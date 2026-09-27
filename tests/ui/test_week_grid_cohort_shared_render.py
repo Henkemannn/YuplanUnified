@@ -129,7 +129,8 @@ def test_kitchen_all_departments_renders_cohort_row_disabled_and_legacy_rows_cli
     assert f'data-group-id="{group_id}"' in html
     assert 'Timbal + Glutenfri' in html
     assert 'data-diet-type-id="' in html  # legacy rows still carry legacy payloads
-    assert 'disabled aria-disabled="true"' in html  # cohort row disabled read-only
+    assert 'disabled aria-disabled="true"' not in html  # kitchen cohort rows with positive counts are clickable
+    assert 'data-service-date="2026-09-07"' in html
     assert 'Inga specialkoster kopplade' not in html
     assert 'Inga specialkoster kopplade' not in html
 
@@ -158,7 +159,8 @@ def test_kitchen_legacy_row_keeps_clickable_contract_while_cohort_row_is_read_on
     cohort_button_slice = html[cohort_button_start: html.index('</button>', cohort_button_start)]
     assert 'data-group-id="' in cohort_button_slice
     assert 'data-diet-type-id="' not in cohort_button_slice
-    assert 'disabled aria-disabled="true"' in cohort_button_slice
+    assert 'data-service-date="2026-09-07"' in cohort_button_slice
+    assert 'disabled aria-disabled="true"' not in cohort_button_slice
     assert 'Inga specialkoster kopplade' not in html
     assert 'Inga specialkoster kopplade' not in html
 

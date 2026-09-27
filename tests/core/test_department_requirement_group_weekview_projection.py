@@ -280,3 +280,37 @@ def test_two_groups_same_primary_remain_separate_and_member_count_does_not_split
         assert need_by_group[group_one["id"]].effective_quantity == 1
         assert need_by_group[group_two["id"]].effective_quantity == 1
         assert len({need.group_id for need in projection.needs}) == 2
+
+
+def test_completion_mark_reload_flips_projection_marked_state(app_session) -> None:
+    with app_session.app_context():
+        site, department, group_repo, timbal_id, glutenfri_id, _lactosefri_id = _seed_site_department_and_requirements("Reload site")
+        group = group_repo.create_group(
+            department["id"],
+            1,
+            [timbal_id, glutenfri_id],
+            label=None,
+            primary_requirement_id=timbal_id,
+        )
+        completion_repo = DepartmentRequirementGroupCompletionRepo()
+        service_date = date(2026, 10, 8)
+
+        completion_repo.set_marked(department["id"], group["id"], service_date, "lunch", True)
+        marked_projection = build_department_requirement_group_weekview_projection(
+            tenant_id=None,
+            site_id=site["id"],
+            department_id=department["id"],
+            service_date=service_date,
+            meal_key="lunch",
+        )
+        assert marked_projection.needs[0].marked is True
+
+        completion_repo.set_marked(department["id"], group["id"], service_date, "lunch", False)
+        cleared_projection = build_department_requirement_group_weekview_projection(
+            tenant_id=None,
+            site_id=site["id"],
+            department_id=department["id"],
+            service_date=service_date,
+            meal_key="lunch",
+        )
+        assert cleared_projection.needs[0].marked is False

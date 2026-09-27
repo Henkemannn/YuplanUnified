@@ -10,10 +10,13 @@ from .auth import require_roles
 from .db import get_session
 from .models import Note, Task, User
 from .weekview.service import WeekviewService
+from .weekview.cohort_completion_service import CohortWeekviewStaleError, WeekviewCohortCompletionService
+from .weekview.repo import WeekviewRepo
 from .weekview_vm import build_weekview_vm
 # use string roles consistently elsewhere; avoid Role import
 from .meal_registration_repo import MealRegistrationRepo
 from .department_requirement_group_week_grid_adapter import build_week_grid_specialkost_rows
+from .department_requirement_group_repo import DepartmentRequirementGroupsRepo
 from .planning_option_review import (
     ADAPTATION_REQUIRED,
     PlanningOptionReviewError,
@@ -987,6 +990,141 @@ def api_weekview_get_etag():
         return resp
     except Exception:
         return jsonify({"error": "server_error"}), 500
+
+
+@ui_bp.route("/api/weekview/requirement-groups/mark", methods=["POST"])
+@require_roles("cook", "admin", "superuser", "kitchen")
+def api_weekview_requirement_groups_mark():
+    from .weekview_api import _require_weekview_enabled
+
+    def _norm_et(et: str) -> str:
+        et = (et or "").strip()
+        et = et.split(",")[0].strip()
+        if et.startswith("W/"):
+            et = et[2:].strip()
+        if len(et) >= 2 and et[0] == '"' and et[-1] == '"':
+            et = et[1:-1]
+        return et
+
+    maybe = _require_weekview_enabled()
+    if maybe is not None:
+        return maybe
+
+    data = request.get_json(silent=True) or {}
+    try:
+        site_id = str(data["site_id"]).strip()
+        department_id = str(data["department_id"]).strip()
+        group_id = str(data["group_id"]).strip()
+        year = int(data["year"])
+        week = int(data["week"])
+        service_date_raw = str(data["service_date"]).strip()
+        meal = str(data["meal"]).strip().lower()
+        marked = bool(data.get("marked", True))
+    except Exception:
+        return jsonify({"type": "about:blank", "title": "invalid_payload"}), 400
+
+    if not site_id or not department_id or not group_id or not service_date_raw:
+        return jsonify({"type": "about:blank", "title": "invalid_payload"}), 400
+    if year < 1970 or not (1 <= week <= 53):
+        return jsonify({"type": "about:blank", "title": "invalid_year_week"}), 400
+    if meal not in {"lunch", "dinner"}:
+        return jsonify({"type": "about:blank", "title": "invalid_meal"}), 400
+
+    try:
+        service_date = _date.fromisoformat(service_date_raw)
+    except Exception:
+        return jsonify({"type": "about:blank", "title": "invalid_service_date"}), 400
+    try:
+        iso = service_date.isocalendar()
+        if int(iso[0]) != int(year) or int(iso[1]) != int(week):
+            return jsonify({"type": "about:blank", "title": "service_date_out_of_week"}), 400
+    except Exception:
+        return jsonify({"type": "about:blank", "title": "invalid_service_date"}), 400
+
+    tid = getattr(g, "tenant_id", None) or session.get("tenant_id")
+    if not tid:
+        return jsonify({"type": "about:blank", "title": "missing_tenant"}), 400
+
+    ctx_site = str((session.get("site_id") or getattr(g, "site_id", "") or "")).strip()
+    if ctx_site and ctx_site != site_id:
+        return jsonify({"type": "about:blank", "title": "forbidden_site"}), 403
+
+    db = get_session()
+    try:
+        dept_row = db.execute(
+            text("SELECT id, site_id FROM departments WHERE id = :dept_id"),
+            {"dept_id": department_id},
+        ).fetchone()
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+    if not dept_row:
+        return jsonify({"type": "about:blank", "title": "department_not_found"}), 404
+    dept_site_id = str(dept_row[1] or "").strip()
+    if dept_site_id and dept_site_id != site_id:
+        return jsonify({"type": "about:blank", "title": "forbidden_site"}), 403
+
+    db = get_session()
+    try:
+        group_row = db.execute(
+            text("SELECT id, department_id FROM department_requirement_groups WHERE id = :group_id"),
+            {"group_id": group_id},
+        ).fetchone()
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+    if not group_row:
+        return jsonify({"type": "about:blank", "title": "group_not_found"}), 404
+    if str(group_row[1] or "").strip() != department_id:
+        return jsonify({"type": "about:blank", "title": "forbidden_group"}), 403
+
+    raw_if_match = str(request.headers.get("If-Match") or request.headers.get("if-match") or "").strip()
+    if not raw_if_match:
+        return jsonify({"type": "about:blank", "title": "missing_if_match"}), 428
+
+    from .weekview.repo import WeekviewRepo
+    from .weekview.service import WeekviewService as _WVS
+
+    repo = WeekviewRepo()
+    svc = _WVS(repo)
+    base_version = WeekviewRepo().get_version(tid, year, week, department_id)
+    effective_version = svc.get_effective_version(tid, year, week, department_id, site_id)
+    current_etag = svc.build_etag(tid, department_id, year, week, effective_version)
+    if _norm_et(raw_if_match) != _norm_et(current_etag):
+        resp = jsonify({"type": "about:blank", "title": "etag_mismatch", "current_etag": current_etag})
+        resp.headers["ETag"] = current_etag
+        return resp, 412
+
+    try:
+        WeekviewCohortCompletionService().set_marked_with_weekview_version(
+            tenant_id=tid,
+            department_id=department_id,
+            year=year,
+            week=week,
+            expected_base_version=base_version,
+            group_id=group_id,
+            service_date=service_date,
+            meal=meal,
+            marked=marked,
+        )
+    except CohortWeekviewStaleError:
+        fresh_etag = svc.build_etag(tid, department_id, year, week, svc.get_effective_version(tid, year, week, department_id, site_id))
+        resp = jsonify({"type": "about:blank", "title": "etag_mismatch", "current_etag": fresh_etag})
+        resp.headers["ETag"] = fresh_etag
+        return resp, 412
+    except Exception:
+        return jsonify({"type": "about:blank", "title": "server_error"}), 500
+
+    new_effective_version = svc.get_effective_version(tid, year, week, department_id, site_id)
+    new_etag = svc.build_etag(tid, department_id, year, week, new_effective_version)
+    resp = jsonify({"status": "ok", "marked": bool(marked)})
+    resp.headers["ETag"] = new_etag
+    return resp, 200
+
 @ui_bp.route("/ui/cook/week-overview/<int:year>/<int:week>", methods=["GET"])
 @require_roles("cook")
 def cook_week_overview_unified(year: int, week: int):
@@ -1872,141 +2010,6 @@ def admin_department_detail_get(department_id: str):
         vm["specialkost_rows"] = []
         vm["specialkost_total"] = 0
     return render_template("ui/unified_admin_department_detail.html", vm=vm)
-
-
-@ui_bp.post("/ui/admin/departments/<department_id>/detail")
-@require_roles(*ADMIN_ROLES)
-def admin_department_detail_post(department_id: str):
-    """Save weekly override for a single department.
-
-    Accepts form values for lunch/dinner; if both empty, delete override.
-    Uses provided hidden year/week or defaults to current ISO week.
-    """
-    # Resolve week
-    try:
-        year = int(request.form.get("year")) if request.form.get("year") else None
-        week = int(request.form.get("week")) if request.form.get("week") else None
-    except Exception:
-        year = None
-        week = None
-    if not year or not week:
-        iso = _date.today().isocalendar()
-        year, week = iso[0], iso[1]
-
-    raw_l = request.form.get(f"dept_{department_id}_lunch")
-    raw_d = request.form.get(f"dept_{department_id}_dinner")
-    lunch = None
-    dinner = None
-    try:
-        lunch = int(raw_l) if (raw_l is not None and raw_l.strip() != "") else None
-    except Exception:
-        lunch = None
-    try:
-        dinner = int(raw_d) if (raw_d is not None and raw_d.strip() != "") else None
-    except Exception:
-        dinner = None
-
-    from core.residents_weekly_repo import ResidentsWeeklyRepo
-    try:
-        repo = ResidentsWeeklyRepo()
-        if lunch is None and dinner is None:
-            repo.delete_for_week(department_id, year, week)
-        else:
-            repo.upsert_for_week(department_id, year, week, residents_lunch=lunch, residents_dinner=dinner)
-        try:
-            flash("Veckovariation uppdaterad.", "success")
-        except Exception:
-            pass
-    except Exception:
-        try:
-            flash("Kunde inte spara veckovariation.", "error")
-        except Exception:
-            pass
-    return redirect(url_for("ui.admin_department_detail", department_id=department_id))
-
-
-@ui_bp.post("/ui/admin/departments/<department_id>/variation", endpoint="admin_department_save_variation")
-@require_roles(*ADMIN_ROLES)
-def admin_department_save_variation(department_id: str):
-    """Persist per-day variation schedule for a department.
-
-    Form fields:
-      selected_week: int
-      mode: 'week' | 'forever'
-      day_X_lunch/dinner for X=1..7
-    """
-    from core.residents_schedule_repo import ResidentsScheduleRepo
-    # Load fixed for comparison
-    db = get_session()
-    try:
-        row = db.execute(text("SELECT COALESCE(resident_count_fixed,0) FROM departments WHERE id=:id"), {"id": department_id}).fetchone()
-        fixed = int(row[0] or 0) if row else 0
-    finally:
-        db.close()
-    try:
-        selected_week = int(request.form.get("selected_week") or request.form.get("selected_week_override") or 0)
-    except Exception:
-        selected_week = 0
-    mode = (request.form.get("mode") or "week").strip()
-    # Collect items
-    items = []
-    differs = False
-    for dow in range(1, 8):
-        for meal in ("lunch", "dinner"):
-            raw = request.form.get(f"day_{dow}_{meal}")
-            cnt = int(raw) if (raw is not None and str(raw).strip() != "") else fixed
-            items.append({"weekday": dow, "meal": meal, "count": cnt})
-            if cnt != fixed:
-                differs = True
-    repo = ResidentsScheduleRepo()
-    # If all equals fixed -> delete schedules
-    if not differs:
-        if mode == "forever":
-            repo.delete_forever(department_id)
-        else:
-            if selected_week:
-                repo.delete_week(department_id, selected_week)
-        flash("Varierat schema borttaget.")
-    else:
-        if mode == "forever":
-            repo.upsert_items(department_id, None, items)
-        else:
-            repo.upsert_items(department_id, selected_week or None, items)
-        flash("Varierat schema sparat.")
-    # Redirect according to caller
-    return_to = (request.form.get("return_to") or "detail").strip().lower()
-    if return_to == "edit":
-        return redirect(url_for("ui.admin_departments_edit_form", dept_id=department_id))
-    # default: back to detail preserving selected week
-    return redirect(url_for("ui.admin_department_detail", department_id=department_id, week=selected_week or None))
-
-
-@ui_bp.post("/ui/admin/departments/<department_id>/detail/fixed", endpoint="admin_department_update_fixed_residents")
-@require_roles(*ADMIN_ROLES)
-def admin_department_update_fixed_residents(department_id: str):
-    """Update the fixed resident count for a department and redirect back to detail."""
-    raw = request.form.get("resident_count_fixed")
-    try:
-        value = int(raw) if raw is not None and raw.strip() != "" else 0
-    except Exception:
-        value = 0
-    db = get_session()
-    try:
-        db.execute(text("UPDATE departments SET resident_count_fixed=:v WHERE id=:id"), {"v": value, "id": department_id})
-        db.commit()
-        try:
-            flash("Fast boendeantal uppdaterat.", "success")
-        except Exception:
-            pass
-    except Exception:
-        db.rollback()
-        try:
-            flash("Kunde inte uppdatera fast boendeantal.", "error")
-        except Exception:
-            pass
-    finally:
-        db.close()
-    return redirect(url_for("ui.admin_department_detail", department_id=department_id))
 
 @ui_bp.post("/ui/admin/diets/create")
 @require_roles(*ADMIN_ROLES)
@@ -3999,6 +4002,124 @@ def kitchen_planering_v1():
             except Exception:
                 service_addons_summary = []
                 selected_service_addon_id = None
+
+
+            @ui_bp.route("/api/weekview/requirement-groups/mark", methods=["POST"])
+            @require_roles("cook", "admin", "superuser", "kitchen")
+            def api_weekview_requirement_groups_mark():
+                maybe = _require_weekview_enabled()
+                if maybe is not None:
+                    return maybe
+
+                data = request.get_json(silent=True) or {}
+                try:
+                    site_id = str(data["site_id"]).strip()
+                    department_id = str(data["department_id"]).strip()
+                    group_id = str(data["group_id"]).strip()
+                    year = int(data["year"])
+                    week = int(data["week"])
+                    service_date_raw = str(data["service_date"]).strip()
+                    meal = str(data["meal"]).strip().lower()
+                    marked = bool(data.get("marked", True))
+                except Exception:
+                    return jsonify({"type": "about:blank", "title": "invalid_payload"}), 400
+
+                if not site_id or not department_id or not group_id or not service_date_raw:
+                    return jsonify({"type": "about:blank", "title": "invalid_payload"}), 400
+                if year < 1970 or not (1 <= week <= 53):
+                    return jsonify({"type": "about:blank", "title": "invalid_year_week"}), 400
+                if meal not in {"lunch", "dinner"}:
+                    return jsonify({"type": "about:blank", "title": "invalid_meal"}), 400
+
+                try:
+                    service_date = _date.fromisoformat(service_date_raw)
+                except Exception:
+                    return jsonify({"type": "about:blank", "title": "invalid_service_date"}), 400
+                try:
+                    iso = service_date.isocalendar()
+                    if int(iso[0]) != int(year) or int(iso[1]) != int(week):
+                        return jsonify({"type": "about:blank", "title": "service_date_out_of_week"}), 400
+                except Exception:
+                    return jsonify({"type": "about:blank", "title": "invalid_service_date"}), 400
+
+                tid = getattr(g, "tenant_id", None) or session.get("tenant_id")
+                if tid is None:
+                    return jsonify({"type": "about:blank", "title": "tenant_missing"}), 400
+                try:
+                    tid = int(tid)
+                except Exception:
+                    return jsonify({"type": "about:blank", "title": "tenant_missing"}), 400
+
+                active_site = str(session.get("site_id") or getattr(g, "site_id", "") or "").strip()
+                if active_site and active_site != site_id:
+                    return jsonify({"type": "about:blank", "title": "site_mismatch"}), 403
+
+                db = get_session()
+                try:
+                    dept_row = db.execute(text("SELECT site_id FROM departments WHERE id=:dep"), {"dep": department_id}).fetchone()
+                    if dept_row is None:
+                        return jsonify({"type": "about:blank", "title": "invalid_department_id"}), 400
+                    dept_site_id = str(dept_row[0] or "").strip()
+                    if not dept_site_id:
+                        return jsonify({"type": "about:blank", "title": "department_site_missing"}), 400
+                    if dept_site_id != site_id:
+                        return jsonify({"type": "about:blank", "title": "site_mismatch"}), 403
+
+                    group = DepartmentRequirementGroupsRepo().get_group(group_id)
+                    if group is None:
+                        return jsonify({"type": "about:blank", "title": "invalid_group_id"}), 400
+                    if str(group.get("department_id") or "") != department_id:
+                        return jsonify({"type": "about:blank", "title": "department_requirement_group_not_owned"}), 403
+                finally:
+                    db.close()
+
+                raw_if_match = request.headers.get("If-Match", "")
+                if not raw_if_match.strip():
+                    return jsonify({"type": "about:blank", "title": "missing_if_match"}), 400
+
+                def _norm_et(et: str) -> str:
+                    et = (et or "").strip()
+                    et = et.split(",")[0].strip()
+                    if et.startswith("W/"):
+                        et = et[2:].strip()
+                    if len(et) >= 2 and et[0] == '"' and et[-1] == '"':
+                        et = et[1:-1]
+                    return et
+
+                svc = WeekviewService()
+                base_version = WeekviewRepo().get_version(tid, year, week, department_id)
+                effective_version = svc.get_effective_version(tid, year, week, department_id, site_id)
+                current_etag = svc.build_etag(tid, department_id, year, week, effective_version)
+                if _norm_et(raw_if_match) != _norm_et(current_etag):
+                    resp = jsonify({"type": "about:blank", "title": "etag_mismatch", "current_etag": current_etag})
+                    resp.headers["ETag"] = current_etag
+                    return resp, 412
+
+                try:
+                    WeekviewCohortCompletionService().set_marked_with_weekview_version(
+                        tenant_id=tid,
+                        department_id=department_id,
+                        year=year,
+                        week=week,
+                        expected_base_version=base_version,
+                        group_id=group_id,
+                        service_date=service_date,
+                        meal=meal,
+                        marked=marked,
+                    )
+                except CohortWeekviewStaleError:
+                    fresh_etag = svc.build_etag(tid, department_id, year, week, svc.get_effective_version(tid, year, week, department_id, site_id))
+                    resp = jsonify({"type": "about:blank", "title": "etag_mismatch", "current_etag": fresh_etag})
+                    resp.headers["ETag"] = fresh_etag
+                    return resp, 412
+                except Exception:
+                    return jsonify({"type": "about:blank", "title": "server_error"}), 500
+
+                new_effective_version = svc.get_effective_version(tid, year, week, department_id, site_id)
+                new_etag = svc.build_etag(tid, department_id, year, week, new_effective_version)
+                resp = jsonify({"status": "ok", "marked": bool(marked)})
+                resp.headers["ETag"] = new_etag
+                return resp, 200
 
     day_labels = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"]
     selected_date_iso = None

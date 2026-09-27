@@ -47,11 +47,14 @@
           {% set dinner = row.cells[(dow-1)*2+1] %}
           <td class="{% if lunch.is_alt2 %}is-alt2 {% endif %}diet-cell{% if lunch.is_done %} marked{% endif %}{% if lunch.is_override %} override-count{% endif %} kw-cell day-start{% if dow > 1 %} day-sep{% endif %}">
             {% if lunch.is_alt2 %}<span class="is-alt2" aria-hidden="true"></span>{% endif %}
-            {% set cell_readonly = (not interactive) or (row_kind == 'cohort') %}
+            {% set cell_readonly = (not interactive) or (row_kind == 'cohort' and (lunch.count | int) <= 0) %}
             <button class="kostcell-btn {{ 'is-done' if lunch.is_done else '' }} {{ 'override-count' if lunch.is_override else '' }}{% if row_kind == 'cohort' %} kostcell-btn--cohort{% endif %}"
               {% if row_kind == 'cohort' %}
               data-row-kind="cohort"
+              data-site-id="{{ vm.site_id }}"
+              data-department-id="{{ dep.id }}"
               data-group-id="{{ row.group_id }}"
+              data-service-date="{{ lunch.service_date }}"
               {% else %}
               data-department-id="{{ dep.id }}"
               data-diet-type-id="{{ row.diet_type_id }}"
@@ -69,11 +72,15 @@
             <button class="kostcell-btn {{ 'is-done' if dinner.is_done else '' }} {{ 'override-count' if dinner.is_override else '' }}{% if row_kind == 'cohort' %} kostcell-btn--cohort{% endif %}"
               {% if row_kind == 'cohort' %}
               data-row-kind="cohort"
+              data-site-id="{{ vm.site_id }}"
+              data-department-id="{{ dep.id }}"
               data-group-id="{{ row.group_id }}"
+              data-service-date="{{ dinner.service_date }}"
               {% else %}
               data-department-id="{{ dep.id }}"
               data-diet-type-id="{{ row.diet_type_id }}"
               {% endif %}
+              {% set cell_readonly = (not interactive) or (row_kind == 'cohort' and (dinner.count | int) <= 0) %}
               data-year="{{ vm.year }}"
               data-week="{{ vm.week }}"
               data-day-index="{{ dinner.day_index }}"

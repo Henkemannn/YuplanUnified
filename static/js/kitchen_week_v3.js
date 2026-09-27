@@ -30,9 +30,19 @@
       default: return "Mån";
     }
   }
-  async function getEtag(departmentId, year, week){
+  function resolveSiteId(){
     const qs = new URLSearchParams(window.location.search);
-    const siteId = qs.get('site_id') || (window.VM && window.VM.site_id) || null;
+    const querySiteId = qs.get('site_id');
+    if(querySiteId){ return querySiteId; }
+    if(window.VM && window.VM.site_id){ return window.VM.site_id; }
+    const byDataAttr = document.querySelector('[data-site-id]');
+    if(byDataAttr && byDataAttr.getAttribute('data-site-id')){ return byDataAttr.getAttribute('data-site-id'); }
+    const shell = document.querySelector('[data-page-site-id]');
+    if(shell && shell.getAttribute('data-page-site-id')){ return shell.getAttribute('data-page-site-id'); }
+    return null;
+  }
+  async function getEtag(departmentId, year, week){
+    const siteId = resolveSiteId();
     const base = `/api/weekview/etag?department_id=${encodeURIComponent(departmentId)}&year=${year}&week=${week}`;
     const url = siteId ? `${base}&site_id=${encodeURIComponent(siteId)}` : base;
     console.debug("[K3] GET ETag URL:", url);
@@ -50,8 +60,7 @@
     const dayIdx = parseInt(btn.dataset.dayIndex, 10);
     const meal = btn.dataset.meal || "lunch";
     const marked = !btn.classList.contains('is-done');
-    const qs = new URLSearchParams(window.location.search);
-    const siteId = qs.get('site_id') || (window.VM && window.VM.site_id) || null;
+    const siteId = resolveSiteId();
     const etag = await getEtag(depId, year, week);
     if(!etag){ return; }
     const payload = {
@@ -112,13 +121,74 @@
       }
     }
   }
+  async function toggleCohortMark(btn){
+    const depId = btn.dataset.departmentId;
+    const groupId = btn.dataset.groupId;
+    const serviceDate = btn.dataset.serviceDate;
+    const year = parseInt(btn.dataset.year, 10);
+    const week = parseInt(btn.dataset.week, 10);
+    const meal = (btn.dataset.meal || 'lunch').toLowerCase();
+    const marked = !btn.classList.contains('is-done');
+    const siteId = resolveSiteId();
+    const csrf = getCsrfToken();
+
+    async function postOnce(etag){
+      return fetch('/api/weekview/requirement-groups/mark', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'If-Match': etag,
+          'X-User-Role': 'cook',
+          ...(csrf ? { 'X-CSRF-Token': csrf } : {})
+        },
+        body: JSON.stringify({
+          site_id: siteId,
+          department_id: depId,
+          year: year,
+          week: week,
+          group_id: groupId,
+          service_date: serviceDate,
+          meal: meal,
+          marked: marked
+        })
+      });
+    }
+
+    const etag = await getEtag(depId, year, week);
+    if(!etag){ return; }
+    const resp = await postOnce(etag);
+    if(resp.status === 200){
+      if(marked){ btn.classList.add('is-done'); } else { btn.classList.remove('is-done'); }
+      return;
+    }
+    if(resp.status === 412){
+      try {
+        const txt = await resp.text();
+        console.warn('[K3] 412 from cohort mark POST. Response snippet:', txt?.slice(0,200));
+      } catch(e) { /* ignore */ }
+      const etag2 = await getEtag(depId, year, week);
+      if(!etag2){ return; }
+      const resp2 = await postOnce(etag2);
+      if(resp2.status === 200){
+        if(marked){ btn.classList.add('is-done'); } else { btn.classList.remove('is-done'); }
+        return;
+      }
+    }
+    try { alert('Uppdaterades av någon annan – laddar om data'); } catch(_) {}
+    window.location.reload();
+  }
   document.addEventListener('DOMContentLoaded', function(){
     document.addEventListener('click', async function(ev){
       const btn = ev.target && ev.target.closest ? ev.target.closest('.kostcell-btn') : null;
       if(!btn){ return; }
       ev.preventDefault();
       try {
-        await toggleMark(btn);
+        if(btn.dataset.rowKind === 'cohort'){
+          await toggleCohortMark(btn);
+        } else {
+          await toggleMark(btn);
+        }
       } finally {
         // Remove focus to avoid any residual browser focus outline
         try { btn.blur(); } catch(e) { /* ignore */ }

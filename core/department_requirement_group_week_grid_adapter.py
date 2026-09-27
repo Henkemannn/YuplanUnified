@@ -86,6 +86,7 @@ def build_week_grid_specialkost_rows(
         for dow in range(1, 8):
             day = day_lookup.get(dow) or {}
             lunch_alt2 = bool(day.get("alt2_lunch"))
+            service_date = str(day.get("date") or "").strip() or _iso_date_for_day(year, week, dow)
             for meal_key in ("lunch", "dinner"):
                 need = projection_cache.get((dow, meal_key), {}).get(group_id)
                 count = int(need.effective_quantity) if need is not None else 0
@@ -103,6 +104,7 @@ def build_week_grid_specialkost_rows(
                         "is_override": False,
                         "is_alt2": lunch_alt2 if meal_key == "lunch" else False,
                         "group_id": group_id,
+                        "service_date": service_date,
                         "row_kind": "cohort",
                     }
                 )

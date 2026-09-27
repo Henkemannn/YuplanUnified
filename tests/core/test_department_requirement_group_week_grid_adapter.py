@@ -188,13 +188,16 @@ def test_lunch_and_dinner_cells_follow_projection_and_marked_state(app_session):
         legacy_rows=[],
     )
     assert len(rows) == 1
+    assert rows[0]["row_kind"] == "cohort"
     cells = rows[0]["cells"]
     assert cells[0]["meal"] == "lunch"
     assert cells[0]["count"] == 2
     assert cells[0]["is_done"] is True
+    assert cells[0]["service_date"] == date.fromisocalendar(2026, 37, 1).isoformat()
     assert cells[1]["meal"] == "dinner"
     assert cells[1]["count"] == 3
     assert cells[1]["is_done"] is False
+    assert cells[1]["service_date"] == date.fromisocalendar(2026, 37, 1).isoformat()
 
 
 def test_weekday_and_exact_service_overrides_are_respected(app_session):
