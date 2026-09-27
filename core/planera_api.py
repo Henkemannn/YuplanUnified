@@ -5,16 +5,27 @@ from datetime import date as _date
 from typing import Any
 
 from flask import Blueprint, jsonify, request, session, make_response, current_app, g
+from sqlalchemy import text
 
 from .auth import require_roles
 from .csrf import csrf_protect
 from .http_errors import bad_request, not_found
 from .db import get_session
 from .kommun_planera_day_application import run_kommun_day_application
+from .planera_product2_page3_vm import Product2Page3VmError, build_product2_page3_vm
 from .planera_v2.day_context_resolver import KommunDayContextResolverError
+from .weekview.cohort_completion_service import CohortWeekviewStaleError
+from .weekview.cohort_bulk_completion_service import (
+    CohortBulkCompletionError,
+    CohortBulkCompletionTarget,
+    WeekviewCohortBulkCompletionService,
+)
+from .weekview.repo import WeekviewRepo
+from .weekview.service import WeekviewService
 
 bp = Blueprint("planera_api", __name__, url_prefix="/api")
 _service: "PlaneraService | None" = None
+KITCHEN_UI_ROLES = ("kitchen", "cook", "admin", "superuser")
 
 
 def _feature_enabled(name: str) -> bool:
@@ -135,6 +146,46 @@ def _ensure_normal_exclusions_schema() -> None:
             db.close()
         except Exception:
             pass
+
+
+def _norm_etag_value(value: object) -> str:
+    etag = str(value or "").strip()
+    if not etag:
+        return ""
+    if "," in etag:
+        etag = etag.split(",", 1)[0].strip()
+    if etag.startswith("W/"):
+        etag = etag[2:].strip()
+    if len(etag) >= 2 and etag[0] == '"' and etag[-1] == '"':
+        etag = etag[1:-1]
+    return etag
+
+
+def _validate_product2_site_tenant(tenant_id: int | str, site_id: str) -> bool:
+    db = get_session()
+    try:
+        row = db.execute(text("SELECT tenant_id FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+        if row is None:
+            return False
+        try:
+            return int(row[0]) == int(tenant_id)
+        except Exception:
+            return False
+    finally:
+        db.close()
+
+
+def _parse_expected_etags(payload: object) -> dict[str, str]:
+    if not isinstance(payload, dict):
+        raise ValueError("invalid_expected_etags")
+    parsed: dict[str, str] = {}
+    for raw_department_id, raw_etag in payload.items():
+        department_id = str(raw_department_id or "").strip()
+        etag = str(raw_etag or "").strip()
+        if not department_id or not etag:
+            raise ValueError("invalid_expected_etags")
+        parsed[department_id] = etag
+    return parsed
 
 
 @bp.get("/planera/day")
@@ -589,3 +640,196 @@ def clear_produced_special():
             total_cleared += len(ops)
 
     return jsonify({"ok": True, "cleared": {"total": total_cleared}})
+
+
+@bp.post("/planera/product2/production-completion")
+@require_roles(*KITCHEN_UI_ROLES)
+@csrf_protect
+def post_planera_product2_production_completion():
+    maybe = _require_planera_enabled()
+    if maybe is not None:
+        return maybe
+
+    tid = _tenant_id()
+    if tid is None:
+        return bad_request("tenant_missing")
+
+    try:
+        payload = request.get_json(force=True) or {}
+    except Exception:
+        payload = {}
+
+    site_id = str(payload.get("site_id") or "").strip()
+    service_date_raw = str(payload.get("service_date") or payload.get("date") or "").strip()
+    meal = str(payload.get("meal") or "").strip().lower()
+    if "marked" not in payload or not isinstance(payload.get("marked"), bool):
+        return bad_request("invalid_marked")
+    marked = bool(payload.get("marked"))
+    expected_etags_raw = payload.get("expected_etags")
+    view = payload.get("view")
+    special_view = payload.get("special_view")
+
+    if not site_id or not service_date_raw or meal not in ("lunch", "dinner"):
+        return bad_request("invalid_parameters")
+
+    try:
+        service_date = _date.fromisoformat(service_date_raw)
+    except Exception:
+        return bad_request("invalid_service_date")
+
+    session_site_id = str(session.get("site_id") or "").strip() if "site_id" in session else ""
+    if session_site_id and session_site_id != site_id:
+        return jsonify({"type": "about:blank", "title": "site_mismatch", "detail": "site_mismatch"}), 403
+
+    if not _validate_product2_site_tenant(tid, site_id):
+        return not_found("site_or_department_not_found")
+
+    try:
+        vm = build_product2_page3_vm(
+            tenant_id=tid,
+            site_id=site_id,
+            service_date=service_date,
+            meal=meal,
+            view=view,
+            special_view=special_view,
+        )
+    except Product2Page3VmError:
+        return not_found("site_or_department_not_found")
+
+    if not bool(getattr(vm, "ready", False)):
+        resp = jsonify(
+            {
+                "type": "about:blank",
+                "title": "production_not_ready",
+                "ready": False,
+                "blockers": list(getattr(vm, "blockers", ()) or ()),
+                "target_count": len(tuple(getattr(vm, "completion_targets", ()) or ())),
+            }
+        )
+        return resp, 409
+
+    completion_targets = tuple(getattr(vm, "completion_targets", ()) or ())
+    target_department_ids = sorted({str(target.destination_id) for target in completion_targets})
+    if not completion_targets:
+        return (
+            jsonify(
+                {
+                    "type": "about:blank",
+                    "title": "no_completion_targets",
+                    "detail": "no_completion_targets",
+                    "ok": False,
+                    "marked": marked,
+                    "site_id": site_id,
+                    "service_date": service_date.isoformat(),
+                    "meal": meal,
+                    "target_count": 0,
+                    "departments": {},
+                    "department_etags": {},
+                }
+            ),
+            409,
+        )
+
+    try:
+        expected_etags = _parse_expected_etags(expected_etags_raw)
+    except ValueError:
+        return bad_request("invalid_expected_etags")
+
+    if set(expected_etags) != set(target_department_ids):
+        resp = jsonify(
+            {
+                "type": "about:blank",
+                "title": "etag_mismatch",
+                "detail": "etag_mismatch",
+                "expected_departments": target_department_ids,
+                "provided_departments": sorted(expected_etags),
+            }
+        )
+        return resp, 412
+
+    weekview_service = WeekviewService()
+    iso_year, iso_week, _ = service_date.isocalendar()
+    current_etags: dict[str, str] = {}
+    expected_base_versions: dict[str, int] = {}
+    for department_id in target_department_ids:
+        current_version = weekview_service.get_effective_version(tid, int(iso_year), int(iso_week), department_id, site_id)
+        current_etag = weekview_service.build_etag(tid, department_id, int(iso_year), int(iso_week), current_version)
+        current_etags[department_id] = current_etag
+        if _norm_etag_value(expected_etags[department_id]) != _norm_etag_value(current_etag):
+            resp = jsonify(
+                {
+                    "type": "about:blank",
+                    "title": "etag_mismatch",
+                    "detail": "etag_mismatch",
+                    "current_etags": current_etags,
+                }
+            )
+            return resp, 412
+        expected_base_versions[department_id] = int(weekview_service.repo.get_version(tid, int(iso_year), int(iso_week), department_id))
+
+    if not completion_targets:
+        return jsonify(
+            {
+                "ok": True,
+                "marked": marked,
+                "site_id": site_id,
+                "service_date": service_date.isoformat(),
+                "meal": meal,
+                "target_count": 0,
+                "departments": {},
+                "department_etags": {},
+            }
+        )
+
+    bulk_service = WeekviewCohortBulkCompletionService(weekview_repo=weekview_service.repo)
+    bulk_targets = [
+        CohortBulkCompletionTarget(
+            department_id=str(target.destination_id),
+            group_id=str(target.requirement_group_id),
+            service_date=_date.fromisoformat(str(target.service_date)),
+            meal=str(target.meal),
+        )
+        for target in completion_targets
+    ]
+    try:
+        result = bulk_service.set_marked_many_with_weekview_versions(
+            tenant_id=tid,
+            year=int(iso_year),
+            week=int(iso_week),
+            expected_base_versions=expected_base_versions,
+            targets=bulk_targets,
+            marked=marked,
+        )
+    except CohortBulkCompletionError as exc:
+        return bad_request(str(exc))
+    except CohortWeekviewStaleError:
+        resp = jsonify(
+            {
+                "type": "about:blank",
+                "title": "etag_mismatch",
+                "detail": "etag_mismatch",
+                "current_etags": current_etags,
+            }
+        )
+        return resp, 412
+
+    departments = {}
+    department_etags = {}
+    for department_id, version in sorted(result.get("departments", {}).items()):
+        current_version = weekview_service.get_effective_version(tid, int(iso_year), int(iso_week), department_id, site_id)
+        current_etag = weekview_service.build_etag(tid, department_id, int(iso_year), int(iso_week), current_version)
+        departments[department_id] = {"version": int(version), "etag": current_etag}
+        department_etags[department_id] = current_etag
+
+    return jsonify(
+        {
+            "ok": True,
+            "marked": marked,
+            "site_id": site_id,
+            "service_date": service_date.isoformat(),
+            "meal": meal,
+            "target_count": int(result.get("target_count") or 0),
+            "departments": departments,
+            "department_etags": department_etags,
+        }
+    )
