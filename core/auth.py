@@ -419,7 +419,7 @@ def login():
                 r = (session.get("role") or "").lower()
                 if r == "superuser":
                     target = url_for("admin_ui.systemadmin_dashboard")
-                elif r == "kitchen":
+                elif r in ("kitchen", "cook"):
                     target = url_for("ui.kitchen_dashboard")
                 elif r == "admin":
                     # If admin lacks an active site, return 403 HTML (no selector)

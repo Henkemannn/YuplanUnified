@@ -13,6 +13,7 @@ from .weekview.service import WeekviewService
 from .weekview_vm import build_weekview_vm
 # use string roles consistently elsewhere; avoid Role import
 from .meal_registration_repo import MealRegistrationRepo
+from .department_requirement_group_week_grid_adapter import build_week_grid_specialkost_rows
 from .planning_option_review import (
     ADAPTATION_REQUIRED,
     PlanningOptionReviewError,
@@ -4164,6 +4165,17 @@ def kitchen_veckovy_week():
             info_text = dep.get("info_text") or ""
             info_text = info_text.strip()
             deps_out.append({"id": dep_id, "name": dep["name"], "resident_count": dep["resident_count"], "info_text": (info_text if info_text else None), "no_diets": (not default_ids), "diet_rows": diet_rows, "days": days})
+        for dep in deps_out:
+            dep["diet_rows"] = build_week_grid_specialkost_rows(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                department_id=dep["id"],
+                year=year,
+                week=week,
+                days=dep.get("days") or [],
+                legacy_rows=dep.get("diet_rows") or [],
+            )
+            dep["no_diets"] = not bool(dep.get("diet_rows") or [])
         # Compute prev/next ISO week rollover using Monday anchor
         try:
             monday = _date.fromisocalendar(year, week, 1)
@@ -4352,12 +4364,32 @@ def kitchen_veckovy_week():
                 "weekday_key": weekday_key,
             })
         rows_out.append({"kosttyp_id": dtid, "kosttyp_name": dname, "cells": cells})
+    rows_out = build_week_grid_specialkost_rows(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        department_id=department_id,
+        year=year,
+        week=week,
+        days=days,
+        legacy_rows=[
+            {
+                "diet_type_id": row.get("kosttyp_id"),
+                "diet_type_name": row.get("kosttyp_name"),
+                "row_label": row.get("kosttyp_name"),
+                "row_kind": "legacy",
+                "cells": row.get("cells") or [],
+            }
+            for row in rows_out
+        ],
+    )
     grid_vm = [{
         "department_id": department_id,
         "department_name": dep_name,
         "residents_by_day": residents_by_day,
         "info_text": dep.get("notes") or "",
         "rows": rows_out,
+        "diet_rows": rows_out,
+        "no_diets": not bool(rows_out),
     }]
     # Build days_ordered and menu_by_day based on payload
     days_ordered = []

@@ -8,6 +8,7 @@ from flask import session
 
 from .db import get_session
 from .menu_service import MenuServiceDB
+from .department_requirement_group_week_grid_adapter import build_week_grid_specialkost_rows
 from .weekview.service import WeekviewService
 from .admin_repo import DietDefaultsRepo, DietTypesRepo
 
@@ -162,6 +163,16 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
                     )
                 diet_name = name_by_id.get(str(dtid), str(dtid))
                 diet_rows.append({"diet_type_id": str(dtid), "diet_type_name": diet_name, "cells": cells})
+        diet_rows = build_week_grid_specialkost_rows(
+            tenant_id=tid,
+            site_id=site_id,
+            department_id=dep_id,
+            year=year,
+            week=week,
+            days=days,
+            legacy_rows=diet_rows,
+        )
+        has_any_diet_rows = bool(diet_rows)
         info_text = (dep.get("info_text") or "").strip()
         has_dinner = any(
             bool((day.get("menu_texts") or {}).get("dinner", {}).get(key))
@@ -175,7 +186,7 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
                 "resident_count": dep["resident_count"],
                 "info_text": (info_text if info_text else None),
                 "notes": (info_text if info_text else None),
-                "no_diets": (not default_ids),
+                "no_diets": (not has_any_diet_rows),
                 "diet_rows": diet_rows,
                 "days": days,
                 "has_dinner": has_dinner,
