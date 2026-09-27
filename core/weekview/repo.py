@@ -26,131 +26,147 @@ class WeekviewRepo:
         """Create minimal tables if they don't exist (SQLite/testing safety)."""
         db = get_session()
         try:
-            dialect = db.bind.dialect.name if db.bind is not None else ""
-            if dialect != "sqlite":
-                return  # assume alembic migration applied in real DB
-            # SQLite DDL
-            db.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS weekview_registrations (
-                      tenant_id TEXT NOT NULL,
-                      department_id TEXT NOT NULL,
-                      year INTEGER NOT NULL,
-                      week INTEGER NOT NULL,
-                      day_of_week INTEGER NOT NULL,
-                      meal TEXT NOT NULL,
-                      diet_type TEXT NOT NULL,
-                      marked INTEGER NOT NULL DEFAULT 0,
-                      UNIQUE (tenant_id, department_id, year, week, day_of_week, meal, diet_type)
-                    );
-                    """
-                )
-            )
-            db.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS weekview_versions (
-                      tenant_id TEXT NOT NULL,
-                      department_id TEXT NOT NULL,
-                      year INTEGER NOT NULL,
-                      week INTEGER NOT NULL,
-                      version INTEGER NOT NULL DEFAULT 0,
-                      UNIQUE (tenant_id, department_id, year, week)
-                    );
-                    """
-                )
-            )
-            db.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS weekview_residents_count (
-                        tenant_id TEXT NOT NULL,
-                        department_id TEXT NOT NULL,
-                        year INTEGER NOT NULL,
-                        week INTEGER NOT NULL,
-                        day_of_week INTEGER NOT NULL,
-                        meal TEXT NOT NULL,
-                        count INTEGER NOT NULL DEFAULT 0,
-                        UNIQUE (tenant_id, department_id, year, week, day_of_week, meal)
-                    );
-                    """
-                )
-            )
-            db.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS weekview_alt2_flags (
-                        site_id TEXT NOT NULL,
-                        department_id TEXT NOT NULL,
-                        year INTEGER NOT NULL,
-                        week INTEGER NOT NULL,
-                        day_of_week INTEGER NOT NULL,
-                        enabled INTEGER NOT NULL DEFAULT 0,
-                        UNIQUE (site_id, department_id, year, week, day_of_week)
-                    );
-                    """
-                )
-            )
-            # Canonicalization/migration guard: explicit env flag or tests only
-            try:
-                allow_env = os.getenv("YUPLAN_ALLOW_SCHEMA_REPAIR", "0").lower() in ("1", "true", "yes")
-                allow_cfg = False
-                cfg = None
-                try:
-                    if flask_current_app is not None:
-                        cfg = flask_current_app.config  # may raise if no app context
-                except Exception:
-                    cfg = None
-                allow_cfg = allow_destructive_db(cfg)
-                if allow_env or allow_cfg:
-                    cols_rows = db.execute(text("PRAGMA table_info('weekview_alt2_flags')")).fetchall()
-                    cols = {str(r[1]) for r in cols_rows}
-                    is_canonical = ("site_id" in cols) and ("enabled" in cols) and ("tenant_id" not in cols) and ("is_alt2" not in cols)
-                    if not is_canonical:
-                        logging.warning("weekview_alt2_flags: repairing legacy SQLite schema to canonical (site-scoped)")
-                        # Create canonical temp table
-                        db.execute(
-                            text(
-                                """
-                                CREATE TABLE IF NOT EXISTS weekview_alt2_flags_new (
-                                    site_id TEXT NOT NULL,
-                                    department_id TEXT NOT NULL,
-                                    year INTEGER NOT NULL,
-                                    week INTEGER NOT NULL,
-                                    day_of_week INTEGER NOT NULL,
-                                    enabled INTEGER NOT NULL DEFAULT 0,
-                                    UNIQUE (site_id, department_id, year, week, day_of_week)
-                                );
-                                """
-                            )
-                        )
-                        # Attempt to migrate legacy data using departments.site_id
-                        try:
-                            db.execute(
-                                text(
-                                    """
-                                    INSERT INTO weekview_alt2_flags_new(site_id, department_id, year, week, day_of_week, enabled)
-                                    SELECT d.site_id, w.department_id, w.year, w.week, w.day_of_week,
-                                           CASE WHEN COALESCE(w.is_alt2, 0) = 1 THEN 1 ELSE 0 END
-                                    FROM weekview_alt2_flags w
-                                    LEFT JOIN departments d ON d.id = w.department_id
-                                    WHERE COALESCE(w.is_alt2, 0) = 1 AND d.site_id IS NOT NULL
-                                    """
-                                )
-                            )
-                        except Exception:
-                            # If migration fails, leave new table empty
-                            pass
-                        # Replace legacy table with canonical
-                        db.execute(text("DROP TABLE IF EXISTS weekview_alt2_flags"))
-                        db.execute(text("ALTER TABLE weekview_alt2_flags_new RENAME TO weekview_alt2_flags"))
-            except Exception:
-                # If PRAGMA fails or table not present, continue (canonical CREATE above ensures baseline)
-                pass
+            self._ensure_schema_in_session(db)
             db.commit()
         finally:
             db.close()
+
+    def _ensure_schema_in_session(self, db) -> None:
+        """Create minimal tables if they don't exist using a caller-supplied session."""
+        dialect = db.bind.dialect.name if db.bind is not None else ""
+        if dialect != "sqlite":
+            return  # assume alembic migration applied in real DB
+        # SQLite DDL
+        db.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS weekview_registrations (
+                  tenant_id TEXT NOT NULL,
+                  department_id TEXT NOT NULL,
+                  year INTEGER NOT NULL,
+                  week INTEGER NOT NULL,
+                  day_of_week INTEGER NOT NULL,
+                  meal TEXT NOT NULL,
+                  diet_type TEXT NOT NULL,
+                  marked INTEGER NOT NULL DEFAULT 0,
+                  UNIQUE (tenant_id, department_id, year, week, day_of_week, meal, diet_type)
+                );
+                """
+            )
+        )
+        db.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS weekview_versions (
+                  tenant_id TEXT NOT NULL,
+                  department_id TEXT NOT NULL,
+                  year INTEGER NOT NULL,
+                  week INTEGER NOT NULL,
+                  version INTEGER NOT NULL DEFAULT 0,
+                  UNIQUE (tenant_id, department_id, year, week)
+                );
+                """
+            )
+        )
+        db.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS weekview_residents_count (
+                    tenant_id TEXT NOT NULL,
+                    department_id TEXT NOT NULL,
+                    year INTEGER NOT NULL,
+                    week INTEGER NOT NULL,
+                    day_of_week INTEGER NOT NULL,
+                    meal TEXT NOT NULL,
+                    count INTEGER NOT NULL DEFAULT 0,
+                    UNIQUE (tenant_id, department_id, year, week, day_of_week, meal)
+                );
+                """
+            )
+        )
+        db.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS weekview_alt2_flags (
+                    site_id TEXT NOT NULL,
+                    department_id TEXT NOT NULL,
+                    year INTEGER NOT NULL,
+                    week INTEGER NOT NULL,
+                    day_of_week INTEGER NOT NULL,
+                    enabled INTEGER NOT NULL DEFAULT 0,
+                    UNIQUE (site_id, department_id, year, week, day_of_week)
+                );
+                """
+            )
+        )
+        # Canonicalization/migration guard: explicit env flag or tests only
+        try:
+            allow_env = os.getenv("YUPLAN_ALLOW_SCHEMA_REPAIR", "0").lower() in ("1", "true", "yes")
+            allow_cfg = False
+            cfg = None
+            try:
+                if flask_current_app is not None:
+                    cfg = flask_current_app.config  # may raise if no app context
+            except Exception:
+                cfg = None
+            allow_cfg = allow_destructive_db(cfg)
+            if allow_env or allow_cfg:
+                cols_rows = db.execute(text("PRAGMA table_info('weekview_alt2_flags')")).fetchall()
+                cols = {str(r[1]) for r in cols_rows}
+                is_canonical = ("site_id" in cols) and ("enabled" in cols) and ("tenant_id" not in cols) and ("is_alt2" not in cols)
+                if not is_canonical:
+                    logging.warning("weekview_alt2_flags: repairing legacy SQLite schema to canonical (site-scoped)")
+                    # Create canonical temp table
+                    db.execute(
+                        text(
+                            """
+                            CREATE TABLE IF NOT EXISTS weekview_alt2_flags_new (
+                                site_id TEXT NOT NULL,
+                                department_id TEXT NOT NULL,
+                                year INTEGER NOT NULL,
+                                week INTEGER NOT NULL,
+                                day_of_week INTEGER NOT NULL,
+                                enabled INTEGER NOT NULL DEFAULT 0,
+                                UNIQUE (site_id, department_id, year, week, day_of_week)
+                            );
+                            """
+                        )
+                    )
+                    # Attempt to migrate legacy data using departments.site_id
+                    try:
+                        db.execute(
+                            text(
+                                """
+                                INSERT INTO weekview_alt2_flags_new(site_id, department_id, year, week, day_of_week, enabled)
+                                SELECT d.site_id, w.department_id, w.year, w.week, w.day_of_week,
+                                       CASE WHEN COALESCE(w.is_alt2, 0) = 1 THEN 1 ELSE 0 END
+                                FROM weekview_alt2_flags w
+                                LEFT JOIN departments d ON d.id = w.department_id
+                                WHERE COALESCE(w.is_alt2, 0) = 1 AND d.site_id IS NOT NULL
+                                """
+                            )
+                        )
+                    except Exception:
+                        # If migration fails, leave new table empty
+                        pass
+                    # Replace legacy table with canonical
+                    db.execute(text("DROP TABLE IF EXISTS weekview_alt2_flags"))
+                    db.execute(text("ALTER TABLE weekview_alt2_flags_new RENAME TO weekview_alt2_flags"))
+        except Exception:
+            # If PRAGMA fails or table not present, continue (canonical CREATE above ensures baseline)
+            pass
+
+    def _ensure_version_row_in_session(self, db, tenant_id: int | str, year: int, week: int, department_id: str) -> None:
+        db.execute(
+            text(
+                """
+                INSERT INTO weekview_versions(tenant_id, department_id, year, week, version)
+                VALUES(:tid, :dep, :yy, :ww, 0)
+                ON CONFLICT(tenant_id, department_id, year, week) DO NOTHING
+                """
+            ),
+            {"tid": str(tenant_id), "dep": department_id, "yy": year, "ww": week},
+        )
 
     def get_weekview(
         self, tenant_id: int | str, year: int, week: int, department_id: Optional[str], site_id: str | None = None
@@ -241,9 +257,9 @@ class WeekviewRepo:
             db.close()
 
     def get_version(self, tenant_id: int | str, year: int, week: int, department_id: str) -> int:
-        self._ensure_schema()
         db = get_session()
         try:
+            self._ensure_schema_in_session(db)
             rec = db.execute(
                 text(
                     """
@@ -254,22 +270,43 @@ class WeekviewRepo:
                 {"tid": str(tenant_id), "dep": department_id, "yy": year, "ww": week},
             ).fetchone()
             if rec is None:
-                # Seed row version 0
-                db.execute(
-                    text(
-                        """
-                        INSERT INTO weekview_versions(tenant_id, department_id, year, week, version)
-                        VALUES(:tid, :dep, :yy, :ww, 0)
-                        ON CONFLICT(tenant_id, department_id, year, week) DO NOTHING
-                        """
-                    ),
-                    {"tid": str(tenant_id), "dep": department_id, "yy": year, "ww": week},
-                )
+                self._ensure_version_row_in_session(db, tenant_id, year, week, department_id)
                 db.commit()
                 return 0
             return int(rec[0])
         finally:
             db.close()
+
+    def compare_and_bump_version_in_session(
+        self,
+        db,
+        tenant_id: int | str,
+        year: int,
+        week: int,
+        department_id: str,
+        expected_version: int,
+    ) -> int | None:
+        self._ensure_schema_in_session(db)
+        self._ensure_version_row_in_session(db, tenant_id, year, week, department_id)
+        result = db.execute(
+            text(
+                """
+                UPDATE weekview_versions
+                SET version = version + 1
+                WHERE tenant_id=:tid AND department_id=:dep AND year=:yy AND week=:ww AND version=:expected_version
+                """
+            ),
+            {
+                "tid": str(tenant_id),
+                "dep": department_id,
+                "yy": year,
+                "ww": week,
+                "expected_version": int(expected_version),
+            },
+        )
+        if int(getattr(result, "rowcount", 0) or 0) != 1:
+            return None
+        return int(expected_version) + 1
 
     def compare_and_bump_version(
         self,
@@ -279,40 +316,14 @@ class WeekviewRepo:
         department_id: str,
         expected_version: int,
     ) -> int | None:
-        self._ensure_schema()
         db = get_session()
         try:
-            db.execute(
-                text(
-                    """
-                    INSERT INTO weekview_versions(tenant_id, department_id, year, week, version)
-                    VALUES(:tid, :dep, :yy, :ww, 0)
-                    ON CONFLICT(tenant_id, department_id, year, week) DO NOTHING
-                    """
-                ),
-                {"tid": str(tenant_id), "dep": department_id, "yy": year, "ww": week},
-            )
-            result = db.execute(
-                text(
-                    """
-                    UPDATE weekview_versions
-                    SET version = version + 1
-                    WHERE tenant_id=:tid AND department_id=:dep AND year=:yy AND week=:ww AND version=:expected_version
-                    """
-                ),
-                {
-                    "tid": str(tenant_id),
-                    "dep": department_id,
-                    "yy": year,
-                    "ww": week,
-                    "expected_version": int(expected_version),
-                },
-            )
-            if int(getattr(result, "rowcount", 0) or 0) != 1:
+            new_version = self.compare_and_bump_version_in_session(db, tenant_id, year, week, department_id, expected_version)
+            if new_version is None:
                 db.rollback()
                 return None
             db.commit()
-            return int(expected_version) + 1
+            return new_version
         except Exception:
             db.rollback()
             raise

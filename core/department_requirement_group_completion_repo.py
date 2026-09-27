@@ -47,8 +47,11 @@ def _serialize_row(row: tuple[Any, ...]) -> dict[str, Any]:
 
 
 class DepartmentRequirementGroupCompletionRepo:
-    def _ensure_table(self, db) -> None:
+    def _ensure_table_in_session(self, db) -> None:
         DepartmentRequirementGroupCompletion.__table__.create(bind=db.bind, checkfirst=True)
+
+    def _ensure_table(self, db) -> None:
+        self._ensure_table_in_session(db)
 
     def _load_group(self, db, group_id: str) -> DepartmentRequirementGroup:
         group = db.get(DepartmentRequirementGroup, str(group_id))
@@ -65,7 +68,7 @@ class DepartmentRequirementGroupCompletionRepo:
     def get(self, group_id: str, service_date: Any, meal_key: Any) -> dict[str, Any] | None:
         db = get_session()
         try:
-            self._ensure_table(db)
+            self._ensure_table_in_session(db)
             self._load_group(db, group_id)
             normalized_date = _normalize_service_date(service_date)
             normalized_meal_key = _normalize_meal_key(meal_key)
@@ -87,53 +90,57 @@ class DepartmentRequirementGroupCompletionRepo:
         finally:
             db.close()
 
+    def set_marked_in_session(self, db, department_id: str, group_id: str, service_date: Any, meal_key: Any, marked: bool) -> dict[str, Any]:
+        self._ensure_table_in_session(db)
+        self._load_owned_group(db, department_id, group_id)
+        normalized_date = _normalize_service_date(service_date)
+        normalized_meal_key = _normalize_meal_key(meal_key)
+        normalized_marked = bool(marked)
+        db.execute(
+            text(
+                """
+                INSERT INTO department_requirement_group_completions(group_id, service_date, meal_key, marked)
+                VALUES(:group_id, :service_date, :meal_key, :marked)
+                ON CONFLICT(group_id, service_date, meal_key)
+                DO UPDATE SET marked=excluded.marked
+                """
+            ),
+            {
+                "group_id": str(group_id),
+                "service_date": normalized_date,
+                "meal_key": normalized_meal_key,
+                "marked": 1 if normalized_marked else 0,
+            },
+        )
+        row = db.execute(
+            text(
+                """
+                SELECT group_id, service_date, meal_key, marked
+                FROM department_requirement_group_completions
+                WHERE group_id=:group_id AND service_date=:service_date AND meal_key=:meal_key
+                """
+            ),
+            {
+                "group_id": str(group_id),
+                "service_date": normalized_date,
+                "meal_key": normalized_meal_key,
+            },
+        ).fetchone()
+        if row is None:
+            return {
+                "group_id": str(group_id),
+                "service_date": normalized_date.isoformat(),
+                "meal_key": normalized_meal_key,
+                "marked": normalized_marked,
+            }
+        return _serialize_row(row)
+
     def set_marked(self, department_id: str, group_id: str, service_date: Any, meal_key: Any, marked: bool) -> dict[str, Any]:
         db = get_session()
         try:
-            self._ensure_table(db)
-            self._load_owned_group(db, department_id, group_id)
-            normalized_date = _normalize_service_date(service_date)
-            normalized_meal_key = _normalize_meal_key(meal_key)
-            normalized_marked = bool(marked)
-            db.execute(
-                text(
-                    """
-                    INSERT INTO department_requirement_group_completions(group_id, service_date, meal_key, marked)
-                    VALUES(:group_id, :service_date, :meal_key, :marked)
-                    ON CONFLICT(group_id, service_date, meal_key)
-                    DO UPDATE SET marked=excluded.marked
-                    """
-                ),
-                {
-                    "group_id": str(group_id),
-                    "service_date": normalized_date,
-                    "meal_key": normalized_meal_key,
-                    "marked": 1 if normalized_marked else 0,
-                },
-            )
+            result = self.set_marked_in_session(db, department_id, group_id, service_date, meal_key, marked)
             db.commit()
-            row = db.execute(
-                text(
-                    """
-                    SELECT group_id, service_date, meal_key, marked
-                    FROM department_requirement_group_completions
-                    WHERE group_id=:group_id AND service_date=:service_date AND meal_key=:meal_key
-                    """
-                ),
-                {
-                    "group_id": str(group_id),
-                    "service_date": normalized_date,
-                    "meal_key": normalized_meal_key,
-                },
-            ).fetchone()
-            if row is None:
-                return {
-                    "group_id": str(group_id),
-                    "service_date": normalized_date.isoformat(),
-                    "meal_key": normalized_meal_key,
-                    "marked": normalized_marked,
-                }
-            return _serialize_row(row)
+            return result
         finally:
             db.close()
 
@@ -146,7 +153,7 @@ class DepartmentRequirementGroupCompletionRepo:
     ) -> list[dict[str, Any]]:
         db = get_session()
         try:
-            self._ensure_table(db)
+            self._ensure_table_in_session(db)
             where = ["g.department_id=:department_id"]
             params: dict[str, Any] = {"department_id": str(department_id)}
             if start_date is not None:
