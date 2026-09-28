@@ -5254,7 +5254,7 @@ def weekview_report_ui():  # TODO Phase 2.E.1: real aggregation; currently place
         db.close()
     meal_labels = get_meal_labels_for_site(site_id)
     # Compute using same aggregation as API
-    from .weekview_report_service import compute_weekview_report  # local import to avoid cycles
+    from .weekview_report_service import compute_weekview_report, resolve_weekview_specialkost_count  # local import to avoid cycles
     tid = session.get("tenant_id")
     if not tid:
         return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
@@ -5412,6 +5412,7 @@ def reports_weekly():
 def admin_report_week():
     from datetime import date as _d
     from datetime import timedelta as _td
+    from .weekview_report_service import resolve_weekview_specialkost_count
     # Params
     today = _d.today()
     iso = today.isocalendar()
@@ -5453,20 +5454,6 @@ def admin_report_week():
 
     svc = WeekviewService()
 
-    def _count_specials(day: dict, meal_key: str) -> int:
-        diets = day.get("diets", {}).get(meal_key, []) or []
-        total = 0
-        for it in diets:
-            if not bool(it.get("marked")):
-                continue
-            name = str(it.get("diet_name", "")).lower()
-            dtid = str(it.get("diet_type_id", "")).lower()
-            if name in ("normal", "normalkost") or dtid in ("normal", "normalkost"):
-                continue
-            cnt = int(it.get("resident_count", 0) or 0)
-            total += cnt
-        return total
-
     vm_deps = []
     for dep in target_deps:
         dep_id = dep["id"]
@@ -5482,8 +5469,8 @@ def admin_report_week():
             wl = str(day.get("weekday_name") or "")
             rl = int(day.get("residents", {}).get("lunch", 0) or 0)
             rd = int(day.get("residents", {}).get("dinner", 0) or 0)
-            spl = _count_specials(day, "lunch")
-            spd = _count_specials(day, "dinner")
+            spl = resolve_weekview_specialkost_count(tenant_id, site_id, dep_id, day.get("date"), "lunch", weekview_day=day)
+            spd = resolve_weekview_specialkost_count(tenant_id, site_id, dep_id, day.get("date"), "dinner", weekview_day=day)
             nol = max(0, rl - spl)
             nod = max(0, rd - spd)
             rows.append({"weekday_index": dow, "weekday_label": wl, "residents_lunch": rl, "residents_dinner": rd, "special_lunch": spl, "normal_lunch": nol, "special_dinner": spd, "normal_dinner": nod})

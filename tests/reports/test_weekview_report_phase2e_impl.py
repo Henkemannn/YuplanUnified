@@ -3,6 +3,10 @@ from datetime import date
 
 import pytest
 
+from core.admin_repo import DepartmentsRepo, DietTypesRepo, SitesRepo
+from core.department_requirement_group_completion_repo import DepartmentRequirementGroupCompletionRepo
+from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
+
 
 ETAG_RE = __import__("re").compile(r'^W/"weekview:dept:.*:year:\d{4}:week:\d{1,2}:v\d+"$')
 
@@ -245,3 +249,67 @@ def test_weekview_report_default_select_marked_specialkost_comes_from_weekview_p
     assert lunch["debiterbar_specialkost_count"] == 2
     assert lunch["normal_diet_count"] == 68
     assert monday["lunch_debiterbar"] == 2
+
+
+@pytest.mark.usefixtures("enable_weekview")
+def test_weekview_report_cohort_bridge_uses_group_completions_and_ignores_legacy_defaults(client_admin):
+    app = client_admin.application
+    year, week = 2026, 37
+
+    with app.app_context():
+        site, _ = SitesRepo().create_site(name=f"Cohort Bridge Site-{uuid.uuid4().hex[:8]}", tenant_id=1)
+        dept_a, _ = DepartmentsRepo().create_department(site_id=site["id"], name="Avdelning 11", resident_count_mode="fixed", resident_count_fixed=10)
+        dept_b, _ = DepartmentsRepo().create_department(site_id=site["id"], name="Avdelning 13", resident_count_mode="fixed", resident_count_fixed=8)
+        dept_c, _ = DepartmentsRepo().create_department(site_id=site["id"], name="Avdelning 16", resident_count_mode="fixed", resident_count_fixed=10)
+
+        gluten = DietTypesRepo().create(site_id=site["id"], name="Glutenfri", default_select=True, semantics="atomic")
+        lactose = DietTypesRepo().create(site_id=site["id"], name="Laktosfri", default_select=False, semantics="atomic")
+        egg = DietTypesRepo().create(site_id=site["id"], name="Äggfri", default_select=False, semantics="atomic")
+        timbal = DietTypesRepo().create(site_id=site["id"], name="Timbal", default_select=False, semantics="atomic")
+        vegetarian = DietTypesRepo().create(site_id=site["id"], name="Vegetarisk", default_select=False, semantics="atomic")
+
+        # Legacy data that would overcount if the report did not switch to cohort truth.
+        DepartmentsRepo().upsert_department_diet_defaults(
+            dept_a["id"],
+            0,
+            [{"diet_type_id": gluten, "default_count": 9}],
+        )
+
+        groups = DepartmentRequirementGroupsRepo()
+        completions = DepartmentRequirementGroupCompletionRepo()
+
+        group_a_done = groups.create_group(dept_a["id"], 1, [gluten], label="Glutenfri", primary_requirement_id=gluten)
+        group_a_not_done = groups.create_group(dept_a["id"], 2, [lactose, egg], label="Laktosfri + Äggfri", primary_requirement_id=lactose)
+        group_b_done = groups.create_group(dept_b["id"], 1, [timbal, lactose], label="Timbal + Laktosfri", primary_requirement_id=timbal)
+        group_c_gluten = groups.create_group(dept_c["id"], 3, [gluten], label="Glutenfri", primary_requirement_id=gluten)
+        group_c_veg = groups.create_group(dept_c["id"], 1, [vegetarian, egg], label="Vegetarisk + Äggfri", primary_requirement_id=vegetarian)
+
+        completions.set_marked(dept_a["id"], group_a_done["id"], "2026-09-08", "lunch", True)
+        completions.set_marked(dept_a["id"], group_a_not_done["id"], "2026-09-08", "lunch", False)
+        completions.set_marked(dept_b["id"], group_b_done["id"], "2026-09-08", "lunch", True)
+        completions.set_marked(dept_c["id"], group_c_gluten["id"], "2026-09-08", "lunch", True)
+        completions.set_marked(dept_c["id"], group_c_veg["id"], "2026-09-08", "lunch", True)
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+        sess["tenant_id"] = 1
+
+    r_api = client_admin.get(f"/api/reports/weekview?site_id={site['id']}&year={year}&week={week}", headers=_h("admin"))
+    assert r_api.status_code == 200
+    data = r_api.get_json()
+    deps = {dep["department_name"]: dep for dep in data["departments"]}
+
+    assert deps["Avdelning 11"]["meals"]["lunch"]["residents_total"] == 70
+    assert deps["Avdelning 11"]["meals"]["lunch"]["debiterbar_specialkost_count"] == 1
+    assert deps["Avdelning 11"]["meals"]["lunch"]["normal_diet_count"] == 69
+    assert deps["Avdelning 11"]["days"][1]["lunch_debiterbar"] == 1
+
+    assert deps["Avdelning 13"]["meals"]["lunch"]["residents_total"] == 56
+    assert deps["Avdelning 13"]["meals"]["lunch"]["debiterbar_specialkost_count"] == 1
+    assert deps["Avdelning 13"]["meals"]["lunch"]["normal_diet_count"] == 55
+    assert deps["Avdelning 13"]["days"][1]["lunch_debiterbar"] == 1
+
+    assert deps["Avdelning 16"]["meals"]["lunch"]["residents_total"] == 70
+    assert deps["Avdelning 16"]["meals"]["lunch"]["debiterbar_specialkost_count"] == 4
+    assert deps["Avdelning 16"]["meals"]["lunch"]["normal_diet_count"] == 66
+    assert deps["Avdelning 16"]["days"][1]["lunch_debiterbar"] == 4

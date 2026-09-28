@@ -1,6 +1,10 @@
 import pytest
 from sqlalchemy import text
 
+from core.admin_repo import DepartmentsRepo, DietTypesRepo, SitesRepo
+from core.department_requirement_group_completion_repo import DepartmentRequirementGroupCompletionRepo
+from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
+
 
 def _seed_site_and_departments(db):
     db.execute(text("""
@@ -156,3 +160,67 @@ def test_seeded_weekly_diets_report(client):
     assert resp4.status_code == 200
     html4 = resp4.get_data(as_text=True)
     assert "Avd B" in html4
+
+
+def test_admin_report_week_uses_cohort_truth_when_groups_exist(client):
+    year, week = 2026, 37
+
+    from core.db import get_session
+
+    db = get_session()
+    try:
+        site_repo = SitesRepo()
+        dept_repo = DepartmentsRepo()
+        diet_repo = DietTypesRepo()
+        group_repo = DepartmentRequirementGroupsRepo()
+        completion_repo = DepartmentRequirementGroupCompletionRepo()
+
+        site, _ = site_repo.create_site(name="Cohort Bridge Site", tenant_id=1)
+        dept_a, _ = dept_repo.create_department(site_id=site["id"], name="Avdelning 11", resident_count_mode="fixed", resident_count_fixed=10)
+        dept_b, _ = dept_repo.create_department(site_id=site["id"], name="Avdelning 13", resident_count_mode="fixed", resident_count_fixed=8)
+        dept_c, _ = dept_repo.create_department(site_id=site["id"], name="Avdelning 16", resident_count_mode="fixed", resident_count_fixed=10)
+
+        gluten = diet_repo.create(site_id=site["id"], name="Glutenfri", default_select=True, semantics="atomic")
+        lactose = diet_repo.create(site_id=site["id"], name="Laktosfri", default_select=False, semantics="atomic")
+        egg = diet_repo.create(site_id=site["id"], name="Äggfri", default_select=False, semantics="atomic")
+        timbal = diet_repo.create(site_id=site["id"], name="Timbal", default_select=False, semantics="atomic")
+        vegetarian = diet_repo.create(site_id=site["id"], name="Vegetarisk", default_select=False, semantics="atomic")
+
+        # Legacy truth that must be ignored once registered requirement groups exist.
+        dept_repo.upsert_department_diet_defaults(
+            dept_a["id"],
+            0,
+            [{"diet_type_id": gluten, "default_count": 9}],
+        )
+
+        group_a = group_repo.create_group(dept_a["id"], 1, [gluten], label="Glutenfri", primary_requirement_id=gluten)
+        group_a_incomplete = group_repo.create_group(dept_a["id"], 2, [lactose, egg], label="Laktosfri + Äggfri", primary_requirement_id=lactose)
+        group_b = group_repo.create_group(dept_b["id"], 1, [timbal, lactose], label="Timbal + Laktosfri", primary_requirement_id=timbal)
+        group_c1 = group_repo.create_group(dept_c["id"], 3, [gluten], label="Glutenfri", primary_requirement_id=gluten)
+        group_c2 = group_repo.create_group(dept_c["id"], 1, [vegetarian, egg], label="Vegetarisk + Äggfri", primary_requirement_id=vegetarian)
+
+        completion_repo.set_marked(dept_a["id"], group_a["id"], "2026-09-08", "lunch", True)
+        completion_repo.set_marked(dept_a["id"], group_a_incomplete["id"], "2026-09-08", "lunch", False)
+        completion_repo.set_marked(dept_b["id"], group_b["id"], "2026-09-08", "lunch", True)
+        completion_repo.set_marked(dept_c["id"], group_c1["id"], "2026-09-08", "lunch", True)
+        completion_repo.set_marked(dept_c["id"], group_c2["id"], "2026-09-08", "lunch", True)
+        db.commit()
+    finally:
+        db.close()
+
+    with client.session_transaction() as s:
+        s["role"] = "admin"
+        s["user_id"] = "tester"
+        s["tenant_id"] = 1
+        s["site_id"] = site["id"]
+
+    resp = client.get(f"/ui/admin/report/week?year={year}&week={week}&department_id=ALL&view=day")
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+
+    assert "Avdelning 11" in html
+    assert "Lunch: Normal 69 · Special 1" in html
+    assert "Avdelning 13" in html
+    assert "Lunch: Normal 55 · Special 1" in html
+    assert "Avdelning 16" in html
+    assert "Lunch: Normal 66 · Special 4" in html
