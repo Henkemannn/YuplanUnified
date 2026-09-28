@@ -1,13 +1,22 @@
 Status: LOCKED
-Last reviewed: 2026-09-24
+Last reviewed: 2026-09-28
 
 # Offshore 1.0 MVP Lock
 
+
 ## Current Program Status
 
-No Offshore 1.0 scope change is introduced by the current Kommun Page3 work.
+No Offshore 1.0 scope change is introduced by the current Kommun work.
 
-Main development focus remains Kommun 1.0 until the Kommun Product2 production path is pilot-ready. Offshore broad MVP work stays frozen except for pilot-blocking regressions or shared-platform issues.
+Main development focus remains Kommun until the current Product2 completion/reporting/parity chain is pilot-ready. The Kommun path is now materially further forward than the 2026-09-24 snapshot:
+- explicit Specialkost primary/modifier persistence is established;
+- registered-need variable quantities are established;
+- shared Admin/Kitchen cohort Weekview projection is established;
+- Kitchen cohort completion persistence is established;
+- Page3 exact completion targets, atomic multi-department completion and the Product2 completion API are established;
+- the visible Page3 completion E2E is the current near-finish gate, followed by reporting/parity and pilot hardening.
+
+Offshore broad MVP work stays frozen except for pilot-blocking regressions or shared-platform issues.
 
 The shared architectural boundary remains unchanged:
 
@@ -15,7 +24,7 @@ Builder -> Business/Operational Context -> Planera 2.0
 
 Current Kommun work must not introduce Kommun-specific concepts into Planera 2.0 Core that would block Offshore reuse.
 
-When Kommun 1.0 reaches Ready for Pilot, main development focus returns to Offshore 1.0.
+When Kommun reaches Ready for Pilot, return main development focus to Offshore 1.0 with a fresh read-only census before resuming implementation. Do not assume the September Offshore backlog is still exact without that census.
 
 ## Goal
 Offshore 1.0 must let a new installation be provisioned and operated without developer scripts or duplicate Builder data models. It should be pilot-ready for a real offshore kitchen while staying deliberately smaller than the long-term Offshore product.
