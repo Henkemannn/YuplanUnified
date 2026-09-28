@@ -33,6 +33,9 @@ let currentRows = [];
 let sectionDrafts = [];
 let pickerOpenSection = "";
 let pickerOpenSlotIndex = null;
+let pickerOpenMode = "attach";
+let pickerOpenRow = null;
+let pickerOpenRowTitle = "";
 let activeDishFilter = "all";
 
 function makeSectionDraft(name, slotLabels) {
@@ -377,6 +380,135 @@ function nextEmptySlotIndex(section) {
   return slots.length;
 }
 
+function menuRowPresentation(row) {
+  const compositionId = normalize(row && row.composition_id);
+  const compositionName = normalize(row && row.composition_name);
+  const unresolvedText = normalize(row && row.unresolved_text);
+  const refType = normalizeLower(row && row.composition_ref_type);
+
+  if (refType === "unresolved" || (!compositionId && unresolvedText)) {
+    return {
+      kind: "unresolved",
+      title: unresolvedText || compositionName || "Rätt",
+      meta: "Ej kopplad till rättbiblioteket",
+      actionLabel: unresolvedText || compositionName || "Rätt",
+    };
+  }
+
+  if (compositionId) {
+    return {
+      kind: "resolved",
+      title: compositionName || compositionId,
+      meta: "Kopplad till: " + String(compositionName || compositionId),
+      actionLabel: compositionName || compositionId,
+      compositionId,
+    };
+  }
+
+  return {
+    kind: "empty",
+    title: "Rätt",
+    meta: "",
+    actionLabel: "Rätt",
+  };
+}
+
+function getActivePickerSelectionHandler() {
+  if (pickerOpenMode === "resolve" && pickerOpenRow) {
+    return async (compositionId) => {
+      await resolveMenuRowToComposition(pickerOpenRow, compositionId);
+    };
+  }
+  return async (compositionId) => {
+    await attachDishToSection(compositionId);
+  };
+}
+
+function resetDishPickerContext() {
+  pickerOpenSection = "";
+  pickerOpenSlotIndex = null;
+  pickerOpenMode = "attach";
+  pickerOpenRow = null;
+  pickerOpenRowTitle = "";
+}
+
+async function resolveMenuRowToComposition(row, compositionId) {
+  const detailId = normalize(row && row.menu_detail_id);
+  const menuId = normalize(activeMenuId);
+  const compositionIdValue = normalize(compositionId);
+  if (!menuId || !detailId || !compositionIdValue) {
+    showText("dishPickerOut", "Kunde inte koppla raden.");
+    return;
+  }
+
+  const result = await callApi(
+    "/api/builder/menus/" + encodeURIComponent(menuId) + "/resolve",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: {
+        menu_detail_id: detailId,
+        composition_id: compositionIdValue,
+      },
+    },
+  );
+
+  if (!result || !result.data || !result.data.ok) {
+    showText("dishPickerOut", "Kunde inte koppla raden.");
+    return;
+  }
+
+  setMenuSaveStatus("Menyn uppdaterad.");
+  showText("menuSectionsOut", "Rätt kopplad.");
+  resetDishPickerContext();
+  closeModal("dishPickerModal");
+  await refreshRows();
+}
+
+async function createCompositionFromMenuRow(row) {
+  const menuId = normalize(activeMenuId);
+  const detailId = normalize(row && row.menu_detail_id);
+  const suggestedName = normalize(row && (row.unresolved_text || row.composition_name)) || "Ny rätt";
+  if (!menuId || !detailId) {
+    showText("menuSectionsOut", "Kunde inte skapa rätt från raden.");
+    return;
+  }
+
+  showLoading("menuSectionsOut");
+  const result = await callApi(
+    "/api/builder/menus/" + encodeURIComponent(menuId) + "/create-composition-from-row",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: {
+        menu_detail_id: detailId,
+        composition_name: suggestedName,
+      },
+    },
+  );
+
+  if (!result || !result.data || !result.data.ok) {
+    showText("menuSectionsOut", "Kunde inte skapa rätt från raden.");
+    return;
+  }
+
+  const compositionId = normalize(result.data && result.data.composition && result.data.composition.composition_id);
+  setMenuSaveStatus("Menyn uppdaterad.");
+  showText("menuSectionsOut", "Rätt skapad.");
+  await refreshRows();
+  if (compositionId) {
+    window.location.href = "/builder-editor-host?composition_id=" + encodeURIComponent(compositionId);
+  }
+}
+
+function openResolvedCompositionEditor(row) {
+  const compositionId = normalize(row && row.composition_id);
+  if (!compositionId) {
+    return;
+  }
+  window.location.href = "/builder-editor-host?composition_id=" + encodeURIComponent(compositionId);
+}
+
 function setSlotLabel(sectionName, slotIndex, value) {
   const draft = ensureDraftSection(sectionName);
   if (!draft) {
@@ -518,21 +650,72 @@ function renderSections() {
         continue;
       }
 
+      const presentation = menuRowPresentation(slot.row);
+
       const dishRow = document.createElement("div");
       dishRow.className = "menu-dish-row";
+      dishRow.classList.add("menu-dish-row--" + presentation.kind);
 
       const left = document.createElement("div");
       const label = document.createElement("div");
       label.className = "menu-dish-label";
-      label.textContent = String(slot.row.composition_name || slot.row.composition_id || "Rätt");
+      label.textContent = String(presentation.title || slot.row.composition_name || slot.row.composition_id || "Rätt");
 
       const meta = document.createElement("div");
       meta.className = "menu-dish-meta";
-      meta.textContent = "";
+      meta.textContent = String(presentation.meta || "");
 
       left.appendChild(label);
       left.appendChild(meta);
       dishRow.appendChild(left);
+
+      const actionWrap = document.createElement("div");
+      actionWrap.className = "menu-inline";
+
+      if (presentation.kind === "unresolved") {
+        const matchBtn = document.createElement("button");
+        matchBtn.type = "button";
+        matchBtn.className = "menu-library-action-btn";
+        matchBtn.textContent = "Matcha rätt";
+        matchBtn.addEventListener("click", () => {
+          pickerOpenMode = "resolve";
+          pickerOpenRow = slot.row;
+          pickerOpenRowTitle = String(presentation.actionLabel || presentation.title || "Rätt");
+          pickerOpenSection = "";
+          pickerOpenSlotIndex = null;
+          const meta = document.getElementById("dishPickerSectionMeta");
+          if (meta) {
+            meta.textContent = "Rad: " + pickerOpenRowTitle;
+          }
+          const search = document.getElementById("dishPickerSearch");
+          if (search) {
+            search.value = "";
+          }
+          showText("dishPickerOut", "Välj en befintlig rätt att koppla till raden.");
+          renderDishPicker();
+          openModal("dishPickerModal");
+        });
+
+        const createBtn = document.createElement("button");
+        createBtn.type = "button";
+        createBtn.className = "menu-library-action-btn";
+        createBtn.textContent = "Skapa rätt";
+        createBtn.addEventListener("click", async () => {
+          await createCompositionFromMenuRow(slot.row);
+        });
+
+        actionWrap.appendChild(matchBtn);
+        actionWrap.appendChild(createBtn);
+      } else if (presentation.kind === "resolved") {
+        const editBtn = document.createElement("button");
+        editBtn.type = "button";
+        editBtn.className = "menu-library-action-btn";
+        editBtn.textContent = "Redigera rätt";
+        editBtn.addEventListener("click", () => {
+          openResolvedCompositionEditor(slot.row);
+        });
+        actionWrap.appendChild(editBtn);
+      }
 
       const removeDishBtn = document.createElement("button");
       removeDishBtn.type = "button";
@@ -543,7 +726,8 @@ function renderSections() {
       removeDishBtn.addEventListener("click", async () => {
         await removeDish(slot.row.menu_detail_id);
       });
-      dishRow.appendChild(removeDishBtn);
+      actionWrap.appendChild(removeDishBtn);
+      dishRow.appendChild(actionWrap);
 
       list.appendChild(dishRow);
     }
@@ -614,7 +798,8 @@ function renderDishList(host, query, options) {
     pill.title = fullName;
     if (allowAttach) {
       pill.addEventListener("click", async () => {
-        await attachDishToSection(String(dish.composition_id || ""));
+        const handler = getActivePickerSelectionHandler();
+        await handler(String(dish.composition_id || ""));
       });
     } else {
       pill.addEventListener("click", async () => {
@@ -622,7 +807,8 @@ function renderDishList(host, query, options) {
           showText("menuSectionsOut", "Välj Lägg till rätt i en sektion först.");
           return;
         }
-        await attachDishToSection(String(dish.composition_id || ""));
+        const handler = getActivePickerSelectionHandler();
+        await handler(String(dish.composition_id || ""));
       });
     }
 
@@ -696,6 +882,9 @@ function openDishPicker(sectionName, slotIndex) {
     return;
   }
 
+  pickerOpenMode = "attach";
+  pickerOpenRow = null;
+  pickerOpenRowTitle = "";
   pickerOpenSection = String(sectionName || "");
   pickerOpenSlotIndex = Number.isInteger(Number(slotIndex)) ? Math.max(0, Number(slotIndex)) : null;
   const meta = document.getElementById("dishPickerSectionMeta");
@@ -801,6 +990,7 @@ async function attachDishToSection(compositionId) {
   setMenuSaveStatus("Menyn uppdaterad.");
   await refreshRows();
   closeModal("dishPickerModal");
+  resetDishPickerContext();
 }
 
 async function removeDish(menuDetailId, options) {

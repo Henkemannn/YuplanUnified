@@ -101,11 +101,22 @@ def test_menu_builder_script_contains_section_slot_template_and_dish_picker_flow
     assert "Direkt skapande av rätt är avstängt i v1A." in script
     assert 'function renderDishBrowser()' in script
     assert 'function renderDishList(host, query, options)' in script
+    assert 'function menuRowPresentation(row)' in script
+    assert 'function resolveMenuRowToComposition(row, compositionId)' in script
+    assert 'function createCompositionFromMenuRow(row)' in script
+    assert 'function openResolvedCompositionEditor(row)' in script
     assert 'const dishBrowserSearch = document.getElementById("dishBrowserSearch");' in script
     assert 'addDishBtn.className = "menu-section-action-btn"' in script
     assert 'renameBtn.className = "menu-section-action-btn"' in script
     assert 'removeBtn.className = "menu-section-action-btn"' in script
     assert 'removeDishBtn.className = "menu-row-remove-btn menu-dish-remove"' in script
+    assert 'matchBtn.textContent = "Matcha rätt"' in script
+    assert 'createBtn.textContent = "Skapa rätt"' in script
+    assert 'editBtn.textContent = "Redigera rätt"' in script
+    assert '/api/builder/menus/' in script
+    assert '/resolve' in script
+    assert '/create-composition-from-row' in script
+    assert '/builder-editor-host?composition_id=' in script
     assert 'openBtn.className = "menu-library-action-btn"' in script
     assert 'outputBtn.className = "menu-library-action-btn"' in script
     assert 'removeDishBtn.textContent = "×"' in script
@@ -114,3 +125,13 @@ def test_menu_builder_script_contains_section_slot_template_and_dish_picker_flow
     assert 'menu-dish-row' in script
     assert "btnViewPrintActive" in script
     assert "/menu-output-v1?menu_id=" in script
+
+
+def test_menu_builder_stylesheet_marks_row_states(client_admin) -> None:
+    rv = client_admin.get("/static/css/menu_builder_v1.css")
+
+    assert rv.status_code == 200
+    css = rv.data.decode("utf-8")
+    assert '.menu-dish-row--unresolved' in css
+    assert '.menu-dish-row--resolved' in css
+    assert '.menu-dish-row .menu-inline' in css

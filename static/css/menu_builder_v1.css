@@ -274,6 +274,23 @@ body {
   gap: 10px;
 }
 
+.menu-dish-row--unresolved {
+  border-style: dashed;
+  background: #f8fbfe;
+}
+
+.menu-dish-row--resolved {
+  background: #fcfdfd;
+}
+
+.menu-dish-row .menu-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .menu-dish-row button {
   padding: 4px 8px;
   min-width: 28px;
