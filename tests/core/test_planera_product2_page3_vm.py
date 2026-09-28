@@ -12,6 +12,7 @@ from core.planera_product2_page2_context import (
     Product2Page2PublicationIdentity,
     Product2Page2RequirementGroupVM,
     Product2Page2RequirementVM,
+    build_product2_page2_planning_context,
 )
 from core.planera_product2_page3_vm import Product2Page3VmError, build_product2_page3_vm
 from core.planera_v2.domain import PlanResult, PlanningSlice, Totals, UnitBreakdown
@@ -474,11 +475,13 @@ def test_build_product2_page3_vm_omits_zero_quantity_completion_refs(monkeypatch
 
 def test_build_product2_page3_vm_live_completion_targets_are_read_only(monkeypatch, tmp_path):
     from scripts.seed_product2_e2e import BUILDER_DB_PATH, MAIN_DB_PATH
+    from scripts.prepare_product2_completion_e2e import prepare_product2_completion_e2e
 
     temp_main_db = tmp_path / "product2_e2e.db"
     temp_builder_db = tmp_path / "product2_e2e_builder.db"
     shutil.copy2(MAIN_DB_PATH, temp_main_db)
     shutil.copy2(BUILDER_DB_PATH, temp_builder_db)
+    prepare_product2_completion_e2e(main_db_path=temp_main_db, builder_db_path=temp_builder_db)
 
     app = create_app(
         {
@@ -524,6 +527,12 @@ def test_build_product2_page3_vm_live_completion_targets_are_read_only(monkeypat
     monkeypatch.setattr("core.planera_product2_page3_vm.get_session", _get_read_only_session)
 
     with app.app_context():
+        page2 = build_product2_page2_planning_context(
+            tenant_id=1,
+            site_id="yuplan-e2e-centralkoket",
+            service_date="2026-09-08",
+            meal="lunch",
+        )
         vm = build_product2_page3_vm(
             tenant_id=1,
             site_id="yuplan-e2e-centralkoket",
@@ -531,10 +540,36 @@ def test_build_product2_page3_vm_live_completion_targets_are_read_only(monkeypat
             meal="lunch",
         )
 
-    assert any(target.requirement_group_id == "2b4a2844-5b18-42cd-895f-d3d20358fe9e" and target.quantity == 3 for target in vm.completion_targets)
-    assert any(target.requirement_group_id == "6250379d-69d3-4d41-b457-2b9ad6630b0e" and target.quantity == 1 for target in vm.completion_targets)
-    assert any(target.requirement_group_id == "5c12b02f-d96b-488d-b9b6-7ee374b1ea33" and target.quantity == 1 for target in vm.completion_targets)
-    assert any(target.requirement_group_id == "f0a6d83b-c135-4e79-8fa2-180ec3b05891" and target.quantity == 1 for target in vm.completion_targets)
+    destination_by_id = {str(destination.destination_id): destination.display_name for destination in page2.destinations}
+    group_by_id = {
+        str(group.requirement_group_id): frozenset(requirement.name for requirement in group.requirements)
+        for group in page2.requirement_groups
+    }
+
+    assert any(
+        destination_by_id.get(str(target.destination_id)) == "Avdelning 16"
+        and group_by_id.get(str(target.requirement_group_id)) == frozenset({"Glutenfri"})
+        and target.quantity == 3
+        for target in vm.completion_targets
+    )
+    assert any(
+        destination_by_id.get(str(target.destination_id)) == "Avdelning 11"
+        and group_by_id.get(str(target.requirement_group_id)) == frozenset({"Glutenfri"})
+        and target.quantity == 1
+        for target in vm.completion_targets
+    )
+    assert any(
+        destination_by_id.get(str(target.destination_id)) == "Avdelning 13"
+        and group_by_id.get(str(target.requirement_group_id)) == frozenset({"Laktosfri", "Timbal"})
+        and target.quantity == 1
+        for target in vm.completion_targets
+    )
+    assert any(
+        destination_by_id.get(str(target.destination_id)) == "Avdelning 16"
+        and group_by_id.get(str(target.requirement_group_id)) == frozenset({"Vegetarisk", "Äggfri"})
+        and target.quantity == 1
+        for target in vm.completion_targets
+    )
     assert all(target.service_date == "2026-09-08" for target in vm.completion_targets)
     assert all(target.meal == "lunch" for target in vm.completion_targets)
     assert len(proxies) == 1

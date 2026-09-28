@@ -646,10 +646,6 @@ def clear_produced_special():
 @require_roles(*KITCHEN_UI_ROLES)
 @csrf_protect
 def post_planera_product2_production_completion():
-    maybe = _require_planera_enabled()
-    if maybe is not None:
-        return maybe
-
     tid = _tenant_id()
     if tid is None:
         return bad_request("tenant_missing")

@@ -24,7 +24,18 @@
 </head>
 <body class="yp-product-body">
   <div class="yp-product-shell">
-    <div class="yp-product-app" id="yp-product-app" data-theme="light" data-screen="production-underlag">
+    <div
+      class="yp-product-app"
+      id="yp-product-app"
+      data-theme="light"
+      data-screen="production-underlag"
+      data-page3-site-id="{{ vm.site_id }}"
+      data-page3-service-date="{{ vm.service_date }}"
+      data-page3-meal="{{ vm.meal }}"
+      data-page3-year="{{ service_year }}"
+      data-page3-week="{{ service_week }}"
+      data-page3-completion-target-departments='{{ completion_department_ids | tojson }}'
+    >
       <header class="yp-product-topbar" aria-label="YUPLAN APP SHELL — LOCKED">
         <div class="yp-product-topbar-brand">
           <img class="yp-product-topbar-brand__mark" src="{{ url_for('static', filename='brand/v1/logo/yuplan-mark-primary.svg') }}" alt="Yuplan" />
@@ -63,6 +74,18 @@
                   <span class="yp-planera-page3-status-pill {% if vm.ready %}is-ready{% else %}is-blocked{% endif %}" aria-label="{{ vm.ready_label }}" title="{{ vm.ready_label }}">{{ vm.ready_label }}</span>
                 </div>
               </div>
+              {% if vm.ready and completion_department_ids %}
+              <div class="yp-planera-page3-action-row" data-page3-completion-shell>
+                <button
+                  class="yp-planera-page3-completion-button"
+                  type="button"
+                  data-page3-completion-button
+                >
+                  Markera som gjorda i veckolistan
+                </button>
+                <p class="yp-planera-page3-completion-feedback" data-page3-completion-feedback aria-live="polite" hidden></p>
+              </div>
+              {% endif %}
             </header>
 
             <nav class="yp-planera-page3-tabs" aria-label="Produktionsvyer" data-page3-tabs>

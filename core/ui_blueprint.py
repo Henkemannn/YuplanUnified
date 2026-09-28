@@ -824,7 +824,18 @@ def kitchen_planering_product2_day_production():
     except Product2Page3VmError:
         return abort(404)
 
-    return render_template("ui/kitchen_product_planera_page3.html", vm=vm)
+    service_year, service_week, _ = service_date.isocalendar()
+    completion_department_ids = tuple(
+        sorted({str(target.destination_id).strip() for target in (vm.completion_targets or ()) if str(target.destination_id).strip()})
+    )
+
+    return render_template(
+        "ui/kitchen_product_planera_page3.html",
+        vm=vm,
+        service_year=service_year,
+        service_week=service_week,
+        completion_department_ids=completion_department_ids,
+    )
 
 
 @ui_bp.post("/ui/kitchen/planering/day/review")

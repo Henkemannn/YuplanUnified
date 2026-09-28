@@ -295,6 +295,84 @@ def test_product2_production_completion_marks_and_clears_targets(app_session, cl
     assert DepartmentRequirementGroupCompletionRepo().get(group_a, service_date, "lunch").get("marked") is False
     assert DepartmentRequirementGroupCompletionRepo().get(group_b, service_date, "lunch").get("marked") is False
 
+    db = get_session()
+    try:
+        db.execute(
+            text("DELETE FROM weekview_registrations WHERE department_id IN (:dep_a, :dep_b) AND year=:yy AND week=:ww"),
+            {"dep_a": dept_a, "dep_b": dept_b, "yy": year, "ww": week},
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_product2_production_completion_succeeds_without_planera_feature_flag(app_session, client_admin, monkeypatch):
+    app = app_session
+    _ensure_weekview_registrations_table()
+    client = client_admin
+
+    reg = getattr(app, "feature_registry", None)
+    assert reg is not None
+    if reg.has("ff.planera.enabled"):
+        reg.set("ff.planera.enabled", False)
+    else:
+        reg.add("ff.planera.enabled")
+        reg.set("ff.planera.enabled", False)
+    assert not reg.enabled("ff.planera.enabled")
+
+    with app.app_context():
+        seeded = _seed_site_with_two_departments(app)
+
+    site_id = seeded["site_id"]
+    dept_a = seeded["dept_a"]
+    dept_b = seeded["dept_b"]
+    group_a = seeded["group_a"]
+    group_b = seeded["group_b"]
+    year = 2026
+    week = 39
+    service_date = date.fromisocalendar(year, week, 1)
+
+    with app.app_context():
+        _seed_weekview_version(1, dept_a, year, week, 0)
+        _seed_weekview_version(1, dept_b, year, week, 0)
+
+    targets = (
+        Product2Page3CompletionTargetVM(requirement_group_id=group_a, destination_id=dept_a, service_date=service_date.isoformat(), meal="lunch", quantity=1),
+        Product2Page3CompletionTargetVM(requirement_group_id=group_b, destination_id=dept_b, service_date=service_date.isoformat(), meal="lunch", quantity=1),
+    )
+    monkeypatch.setattr(
+        "core.planera_api.build_product2_page3_vm",
+        _make_vm({}, site_id=site_id, service_date=service_date, meal="lunch", ready=True, blockers=(), targets=targets),
+    )
+
+    _login(client, site_id=site_id, role="cook")
+    response = client.post(
+        "/api/planera/product2/production-completion",
+        json={
+            "site_id": site_id,
+            "service_date": service_date.isoformat(),
+            "meal": "lunch",
+            "marked": True,
+            "expected_etags": {
+                dept_a: _current_etag(dept_a, year, week, site_id),
+                dept_b: _current_etag(dept_b, year, week, site_id),
+            },
+        },
+        headers={**_csrf_headers(client), "X-User-Role": "cook", "X-Tenant-Id": "1"},
+    )
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["ok"] is True
+    assert body["marked"] is True
+    assert body["target_count"] == 2
+    assert body["site_id"] == site_id
+    assert body["service_date"] == service_date.isoformat()
+    assert body["meal"] == "lunch"
+    assert set(body["departments"]) == {dept_a, dept_b}
+    assert set(body["department_etags"]) == {dept_a, dept_b}
+    assert body["detail"] if "detail" in body else True
+    assert not reg.enabled("ff.planera.enabled")
+
 
 def test_product2_production_completion_rejects_missing_department_etag_without_mutating(app_session, client_admin, monkeypatch):
     app = app_session

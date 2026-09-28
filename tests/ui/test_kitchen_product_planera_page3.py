@@ -7,6 +7,7 @@ from core.admin_repo import DepartmentServiceAddonsRepo, DepartmentsRepo, Servic
 from core.db import get_session
 from sqlalchemy import text
 from core.planera_product2_page3_vm import (
+    Product2Page3CompletionTargetVM,
     Product2Page3DepartmentQuantityVM,
     Product2Page3DestinationVM,
     Product2Page3NormalMatrixCellVM,
@@ -434,6 +435,85 @@ def test_page3_route_renders_production_underlag(app_session, monkeypatch):
     assert 'data-page3-view-link' in html
     assert 'data-page3-panel="overview"' in html
     assert 'data-page3-stickybar' not in html
+    assert 'data-page3-site-id=' in html
+    assert 'data-page3-service-date=' in html
+    assert 'data-page3-meal=' in html
+    assert 'data-page3-year=' in html
+    assert 'data-page3-week=' in html
+
+
+def test_page3_route_renders_completion_button_for_ready_targets(app_session, monkeypatch):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+
+    site, _ = SitesRepo().create_site(name="Page3 Completion Site", tenant_id=1)
+    base_vm = _page3_vm_hierarchy()
+    vm = replace(
+        base_vm,
+        completion_targets=(
+            Product2Page3CompletionTargetVM(requirement_group_id="group-a", destination_id="dept-a", service_date="2026-09-08", meal="lunch", quantity=1),
+            Product2Page3CompletionTargetVM(requirement_group_id="group-b", destination_id="dept-b", service_date="2026-09-08", meal="lunch", quantity=1),
+            Product2Page3CompletionTargetVM(requirement_group_id="group-c", destination_id="dept-a", service_date="2026-09-08", meal="lunch", quantity=2),
+        ),
+    )
+    monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: vm)
+
+    rv = client.get(
+        f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert 'data-page3-completion-target-departments=\'["dept-a", "dept-b"]\'' in html
+    assert 'Markera som gjorda i veckolistan' in html
+    assert 'data-page3-completion-button' in html
+
+
+def test_page3_route_hides_completion_button_when_not_ready(app_session, monkeypatch):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+
+    site, _ = SitesRepo().create_site(name="Page3 Completion Blocked Site", tenant_id=1)
+    vm = replace(
+        _page3_vm_hierarchy(ready=False, blocker_messages=("Produktion saknar beslut",)),
+        completion_targets=(
+            Product2Page3CompletionTargetVM(requirement_group_id="group-a", destination_id="dept-a", service_date="2026-09-08", meal="lunch", quantity=1),
+        ),
+    )
+    monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: vm)
+
+    rv = client.get(
+        f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert 'data-page3-completion-button' not in html
+    assert 'Markera som gjorda i veckolistan' not in html
+
+
+def test_page3_route_hides_completion_button_when_no_completion_targets(app_session, monkeypatch):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+
+    site, _ = SitesRepo().create_site(name="Page3 Empty Completion Site", tenant_id=1)
+    vm = replace(_page3_vm_hierarchy(), completion_targets=())
+    monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: vm)
+
+    rv = client.get(
+        f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert 'data-page3-completion-button' not in html
+    assert 'Markera som gjorda i veckolistan' not in html
 
 
 def test_page3_ready_status_is_compact_and_rendered_once(app_session, monkeypatch):
