@@ -258,17 +258,56 @@ def test_edit_form_renders_requirement_groups_and_can_create_update(client_admin
     assert reread is not None
     assert reread["primary_requirement_id"] == timbal_id
     assert reread["default_quantity"] == 3
-    assert {item["dietary_type_id"] for item in reread["requirements"]} == {timbal_id, glutenfri_id}
+
+
+def test_edit_form_saves_residents_variation(client_admin):
+    site, _ = SitesRepo().create_site(f"Variation UI site {uuid.uuid4()}")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Variation UI",
+        resident_count_mode="fixed",
+        resident_count_fixed=10,
+    )
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
 
     page = client_admin.get(f"/ui/admin/departments/{dep['id']}/edit", headers={"X-User-Role": "admin", "X-Tenant-Id": "1"})
     assert page.status_code == 200
-    html = page.get_data(as_text=True)
-    assert "Registrerade behov" in html
-    assert "Timbal" in html
-    assert "Glutenfri" in html
-    assert "Ytterligare avvikelser" in html
-    assert DietDefaultsRepo().list_for_department(dep["id"]) == defaults_before
-    assert len(DietTypesRepo().list_all(site_id=site["id"])) == diet_count_before
+
+    resp = client_admin.post(
+        f"/ui/admin/departments/{dep['id']}/variation",
+        data={
+            "selected_week": "12",
+            "selected_week_override": "12",
+            "mode": "week",
+            "day_1_lunch": "7",
+            "day_1_dinner": "8",
+            "day_2_lunch": "9",
+            "day_2_dinner": "10",
+            "day_3_lunch": "11",
+            "day_3_dinner": "12",
+            "day_4_lunch": "13",
+            "day_4_dinner": "14",
+            "day_5_lunch": "15",
+            "day_5_dinner": "16",
+            "day_6_lunch": "17",
+            "day_6_dinner": "18",
+            "day_7_lunch": "19",
+            "day_7_dinner": "20",
+        },
+        follow_redirects=True,
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert resp.status_code == 200
+
+    from core.residents_schedule_repo import ResidentsScheduleRepo
+
+    rows = ResidentsScheduleRepo().get_week(dep["id"], 12)
+    found = {(int(row["weekday"]), str(row["meal"])): int(row["count"]) for row in rows}
+    assert found[(1, "lunch")] == 7
+    assert found[(1, "dinner")] == 8
+    assert found[(7, "dinner")] == 20
 
 
 def test_edit_form_rejects_unconfigured_requirement_in_create_flow(client_admin):

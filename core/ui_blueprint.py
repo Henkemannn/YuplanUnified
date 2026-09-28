@@ -7498,6 +7498,75 @@ def admin_departments_save_requirement_group(dept_id: str):
     return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
 
 
+@ui_bp.post("/ui/admin/departments/<department_id>/variation")
+@require_roles(*ADMIN_ROLES)
+def admin_department_save_variation(department_id: str):
+    from flask import flash, redirect, url_for
+    from core.residents_schedule_repo import ResidentsScheduleRepo
+
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id")
+    if not active_site_id:
+        flash("Välj site först.", "error")
+        return redirect(url_for("ui.select_site", next=url_for("ui.admin_departments_edit_form", dept_id=department_id)))
+
+    db = get_session()
+    try:
+        row = db.execute(
+            text("SELECT id FROM departments WHERE id=:id AND site_id=:sid"),
+            {"id": department_id, "sid": active_site_id},
+        ).fetchone()
+    finally:
+        db.close()
+    if not row:
+        flash("Avdelningen hittades inte för vald site.", "error")
+        return redirect(url_for("ui.admin_departments_list"))
+
+    mode = (request.form.get("mode") or "week").strip().lower()
+    selected_week_raw = request.form.get("selected_week_override") or request.form.get("selected_week") or ""
+    if mode == "forever":
+        target_week: int | None = None
+    else:
+        try:
+            target_week = int(str(selected_week_raw).strip() or 0)
+        except Exception:
+            target_week = 0
+        if target_week <= 0:
+            from datetime import date as _date
+
+            target_week = _date.today().isocalendar()[1]
+
+    items: list[dict[str, int | str]] = []
+    for weekday in range(1, 8):
+        for meal in ("lunch", "dinner"):
+            raw_value = (request.form.get(f"day_{weekday}_{meal}") or "").strip()
+            if raw_value == "":
+                continue
+            try:
+                count = int(raw_value)
+            except ValueError:
+                flash("Antal måste vara ett heltal.", "error")
+                return redirect(url_for("ui.admin_departments_edit_form", dept_id=department_id))
+            if count < 0:
+                flash("Antal måste vara 0 eller högre.", "error")
+                return redirect(url_for("ui.admin_departments_edit_form", dept_id=department_id))
+            items.append({"weekday": weekday, "meal": meal, "count": count})
+
+    repo = ResidentsScheduleRepo()
+    try:
+        if target_week is None:
+            repo.delete_forever(department_id)
+        else:
+            repo.delete_week(department_id, target_week)
+        if items:
+            repo.upsert_items(department_id, target_week, items)
+        flash("Varierat boendeantal sparat.", "success")
+    except Exception as exc:
+        flash(f"Kunde inte spara varierat boendeantal: {str(exc)}", "error")
+    return redirect(url_for("ui.admin_departments_edit_form", dept_id=department_id))
+
+
 @ui_bp.post("/ui/admin/departments/<dept_id>/edit/service-addons")
 @require_roles(*ADMIN_ROLES)
 def admin_departments_edit_save_service_addons(dept_id: str):
