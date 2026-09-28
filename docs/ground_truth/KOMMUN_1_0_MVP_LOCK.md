@@ -3,576 +3,306 @@ Last reviewed: 2026-09-28
 
 # Kommun MVP Lock — Product2 / Kommun 1.1
 
+## Release naming
 
-## Goal
+- **Kommun 1.0** = existing legacy/pilot baseline and parity reference.
+- **Kommun 1.1** = current Product2 + Planera 2.0 implementation being finished for the next pilot.
+- **Yuplan 1.0** = wider platform MVP that includes a pilot-ready Kommun track plus Offshore 1.0.
 
-Yuplan Kommun must provide one coherent operational flow from published menu to production, completion, reporting and packing for a municipal kitchen.
+This file keeps its historical path for continuity, but its active status describes **Kommun 1.1**.
 
-Release naming used by the active project:
-- **Kommun 1.0** = existing legacy/pilot baseline that remains the parity reference.
-- **Kommun 1.1** = the current Product2 + Planera 2.0 implementation being finished for the next pilot.
+## Current program status
 
-This file keeps its historical path for continuity, but its active implementation status now describes **Kommun 1.1**.
+Kommun 1.1 has now passed the core operational chain from registered need to reporting.
 
-The MVP must preserve the useful working Kommun 1.0 behavior while moving production truth to the canonical Builder -> Business Context -> Planera 2.0 architecture. Reuse working Weekview, registration and admin surfaces before rewriting them.
+Accepted local checkpoints:
+- `aadfe9c4aecb64f8c14bd239193f687da0b4b2b7` — Page3 -> Weekview completion flow.
+- `4dc54f3f9e7abddea9121d2f55a16be71596aff6` — cohort completion/quantity bridge into existing weekly reports.
 
+Fresh E2E proof has verified:
+- Product2 Page2 reviewed state.
+- Page3 exact Specialkost production targets.
+- Page3 completion action.
+- persisted cohort completion.
+- Kitchen Weekview readback.
+- Admin Weekview readback.
+- weekly report readback with cohort quantities.
 
-## Current Implementation Status
+Verified report values for week 37 / 2026 after completion:
+- Avdelning 11 Lunch: Normal 69 · Special 1.
+- Avdelning 13 Lunch: Normal 55 · Special 1.
+- Avdelning 16 Lunch: Normal 66 · Special 4.
 
-As of 2026-09-28:
+The core chain is therefore established:
 
-Complete / accepted foundations:
-- Product2 Page1 foundation.
-- Product2 Page2 human-review foundation.
-- option-review persistence and staleness.
-- explicit Specialkost primary semantics through `primary_requirement_id`.
-- recurring/variable registered-need quantity persistence.
-- review-aware Kommun -> Planera 2.0 adapter.
-- meal-level orchestration.
-- Page3 authoritative Planera 2.0-backed production projection.
-- Page3 Specialkost primary/modifier presentation foundation.
-- shared Admin/Kitchen Weekview cohort projection.
-- Kitchen cohort completion writes with optimistic concurrency.
-- exact Page3 completion-target contract.
-- atomic multi-department cohort completion coordinator.
-- Product2 completion API with exact per-department ETag validation.
-
-Latest accepted local code checkpoint before the current uncommitted gate:
-
-`2364ba475a7ed8d16087d7f60f9fadf25756c945`
-
-`feat(planera): add product2 cohort completion api`
-
-Current uncommitted gate:
-- visible Page3 completion button/client flow;
-- remove the incorrect legacy `ff.planera.enabled` guard from Product2 completion;
-- finish one clean deterministic manual Page3 -> Weekview E2E proof.
-
-Focused regression after the guard correction: **90 passed, 0 failed, 0 skipped**.
-
-Manual runtime proof already established:
-- Page3 completion can reach `Markerat i veckolistan ✓`;
-- cohort rows persist as completed in Kitchen Weekview;
-- Alt 2 yellow state is independent menu-choice truth and was not written by the completion path.
-
-The remaining E2E issue is fixture hygiene: the generic Product2 seed starts Page2 UNREVIEWED and intentionally seeds Alt 2 menu choices for some departments, so a reused DB is not a canonical four-target completion scenario.
-
-Final Page3 micro-polish is deliberately deferred until the functional/reporting/parity chain is closed.
-
-
-## Required End-to-End Flow
-
-Builder
--> Published Menu
--> Department Portal / menu choice
--> current department baseline and registered needs
--> Product2 Page1 day overview
--> Product2 Page2 human review
--> meal orchestration
--> Planera 2.0
--> Page3 production underlay
+Admin registered needs
+-> variable quantity
+-> published menu + department menu choice
+-> Product2 Page1/Page2/Page3
+-> Planera 2.0 production truth
 -> Kitchen Weekview completion
--> reporting/statistics projection
--> separate Servering / Packning projection
+-> Admin Weekview
+-> Rapport / Statistik
 
-The flow must be usable by a normal site-bound kitchen/cook user.
+## Current active P0 gate
 
-Admin Weekview is read-only operational oversight. Kitchen Weekview owns manual produced/done interaction.
+The fresh pilot smoke found one real admin blocker:
 
-The existing working Weekview surfaces are reused:
-- Admin — Veckovy: read-only;
-- Kök — Veckovy: operational/interactive.
+`ui.admin_department_save_variation`
 
-Do not create a third Weekview to support Product2.
+The department edit template still referenced the old **Varierat boendeantal** form action, but the endpoint no longer existed, causing the admin Specialkost/department edit page to return HTTP 500.
 
-## Canonical Inputs
+Current local uncommitted fix:
+- restore a narrow compatibility POST endpoint for the existing variation modal;
+- persist through `ResidentsScheduleRepo`;
+- do not change DepartmentRequirementGroup or registered-need semantics;
+- focused `tests/ui/test_admin_departments_edit_specialkost.py` is green.
 
-Kommun 1.0 production input must come from current canonical sources:
+This fix is **not yet an accepted checkpoint** until:
+1. live admin page returns 200;
+2. Varierat boendeantal can save and reload;
+3. the change is checkpointed with a clean tree.
 
-- published Builder menu / publication snapshot
-- department menu choices
-- department baseline / resident quantities
-- canonical atomic dietary / texture requirements
-- disjoint DepartmentRequirementGroup cohorts
-- current service overrides
-- human option review against the current published dish
+Do not start the broader UI/UX finish before this P0 is closed.
 
-Existing Serveringstillägg remains valid transition input for the separate serving/packing track.
+## Canonical architecture
 
-Missing menu choice must not silently fall back to another option.
+Builder remains canonical food/menu knowledge:
 
-## Specialkost vs Serveringsanpassning
+Components
+-> Dishes / Compositions
+-> Menus
+-> Published Menu
 
-This separation is locked.
+Kommun owns business/operational context:
+- departments/destinations;
+- resident/baseline quantities;
+- registered Specialkost needs;
+- primary + modifiers;
+- variable quantities;
+- department menu choice;
+- serving/packing preferences.
 
-### Specialkost
+Planera 2.0 owns production calculation.
 
-Recipient-level / recipient-cohort needs that may affect what must be produced.
+Planera Core must remain generic. Kommun-specific labels such as:
+- department;
+- Alt1 / Alt2;
+- lunch / dinner;
+- gluten;
+- timbal;
+- salad;
+must stay in adapters/application layers unless a future cross-domain rule genuinely requires them.
 
-Examples:
-- one recipient never tomato
-- gluten-free
-- timbal
-- vegetarian
-- no fish
+The current Kommun implementation may use lunch/dinner/dessert semantics, but those are **Kommun adapter/UI semantics**, not universal Planera Core constraints.
 
-Specialkost belongs in the requirement/cohort flow:
+## Menu / Builder status
 
-requirements
--> Page2 human review
--> Planera 2.0
--> normal + adapted production
+Established:
+- Builder/publication is the canonical menu direction.
+- Published menu consumption in Product2/Planera is working.
+- department Alt1/Alt2 menu-choice truth is working.
+- missing menu choice must not silently fall back.
 
-### Serveringsanpassning
+Still to verify before Kommun 1.1 pilot freeze:
+- whether the existing **Menyimport** writes into the same Builder/published-menu truth or still maintains a parallel legacy menu path;
+- whether imported CSV/DOCX weeks become editable/publishable in Builder without creating two competing menu truths;
+- how Kommun maps lunch alternatives, dessert and dinner through the adapter without leaking those assumptions into Planera Core.
 
-Department/destination-level serving, packing or delivery preferences.
+Desired end state:
 
-Examples:
-- salad for 6
-- the department never wants tomato in its salad
-- sauce separately
-- mashed potato instead of boiled potato
-- macaroni instead of spaghetti
+Menyimport
+-> normalized/imported menu content
+-> Builder menu
+-> Published Menu
+-> Avdelningsportal / menu choice / Product2 / Planera 2.0
 
-Serveringsanpassning must not be mixed into the default normal/specialkost production worklist.
+Menyimport must be an ingestion path, not a second canonical menu system.
 
-It belongs in a separate Servering / Packning operational surface.
+## Avdelningsportal status
 
-A similar phrase can therefore belong to different domains depending on scope:
+Avdelningsportalen is **not yet considered fully closed for pilot**.
 
-- one recipient never tomato -> Specialkost
-- whole department wants salad without tomato -> Serveringsanpassning
+Existing foundations already include:
+- department-scoped weekly view;
+- published menu display;
+- resident/specialkost read-only context;
+- Alt1/Alt2 menu-choice interaction;
+- ETag-aware menu-choice mutation;
+- portal tests and legacy parity documentation.
 
-## Human Review
+Before pilot freeze, run a focused portal census to verify:
+- the current canonical 1.1 route/template;
+- published Builder menu -> portal;
+- portal menu choice -> same department-menu-choice truth used by kitchen/Product2;
+- registered-needs/cohort information shown correctly and read-only;
+- no duplicate/legacy portal path creates conflicting behavior;
+- tablet usability and role isolation.
 
-Page2 answers:
+The portal must not own resident or Specialkost writes. Its mutable responsibility is department menu choice.
 
-> Which recipient cohorts cannot eat the current published dish as it is?
+## Registered needs / Specialkost
 
-Review state is separate from quantity truth.
+Durable model:
 
-- UNREVIEWED is not equivalent to no adaptations.
-- stale review is not current production truth.
-- current reviewed NO means no adaptation for that cohort.
-- current reviewed YES becomes production deviation input.
-- current quantities always come from current business context.
-
-Serveringsanpassningar do not enter Page2 merely because they may later affect packing.
-
-
-## Specialkost Primary / Modifier Semantics
-
-Explicit hierarchy is now part of the durable Kommun model:
-
-**one primary requirement + 0..N modifiers**
-
-Example:
-
-`Timbal + Glutenfri`
-
-means:
-- primary production group: Timbal
-- modifier/additional requirement: Glutenfri
-- the recipient/cohort is counted once
-- the full exact requirement-member set remains available to Planera 2.0
-
-Implemented persistence direction:
-- `primary_requirement_id` exists on `department_requirement_groups`;
-- primary must belong to the group member set;
-- all remaining members are modifiers;
-- single-requirement groups are unambiguous;
-- unresolved legacy multi-requirement groups must not be guessed from names/order.
-
-Planera 2.0 Core remains order-agnostic and consumes the full exact combination. Primary/modifier remains application/registration/presentation semantics unless a future production rule genuinely requires more.
-
-
-## Specialkost Registration UX Direction
-
-Current conceptual model:
-
-**Specialkosttyper**
-= atomic catalog/library such as Glutenfri, Timbal, Laktosfri.
+**Specialkosttyp**
+= atomic catalog item such as Glutenfri, Timbal, Laktosfri.
 
 **Registrerat behov**
 = one primary requirement + 0..N additional requirements/modifiers + quantity.
 
 **Varierat antal**
-= the existing familiar weekday/meal quantity concept, now keyed to the registered need/cohort rather than an isolated atomic diet type.
+= weekday/meal quantity overrides keyed to the registered need/cohort.
 
-The current data/function is accepted. Remaining work is presentation polish:
-- compact each registered need;
-- keep default quantity visible;
+Rules:
+- one recipient/cohort is counted once;
+- modifiers do not create duplicate portions;
+- unresolved legacy multi-requirement groups must not be guessed from name/order;
+- exact requirement-member set remains available to Planera 2.0.
+
+Remaining UI/UX finish:
+- compact registered-need cards/rows;
+- keep default quantity immediately visible;
 - collapse the full 7 x 2 varied-quantity matrix behind `Varierat antal`;
-- avoid presenting the transition between old Specialkost configuration and new Registrerade behov as two competing truths.
-
-Do not remove old transition data until parity/cutover proves it is safe.
-
-## Planera 2.0
-
-Planera 2.0 is the production calculation layer.
-
-For each demanded menu option it must produce deterministic standard and adapted production quantities with destination traceability.
-
-The Core remains generic and must not contain Kommun-specific concepts such as:
-- department
-- Alt1 / Alt2
-- gluten
-- timbal
-- salad
-- mash
-- tomato
-- spaghetti
-
-Kommun-specific interpretation belongs in adapters / application layers.
-
-Serveringsanpassningar are not automatically Planera deviations.
-
-Primary/modifier hierarchy must not be hardcoded into Planera Core while the engine only needs the exact requirement combination.
-
-## Meal Orchestration
-
-Meal-level orchestration is complete for the current Product2 production path.
-
-It:
-- derives the current published options
-- derives current destination assignment
-- exposes unassigned destinations separately
-- requires current review only for options with demand
-- skips zero-demand options without inventing production
-- runs reviewed demanded options through acceptance and Planera Core
-- preserves multiple blockers simultaneously
-- does not create fake meal-wide totals across unlike dishes
-
-Serveringstillägg remains outside this production orchestration gate.
-
-## Page3 Production Underlay
-
-Page3 is the user-facing projection of Planera 2.0 production truth.
-
-### Locked information architecture
-
-One production context, three equal work tabs:
-
-- Översikt
-- Normalkost
-- Specialkost
-
-Exactly one main work area is active at a time.
-
-No duplicate local navigation hierarchy should appear.
-
-### Shared context/header
-
-Target:
-- global Yuplan topbar retained
-- compact `Produktionsunderlag` title
-- operational date context
-- kitchen/site + meal
-- quiet review action
-- status wording `Underlag granskat` when orchestration/review basis is READY
-
-The status must not imply that cooking/production itself is finished.
-
-### Översikt
-
-One compact authoritative table:
-- Menyval
-- Totalt
-- Normalkost
-- Specialkost
-- total row
-
-Do not duplicate the same truth in large summary cards.
-
-### Normalkost
-
-Destination x published-menu-choice matrix:
-- destination first column
-- one column per published option
-- dish title and total in header
-- zero as dash
-- total row
-- horizontal scroll for many options
-- no unexplained row highlight
-
-### Specialkost target
-
-When explicit primary/modifier persistence exists:
-
-`PRIMARY REQUIREMENT                   total`
-
-`Avdelning 11 [neutral menu-choice pill] [modifier pill] quantity`
-
-Menu-choice pill:
-- context only
-- neutral visual weight
-- means the department's ordinary published menu choice
-- does not claim that the specialkost recipient necessarily receives that exact dish
-
-Modifier pill:
-- visually distinct from neutral menu choice
-- planned subtle purple token family
-- inline on the same row
-- multiple modifiers allowed
-
-Grouping:
-- `Avdelning | Menyval` is a presentation toggle only
-- same recipients
-- same totals
-- no arithmetic changes
-- no duplicate counting
-
-### Current-safe rule
-
-Until primary/modifier persistence exists, Page3 must keep truthful exact-combination semantics and must not fake a primary requirement from names or order.
-
-
-## Product2 Completion and Weekview
-
-Completion semantics are locked:
-
-- `quantity` = planned production need.
-- `completion/done` = produced/handled operational outcome.
-- `Alt 2` = independent department menu-choice state.
-- reporting later consumes completion + quantity truth.
-- external billing is not part of Kommun 1.1.
-
-Product2 completion identity is cohort identity, never a fake diet type.
-
-Page3:
-- derives exact completion targets server-side from `planning_slice.context["requirement_group_refs"]`;
-- includes only current adaptation-required cohort refs;
-- does not use visual combination aggregation as mutation identity.
-
-Browser:
-- receives only the affected department IDs plus page context;
-- fetches current Weekview ETags per affected department;
-- sends no cohort/group/diet identity in the completion POST.
-
-API:
-- rebuilds Page3 server-side;
-- validates the exact affected-department ETag set;
-- converts effective ETags to current base versions;
-- calls the atomic multi-department coordinator.
-
-Atomic coordinator:
-- uses one session/transaction;
-- bumps each affected department version once;
-- writes completion rows only after all CAS checks succeed;
-- rolls back all versions/completions on stale/error;
-- never writes legacy `weekview_registrations`.
-
-Weekview rendering keeps states independent:
-- completion -> green completion indicator;
-- Alt 2 -> yellow background;
-- both may coexist only when both truths are independently present.
-
-A live investigation proved the observed yellow state in the reusable E2E DB came from pre-existing `department_menu_choices` rows, not from Product2 completion writes.
-
-## Current Page3 UX Status
-
-The old 2026-09-24 visual-debt list is no longer the active blocker.
-
-Current accepted direction:
-- compact production context;
-- tabs Översikt / Normalkost / Specialkost;
-- Specialkost Produktionslista / Packlista where applicable;
-- primary requirement as the main production grouping;
-- destination + quantity as primary row context;
-- modifiers as quiet secondary pills;
-- completion action applies to the whole current date/meal production context.
-
-Final Light/Dark, iPad, status/error and spacing polish is deferred to the consolidated Kommun UI finish after reporting/parity bridges are functional.
-
-Do not reopen broad Page3 redesign during the remaining backend/E2E gates.
-
-
-## Product2 E2E Runtime
-
-Normal local development:
-- `python run.py`
-- ordinary local `dev.db`
-
-Canonical Product2 E2E/manual review:
-- `instance/product2_e2e.db`
-- `instance/product2_e2e_builder.db`
-- one process
-- port 5000
-- `debug=False`
-- `use_reloader=False`
-
-Verified E2E identities:
-- Kitchen/cook account: `e2e.kitchen@yuplan.local`
-- Admin account: `e2e.admin@yuplan.local`
-
-The generic base E2E seed is not itself a canonical completion scenario:
-- it intentionally starts Page2 UNREVIEWED;
-- it intentionally seeds broad Alt1/Alt2 menu-choice data.
-
-For destructive/manual completion acceptance, apply only a very small deterministic completion-scenario overlay/reset. This must not turn into a general E2E framework or multi-day seed refactor.
-
-The Product2 completion manual gate is considered proven only from a clean before-state:
-- exact expected completion targets;
-- target cells not already completed;
-- no misleading Alt 2 state on the target cells unless the scenario intentionally requires it.
-
-## Parallel Run / Parity
-
-Planera 1 and Planera 2.0 must run in parallel before cutover.
-
-Production parity should compare:
-- department inputs
-- menu choices
-- baseline quantities
-- requirement quantities
-- normal / standard production
-- adapted production
-- destination breakdown
-
-Servering parity should be compared separately:
-- existing Serveringstillägg counts
-- department breakdown
-- notes
-- future structured serving rules
-
-A difference must be classified before cutover as:
-- regression
-- legacy-model limitation
-- intentional new behavior
-
-Planera 2.0 becomes Kommun production truth only after parity acceptance.
-
-## Serveringstillägg and Serveringsanpassning
-
-The existing Serveringstillägg feature is retained as valid transition input.
-
-Current fixed additions such as:
-- Mos
-- Sallad
-- Sauce separately / other site-specific additions
-
-must remain available through the transition, but in a separate serving/packing track.
-
-The long-term model must support more than fixed addon families.
-
-It must allow structured:
-- standing additions
-- department-level exclusions
-- conditional component substitutions
-- serving / handling instructions
-
-The architecture must remain open to any user-defined component replacement, for example:
-- boiled potato -> mashed potato
-- pasta -> mashed potato
-- spaghetti -> macaroni
-
-Do not hardcode only current examples.
-
-## Menu-Aware Servering Rules
-
-Structured serving rules should be resolved against canonical Builder component knowledge.
-
-If a replacement is already the normal published component, Yuplan must not create duplicate output.
-
-Example:
-
-Rule:
-- potato or pasta -> mashed potato
-
-Published dish already contains mashed potato:
-- no extra mashed-potato serving requirement
-
-This resolution belongs outside Planera Core.
-
-## Daily Packing
-
-Daily destination-aware packing output is part of Kommun 1.0 operational finishline.
-
-The kitchen must be able to determine:
-- what is packed
-- quantity
-- meal / date
-- department / destination
-- standard vs adapted production item where relevant
-- serving addon / substitution / handling need where relevant
-
-Packing is a projection over shared truths, not a separate calculation engine.
-
-## Optional Combined Total Pack List
-
-A later total pack view may deliberately combine the separate tracks for the final packing task.
-
-Example:
-
-Solrosen — Avdelning 1
-
-- Normalkost: 8
-- Timbal: 1
-- Sallad: 6 — aldrig tomat
-- Potatismos istället för kokt potatis: 1
-
-This combined view may be generated:
-- for one department
-- for one delivery location / boende
-- for all departments
-
-It is an explicit downstream projection.
-
-It must not collapse Specialkost and Serveringsanpassning into one data model or one default production worklist.
-
-
-## Required Before Ready for Pilot
-
-Already established:
-- normal authenticated Product2 Kitchen and Admin access.
-- Product2 Page1 from current published menu.
-- Product2 Page2 review + persistence/staleness.
-- explicit primary/modifier registered-need semantics.
+- provide a clear edit and, if required for pilot operations, delete/retire path;
+- remove or visually subordinate transition UI so old Specialkost defaults and new Registrerade behov do not look like competing truths.
+
+## Product2 / Planera status
+
+Complete and accepted:
+- Page1 day overview foundation.
+- Page2 human review.
+- review persistence and staleness.
+- review-aware Kommun -> Planera 2.0 adaptation.
+- primary/modifier semantics.
 - variable cohort quantities.
 - meal orchestration.
-- authoritative Page3 production projection.
-- shared cohort Weekview read model.
-- Kitchen cohort completion persistence.
-- exact Page3 completion targets.
-- atomic multi-department completion service.
-- Product2 completion API / ETag concurrency bridge.
+- Page3 authoritative production projection.
+- Normalkost and Specialkost quantities.
+- destination breakdown.
+- exact completion-target identity.
+- atomic multi-department completion.
+- optimistic concurrency / ETag validation.
+- completion persistence and reload.
 
-Remaining:
-- close and checkpoint the visible Page3 completion client flow with one clean manual Page3 -> Kitchen Weekview -> reload -> Admin Weekview proof.
-- reporting/statistics bridge over new cohort quantity + completion truth.
-- one full Kommun E2E from Admin registered need through report.
-- Kommun 1.0 vs Kommun 1.1 parity/cutover review.
-- consolidated operational UI/UX finish including compact Varierat antal editing, empty/error/status states, iPad and Light/Dark consistency.
-- separate Servering / Packning output.
-- preserve existing fixed Serveringstillägg in that separate surface.
-- daily destination-aware packing output.
-- final pilot smoke/regression/deploy checks.
+Current verified Product2 E2E scenario is lunch. Dinner support exists in the Kommun stack but should receive a current-branch verification during the finish pass. Dessert/menu-section semantics should be checked during the Menu/Builder census rather than generalized prematurely.
 
-A difference versus Kommun 1.0 must be classified as:
-- regression;
-- old-model limitation;
-- intentional new semantics.
+## Weekview status
 
-Do not rewrite working Kommun 1.0 behavior merely to make the new track look different.
+Existing working surfaces are reused:
+- Admin — Veckovy: read-only.
+- Kök — Veckovy: operational/interactive.
 
-## Not Required to Block First Pilot
+Accepted:
+- cohort rows;
+- variable quantities;
+- completion mark/unmark;
+- persistence/reload;
+- optimistic concurrency;
+- Alt2 truth independent from completion truth;
+- no third Weekview.
 
-These may follow after the first pilot if the architecture already supports them:
+## Reporting status
 
-- full arbitrary substitution-rule editor
-- complete conversion of all free-text notes to structured rules
-- polished combined total-pack UI
-- recipient-level identity model
-- advanced delivery-location hierarchy
-- recipe scaling
-- inventory / purchasing
-- freezer / prep automation
-- AI suggestions
+The existing report page remains the product surface.
 
-## Detailed Reference
+Accepted bridge:
+- residents totals unchanged;
+- cohort projection supplies completed Specialkost quantity where registered groups exist;
+- legacy DietDefaults/marks path remains fallback only for legacy-only departments;
+- cohort and legacy are never summed together for the same department;
+- normal count = max(residents - completed special quantity, 0).
 
-See:
+No new report UI or report engine was introduced.
 
-- `docs/planera2/KOMMUN_STANDING_NEEDS_AND_PACKING.md`
-- `docs/ground_truth/PLANERA_2_0_ARCHITECTURE_LOCK.md`
+## Servering / Packning status
+
+Existing `Serveringstillägg` and printable production-list output remain valid transition behavior.
+
+Current decision for first pilot:
+- do **not** build a new dedicated packing module unless the finish smoke proves the existing output is operationally insufficient;
+- production, destination breakdown and Serveringstillägg may remain in the existing printable surface for the first pilot;
+- a dedicated structured packing projection is a post-pilot improvement unless promoted by a proven pilot blocker.
+
+Long-term architecture remains:
+- Specialkost production truth and Serveringsanpassning are separate domains;
+- a combined pack list may project both downstream;
+- packing must not become a second production-calculation engine.
+
+## Remaining to Kommun 1.1 MVP / pilot
+
+### P0 — must close before further finish work
+
+1. **Admin Varierat boendeantal 500**
+   - live-verify the restored compatibility endpoint;
+   - save/reload week or forever resident schedule;
+   - checkpoint the fix.
+
+### P1 — finish before pilot freeze
+
+2. **Menyimport -> Builder census**
+   - determine whether one or two menu truths still exist;
+   - lock the ingestion path into Builder/published menu;
+   - no broad Builder redesign.
+
+3. **Avdelningsportal census**
+   - verify current route/template/data ownership;
+   - verify published menu and menu-choice round trip;
+   - verify read-only Specialkost/department facts;
+   - identify only real pilot gaps.
+
+4. **Kommun UI/UX finish**
+   - clean department setup;
+   - compact Registrerade behov / Varierat antal;
+   - reduce transition duplication;
+   - clarify admin navigation/menu surfaces;
+   - polish portal where needed;
+   - preserve working Weekview and Report layouts.
+
+5. **Tablet/iPad finish pass**
+   - department setup;
+   - Product2 Page3;
+   - Kitchen Weekview;
+   - Rapport;
+   - Avdelningsportal.
+
+6. **Current-branch meal semantics verification**
+   - lunch already proven;
+   - verify dinner/kvällsmat in Product2;
+   - verify dessert mapping in Kommun menu adapter;
+   - confirm no Kommun-specific meal assumptions have leaked into Planera Core.
+
+7. **Final fresh pilot smoke**
+   - real Admin + Kitchen roles;
+   - fresh E2E reset;
+   - admin setup -> menu -> Planera -> completion -> Weekview -> report;
+   - portal/menu-choice readback;
+   - no HTTP 500 / stale transition blockers.
+
+### P2 — post-pilot unless promoted by real pilot evidence
+
+- dedicated structured packing projection;
+- advanced Serveringsanpassning rule editor;
+- full dead-code cleanup;
+- broad legacy route removal;
+- advanced analytics/billing integration;
+- Home / Hotel / Banquet/Event work.
+
+## Pilot-ready definition
+
+Kommun 1.1 is pilot-ready when:
+- current P0 admin blocker is closed;
+- Menyimport/Builder ownership is unambiguous;
+- Avdelningsportal has passed its focused census and any true blocker is closed;
+- department/admin UI has received the planned compact finish pass;
+- critical surfaces work on iPad/tablet;
+- fresh end-to-end operator smoke passes.
+
+Do not reopen core Planera architecture, invent a third Weekview, redesign the existing report, or generalize all future business types during this finish phase.
+
+## Related ground truth
+
 - `docs/ground_truth/YUPLAN_1_0_FINISHLINE.md`
+- `docs/ground_truth/PLANERA_2_0_ARCHITECTURE_LOCK.md`
+- `docs/ground_truth/PORTALS_ARCHITECTURE_LOCK.md`
+- `docs/planera2/KOMMUN_STANDING_NEEDS_AND_PACKING.md`
