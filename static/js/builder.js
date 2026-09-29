@@ -138,6 +138,7 @@ const _builderModalShadowState = {
   pendingComponentCreateForCompositionName: null,
   pendingComponentCreateReturnTab: "components",
   pendingComponentCreateComponentId: null,
+  componentDetailOpenContext: null,
   _activeComponentDetailId: "",
   _activeComponentDetailTab: "overview",
   _componentDetailDirty: false,
@@ -2154,12 +2155,12 @@ async function saveComponentOverviewFromDetail(componentId) {
   void componentId;
 }
 
-async function openComponentDetailEditor(componentId, initialTab) {
+async function openComponentDetailEditor(componentId, initialTab, openerContext) {
   _componentActionPopoverId = "";
   _componentInlineEditId = "";
   const editor = _getBuilderComponentEditor();
   if (editor && typeof editor.openComponentDetailEditor === "function") {
-    return editor.openComponentDetailEditor(componentId, initialTab);
+    return editor.openComponentDetailEditor(componentId, initialTab, openerContext);
   }
   return Promise.resolve();
 }
@@ -4341,7 +4342,12 @@ function renderBuilderPanel(composition) {
       if (target && target.closest(".component-row-right")) {
         return;
       }
-      await openComponentDetailEditor(componentIdValue);
+      await openComponentDetailEditor(componentIdValue, "overview", currentBuilderComposition ? {
+        kind: "composition",
+        composition_id: String(currentBuilderComposition.composition_id || "").trim(),
+        composition_name: String(currentBuilderComposition.composition_name || "").trim(),
+        return_tab: "components",
+      } : null);
     });
 
     const surface = document.createElement("button");

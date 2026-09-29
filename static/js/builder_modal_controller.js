@@ -204,9 +204,16 @@ function createBuilderModalController(config) {
       if (prepared && prepared.composition) {
         renderCurrentComposition(prepared.composition);
       }
+      const composition = prepared && prepared.composition ? prepared.composition : null;
       if (prepared && prepared.component && String(prepared.component.component_id || "").trim()) {
         targetComponentId = String(prepared.component.component_id || "").trim();
       }
+      return _componentEditor.openComponentDetailEditor(targetComponentId, "overview", composition ? {
+        kind: "composition",
+        composition_id: String(composition.composition_id || "").trim(),
+        composition_name: String(composition.composition_name || "").trim(),
+        return_tab: "components",
+      } : null);
     }
 
     return _componentEditor.openComponentDetailEditor(targetComponentId, "overview");
@@ -993,8 +1000,8 @@ function createBuilderModalController(config) {
      * @param {string} componentId
      * @param {string} [initialTab]
      */
-    openComponentDetailEditor(componentId, initialTab) {
-      if (_componentEditor) return _componentEditor.openComponentDetailEditor(componentId, initialTab);
+    openComponentDetailEditor(componentId, initialTab, openerContext) {
+      if (_componentEditor) return _componentEditor.openComponentDetailEditor(componentId, initialTab, openerContext);
       return Promise.resolve();
     },
 

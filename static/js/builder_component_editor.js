@@ -431,6 +431,20 @@ function createBuilderComponentEditor(config) {
     return Array.isArray(draft) ? draft.slice() : [];
   }
 
+  function currentComponentDetailOpenContext() {
+    const context = _getState("componentDetailOpenContext");
+    return context && typeof context === "object" ? context : null;
+  }
+
+  function componentDetailBackLabel() {
+    const context = currentComponentDetailOpenContext();
+    if (context && String(context.kind || "") === "composition") {
+      const compositionName = String(context.composition_name || "").trim();
+      return compositionName ? "Tillbaka till " + compositionName : "Tillbaka till rätten";
+    }
+    return "Tillbaka till komponenter";
+  }
+
   function _buildTagCatalog() {
     const unique = new Set();
     for (const item of _getCachedComponents()) {
@@ -929,14 +943,26 @@ function createBuilderComponentEditor(config) {
     const pendingComponentId = String(_getState("pendingComponentCreateComponentId") || "").trim();
     const activeComponentId = String(_getState("_activeComponentDetailId") || "").trim();
     if (!compositionId || !compositionName || !pendingComponentId || !activeComponentId || activeComponentId !== pendingComponentId) {
-      button.classList.add("hidden");
-      button.setAttribute("hidden", "hidden");
       button.textContent = "";
+      button.hidden = true;
+      button.style.display = "none";
+      button.classList.add("hidden");
       return;
     }
     button.textContent = "Lägg till i " + compositionName;
+    button.hidden = false;
+    button.style.display = "";
     button.classList.remove("hidden");
-    button.removeAttribute("hidden");
+  }
+
+  function updateComponentDetailBackAction() {
+    const button = document.getElementById("componentDetailEditorClose");
+    if (!button) {
+      return;
+    }
+    button.textContent = componentDetailBackLabel();
+    button.hidden = false;
+    button.classList.remove("hidden");
   }
 
   // ─── L: Text helper ───────────────────────────────────────────────────────
@@ -986,7 +1012,7 @@ function createBuilderComponentEditor(config) {
 
   // ─── I: Modal open/save/close orchestration ───────────────────────────────
 
-  async function openComponentDetailEditor(componentId, initialTab) {
+  async function openComponentDetailEditor(componentId, initialTab, openerContext) {
     const idValue = String(componentId || "").trim();
     if (!idValue) {
       return;
@@ -1008,6 +1034,15 @@ function createBuilderComponentEditor(config) {
     if (!component) {
       return;
     }
+    const normalizedContext = openerContext && typeof openerContext === "object"
+      ? {
+        kind: String(openerContext.kind || "").trim().toLowerCase() || "library",
+        composition_id: String(openerContext.composition_id || "").trim(),
+        composition_name: String(openerContext.composition_name || "").trim(),
+        return_tab: String(openerContext.return_tab || "").trim().toLowerCase() || "components",
+      }
+      : null;
+    _setState("componentDetailOpenContext", normalizedContext);
     _setState("_activeComponentDetailId", idValue);
     const title = document.getElementById("componentDetailEditorTitle");
     const nameInput = document.getElementById("componentDetailOverviewName");
@@ -1050,6 +1085,7 @@ function createBuilderComponentEditor(config) {
     setComponentDetailTab(requestedTab || "overview");
     resetComponentDetailDirty();
     _openSimpleModal("componentDetailEditorModal");
+    updateComponentDetailBackAction();
     updateComponentDetailReturnAction();
   }
 

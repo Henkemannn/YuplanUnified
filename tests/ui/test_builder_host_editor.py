@@ -140,8 +140,8 @@ def test_builder_editor_host_uses_targeted_scoped_reads() -> None:
     assert "dishOverviewMenuName" in controller_js
     assert "_openLinkedComponentEditor" in controller_js
     assert "await _openLinkedComponentEditor(componentIdValue);" in controller_js
-    assert "openComponentDetailEditor(componentId, initialTab)" in controller_js
-    assert "if (_componentEditor) return _componentEditor.openComponentDetailEditor(componentId, initialTab);" in controller_js
+    assert "openComponentDetailEditor(componentId, initialTab, openerContext)" in controller_js
+    assert "if (_componentEditor) return _componentEditor.openComponentDetailEditor(componentId, initialTab, openerContext);" in controller_js
     assert "loadCompositionTextPreviewForCurrentComposition" not in controller_js
     assert "window.addEventListener('message'" in host_js
     assert "if (target.hostTargetId) {" in host_js

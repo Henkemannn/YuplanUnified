@@ -11,6 +11,7 @@
     pendingComponentCreateForCompositionName: null,
     pendingComponentCreateReturnTab: 'components',
     pendingComponentCreateComponentId: null,
+    componentDetailOpenContext: null,
     _activeComponentDetailId: '',
     _activeComponentDetailTab: 'overview',
     _componentDetailDirty: false,

@@ -479,6 +479,8 @@ describe('standalone canonical builder runtime', () => {
     await waitForCondition(() => !document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
     expect(document.getElementById('componentDetailEditorModal')?.classList.contains('hidden')).toBe(false);
     expect(document.getElementById('componentDetailEditorTitle')?.textContent).toContain('Linked Component');
+    expect(document.getElementById('componentDetailEditorClose')?.textContent).toBe('Tillbaka till Standalone Dish');
+    expect(document.getElementById('componentDetailReturnToDishBtn')?.classList.contains('hidden')).toBe(true);
     expect(typeof window.openBuilderModalForComposition).toBe('undefined');
 
     const nameInput = document.getElementById('componentDetailOverviewName');
@@ -514,6 +516,24 @@ describe('standalone canonical builder runtime', () => {
     expect(attachCalls).toHaveLength(0);
     expect(document.getElementById('resolveModal')?.classList.contains('hidden')).toBe(false);
 
+    controller.openComponentDetailEditor('linked_component', 'overview', {
+      kind: 'composition',
+      composition_id: 'dish_1',
+      composition_name: 'Standalone Dish',
+      return_tab: 'components',
+    });
+    await waitForCondition(() => !document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
+    document.getElementById('componentDetailOverviewName').value = 'Linked Component Dirty Return';
+    const originalConfirm = window.confirm;
+    window.confirm = () => true;
+    document.getElementById('componentDetailEditorClose')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await waitForCondition(() => document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
+    window.confirm = originalConfirm;
+    expect(apiCalls.some((call) => call.method === 'PATCH' && /\/components\/linked_component$/.test(call.url))).toBe(true);
+    expect(apiCalls.some((call) => call.method === 'PATCH' && /\/components\/linked_component\/details$/.test(call.url))).toBe(true);
+    expect(controller.getCurrentComposition()?.components?.[0]?.component_name).toBe('Linked Component Dirty Return');
+    expect(document.querySelector('#builderComponentsList .dish-linked-component-card[data-component-id="linked_component"] .component-library-card-name')?.textContent).toBe('Linked Component Dirty Return');
+
     forceComponentOverviewSaveFailure = true;
     controller.openComponentDetailEditor('linked_component', 'overview');
     await waitForCondition(() => !document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
@@ -527,6 +547,7 @@ describe('standalone canonical builder runtime', () => {
 
     controller.openComponentDetailEditor('new_component', 'overview');
     await waitForCondition(() => !document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
+    expect(document.getElementById('componentDetailEditorClose')?.textContent).toBe('Tillbaka till komponenter');
     expect(document.getElementById('componentDetailOut')?.textContent).not.toContain('Could not save changes.');
     document.getElementById('componentDetailEditorClose')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await waitForCondition(() => document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
@@ -534,10 +555,9 @@ describe('standalone canonical builder runtime', () => {
 
     controller.setPendingComponentCreate();
     expect(controller.getState('pendingComponentCreateForCompositionId')).toBe('dish_1');
+    controller.setState('pendingComponentCreateComponentId', 'new_component');
     controller.openComponentDetailEditor('new_component', 'overview');
     await waitForCondition(() => !document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
-    expect(document.getElementById('componentDetailReturnToDishBtn')?.classList.contains('hidden')).toBe(true);
-    controller.setState('pendingComponentCreateComponentId', 'new_component');
     expect(document.getElementById('componentDetailReturnToDishBtn')?.textContent).toContain('Standalone Dish');
     expect(document.getElementById('componentDetailReturnToDishBtn')?.classList.contains('hidden')).toBe(false);
 
@@ -548,9 +568,9 @@ describe('standalone canonical builder runtime', () => {
     expect(attachCalls).toHaveLength(0);
 
     controller.setPendingComponentCreate();
+    controller.setState('pendingComponentCreateComponentId', 'new_component');
     controller.openComponentDetailEditor('new_component', 'overview');
     await waitForCondition(() => !document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
-    controller.setState('pendingComponentCreateComponentId', 'new_component');
     expect(document.getElementById('componentDetailReturnToDishBtn')?.classList.contains('hidden')).toBe(false);
 
     const newComponentName = document.getElementById('componentDetailOverviewName');
@@ -580,15 +600,16 @@ describe('standalone canonical builder runtime', () => {
     controller.openComponentDetailEditor('linked_component', 'overview');
     await waitForCondition(() => !document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
     expect(document.getElementById('componentDetailReturnToDishBtn')?.classList.contains('hidden')).toBe(true);
+    expect(document.getElementById('componentDetailEditorClose')?.textContent).toBe('Tillbaka till komponenter');
     document.getElementById('componentDetailEditorClose')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await waitForCondition(() => document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
     expect(attachCalls).toHaveLength(attachCountAfterFirstReturn);
 
     controller.setPendingComponentCreate();
     expect(controller.getState('pendingComponentCreateForCompositionId')).toBe('dish_1');
+    controller.setState('pendingComponentCreateComponentId', 'new_component');
     controller.openComponentDetailEditor('new_component', 'overview');
     await waitForCondition(() => !document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
-    controller.setState('pendingComponentCreateComponentId', 'new_component');
     expect(document.getElementById('componentDetailReturnToDishBtn')?.textContent).toContain('Standalone Dish');
 
     document.getElementById('componentDetailReturnToDishBtn')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
