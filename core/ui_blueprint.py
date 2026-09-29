@@ -277,7 +277,17 @@ def builder_editor_host_ui():
 @ui_bp.get("/menu-builder-v1")
 @require_roles("editor", "admin", "superuser")
 def menu_builder_v1_ui():
-    return render_template("menu_builder_v1.html")
+    from flask import request
+
+    menu_id = str(request.args.get("menu_id") or "").strip()
+    return_url = str(request.args.get("return_url") or "").strip()
+    if not (return_url.startswith("/") and not return_url.startswith("//")):
+        return_url = ""
+    return render_template(
+        "menu_builder_v1.html",
+        initial_menu_id=menu_id,
+        return_url=return_url,
+    )
 
 
 @ui_bp.get("/menu-output-v1")

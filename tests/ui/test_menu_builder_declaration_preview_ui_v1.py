@@ -81,6 +81,19 @@ def test_menu_builder_ui_keeps_sections_and_dish_add_surfaces(client_admin) -> N
     assert 'id="btnRefreshSections"' not in html
 
 
+def test_menu_builder_ui_accepts_menu_and_return_context(client_admin) -> None:
+    rv = client_admin.get(
+        "/menu-builder-v1?menu_id=builder-menu-1&return_url=/ui/admin/menu-import/week/2025/48",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+
+    assert rv.status_code == 200
+    html = rv.data.decode("utf-8")
+    assert 'data-initial-menu-id="builder-menu-1"' in html
+    assert 'href="/ui/admin/menu-import/week/2025/48"' in html
+    assert "Tillbaka till veckan" in html
+
+
 def test_menu_builder_script_contains_section_slot_template_and_dish_picker_flow(client_admin) -> None:
     rv = client_admin.get("/static/js/menu_builder_v1.js")
 
@@ -125,6 +138,7 @@ def test_menu_builder_script_contains_section_slot_template_and_dish_picker_flow
     assert 'menu-dish-row' in script
     assert "btnViewPrintActive" in script
     assert "/menu-output-v1?menu_id=" in script
+    assert "function openMenuById(menuId)" in script
 
 
 def test_menu_builder_stylesheet_marks_row_states(client_admin) -> None:

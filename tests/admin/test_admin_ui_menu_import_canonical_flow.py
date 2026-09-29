@@ -262,7 +262,16 @@ def test_admin_menu_import_upload_creates_builder_link_publication_and_portal_pa
     finally:
         db.close()
 
+    builder_menu_count_before = len(app_session.extensions["builder_menu_context_flow"].list_menus())
+
     week_view = client_admin.get(f"/ui/admin/menu-import/week/{YEAR}/{WEEK}", headers=ADMIN_HEADERS)
+    html = week_view.data.decode("utf-8")
+    assert "Redigera matsedel" in html
+    assert f"/menu-builder-v1?menu_id={builder_menu_id}" in html
+    assert f"return_url=/ui/admin/menu-import/week/{YEAR}/{WEEK}" in html
+    assert html.count("Redigera matsedel") == 1
+    builder_menu_count_after = len(app_session.extensions["builder_menu_context_flow"].list_menus())
+    assert builder_menu_count_after == builder_menu_count_before
     etag = week_view.headers.get("ETag")
     assert etag
 

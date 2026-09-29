@@ -181,6 +181,14 @@ def test_admin_menu_import_week_shows_menu_data(client_admin: FlaskClient):
     assert "Glass" in html
 
 
+def test_admin_menu_import_week_hides_builder_entrypoint_without_link(client_admin: FlaskClient):
+    response = client_admin.get("/ui/admin/menu-import/week/2025/48", headers=ADMIN_HEADERS)
+
+    assert response.status_code == 200
+    html = response.data.decode()
+    assert "Redigera matsedel" not in html
+
+
 def test_admin_menu_import_week_nonexistent_shows_warning(client_admin: FlaskClient):
     """Week detail for non-existent menu shows warning and redirects."""
     response = client_admin.get("/ui/admin/menu-import/week/2099/99", headers=ADMIN_HEADERS, follow_redirects=True)

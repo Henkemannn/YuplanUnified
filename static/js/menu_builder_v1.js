@@ -1277,10 +1277,32 @@ async function refreshMenuLibrary() {
   const result = await callApi("/api/builder/menus", { method: "GET" });
   if (!result || !result.data || !result.data.ok) {
     showText("menuLibraryOut", "Kunde inte läsa in menyer.");
-    return;
+    return [];
   }
-  renderMenuLibrary(result.data.menus);
+  const menus = Array.isArray(result.data.menus) ? result.data.menus : [];
+  renderMenuLibrary(menus);
   showText("menuLibraryOut", "Menybibliotek uppdaterat.");
+  return menus;
+}
+
+async function openMenuById(menuId) {
+  const targetId = normalize(menuId);
+  if (!targetId) {
+    return false;
+  }
+
+  const menus = await refreshMenuLibrary();
+  const match = menus.find((menu) => String(menu.menu_id || "") === targetId) || null;
+  if (!match) {
+    showText("menuLibraryOut", "Kunde inte hitta vald meny.");
+    return false;
+  }
+
+  setActiveMenu(match);
+  sectionDrafts = [];
+  showText("menuSectionsOut", "Meny öppnad.");
+  await refreshRows();
+  return true;
 }
 
 function selectedStartMode() {
@@ -1485,6 +1507,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   setActiveMenu({ menu_id: "", title: "" });
   await loadDishes();
   renderDishBrowser();
-  await refreshMenuLibrary();
+  const initialMenuId = normalize(document.body && document.body.dataset ? document.body.dataset.initialMenuId : "");
+  if (initialMenuId) {
+    await openMenuById(initialMenuId);
+  } else {
+    await refreshMenuLibrary();
+  }
   renderSections();
 });

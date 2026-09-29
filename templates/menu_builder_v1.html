@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/static/css/builder.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/menu_builder_v1.css') }}">
 </head>
-<body>
+<body data-initial-menu-id="{{ initial_menu_id or '' }}" data-return-url="{{ return_url or '' }}">
   <div class="menu-composer-shell menu-composer-grid">
     <aside class="menu-dish-panel">
       <div class="menu-panel-header">
@@ -26,6 +26,9 @@
       <section class="menu-card menu-topbar">
         <div class="menu-topbar-copy">
           <a href="/builder-workspace-v1" class="menu-back-link">← Till Builder</a>
+          {% if return_url %}
+          <a href="{{ return_url }}" class="menu-back-link">← Tillbaka till veckan</a>
+          {% endif %}
           <p class="menu-document-kicker">Meny</p>
           <h1 id="menuDocumentTitle">Bygg meny</h1>
           <p class="menu-meta">Bygg en meny av befintliga rätter och fortsätt där du slutade.</p>
@@ -97,6 +100,7 @@
     </div>
   </div>
 
+  <body data-initial-menu-id="{{ initial_menu_id or '' }}" data-return-url="{{ return_url or '' }}"></body>
   <script src="/static/js/menu_builder_v1.js"></script>
 </body>
 </html>
