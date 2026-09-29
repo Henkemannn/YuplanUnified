@@ -53,6 +53,7 @@
 
 {% block scripts %}
     {{ super() }}
+    <script src="{{ url_for('static', filename='ui/admin_menu_import_week_builder_host.js') }}" defer></script>
     <script src="{{ url_for('static', filename='ui/admin_menu_week_picker.js') }}" defer></script>
 {% endblock %}
 {% block admin_main %}
@@ -149,7 +150,17 @@
                                     {% set slot = day_row.slots.get(slot_key, {}) %}
                                     <div class="menu-editor-meal-row menu-day-row">
                                         <div class="menu-editor-meal-type">{{ slot.get('label', '-') }}</div>
-                                        <div class="menu-editor-meal-dish menu-editor-readonly-field">{{ slot.get('dish_name') or '—' }}</div>
+                                        {% if slot.get('composition_id') %}
+                                            <button
+                                                type="button"
+                                                class="menu-editor-meal-dish menu-editor-readonly-field menu-editor-meal-dish--link"
+                                                data-admin-week-builder-open
+                                                data-builder-composition-id="{{ slot.get('composition_id') }}"
+                                                aria-label="Öppna {{ slot.get('dish_name') or 'rätt' }} i Builder"
+                                            >{{ slot.get('dish_name') or '—' }}</button>
+                                        {% else %}
+                                            <div class="menu-editor-meal-dish menu-editor-readonly-field">{{ slot.get('dish_name') or '—' }}</div>
+                                        {% endif %}
                                     </div>
                                 {% endfor %}
                             </div>
@@ -158,5 +169,12 @@
                 {% endfor %}
             </div>
         </article>
+    </section>
+
+    <section class="menu-editor-builder-host" hidden aria-hidden="true" data-admin-week-builder-host>
+        <div class="menu-editor-builder-host__backdrop" data-admin-week-builder-host-close></div>
+        <div class="menu-editor-builder-host__panel" role="dialog" aria-modal="true" aria-label="Builder dish editor" tabindex="-1">
+            <iframe class="menu-editor-builder-host__frame" title="Builder dish editor" src="about:blank" data-admin-week-builder-host-frame></iframe>
+        </div>
     </section>
 {% endblock %}

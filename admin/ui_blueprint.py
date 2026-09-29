@@ -4,6 +4,7 @@ from flask import Blueprint, render_template, request, current_app, redirect, ur
 from core.app_authz import require_roles
 from core.db import get_session
 from core.admin_repo import DepartmentsRepo, SitesRepo, DietTypesRepo, tenant_exists
+from core.commun_builder_projection import _get_builder_menu_context_flow
 from core.menu_service import MenuServiceDB
 from sqlalchemy import text
 from werkzeug.security import generate_password_hash
@@ -996,18 +997,71 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
                 return {"dish_name": str(variant)}
         return {}
 
+    builder_menu_id = None
+    try:
+        builder_menu_id = str(getattr(preview_result, "builder_menu_id", "") or "").strip() or None
+    except Exception:
+        builder_menu_id = None
+    if not builder_menu_id:
+        try:
+            link_service = CommunBuilderMenuLinkService()
+            link = link_service.get_link_for_week(
+                tenant_id=int(site_tenant_id),
+                site_id=str(site_id),
+                year=int(year),
+                week=int(week),
+            )
+            builder_menu_id = str(getattr(link, "builder_menu_id", "") or "").strip() or None
+        except Exception:
+            builder_menu_id = None
+
+    builder_row_composition_by_slot: dict[tuple[str, str], str] = {}
+    if builder_menu_id:
+        try:
+            builder_flow = _get_builder_menu_context_flow()
+            if builder_flow is not None:
+                for row in builder_flow.list_menu_rows(str(builder_menu_id)):
+                    row_day = str(row.get("day") or "").strip().lower()
+                    row_meal_slot = str(row.get("meal_slot") or "").strip().lower()
+                    row_composition_id = str(row.get("composition_id") or "").strip()
+                    if row_day and row_meal_slot and row_composition_id:
+                        builder_row_composition_by_slot[(row_day, row_meal_slot)] = row_composition_id
+        except Exception:
+            builder_row_composition_by_slot = {}
+
     day_rows: list[dict[str, object]] = []
     slot_order: list[str] = [spec["key"] for spec in slot_specs]
+    builder_slot_key_by_ui_key = {
+        "lunch_alt1": "lunch_alt1",
+        "lunch_alt2": "lunch_alt2",
+        "dessert": "lunch_dessert",
+        "dinner": "dinner_main",
+    }
+    day_label_to_day_key = {
+        "Måndag": "monday",
+        "Tisdag": "tuesday",
+        "Onsdag": "wednesday",
+        "Torsdag": "thursday",
+        "Fredag": "friday",
+        "Lördag": "saturday",
+        "Söndag": "sunday",
+    }
     for day_label in ordered_days:
         day_meals = normalized_days.get(day_label, {})
         slots: dict[str, dict[str, str]] = {}
+        day_key = day_label_to_day_key.get(day_label, "")
         for spec in slot_specs:
             slot_info = _pick_slot(day_meals, spec["candidates"])
             meal_name, variant_name = spec["field"]
+            composition_id = str(slot_info.get("composition_id") or "").strip()
+            builder_slot_key = builder_slot_key_by_ui_key.get(str(spec["key"]), str(spec["key"]))
+            if not composition_id and day_key:
+                composition_id = str(builder_row_composition_by_slot.get((day_key, builder_slot_key), "")).strip()
             slots[spec["key"]] = {
                 "label": str(spec["label"]),
                 "dish_name": str(slot_info.get("dish_name") or ""),
                 "field_name": f"{day_label}_{meal_name}_{variant_name}",
+                "composition_id": composition_id,
             }
         day_rows.append({"day_label": day_label, "slots": slots})
 
@@ -1059,24 +1113,6 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
     if week_index >= 0 and week_index < (len(imported_weeks) - 1):
         next_year, next_week_no = imported_weeks[week_index + 1]
         next_week = {"year": next_year, "week": next_week_no}
-
-    builder_menu_id = None
-    try:
-        builder_menu_id = str(getattr(preview_result, "builder_menu_id", "") or "").strip() or None
-    except Exception:
-        builder_menu_id = None
-    if not builder_menu_id:
-        try:
-            link_service = CommunBuilderMenuLinkService()
-            link = link_service.get_link_for_week(
-                tenant_id=int(site_tenant_id),
-                site_id=str(site_id),
-                year=int(year),
-                week=int(week),
-            )
-            builder_menu_id = str(getattr(link, "builder_menu_id", "") or "").strip() or None
-        except Exception:
-            builder_menu_id = None
 
     builder_menu_url = None
     builder_return_url = url_for("admin_ui.admin_menu_import_week", year=year, week=week, site_id=site_id)

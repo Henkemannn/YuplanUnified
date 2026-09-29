@@ -3,12 +3,15 @@ from __future__ import annotations
 import csv
 import io
 import json
+import sqlite3
+from pathlib import Path
 
 import pytest
 from sqlalchemy import text
 
 from core.builder import BuilderFlow
 from core.builder_menu_context_flow import BuilderMenuContextFlow
+from core.builder_sqlite import initialize_builder_sqlite
 from core.components import (
     ComponentService,
     CompositionService,
@@ -263,6 +266,14 @@ def test_admin_menu_import_upload_creates_builder_link_publication_and_portal_pa
         db.close()
 
     builder_menu_count_before = len(app_session.extensions["builder_menu_context_flow"].list_menus())
+    db = get_session()
+    try:
+        publication_count_before = db.execute(
+            text("SELECT COUNT(*) FROM commun_builder_publication_pins WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week"),
+            {"tid": TENANT_ID, "sid": SITE_ID, "year": YEAR, "week": WEEK},
+        ).fetchone()[0]
+    finally:
+        db.close()
 
     week_view = client_admin.get(f"/ui/admin/menu-import/week/{YEAR}/{WEEK}", headers=ADMIN_HEADERS)
     html = week_view.data.decode("utf-8")
@@ -270,8 +281,31 @@ def test_admin_menu_import_upload_creates_builder_link_publication_and_portal_pa
     assert f"/menu-builder-v1?menu_id={builder_menu_id}" in html
     assert f"return_url=/ui/admin/menu-import/week/{YEAR}/{WEEK}" in html
     assert html.count("Redigera matsedel") == 1
+    assert 'data-admin-week-builder-host' in html
+    assert 'data-admin-week-builder-host-frame' in html
+    assert 'data-admin-week-builder-open' in html
+    assert 'data-builder-composition-id="comp_monday_alt1"' in html
+    assert html.count('data-admin-week-builder-open') == 4
+    assert 'Tillbaka till matsedeln' not in html
+    assert '/builder-editor-host?composition_id=' not in html
+
+    controller_js = Path('static/ui/admin_menu_import_week_builder_host.js').read_text(encoding='utf-8')
+    assert "builder-host-close" in controller_js
+    assert "closeHost();" in controller_js
+    assert "window.location.replace" not in controller_js
+    assert "window.location.assign" not in controller_js
+
     builder_menu_count_after = len(app_session.extensions["builder_menu_context_flow"].list_menus())
+    db = get_session()
+    try:
+        publication_count_after = db.execute(
+            text("SELECT COUNT(*) FROM commun_builder_publication_pins WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week"),
+            {"tid": TENANT_ID, "sid": SITE_ID, "year": YEAR, "week": WEEK},
+        ).fetchone()[0]
+    finally:
+        db.close()
     assert builder_menu_count_after == builder_menu_count_before
+    assert publication_count_after == publication_count_before
     etag = week_view.headers.get("ETag")
     assert etag
 
@@ -311,7 +345,6 @@ def test_admin_menu_import_upload_creates_builder_link_publication_and_portal_pa
     assert payload["days"][0]["menu"]["lunch_alt2"] == "Ugnsbakad lax med dillsås och potatis"
     assert payload["days"][0]["menu"]["dessert"] == "Äppelpaj med vaniljsås"
     assert payload["days"][0]["menu"]["dinner"] == "Tomatsoppa med ostsmörgås"
-
     from core.weekview_vm import build_weekview_vm
 
     weekview_vm = build_weekview_vm(site_id=SITE_ID, year=YEAR, week=WEEK, tenant_id=TENANT_ID)
@@ -338,6 +371,109 @@ def test_admin_menu_import_upload_creates_builder_link_publication_and_portal_pa
     assert "Tomatsoppa med ostsmörgås" in overview_html
     assert "Kvällsmat" in overview_html
     assert "Middag" not in overview_html
+
+
+def test_admin_menu_import_week_fresh_get_hydrates_canonical_builder_rows(app_session):
+    site_id = "yuplan-e2e-centralkoket"
+    year = 2025
+    week = 49
+    menu_id = "builder-menu-1-yuplan-e2e-centralkoket-2025-w49-menu"
+    builder_db_path = Path(app_session.instance_path) / "test_builder_week49.db"
+
+    with app_session.app_context():
+        app_session.config["BUILDER_DB_PATH"] = str(builder_db_path)
+        for key in (
+            "builder_menu_context_flow",
+            "builder_menu_service",
+            "builder_flow",
+            "builder_menu_recipe_repository",
+            "builder_menu_ingredient_repository",
+        ):
+            app_session.extensions.pop(key, None)
+
+        db = get_session()
+        try:
+            db.execute(text("DELETE FROM menu_variants WHERE menu_id IN (SELECT id FROM menus WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week)"), {"tid": TENANT_ID, "sid": site_id, "year": year, "week": week})
+            db.execute(text("DELETE FROM menus WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week"), {"tid": TENANT_ID, "sid": site_id, "year": year, "week": week})
+            db.execute(text("DELETE FROM commun_builder_menu_links WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week"), {"tid": TENANT_ID, "sid": site_id, "year": year, "week": week})
+            db.execute(text("DELETE FROM commun_builder_publication_pins WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week"), {"tid": TENANT_ID, "sid": site_id, "year": year, "week": week})
+            db.execute(text("DELETE FROM dishes WHERE tenant_id=:tid AND name IN ('Köttbullar', 'Fiskgratäng', 'Glass')"), {"tid": TENANT_ID})
+            db.execute(text("INSERT OR REPLACE INTO tenants (id, name, active) VALUES (:id, :name, 1)"), {"id": TENANT_ID, "name": "Primary"})
+            db.execute(text("INSERT OR REPLACE INTO sites (id, name, tenant_id, version) VALUES (:id, :name, :tid, 0)"), {"id": site_id, "name": "Yuplan E2E Kommun", "tid": TENANT_ID})
+            db.execute(
+                text("INSERT INTO menus (id, tenant_id, site_id, week, year, status) VALUES (:id, :tid, :sid, :week, :year, :status)"),
+                {"id": 4901, "tid": TENANT_ID, "sid": site_id, "week": week, "year": year, "status": "draft"},
+            )
+            dish_ids = {}
+            for dish_id, dish_name in [(4911, "Köttbullar"), (4912, "Fiskgratäng"), (4913, "Glass")]:
+                dish_ids[dish_name] = dish_id
+                db.execute(
+                    text("INSERT OR REPLACE INTO dishes (id, tenant_id, name, category) VALUES (:id, :tid, :name, NULL)"),
+                    {"id": dish_id, "tid": TENANT_ID, "name": dish_name},
+                )
+            db.execute(
+                text("INSERT INTO menu_variants (menu_id, day, meal, variant_type, dish_id) VALUES (:menu_id, :day, :meal, :variant_type, :dish_id)"),
+                {"menu_id": 4901, "day": "Måndag", "meal": "Lunch", "variant_type": "alt1", "dish_id": dish_ids["Köttbullar"]},
+            )
+            db.execute(
+                text(
+                    "INSERT INTO commun_builder_menu_links (id, tenant_id, site_id, year, week, legacy_menu_id, builder_menu_id, builder_menu_version, source, projection_version, created_at, updated_at) "
+                    "VALUES (:id, :tid, :sid, :year, :week, :legacy_menu_id, :builder_menu_id, :builder_menu_version, :source, :projection_version, :created_at, :updated_at)"
+                ),
+                {
+                    "id": "link-week49-cmp_l91kiq",
+                    "tid": TENANT_ID,
+                    "sid": site_id,
+                    "year": year,
+                    "week": week,
+                    "legacy_menu_id": 4901,
+                    "builder_menu_id": menu_id,
+                    "builder_menu_version": 1,
+                    "source": "import",
+                    "projection_version": 1,
+                    "created_at": "2026-09-29 00:00:00",
+                    "updated_at": "2026-09-29 00:00:00",
+                },
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        initialize_builder_sqlite(str(builder_db_path))
+        conn = sqlite3.connect(builder_db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            conn.execute(
+                "INSERT OR REPLACE INTO builder_compositions (composition_id, composition_name, library_group, use_custom_menu_name, menu_name) VALUES (?, ?, ?, 0, NULL)",
+                ("cmp_l91kiq", "Köttbullar", None),
+            )
+            conn.execute(
+                "INSERT OR REPLACE INTO builder_menus (menu_id, title, site_id, week_key, version, status) VALUES (?, NULL, ?, ?, 1, 'created')",
+                (menu_id, site_id, f"{year}-W{week:02d}"),
+            )
+            conn.execute(
+                "INSERT OR REPLACE INTO builder_menu_rows (menu_detail_id, menu_id, day, meal_slot, composition_ref_type, composition_id, unresolved_text, note, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (f"{menu_id}-import-1", menu_id, "monday", "lunch_alt1", "composition", "cmp_l91kiq", None, None, 10),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        app_session.extensions.pop("builder_menu_context_flow", None)
+        app_session.extensions.pop("builder_menu_service", None)
+        assert "builder_menu_context_flow" not in app_session.extensions
+
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["site_id"] = site_id
+
+    week_view = client.get(f"/ui/admin/menu-import/week/{year}/{week}?site_id={site_id}", headers=ADMIN_HEADERS)
+    assert week_view.status_code == 200
+    html = week_view.data.decode("utf-8")
+    assert 'data-admin-week-builder-open' in html
+    assert 'data-builder-composition-id="cmp_l91kiq"' in html
+    assert html.count('data-admin-week-builder-open') == 1
+    assert 'Köttbullar' in html
 
 
 def test_admin_menu_publish_without_builder_link_fails_closed(app_session):
