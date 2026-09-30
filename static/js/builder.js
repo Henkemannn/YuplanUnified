@@ -2071,6 +2071,50 @@ function categoryThemeColorHex(themeKey) {
   return "#7b8a9b";
 }
 
+function formatDishComponentSecondaryLabel(component) {
+  const candidateValues = [
+    component && component.role,
+    component && component.category,
+  ];
+  const labelMap = {
+    main: "Huvudkomponent",
+    side: "Tillbehör",
+    sauce: "Sås",
+    garnish: "Garnityr",
+    bread: "Bröd",
+    beverage: "Dryck",
+    add_on: "Tillägg",
+    addon: "Tillägg",
+    dessert: "Dessert",
+    ovrigt: "Övrigt",
+    "övrigt": "Övrigt",
+    kott: "Kött",
+    "kött": "Kött",
+    fisk: "Fisk",
+    tillbehor: "Tillbehör",
+    "tillbehör": "Tillbehör",
+    sas: "Sås",
+    "sås": "Sås",
+  };
+
+  for (const candidate of candidateValues) {
+    const rawValue = String(candidate || "").trim();
+    if (!rawValue) {
+      continue;
+    }
+    const lowerValue = rawValue.toLowerCase();
+    if (lowerValue === "component" || lowerValue === "null" || lowerValue === "undefined") {
+      continue;
+    }
+    const normalizedValue = lowerValue.replace(/[-\s]+/g, "_");
+    if (Object.prototype.hasOwnProperty.call(labelMap, normalizedValue)) {
+      return labelMap[normalizedValue];
+    }
+  }
+
+  return "";
+}
+
 function componentDetailSummary(item) {
   const summary = (item && typeof item.detail_summary === "object" && item.detail_summary)
     ? item.detail_summary
@@ -4263,83 +4307,15 @@ function renderBuilderPanel(composition) {
   for (const component of visibleComponents) {
     const componentIdValue = String(component.component_id || "");
     const cached = findCachedComponentById(componentIdValue);
-    const hasRecipeData = Boolean(cached && String(cached.primary_recipe_id || "").trim());
     const categoryTheme = resolveComponentCategoryThemeKey(cached || component);
+    const secondaryLabel = formatDishComponentSecondaryLabel(cached || component);
 
     const li = document.createElement("li");
     li.className = "component-list-item";
-    if (!String(component.role || "").trim()) {
-      li.classList.add("component-list-item-missing-role");
-    }
     const card = document.createElement("article");
     card.className = "builder-component-card builder-component-card-compact dish-linked-component-card";
     card.classList.add("builder-component-card-theme-" + categoryTheme);
     card.dataset.componentId = componentIdValue;
-    card.draggable = true;
-    const entryKey = componentEntryKey(component);
-    card.dataset.entryKey = entryKey;
-
-    if (selectedComponentId === componentIdValue) {
-      card.classList.add("component-block-selected");
-    }
-    if (pendingAddedPulseComponentId === componentIdValue) {
-      card.classList.add("component-block-just-added");
-    }
-    if (pendingSelectedPulseComponentId === componentIdValue) {
-      card.classList.add("component-block-just-selected");
-    }
-    if (pendingReorderedPulseComponentId === componentIdValue) {
-      card.classList.add("component-block-just-reordered");
-    }
-
-    card.addEventListener("dragstart", (event) => {
-      draggedComponentEntryKey = entryKey;
-      card.classList.add("component-block-dragging");
-      if (event && event.dataTransfer) {
-        event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData("text/plain", entryKey);
-      }
-    });
-    card.addEventListener("dragend", () => {
-      draggedComponentEntryKey = null;
-      card.classList.remove("component-block-dragging");
-      const allBlocks = list.querySelectorAll(".component-block-drop-target");
-      for (const element of allBlocks) {
-        element.classList.remove("component-block-drop-target");
-      }
-    });
-    card.addEventListener("dragover", (event) => {
-      if (!draggedComponentEntryKey || draggedComponentEntryKey === entryKey) {
-        return;
-      }
-      event.preventDefault();
-      if (event && event.dataTransfer) {
-        event.dataTransfer.dropEffect = "move";
-      }
-      card.classList.add("component-block-drop-target");
-    });
-    card.addEventListener("dragleave", () => {
-      card.classList.remove("component-block-drop-target");
-    });
-    card.addEventListener("drop", async (event) => {
-      event.preventDefault();
-      card.classList.remove("component-block-drop-target");
-      const fromKey = draggedComponentEntryKey || "";
-      draggedComponentEntryKey = null;
-      if (!fromKey || fromKey === entryKey) {
-        return;
-      }
-      stageReorderedComponentPulse(componentIdValue);
-      showLoading("builderOut");
-      try {
-        await reorderCompositionBlocksByEntryKey(fromKey, entryKey);
-      } catch (error) {
-        showJson("builderOut", {
-          status: 0,
-          data: { ok: false, error: String(error.message || error) },
-        });
-      }
-    });
 
     card.addEventListener("click", async (event) => {
       const target = event.target instanceof Element ? event.target : null;
@@ -4365,10 +4341,22 @@ function renderBuilderPanel(composition) {
       selectComponentBlock(componentIdValue);
     });
 
+    const copy = document.createElement("div");
+    copy.className = "builder-component-card-copy";
+
     const name = document.createElement("div");
     name.className = "component-library-card-name";
     name.textContent = String(component.component_name || component.component_id || "");
-    surface.appendChild(name);
+    copy.appendChild(name);
+
+    if (secondaryLabel) {
+      const secondary = document.createElement("div");
+      secondary.className = "builder-component-card-secondary";
+      secondary.textContent = secondaryLabel;
+      copy.appendChild(secondary);
+    }
+
+    surface.appendChild(copy);
 
     const overflow = document.createElement("details");
     overflow.className = "component-overflow";
@@ -4414,21 +4402,8 @@ function renderBuilderPanel(composition) {
     overflow.appendChild(overflowSummary);
     overflow.appendChild(menu);
 
-    const dataIcon = document.createElement("button");
-    dataIcon.className = "component-data-icon";
-    dataIcon.type = "button";
-    dataIcon.textContent = "R";
-    dataIcon.title = hasRecipeData
-      ? "Recipe data exists for this component"
-      : "Select component";
-    dataIcon.classList.add(hasRecipeData ? "component-data-icon-has-data" : "component-data-icon-no-data");
-    dataIcon.addEventListener("click", () => {
-      selectComponentBlock(componentIdValue);
-    });
-
     const right = document.createElement("div");
     right.className = "component-row-right";
-    right.appendChild(dataIcon);
     right.appendChild(overflow);
 
     surface.appendChild(right);

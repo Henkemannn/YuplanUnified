@@ -185,6 +185,47 @@ function createBuilderModalController(config) {
     return "neutral";
   }
 
+  function _formatComponentSecondaryLabel(component, fallbackCategory = "") {
+    const candidateValues = [component && component.role, fallbackCategory, component && component.category];
+    const labelMap = {
+      main: "Huvudkomponent",
+      side: "Tillbehör",
+      sauce: "Sås",
+      garnish: "Garnityr",
+      bread: "Bröd",
+      beverage: "Dryck",
+      add_on: "Tillägg",
+      addon: "Tillägg",
+      dessert: "Dessert",
+      ovrigt: "Övrigt",
+      "övrigt": "Övrigt",
+      kott: "Kött",
+      "kött": "Kött",
+      fisk: "Fisk",
+      tillbehor: "Tillbehör",
+      "tillbehör": "Tillbehör",
+      sas: "Sås",
+      "sås": "Sås",
+    };
+
+    for (const candidate of candidateValues) {
+      const rawValue = String(candidate || "").trim();
+      if (!rawValue) {
+        continue;
+      }
+      const lowerValue = rawValue.toLowerCase();
+      if (lowerValue === "component" || lowerValue === "null" || lowerValue === "undefined") {
+        continue;
+      }
+      const normalizedValue = lowerValue.replace(/[-\s]+/g, "_");
+      if (Object.prototype.hasOwnProperty.call(labelMap, normalizedValue)) {
+        return labelMap[normalizedValue];
+      }
+    }
+
+    return "";
+  }
+
   async function _resolveComponentById(componentId) {
     if (typeof _callbacks.resolveComponentById === "function") {
       return _callbacks.resolveComponentById(componentId);
@@ -436,11 +477,9 @@ function createBuilderModalController(config) {
       const displayedName = String((canonicalResolved && canonicalResolved.component_name) || component.component_name || component.component_id || "");
       const displayedCategory = String((canonicalResolved && canonicalResolved.category) || component.category || "");
       const themeKey = _resolveComponentTheme(canonicalResolved || component);
+      const secondaryLabel = _formatComponentSecondaryLabel(component, displayedCategory);
       const li = document.createElement("li");
       li.className = "component-list-item";
-      if (!String(component.role || "").trim()) {
-        li.classList.add("component-list-item-missing-role");
-      }
 
       const card = document.createElement("article");
       card.className = "builder-component-card builder-component-card-compact dish-linked-component-card";
@@ -451,9 +490,20 @@ function createBuilderModalController(config) {
       surface.type = "button";
       surface.className = "builder-component-card-surface";
 
+      const copy = document.createElement("div");
+      copy.className = "builder-component-card-copy";
+
       const name = document.createElement("div");
       name.className = "component-library-card-name";
       name.textContent = displayedName;
+      copy.appendChild(name);
+
+      if (secondaryLabel) {
+        const secondary = document.createElement("div");
+        secondary.className = "builder-component-card-secondary";
+        secondary.textContent = secondaryLabel;
+        copy.appendChild(secondary);
+      }
 
       const right = document.createElement("div");
       right.className = "component-row-right";
@@ -479,7 +529,7 @@ function createBuilderModalController(config) {
       overflow.appendChild(menu);
       right.appendChild(overflow);
 
-      surface.appendChild(name);
+      surface.appendChild(copy);
       surface.appendChild(right);
       surface.addEventListener("click", async () => {
         await _openLinkedComponentEditor(componentIdValue);

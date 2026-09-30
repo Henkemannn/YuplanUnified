@@ -18,7 +18,7 @@ def test_builder_editor_host_renders_shared_editor_shell(client_admin) -> None:
     html = rv.data.decode("utf-8")
     assert '<style>' not in html
     assert 'class="builder-workspace-v1 builder-editor-host"' in html
-    assert '<link rel="stylesheet" href="/static/css/builder.css?v=builder-modal-system-reset-1">' in html
+    assert '<link rel="stylesheet" href="/static/css/builder.css?v=builder-modal-system-reset-4">' in html
     assert '<link rel="stylesheet" href="/static/css/builder_modal.css?v=builder-b1-modal-css-v1">' in html
     assert '<link rel="stylesheet" href="/static/css/builder_editor_host.css?v=builder-editor-host-v1">' in html
     assert '<script src="/static/js/builder_component_theme.js"></script>' in html
@@ -42,7 +42,7 @@ def test_builder_editor_host_uses_same_assets_for_component_route(client_admin) 
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
     assert 'class="builder-workspace-v1 builder-editor-host"' in html
-    assert '<link rel="stylesheet" href="/static/css/builder.css?v=builder-modal-system-reset-1">' in html
+    assert '<link rel="stylesheet" href="/static/css/builder.css?v=builder-modal-system-reset-4">' in html
     assert '<link rel="stylesheet" href="/static/css/builder_modal.css?v=builder-b1-modal-css-v1">' in html
     assert '<link rel="stylesheet" href="/static/css/builder_editor_host.css?v=builder-editor-host-v1">' in html
     assert '<script src="/static/js/builder_component_theme.js"></script>' in html
@@ -61,7 +61,7 @@ def test_builder_editor_host_without_target_still_loads_shell(client_admin) -> N
     html = rv.data.decode("utf-8")
     assert '<style>' not in html
     assert 'class="builder-workspace-v1 builder-editor-host"' in html
-    assert '<link rel="stylesheet" href="/static/css/builder.css?v=builder-modal-system-reset-1">' in html
+    assert '<link rel="stylesheet" href="/static/css/builder.css?v=builder-modal-system-reset-4">' in html
     assert '<link rel="stylesheet" href="/static/css/builder_modal.css?v=builder-b1-modal-css-v1">' in html
     assert '<link rel="stylesheet" href="/static/css/builder_editor_host.css?v=builder-editor-host-v1">' in html
     assert '<script src="/static/js/builder_component_theme.js"></script>' in html

@@ -3962,27 +3962,121 @@ body:not(.builder-workspace-v1) ul {
   margin: 0;
 }
 
-#resolveModal .builder-dish-view-card .dish-linked-component-card,
-#resolveModal .builder-dish-view-card .builder-component-card-surface {
-  min-height: 48px;
-}
-
-#resolveModal .builder-dish-view-card .dish-linked-component-card {
-  border-radius: 12px;
-}
-
-#resolveModal .builder-dish-view-card .builder-component-card-surface {
-  padding-top: 8px;
-  padding-bottom: 8px;
-}
-
 #dishComponentsPanel .component-block-list {
-  overflow-x: visible;
-  overflow-y: visible;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 12px;
+  min-height: 0;
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  padding: 0 2px 10px;
+  scrollbar-width: thin;
+  scrollbar-color: #b9c7d6 transparent;
+}
+
+#dishComponentsPanel .component-block-list::-webkit-scrollbar {
+  height: 10px;
+}
+
+#dishComponentsPanel .component-block-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#dishComponentsPanel .component-block-list::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+  background-color: #c2cedb;
+}
+
+#dishComponentsPanel .component-block-list::-webkit-scrollbar-thumb:hover {
+  background-color: #adbece;
 }
 
 #dishComponentsPanel .component-list-item {
+  flex: 0 0 auto;
+  width: 192px;
   overflow: visible;
+}
+
+#dishComponentsPanel .dish-linked-component-card {
+  --builder-component-border: #d8e0e8;
+  border-color: #d8e0e8;
+  box-shadow: 0 1px 2px rgba(18, 43, 63, 0.04);
+  min-height: 70px;
+}
+
+#dishComponentsPanel .builder-component-card-surface {
+  min-height: 70px;
+  padding: 7px 10px 7px 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+#dishComponentsPanel .builder-component-card-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+#dishComponentsPanel .component-library-card-name {
+  font-size: 13px;
+  line-height: 1.14;
+  -webkit-line-clamp: 2;
+}
+
+#dishComponentsPanel .builder-component-card-secondary {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.1;
+  color: #6b7a88;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+#dishComponentsPanel .component-row-right {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 0;
+}
+
+#dishComponentsPanel .component-overflow summary {
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#dishComponentsPanel .component-overflow-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  bottom: auto;
+  right: 0;
+  z-index: 60;
+  min-width: 124px;
+  max-height: 140px;
+  padding: 3px;
+  gap: 3px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-shadow: 0 10px 22px rgba(20, 42, 57, 0.18);
+}
+
+#dishComponentsPanel .component-row-right {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 0;
 }
 
 #dishComponentsPanel .component-overflow {
@@ -3994,10 +4088,25 @@ body:not(.builder-workspace-v1) ul {
   z-index: 48;
 }
 
+#dishComponentsPanel .component-overflow summary {
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#dishComponentsPanel .dish-linked-component-card::before {
+  width: 4px;
+  background: var(--builder-component-accent);
+}
+
 #dishComponentsPanel .component-overflow-menu {
   position: absolute;
-  top: auto;
-  bottom: calc(100% + 6px);
+  top: calc(100% + 6px);
+  bottom: auto;
   right: 0;
   z-index: 60;
   min-width: 124px;

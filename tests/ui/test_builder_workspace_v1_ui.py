@@ -8,7 +8,7 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
 
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
-    assert '<link rel="stylesheet" href="/static/css/builder.css?v=builder-modal-system-reset-1">' in html
+    assert '<link rel="stylesheet" href="/static/css/builder.css?v=builder-modal-system-reset-4">' in html
     assert '<link rel="stylesheet" href="/static/css/builder_modal.css?v=builder-b1-modal-css-v1">' in html
     assert 'builder_editor.css' not in html
     assert "Builder Workspace v1" in html
@@ -287,6 +287,8 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'builder-component-card builder-component-card-compact dish-linked-component-card' in builder_panel_js
     assert 'builder-component-card-surface' in builder_panel_js
     assert 'component-library-card-name' in builder_panel_js
+    assert 'builder-component-card-copy' in builder_panel_js
+    assert 'builder-component-card-secondary' in builder_panel_js
     assert 'component-overflow' in builder_panel_js
     assert 'card.addEventListener("click", async (event) => {' in builder_panel_js
     assert 'target.closest(".component-row-right")' in builder_panel_js
@@ -318,7 +320,10 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'Byt namn' not in builder_panel_js
     assert 'Ändra roll' not in builder_panel_js
     assert 'component-role-tag' not in builder_panel_js
-    assert 'component-data-icon' in builder_panel_js
+    assert 'component-data-icon' not in builder_panel_js
+    assert 'component-block-selected' not in builder_panel_js
+    assert 'dragstart' not in builder_panel_js
+    assert 'reorderCompositionBlocksByEntryKey' not in builder_panel_js
     assert 'component-conflict-badge' not in builder_panel_js
     assert 'async function saveDishOverviewMetadata() {' in js
     assert 'const editor = _getBuilderDishEditor();' in js
@@ -346,13 +351,25 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert '#dishOverviewKlossPreview .builder-component-card-surface {' in css
     assert 'pointer-events: none;' in css
     assert '#dishComponentsPanel .component-block-list {' in css
-    assert 'overflow-y: visible;' in css
+    assert 'display: flex;' in css
+    assert 'flex-wrap: nowrap;' in css
+    assert 'overflow-x: auto;' in css
+    assert 'overflow-y: hidden;' in css
+    assert 'scrollbar-width: thin;' in css
+    assert 'width: 192px;' in css
+    assert '#dishComponentsPanel .builder-component-card-surface {' in css
+    assert '#dishComponentsPanel .builder-component-card-copy {' in css
+    assert '#dishComponentsPanel .builder-component-card-secondary {' in css
+    assert '#dishComponentsPanel .dish-linked-component-card {' in css
+    assert '--builder-component-border: #d8e0e8;' in css
+    assert 'box-shadow: 0 1px 2px rgba(18, 43, 63, 0.04);' in css
+    assert 'min-height: 70px;' in css
     assert '#dishComponentsPanel .component-overflow {' in css
     assert '#dishComponentsPanel .component-overflow[open] {' in css
+    assert '#dishComponentsPanel .component-overflow summary {' in css
     assert '#dishComponentsPanel .component-overflow-menu {' in css
     assert 'position: absolute;' in css
-    assert 'top: auto;' in css
-    assert 'bottom: calc(100% + 6px);' in css
+    assert 'top: calc(100% + 6px);' in css
     assert 'z-index: 60;' in css
     assert 'max-height: 140px;' in css
     assert 'overflow-y: auto;' in css
@@ -366,11 +383,13 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert '#dishCalculationPanel .builder-dish-calculation-row {' in css
     assert '#dishCalculationPanel .builder-dish-calculation-total {' in css
     assert '#dishCalculationPanel .builder-dish-calculation-summary-warning {' in css
-    dish_list_block = re.search(r"\.builder-dish-view-card \.component-block-list\s*\{[^}]*\}", css, re.S)
+    dish_list_block = re.search(r"#dishComponentsPanel \.component-block-list\s*\{[^}]*\}", css, re.S)
     assert dish_list_block is not None
-    assert 'gap: 8px;' in dish_list_block.group(0)
-    assert '#resolveModal .builder-dish-view-card .dish-linked-component-card {' in css
-    assert '#resolveModal .builder-dish-view-card .builder-component-card-surface {' in css
+    assert 'display: flex;' in dish_list_block.group(0)
+    assert 'gap: 12px;' in dish_list_block.group(0)
+    assert 'overflow-x: auto;' in dish_list_block.group(0)
+    assert '#dishComponentsPanel .dish-linked-component-card {' in css
+    assert '#dishComponentsPanel .builder-component-card-surface {' in css
     assert '#resolveModal .builder-dish-view-card .dish-linked-component-card .component-library-card-name {' not in css
     assert 'id="workspaceOverviewSection"' in html
     assert "What do you want to do today?" in html
@@ -1259,21 +1278,23 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
     assert "background: transparent;" in surface_block.group(0)
     assert "border-radius: 0;" in surface_block.group(0)
 
-    dish_block_list = re.search(r"\.builder-dish-view-card \.component-block-list\s*\{[^}]*\}", css, re.S)
+    dish_block_list = re.search(r"#dishComponentsPanel \.component-block-list\s*\{[^}]*\}", css, re.S)
     assert dish_block_list is not None
-    assert "background: transparent;" in dish_block_list.group(0)
-    assert "border: 0;" in dish_block_list.group(0)
-    assert "gap: 8px;" in dish_block_list.group(0)
+    assert "display: flex;" in dish_block_list.group(0)
+    assert "flex-wrap: nowrap;" in dish_block_list.group(0)
+    assert "overflow-x: auto;" in dish_block_list.group(0)
+    assert "overflow-y: hidden;" in dish_block_list.group(0)
+    assert "gap: 12px;" in dish_block_list.group(0)
 
     dish_block_override = re.search(r"\.builder-dish-view-card \.component-block\s*\{[^}]*\}", css, re.S)
     assert dish_block_override is None
 
-    dish_linked_right_block = re.search(r"\.builder-dish-view-card \.dish-linked-component-card \.component-row-right\s*\{[^}]*\}", css, re.S)
+    dish_linked_right_block = re.search(r"#dishComponentsPanel \.component-row-right\s*\{[^}]*\}", css, re.S)
     assert dish_linked_right_block is not None
-    assert "align-items: center;" in dish_linked_right_block.group(0)
-    assert "gap: 4px;" in dish_linked_right_block.group(0)
+    assert "align-items: flex-start;" in dish_linked_right_block.group(0)
+    assert "justify-content: flex-end;" in dish_linked_right_block.group(0)
 
-    dish_overflow_summary_block = re.search(r"\.builder-dish-view-card \.dish-linked-component-card \.component-overflow summary\s*\{[^}]*\}", css, re.S)
+    dish_overflow_summary_block = re.search(r"#dishComponentsPanel \.component-overflow summary\s*\{[^}]*\}", css, re.S)
     assert dish_overflow_summary_block is not None
     assert "min-width: 22px;" in dish_overflow_summary_block.group(0)
     assert "min-height: 22px;" in dish_overflow_summary_block.group(0)
@@ -1309,9 +1330,9 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
     assert surface_hover_block is not None
     assert "background: transparent;" in surface_hover_block.group(0)
 
-    card_strip_block = re.search(r"\.builder-component-card::before\s*\{[^}]*\}", css, re.S)
+    card_strip_block = re.search(r"#dishComponentsPanel \.dish-linked-component-card::before\s*\{[^}]*\}", css, re.S)
     assert card_strip_block is not None
-    assert "width: 6px;" in card_strip_block.group(0)
+    assert "width: 4px;" in card_strip_block.group(0)
     assert "background: var(--builder-component-accent);" in card_strip_block.group(0)
 
     theme_main_block = re.search(r"\.builder-component-card-theme-main\s*\{[^}]*\}", css, re.S)
