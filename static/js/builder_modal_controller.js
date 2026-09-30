@@ -367,6 +367,10 @@ function createBuilderModalController(config) {
 
     previewList.innerHTML = "";
     const components = componentsInDisplayOrder(_normalizeCompositionForRender(composition));
+    const countHost = compositionRoot.querySelector("#dishOverviewComponentCount");
+    if (countHost) {
+      countHost.textContent = components.length === 1 ? "1 komponent" : `${components.length} komponenter`;
+    }
 
     if (components.length === 0) {
       const li = document.createElement("li");
@@ -385,7 +389,7 @@ function createBuilderModalController(config) {
       li.className = "component-list-item";
 
       const card = document.createElement("article");
-      card.className = "builder-component-card builder-component-card-compact dish-linked-component-card";
+      card.className = "builder-component-card builder-component-card-compact builder-dish-overview-component-card dish-linked-component-card";
       card.classList.add("builder-component-card-theme-" + themeKey);
 
       const surface = document.createElement("div");

@@ -2,7 +2,8 @@
     <div class="modal-content modal-content-dish modal-content-component-detail">
       <div class="workspace-modal-header">
         <div>
-          <h3 id="resolveModalTitle">Redigera rätt</h3>
+          <p class="workspace-modal-kicker">RÄTT</p>
+          <h3 id="resolveModalTitle">Köttbullar</h3>
         </div>
         <button id="resolveCancel" type="button">Klar</button>
       </div>
@@ -11,10 +12,10 @@
       <div id="modalBuilderSection" class="workspace-modal-body workspace-modal-body-single modal-section">
         <div class="workspace-modal-column workspace-modal-column-primary workspace-modal-column-single">
           <div class="builder-component-detail-tabs builder-dish-shell-chips" role="tablist" aria-label="Rättsektioner">
-            <button id="dishOverviewTabBtn" type="button" class="builder-chip is-active" data-dish-tab="overview" aria-pressed="true" aria-selected="true">🧾 Översikt</button>
-            <button id="dishComponentsTabBtn" type="button" class="builder-chip" data-dish-tab="components" aria-pressed="false" aria-selected="false">🧩 Komponentklossar</button>
-            <button id="dishCalculationTabBtn" type="button" class="builder-chip" data-dish-tab="calculation" aria-pressed="false" aria-selected="false">💰 Kalkyl</button>
-            <button id="dishAllergensTabBtn" type="button" class="builder-chip" data-dish-tab="allergens" aria-pressed="false" aria-selected="false">🌾 Allergener/kostinfo</button>
+            <button id="dishOverviewTabBtn" type="button" class="builder-chip is-active" data-dish-tab="overview" aria-pressed="true" aria-selected="true">Översikt</button>
+            <button id="dishComponentsTabBtn" type="button" class="builder-chip" data-dish-tab="components" aria-pressed="false" aria-selected="false">Komponenter</button>
+            <button id="dishCalculationTabBtn" type="button" class="builder-chip" data-dish-tab="calculation" aria-pressed="false" aria-selected="false">Kalkyl</button>
+            <button id="dishAllergensTabBtn" type="button" class="builder-chip" data-dish-tab="allergens" aria-pressed="false" aria-selected="false">Allergener / kostinfo</button>
           </div>
 
           <div id="dishOverviewPanel" class="workspace-modal-section-card builder-dish-view-card builder-dish-view-card-overview" data-dish-panel="overview">
@@ -25,51 +26,53 @@
             </div>
 
             <div class="builder-dish-overview-editor" aria-label="Redigera rättens metadata">
-              <label class="builder-dish-overview-field" for="dishOverviewName">
-                <span>Rättnamn</span>
+              <div class="builder-dish-overview-row">
+                <label class="builder-dish-overview-label" for="dishOverviewName">Rättnamn</label>
                 <input id="dishOverviewName" type="text" autocomplete="off" spellcheck="false" placeholder="Ange rättens namn">
-              </label>
+              </div>
 
-              <label class="builder-dish-overview-field" for="dishOverviewCategorySelect">
-                <span>Kategori</span>
+              <div class="builder-dish-overview-row">
+                <label class="builder-dish-overview-label" for="dishOverviewCategorySelect">Kategori</label>
                 <select id="dishOverviewCategorySelect">
                   <option value="ovrigt">Övrigt</option>
                   <option value="fisk">Fisk</option>
                   <option value="kott">Kött</option>
                   <option value="dessert">Dessert</option>
                 </select>
-              </label>
+              </div>
 
-              <div class="builder-dish-overview-field builder-dish-overview-field-wide">
-                <label for="dishOverviewUseCustomMenuName">
+              <div class="builder-dish-overview-row builder-dish-overview-row-toggle">
+                <label class="builder-dish-overview-toggle" for="dishOverviewUseCustomMenuName">
                   <input id="dishOverviewUseCustomMenuName" type="checkbox">
-                  <span>Använd annat namn i menyer</span>
-                </label>
-                <p class="builder-dish-view-note">När detta är av används rättnamnet i menyer och utskrifter.</p>
-              </div>
-
-              <div id="dishOverviewMenuNameField" class="builder-dish-overview-field builder-dish-overview-field-wide" hidden>
-                <label class="builder-dish-overview-field" for="dishOverviewMenuName">
-                  <span>Menynamn</span>
-                  <input id="dishOverviewMenuName" type="text" autocomplete="off" spellcheck="false">
+                  <span>Använd annat namn i meny/utskrift</span>
                 </label>
               </div>
 
-              <div class="workspace-inline-actions">
-                <button id="btnDishOverviewSave" type="button">Spara ändringar</button>
+              <div id="dishOverviewMenuNameField" class="builder-dish-overview-row builder-dish-overview-menu-name" hidden>
+                <label class="builder-dish-overview-label" for="dishOverviewMenuName">Menynamn</label>
+                <input id="dishOverviewMenuName" type="text" autocomplete="off" spellcheck="false">
+              </div>
+
+              <div class="workspace-inline-actions builder-dish-overview-save-row">
+                <button id="btnDishOverviewSave" type="button" class="builder-button-primary">Spara ändringar</button>
               </div>
             </div>
 
-            <div class="builder-dish-overview-preview-block">
-              <p class="modal-section-title">Komponentklossar</p>
-              <ul id="dishOverviewKlossPreview" class="component-block-list builder-dish-overview-kloss-preview" aria-label="Förhandsvisning komponentklossar"></ul>
+            <div class="builder-dish-overview-preview-block builder-dish-overview-components-summary">
+              <div class="builder-dish-overview-preview-header">
+                <div>
+                  <p class="modal-section-title">Komponenter</p>
+                  <p id="dishOverviewComponentCount" class="builder-dish-overview-component-count">0 komponenter</p>
+                </div>
+              </div>
+              <ul id="dishOverviewKlossPreview" class="component-block-list builder-dish-overview-kloss-preview" aria-label="Förhandsvisning komponenter"></ul>
             </div>
           </div>
 
           <div id="dishComponentsPanel" class="workspace-modal-section-card builder-dish-view-card builder-dish-view-card-components hidden" data-dish-panel="components" hidden>
             <div class="builder-dish-view-header">
               <div>
-                <p class="modal-section-title">🧩 Komponentklossar</p>
+                <p class="modal-section-title">Komponenter</p>
                 <p class="builder-dish-view-note">Bygg rätten av befintliga komponenter.</p>
               </div>
             </div>
@@ -82,7 +85,7 @@
           <div id="dishAllergensPanel" class="workspace-modal-section-card builder-dish-view-card builder-dish-view-card-allergens hidden" data-dish-panel="allergens" hidden>
             <div class="builder-dish-view-header">
               <div>
-                <p class="modal-section-title">🌾 Allergener/kostinfo</p>
+                <p class="modal-section-title">Allergener / kostinfo</p>
                 <p class="builder-dish-view-note">Sammanställs från rättens komponenter.</p>
               </div>
             </div>
@@ -95,7 +98,7 @@
           <div id="dishCalculationPanel" class="workspace-modal-section-card builder-dish-view-card builder-dish-view-card-calculation hidden" data-dish-panel="calculation" hidden>
             <div class="builder-dish-view-header">
               <div>
-                <p class="modal-section-title">💰 Kalkyl</p>
+                <p class="modal-section-title">Kalkyl</p>
                 <p class="builder-dish-view-help">Sammanställs från rättens komponenter.</p>
               </div>
             </div>

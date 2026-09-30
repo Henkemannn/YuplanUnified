@@ -4170,6 +4170,10 @@ function renderDishOverviewKlossPreview(composition) {
 
   previewList.innerHTML = "";
   const components = componentsInDisplayOrder(composition);
+  const countHost = document.getElementById("dishOverviewComponentCount");
+  if (countHost) {
+    countHost.textContent = components.length === 1 ? "1 komponent" : `${components.length} komponenter`;
+  }
   traceCompositionRenderContext(composition, "overview-preview");
 
   if (components.length === 0) {
@@ -4189,7 +4193,7 @@ function renderDishOverviewKlossPreview(composition) {
     li.className = "component-list-item";
 
     const card = document.createElement("article");
-    card.className = "builder-component-card builder-component-card-compact dish-linked-component-card";
+    card.className = "builder-component-card builder-component-card-compact builder-dish-overview-component-card dish-linked-component-card";
     card.classList.add("builder-component-card-theme-" + categoryTheme);
 
     const surface = document.createElement("div");
@@ -5137,6 +5141,22 @@ function bindBuilderHandlers() {
     refreshCurrentCompositionView: () => {
       refreshCurrentCompositionViewFromCanonicalCache();
       return Promise.resolve();
+    },
+    prepareLinkedComponentForEdit: async (componentId) => {
+      const composition = currentBuilderComposition ? {
+        ...currentBuilderComposition,
+        components: Array.isArray(currentBuilderComposition.components)
+          ? currentBuilderComposition.components.map((item) => ({ ...item }))
+          : [],
+      } : null;
+      const resolvedComponent = findCachedComponentById(componentId);
+      if (!composition || !resolvedComponent) {
+        return null;
+      }
+      return {
+        composition,
+        component: resolvedComponent,
+      };
     },
     resolveComponentCategoryThemeKey: resolveComponentCategoryThemeKey,
     updateComponentCategoryChipCounts: updateComponentCategoryChipCounts,

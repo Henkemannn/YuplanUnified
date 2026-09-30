@@ -1050,9 +1050,7 @@ function createBuilderComponentEditor(config) {
     const meta = document.getElementById("componentDetailOverviewMeta");
     const nextCategory = String(component.category || "").trim().toLowerCase();
     if (title) {
-      title.textContent =
-        "Komponentredigerare: " +
-        String(component.component_name || component.component_id || "");
+      title.textContent = String(component.component_name || component.component_id || "");
     }
     if (nameInput) {
       nameInput.value = String(component.component_name || component.component_id || "");
@@ -1063,7 +1061,7 @@ function createBuilderComponentEditor(config) {
         : "ovrigt";
     }
     if (meta) {
-      meta.textContent = "Komponent-ID: " + String(component.component_id || "");
+      meta.textContent = "ID: " + String(component.component_id || "");
     }
     _showLoading("componentDetailOut");
       clearComponentDetailFeedback();

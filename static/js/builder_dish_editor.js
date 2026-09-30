@@ -51,6 +51,17 @@ function createBuilderDishEditor(config) {
     const isVisible = Boolean(useCustomMenuNameCheckbox && useCustomMenuNameCheckbox.checked);
     if (menuNameField) {
       menuNameField.hidden = !isVisible;
+      if (isVisible) {
+        menuNameField.style.removeProperty("display");
+        menuNameField.style.removeProperty("visibility");
+        menuNameField.style.removeProperty("height");
+        menuNameField.style.removeProperty("overflow");
+      } else {
+        menuNameField.style.display = "none";
+        menuNameField.style.visibility = "hidden";
+        menuNameField.style.height = "0";
+        menuNameField.style.overflow = "hidden";
+      }
     }
     return isVisible;
   }
