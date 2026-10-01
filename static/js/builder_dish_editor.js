@@ -343,9 +343,19 @@ function createBuilderDishEditor(config) {
     return amountText + " " + unitText;
   }
 
-  function formatDishCalculationRowCost(value) {
-    const parsed = parseDishCurrencyValue(value);
-    return parsed == null ? "–" : formatDishCostValue(parsed) + " kr";
+  const calculationUtils = globalThis.BuilderCalculationUtils || null;
+  if (!calculationUtils) {
+    throw new Error("createBuilderDishEditor: BuilderCalculationUtils is required");
+  }
+
+  function formatDishCalculationRowCost(row) {
+    const explicitValue = String((row && row.calculated_cost) || "").trim();
+    if (explicitValue) {
+      const parsed = parseDishCurrencyValue(explicitValue);
+      return parsed == null ? explicitValue : formatDishCostValue(parsed) + " kr";
+    }
+    const computedCost = calculationUtils.calculateRowCost(row);
+    return computedCost == null ? "–" : calculationUtils.formatCostValue(computedCost) + " kr";
   }
 
   function renderDishCalculationRow(row) {
@@ -369,10 +379,84 @@ function createBuilderDishEditor(config) {
 
     const cost = document.createElement("div");
     cost.className = "builder-dish-calculation-row-value builder-dish-calculation-row-value-cost";
-    cost.textContent = formatDishCalculationRowCost((row && row.calculated_cost) || "");
+    cost.textContent = formatDishCalculationRowCost(row);
     rowCard.appendChild(cost);
 
     return rowCard;
+  }
+
+  function closeDishCalculationEntries(host, exceptElement = null) {
+    if (!host) {
+      return;
+    }
+    host.querySelectorAll("details[data-dish-calculation-entry][open]").forEach((detailsElement) => {
+      if (detailsElement !== exceptElement) {
+        detailsElement.open = false;
+      }
+    });
+  }
+
+  function renderDishCalculationEntryDetails(details) {
+    const detailsWrap = document.createElement("div");
+    detailsWrap.className = "builder-dish-calculation-entry-details-content";
+
+    const metaGrid = document.createElement("div");
+    metaGrid.className = "builder-dish-calculation-meta";
+
+    const calculationCostText = String((details && details.calculation_cost) || "").trim();
+    const calculationNotesText = String((details && details.calculation_notes) || "").trim();
+    const calculationRows = Array.isArray(details && details.calculation_rows) ? details.calculation_rows : [];
+
+    const totalField = document.createElement("div");
+    totalField.className = "builder-dish-calculation-meta-item";
+    const totalLabel = document.createElement("span");
+    totalLabel.className = "builder-dish-calculation-meta-label";
+    totalLabel.textContent = "Komponentkostnad";
+    const totalValue = document.createElement("span");
+    totalValue.className = "builder-dish-calculation-meta-value";
+    totalValue.textContent = formatDishCalculationValue(calculationCostText);
+    totalField.appendChild(totalLabel);
+    totalField.appendChild(totalValue);
+    metaGrid.appendChild(totalField);
+
+    if (calculationNotesText) {
+      const notesField = document.createElement("div");
+      notesField.className = "builder-dish-calculation-meta-item";
+      const notesLabel = document.createElement("span");
+      notesLabel.className = "builder-dish-calculation-meta-label";
+      notesLabel.textContent = "Anteckning";
+      const notesValue = document.createElement("span");
+      notesValue.className = "builder-dish-calculation-meta-value";
+      notesValue.textContent = calculationNotesText;
+      notesField.appendChild(notesLabel);
+      notesField.appendChild(notesValue);
+      metaGrid.appendChild(notesField);
+    }
+
+    detailsWrap.appendChild(metaGrid);
+
+    if (calculationRows.length > 0) {
+      const rowsWrap = document.createElement("div");
+      rowsWrap.className = "builder-dish-calculation-rows";
+
+      const header = document.createElement("div");
+      header.className = "builder-dish-calculation-row builder-dish-calculation-row-head";
+      ["Ingrediens", "Mängd", "Pris", "Kostnad"].forEach((labelText) => {
+        const label = document.createElement("div");
+        label.className = "builder-dish-calculation-row-value";
+        label.textContent = labelText;
+        header.appendChild(label);
+      });
+      rowsWrap.appendChild(header);
+
+      calculationRows.forEach((row) => {
+        rowsWrap.appendChild(renderDishCalculationRow(row));
+      });
+
+      detailsWrap.appendChild(rowsWrap);
+    }
+
+    return detailsWrap;
   }
 
   function componentsInDisplayOrder(composition) {
@@ -563,78 +647,75 @@ function createBuilderDishEditor(config) {
         knownCostCount += 1;
       }
 
-      const card = document.createElement("article");
-      card.className = "builder-dish-calculation-card";
-
-      const title = document.createElement("div");
-      title.className = "builder-dish-calculation-card-title";
-      title.textContent = componentName || "Komponent";
-      card.appendChild(title);
-
       if (!hasCalculationData) {
-        const missing = document.createElement("p");
-        missing.className = "builder-dish-calculation-summary-empty builder-dish-calculation-summary-missing";
-        missing.textContent = "Saknar kalkyldata";
-        card.appendChild(missing);
-        host.appendChild(card);
+        const missingCard = document.createElement("article");
+        missingCard.className = "builder-dish-calculation-summary-entry builder-dish-calculation-summary-entry-missing";
+
+        const header = document.createElement("div");
+        header.className = "builder-dish-calculation-summary-entry-header";
+
+        const name = document.createElement("div");
+        name.className = "builder-dish-calculation-summary-entry-name";
+        name.textContent = componentName || "Komponent";
+        header.appendChild(name);
+
+        const status = document.createElement("div");
+        status.className = "builder-dish-calculation-summary-entry-status";
+        status.textContent = "Saknar kalkyldata";
+        header.appendChild(status);
+
+        missingCard.appendChild(header);
+        host.appendChild(missingCard);
         continue;
       }
 
       anyCalculationData = true;
 
-      const metaGrid = document.createElement("div");
-      metaGrid.className = "builder-dish-calculation-meta";
+      const summaryEntry = document.createElement("details");
+      summaryEntry.className = "builder-dish-calculation-summary-entry";
+      summaryEntry.dataset.dishCalculationEntry = "1";
 
-      const totalField = document.createElement("div");
-      totalField.className = "builder-dish-calculation-meta-item";
-      const totalLabel = document.createElement("span");
-      totalLabel.className = "builder-dish-calculation-meta-label";
-      totalLabel.textContent = "Komponentkostnad";
-      const totalValue = document.createElement("span");
-      totalValue.className = "builder-dish-calculation-meta-value";
-      totalValue.textContent = formatDishCalculationValue(calculationCostText);
-      totalField.appendChild(totalLabel);
-      totalField.appendChild(totalValue);
-      metaGrid.appendChild(totalField);
+      const summary = document.createElement("summary");
+      summary.className = "builder-dish-calculation-summary-entry-header";
+      summary.addEventListener("click", () => {
+        if (!summaryEntry.open) {
+          closeDishCalculationEntries(host, summaryEntry);
+        }
+      });
 
-      if (calculationNotesText) {
-        const notesField = document.createElement("div");
-        notesField.className = "builder-dish-calculation-meta-item";
-        const notesLabel = document.createElement("span");
-        notesLabel.className = "builder-dish-calculation-meta-label";
-        notesLabel.textContent = "Anteckning";
-        const notesValue = document.createElement("span");
-        notesValue.className = "builder-dish-calculation-meta-value";
-        notesValue.textContent = calculationNotesText;
-        notesField.appendChild(notesLabel);
-        notesField.appendChild(notesValue);
-        metaGrid.appendChild(notesField);
-      }
+      const name = document.createElement("div");
+      name.className = "builder-dish-calculation-summary-entry-name";
+      name.textContent = componentName || "Komponent";
+      summary.appendChild(name);
 
-      card.appendChild(metaGrid);
+      const right = document.createElement("div");
+      right.className = "builder-dish-calculation-summary-entry-right";
 
-      if (calculationRows.length > 0) {
-        const rowsWrap = document.createElement("div");
-        rowsWrap.className = "builder-dish-calculation-rows";
+      const status = document.createElement("span");
+      status.className = "builder-dish-calculation-summary-entry-status";
+      status.textContent = calculationCostText ? formatDishCalculationValue(calculationCostText) : "Kalkyldata finns";
+      right.appendChild(status);
 
-        const header = document.createElement("div");
-        header.className = "builder-dish-calculation-row builder-dish-calculation-row-head";
-        ["Ingrediens", "Mängd", "Pris", "Kostnad"].forEach((labelText) => {
-          const label = document.createElement("div");
-          label.className = "builder-dish-calculation-row-value";
-          label.textContent = labelText;
-          header.appendChild(label);
-        });
-        rowsWrap.appendChild(header);
+      const disclosure = document.createElement("span");
+      disclosure.className = "builder-dish-calculation-summary-entry-chevron";
+      disclosure.setAttribute("aria-hidden", "true");
+      right.appendChild(disclosure);
 
-        calculationRows.forEach((row) => {
-          rowsWrap.appendChild(renderDishCalculationRow(row));
-        });
+      summary.appendChild(right);
+      summaryEntry.appendChild(summary);
 
-        card.appendChild(rowsWrap);
-      }
+      const detailsWrap = document.createElement("div");
+      detailsWrap.className = "builder-dish-calculation-summary-entry-details";
+      detailsWrap.appendChild(renderDishCalculationEntryDetails(details));
+      summaryEntry.appendChild(detailsWrap);
 
-      host.appendChild(card);
+      summaryEntry.addEventListener("toggle", () => {
+        if (summaryEntry.open) {
+          closeDishCalculationEntries(host, summaryEntry);
+        }
+      });
+
+      host.appendChild(summaryEntry);
     }
 
     if (!anyCalculationData) {

@@ -94,6 +94,7 @@ describe('standalone canonical builder runtime', () => {
     expect(document.getElementById('dishOverviewMenuName')).not.toBeNull();
     expect(document.getElementById('dishTextPreview')).toBeNull();
 
+    loadScript('../../static/js/builder_calculation_utils.js');
     loadScript('../../static/js/builder_dish_editor.js');
     loadScript('../../static/js/builder_modal_controller.js');
 
@@ -256,6 +257,7 @@ describe('standalone canonical builder runtime', () => {
       componentHtml,
     ].join('\n');
 
+    loadScript('../../static/js/builder_calculation_utils.js');
     loadScript('../../static/js/builder_component_editor.js');
     loadScript('../../static/js/builder_dish_editor.js');
     loadScript('../../static/js/builder_modal_controller.js');

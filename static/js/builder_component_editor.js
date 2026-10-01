@@ -161,11 +161,6 @@ function createBuilderComponentEditor(config) {
     };
   }
 
-  function parseFloatSafe(value) {
-    const num = Number(String(value || "").replace(",", "."));
-    return Number.isFinite(num) ? num : null;
-  }
-
   function normalizeCalculationRows(value) {
     if (!Array.isArray(value)) {
       return [];
@@ -190,48 +185,13 @@ function createBuilderComponentEditor(config) {
       );
   }
 
-  function calculateRowCost(row) {
-    const amountValue = parseFloatSafe(row && row.amount_value);
-    const priceValue = parseFloatSafe(row && row.price_value);
-    const amountUnit = String((row && row.amount_unit) || "").trim().toLowerCase();
-    const priceUnit = String((row && row.price_unit) || "").trim().toLowerCase();
-    if (amountValue == null || priceValue == null) {
-      return null;
-    }
-    if (priceUnit === "kr/kg") {
-      if (amountUnit === "g") {
-        return (amountValue / 1000) * priceValue;
-      }
-      if (amountUnit === "kg") {
-        return amountValue * priceValue;
-      }
-    }
-    if (priceUnit === "kr/l") {
-      if (amountUnit === "ml") {
-        return (amountValue / 1000) * priceValue;
-      }
-      if (amountUnit === "dl") {
-        return (amountValue / 10) * priceValue;
-      }
-      if (amountUnit === "l") {
-        return amountValue * priceValue;
-      }
-      if (amountUnit === "g") {
-        return (amountValue / 1000) * priceValue;
-      }
-    }
-    if (priceUnit === "kr/st") {
-      return amountValue * priceValue;
-    }
-    return null;
+  const calculationUtils = globalThis.BuilderCalculationUtils || null;
+  if (!calculationUtils) {
+    throw new Error("createBuilderComponentEditor: BuilderCalculationUtils is required");
   }
-
-  function formatCostValue(value) {
-    if (!Number.isFinite(value)) {
-      return "";
-    }
-    return value.toFixed(2);
-  }
+  const parseFloatSafe = calculationUtils.parseFloatSafe;
+  const calculateRowCost = calculationUtils.calculateRowCost;
+  const formatCostValue = calculationUtils.formatCostValue;
 
   function defaultComponentDetailDraft() {
     return {

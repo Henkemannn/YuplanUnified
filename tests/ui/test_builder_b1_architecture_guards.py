@@ -15,10 +15,11 @@ These tests verify:
 11. Component has recipe/method.
 12. Engine Ownership Contract document exists.
 13. Workspace callbacks are explicitly separated.
-14. [C1] builder_component_editor.js exists, is loaded before controller, and owns real Component implementation.
-15. [C1] builder.js does not contain extracted Component implementation bodies.
-16. [C1] controller instantiates component editor via factory.
-17. [C1] no builder_modal_runtime.js exists.
+14. [C1] builder_calculation_utils.js exists, is loaded before editor scripts, and owns shared calculation truth.
+15. [C1] builder_component_editor.js exists, is loaded before controller, and owns real Component implementation.
+16. [C1] builder.js does not contain extracted Component implementation bodies.
+17. [C1] controller instantiates component editor via factory.
+18. [C1] no builder_modal_runtime.js exists.
 """
 from __future__ import annotations
 
@@ -522,10 +523,12 @@ def test_component_editor_script_served(client_admin) -> None:
 def test_component_editor_loaded_before_controller(client_admin) -> None:
     """builder_component_editor.js is loaded before the controller and builder.js."""
     html = _workspace_html(client_admin)
+    calc_pos = html.find("builder_calculation_utils.js")
     assert "builder_component_editor.js" in html
     editor_pos = html.find("builder_component_editor.js")
     ctrl_pos = html.find("builder_modal_controller.js")
     builder_pos = html.find("builder.js")
+    assert calc_pos < editor_pos
     assert editor_pos < ctrl_pos < builder_pos, (
         "builder_component_editor.js must load before controller, which must load before builder.js"
     )

@@ -4335,6 +4335,96 @@ body:not(.builder-workspace-v1) ul {
   gap: 10px;
 }
 
+#dishCalculationPanel .builder-dish-calculation-summary-entry {
+  display: grid;
+  gap: 0;
+  border: 1px solid #d5dee8;
+  border-radius: 10px;
+  background: #fbfdff;
+  overflow: hidden;
+}
+
+#dishCalculationPanel .builder-dish-calculation-summary-entry[open] {
+  border-color: #bfd4e5;
+  background: #f7fbfe;
+}
+
+#dishCalculationPanel .builder-dish-calculation-summary-entry-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  margin: 0;
+  padding: 9px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  list-style: none;
+  cursor: pointer;
+}
+
+#dishCalculationPanel .builder-dish-calculation-summary-entry-header::-webkit-details-marker {
+  display: none;
+}
+
+#dishCalculationPanel .builder-dish-calculation-summary-entry-header::marker {
+  content: "";
+}
+
+#dishCalculationPanel .builder-dish-calculation-summary-entry-name {
+  min-width: 0;
+  color: #31485c;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+#dishCalculationPanel .builder-dish-calculation-summary-entry-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #163044;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+#dishCalculationPanel .builder-dish-calculation-summary-entry-status {
+  color: #163044;
+}
+
+#dishCalculationPanel .builder-dish-calculation-summary-entry-missing .builder-dish-calculation-summary-entry-status {
+  color: #8a4f12;
+}
+
+#dishCalculationPanel .builder-dish-calculation-summary-entry-chevron {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  margin-left: 2px;
+  border-right: 1.5px solid #6b7f90;
+  border-bottom: 1.5px solid #6b7f90;
+  transform: translateY(-1px) rotate(-45deg);
+  transition: transform 0.16s ease;
+}
+
+#dishCalculationPanel .builder-dish-calculation-summary-entry[open] .builder-dish-calculation-summary-entry-chevron {
+  transform: translateY(1px) rotate(45deg);
+}
+
+#dishCalculationPanel .builder-dish-calculation-summary-entry-details {
+  border-top: 1px solid #e2ebf2;
+  padding: 10px 12px 12px;
+}
+
+#dishCalculationPanel .builder-dish-calculation-entry-details-content {
+  display: grid;
+  gap: 8px;
+}
+
 #dishCalculationPanel .builder-dish-calculation-summary-empty {
   margin: 0;
   color: #586c7e;

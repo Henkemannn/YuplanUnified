@@ -18,17 +18,19 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert '<script src="/static/js/builder_component_editor.js"></script>' in html
     assert '<script src="/static/js/builder_dish_editor.js"></script>' in html
     assert '<script src="/static/js/builder_component_theme.js"></script>' in html
+    assert '<script src="/static/js/builder_calculation_utils.js"></script>' in html
     assert '<script src="/static/js/builder_component_library_runtime.js"></script>' in html
     assert html.count('<script src="/static/js/builder_component_theme.js"></script>') == 1
     assert '<script src="/static/js/builder.js?v=builder-modal-system-reset-1"></script>' in html
     ce_pos = html.find("builder_component_editor.js")
     de_pos = html.find("builder_dish_editor.js")
     theme_pos = html.find("builder_component_theme.js")
+    calc_utils_pos = html.find("builder_calculation_utils.js")
     runtime_pos = html.find("builder_component_library_runtime.js")
     ctrl_pos = html.find("builder_modal_controller.js")
     builder_pos = html.find("builder.js?v=")
     assert ce_pos < de_pos < ctrl_pos < builder_pos
-    assert theme_pos < runtime_pos < ce_pos < builder_pos
+    assert theme_pos < calc_utils_pos < runtime_pos < ce_pos < builder_pos
 
     # Legacy modal identified in stuck screenshot should be present.
     assert 'id="addComponentModal"' in html
@@ -248,17 +250,25 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'return editor.renderDishCalculationSummaryEmpty();' in js or 'editor.renderDishCalculationSummaryEmpty()' in js
     assert 'return editor.renderDishCalculationSummaryLoading();' in js or 'editor.renderDishCalculationSummaryLoading()' in js
     assert 'function renderDishCalculationRow(row) {' in js
-    assert 'function renderDishCalculationSummary(composition, componentDetails) {' in js
-    assert 'function loadDishCalculationSummaryForCurrentComposition() {' in js
+    assert 'function closeDishCalculationEntries(host, exceptElement = null) {' in dish_editor_js
+    assert 'function renderDishCalculationEntryDetails(details) {' in dish_editor_js
+    assert 'function renderDishCalculationSummary(composition, componentDetails) {' in dish_editor_js
+    assert 'function loadDishCalculationSummaryForCurrentComposition() {' in dish_editor_js
     assert 'function parseDishCurrencyValue(value) {' in dish_editor_js
     assert 'function formatDishCostValue(value) {' in dish_editor_js
     assert 'return value.toFixed(2);' in dish_editor_js
-    assert 'formatCostValue(' not in dish_editor_js
+    assert 'function formatCostValue(value) {' not in dish_editor_js
     assert 'Saknar kalkyldata' in dish_editor_js
     assert 'Ingen kalkyl registrerad på komponenterna.' in dish_editor_js
     assert 'Komponentkostnad' in dish_editor_js
     assert 'Total kalkyl för rätt' in dish_editor_js
     assert 'Vissa komponenter saknar kalkyldata.' in dish_editor_js
+    assert 'summaryEntry.className = "builder-dish-calculation-summary-entry";' in dish_editor_js
+    assert 'summaryEntry.dataset.dishCalculationEntry = "1";' in dish_editor_js
+    assert 'summary.className = "builder-dish-calculation-summary-entry-header";' in dish_editor_js
+    assert 'builder-dish-calculation-summary-entry-details' in dish_editor_js
+    assert 'closeDishCalculationEntries(host, summaryEntry);' in dish_editor_js
+    assert 'summaryEntry.addEventListener("toggle", () => {' in dish_editor_js
     assert 'formatDishCalculationAmount(' in dish_editor_js
     assert 'formatDishCalculationRowCost(' in dish_editor_js
     assert 'host.insertBefore(totalCard, host.firstChild);' in dish_editor_js
@@ -394,6 +404,10 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert '#dishAllergensPanel .builder-dish-allergen-source,' in css
     assert '#dishCalculationPanel .builder-dish-calculation-summary {' in css
     assert '#dishCalculationPanel .builder-dish-calculation-card {' in css
+    assert '#dishCalculationPanel .builder-dish-calculation-summary-entry {' in css
+    assert '#dishCalculationPanel .builder-dish-calculation-summary-entry[open] {' in css
+    assert '#dishCalculationPanel .builder-dish-calculation-summary-entry-header {' in css
+    assert '#dishCalculationPanel .builder-dish-calculation-summary-entry-details {' in css
     assert '#dishCalculationPanel .builder-dish-calculation-row {' in css
     assert '#dishCalculationPanel .builder-dish-calculation-total {' in css
     assert '#dishCalculationPanel .builder-dish-calculation-summary-warning {' in css

@@ -22,12 +22,13 @@ def test_builder_editor_host_renders_shared_editor_shell(client_admin) -> None:
     assert '<link rel="stylesheet" href="/static/css/builder_modal.css?v=builder-b1-modal-css-v1">' in html
     assert '<link rel="stylesheet" href="/static/css/builder_editor_host.css?v=builder-editor-host-v1">' in html
     assert '<script src="/static/js/builder_component_theme.js"></script>' in html
+    assert '<script src="/static/js/builder_calculation_utils.js"></script>' in html
     assert '<script src="/static/js/builder_component_library_runtime.js"></script>' in html
     assert '<script src="/static/js/builder_component_editor.js"></script>' in html
     assert '<script src="/static/js/builder_dish_editor.js"></script>' in html
     assert '<script src="/static/js/builder_modal_controller.js?v=builder-b1-modal-controller-v1"></script>' in html
     assert '<script src="/static/js/builder_editor_host.js?v=builder-editor-host-v1"></script>' in html
-    assert html.find("builder_component_theme.js") < html.find("builder_component_library_runtime.js") < html.find("builder_editor_host.js?v=builder-editor-host-v1")
+    assert html.find("builder_component_theme.js") < html.find("builder_calculation_utils.js") < html.find("builder_component_library_runtime.js") < html.find("builder_editor_host.js?v=builder-editor-host-v1")
     assert '<script src="/static/js/builder.js?v=builder-modal-system-reset-1"></script>' not in html
     assert 'builder-platform-header' not in html
     assert 'builder-shell' not in html
@@ -46,10 +47,11 @@ def test_builder_editor_host_uses_same_assets_for_component_route(client_admin) 
     assert '<link rel="stylesheet" href="/static/css/builder_modal.css?v=builder-b1-modal-css-v1">' in html
     assert '<link rel="stylesheet" href="/static/css/builder_editor_host.css?v=builder-editor-host-v1">' in html
     assert '<script src="/static/js/builder_component_theme.js"></script>' in html
+    assert '<script src="/static/js/builder_calculation_utils.js"></script>' in html
     assert '<script src="/static/js/builder_component_editor.js"></script>' in html
     assert '<script src="/static/js/builder_dish_editor.js"></script>' in html
     assert '<script src="/static/js/builder_editor_host.js?v=builder-editor-host-v1"></script>' in html
-    assert html.find("builder_component_theme.js") < html.find("builder_editor_host.js?v=builder-editor-host-v1")
+    assert html.find("builder_component_theme.js") < html.find("builder_calculation_utils.js") < html.find("builder_editor_host.js?v=builder-editor-host-v1")
     assert '<script src="/static/js/builder.js?v=builder-modal-system-reset-1"></script>' not in html
     assert 'Tillbaka till matsedeln' not in html
 
@@ -65,8 +67,9 @@ def test_builder_editor_host_without_target_still_loads_shell(client_admin) -> N
     assert '<link rel="stylesheet" href="/static/css/builder_modal.css?v=builder-b1-modal-css-v1">' in html
     assert '<link rel="stylesheet" href="/static/css/builder_editor_host.css?v=builder-editor-host-v1">' in html
     assert '<script src="/static/js/builder_component_theme.js"></script>' in html
+    assert '<script src="/static/js/builder_calculation_utils.js"></script>' in html
     assert '<script src="/static/js/builder_editor_host.js?v=builder-editor-host-v1"></script>' in html
-    assert html.find("builder_component_theme.js") < html.find("builder_editor_host.js?v=builder-editor-host-v1")
+    assert html.find("builder_component_theme.js") < html.find("builder_calculation_utils.js") < html.find("builder_editor_host.js?v=builder-editor-host-v1")
     assert '<script src="/static/js/builder.js?v=builder-modal-system-reset-1"></script>' not in html
     assert 'Tillbaka till matsedeln' not in html
 
