@@ -2190,20 +2190,26 @@ body:not(.builder-workspace-v1) ul {
 
 .builder-workspace-v1 .modal > .modal-content {
   flex: 0 1 min(1120px, calc(100vw - 48px));
+  box-sizing: border-box;
 }
 
 .builder-workspace-v1 .modal-content-dish {
   width: min(1120px, calc(100vw - 40px));
+  height: min(640px, calc(100vh - 48px));
+  box-sizing: border-box;
+  overflow: auto;
 }
 
 .builder-workspace-v1 #componentDetailEditorModal .modal-content-component-detail {
   position: relative;
   width: min(1120px, calc(100vw - 40px));
   max-width: calc(100vw - 40px);
+  height: min(700px, calc(100vh - 48px));
   min-height: 320px;
   max-height: calc(100vh - 48px);
   margin: 0;
   overflow: auto;
+  box-sizing: border-box;
 }
 
 .workspace-modal-header {
@@ -2967,10 +2973,15 @@ body:not(.builder-workspace-v1) ul {
 }
 
 .builder-component-detail-tabs {
+  position: sticky;
+  top: 72px;
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 14px;
+  padding-top: 8px;
+  background: linear-gradient(180deg, #fcfdfe 0%, #f2f6f9 100%);
 }
 
 .builder-component-detail-tabs .builder-chip {
@@ -3847,7 +3858,12 @@ body:not(.builder-workspace-v1) ul {
 }
 
 .builder-dish-shell-chips {
+  position: sticky;
+  top: 72px;
+  z-index: 2;
   margin: 0 0 12px;
+  padding-top: 8px;
+  background: linear-gradient(180deg, #fcfdfe 0%, #f2f6f9 100%);
 }
 
 .builder-dish-shell-chips .builder-chip {
@@ -3907,17 +3923,86 @@ body:not(.builder-workspace-v1) ul {
 }
 
 .builder-dish-overview-components-summary .component-block-list {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 12px;
+  min-height: 0;
   max-height: none;
-  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  padding: 0 2px 10px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.builder-dish-overview-components-summary .component-block-list::-webkit-scrollbar {
+  display: none;
+}
+
+.builder-dish-overview-components-summary .component-block-list::before,
+.builder-dish-overview-components-summary .component-block-list::after {
+  content: "";
+  position: sticky;
+  top: 0;
+  bottom: 0;
+  width: 28px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  z-index: 2;
+}
+
+.builder-dish-overview-components-summary .component-block-list::before {
+  left: 0;
+  margin-right: -28px;
+  background: linear-gradient(to right, rgba(252, 253, 254, 0.98) 0%, rgba(252, 253, 254, 0) 100%);
+}
+
+.builder-dish-overview-components-summary .component-block-list::after {
+  right: 0;
+  margin-left: -28px;
+  background: linear-gradient(to left, rgba(252, 253, 254, 0.98) 0%, rgba(252, 253, 254, 0) 100%);
+}
+
+.builder-dish-overview-components-summary .component-block-list.has-overflow-left::before {
+  opacity: 1;
+}
+
+.builder-dish-overview-components-summary .component-block-list.has-overflow-right::after {
+  opacity: 1;
 }
 
 .builder-dish-overview-component-card .builder-component-card-surface {
-  padding: 8px 10px;
-  min-height: 0;
+  min-height: 70px;
+  padding: 7px 10px 7px 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.builder-dish-overview-component-card .builder-component-card-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
 }
 
 .builder-dish-overview-component-card .component-library-card-name {
   font-size: 13px;
+  line-height: 1.14;
+  -webkit-line-clamp: 2;
+}
+
+.builder-dish-overview-component-card .builder-component-card-secondary {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.1;
+  color: #6b7a88;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .builder-dish-overview-component-meta {
@@ -3928,12 +4013,71 @@ body:not(.builder-workspace-v1) ul {
 }
 
 #dishOverviewKlossPreview {
-  max-height: 220px;
+  position: relative;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 12px;
+  min-height: 0;
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  padding: 0 2px 10px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+#dishOverviewKlossPreview::-webkit-scrollbar {
+  display: none;
+}
+
+#dishOverviewKlossPreview::before,
+#dishOverviewKlossPreview::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 10px;
+  width: 28px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  z-index: 2;
+}
+
+#dishOverviewKlossPreview::before {
+  left: 0;
+  background: linear-gradient(to right, rgba(252, 253, 254, 0.98) 0%, rgba(252, 253, 254, 0) 100%);
+}
+
+#dishOverviewKlossPreview::after {
+  right: 0;
+  background: linear-gradient(to left, rgba(252, 253, 254, 0.98) 0%, rgba(252, 253, 254, 0) 100%);
+}
+
+#dishOverviewKlossPreview.has-overflow-left::before {
+  opacity: 1;
+}
+
+#dishOverviewKlossPreview.has-overflow-right::after {
+  opacity: 1;
+}
+
+#dishOverviewKlossPreview .component-list-item {
+  flex: 0 0 auto;
+  width: 192px;
+  overflow: visible;
 }
 
 #dishOverviewKlossPreview .builder-component-card-surface {
   cursor: default;
   pointer-events: none;
+}
+
+#dishOverviewKlossPreview .builder-dish-overview-component-card .builder-component-card-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
 }
 
 .builder-dish-view-card-components .builder-dish-view-help {
@@ -4729,6 +4873,7 @@ body:not(.builder-workspace-v1) ul {
   width: min(1120px, calc(100vw - 40px)) !important;
   min-width: 0 !important;
   max-width: calc(100vw - 40px) !important;
+  height: min(700px, calc(100vh - 48px)) !important;
   min-height: 320px !important;
   max-height: calc(100vh - 48px) !important;
   overflow: auto !important;

@@ -349,6 +349,15 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert '.builder-dish-overview-preview-block {' in css
     assert '#dishOverviewKlossPreview {' in css
     assert '#dishOverviewKlossPreview .builder-component-card-surface {' in css
+    assert '#dishOverviewKlossPreview .component-list-item {' in css
+    assert 'display: flex;' in css
+    assert 'flex-wrap: nowrap;' in css
+    assert 'overflow-x: auto;' in css
+    assert 'overflow-y: hidden;' in css
+    assert 'scrollbar-width: none;' in css
+    assert '#dishOverviewKlossPreview.has-overflow-left::before {' in css
+    assert '#dishOverviewKlossPreview.has-overflow-right::after {' in css
+    assert '.builder-dish-overview-component-card .builder-component-card-copy {' in css
     assert 'pointer-events: none;' in css
     assert '#dishComponentsPanel .component-block-list {' in css
     assert 'display: flex;' in css
@@ -374,6 +383,11 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'max-height: 140px;' in css
     assert 'overflow-y: auto;' in css
     assert '#dishComponentsPanel .component-overflow-menu button {' in css
+    assert '#dishOverviewKlossPreview .builder-component-card-surface {' in css
+    assert 'min-height: 70px;' in css
+    assert 'padding: 7px 10px 7px 12px;' in css
+    assert '.builder-dish-overview-component-card .builder-component-card-secondary {' in css
+    assert '.builder-dish-overview-component-card .component-library-card-name {' in css
     assert '#dishAllergensPanel .builder-dish-allergen-summary {' in css
     assert '#dishAllergensPanel .builder-dish-allergen-card,' in css
     assert '#dishAllergensPanel .builder-dish-allergen-chip,' in css
@@ -1101,9 +1115,30 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
     assert component_modal_panel_block is not None
     assert "position: relative;" in component_modal_panel_block.group(0)
     assert "width: min(1120px, calc(100vw - 40px));" in component_modal_panel_block.group(0)
+    assert "height: min(700px, calc(100vh - 48px));" in component_modal_panel_block.group(0)
     assert "max-height: calc(100vh - 48px);" in component_modal_panel_block.group(0)
     assert "min-height: 320px;" in component_modal_panel_block.group(0)
     assert "overflow: auto;" in component_modal_panel_block.group(0)
+    assert "box-sizing: border-box;" in component_modal_panel_block.group(0)
+
+    dish_modal_panel_block = re.search(r"\.builder-workspace-v1 \.modal-content-dish\s*\{[^}]*\}", css, re.S)
+    assert dish_modal_panel_block is not None
+    assert "width: min(1120px, calc(100vw - 40px));" in dish_modal_panel_block.group(0)
+    assert "height: min(640px, calc(100vh - 48px));" in dish_modal_panel_block.group(0)
+    assert "overflow: auto;" in dish_modal_panel_block.group(0)
+    assert "box-sizing: border-box;" in dish_modal_panel_block.group(0)
+
+    component_tabs_block = re.search(r"\.builder-component-detail-tabs\s*\{[^}]*\}", css, re.S)
+    assert component_tabs_block is not None
+    assert "position: sticky;" in component_tabs_block.group(0)
+    assert "top: 72px;" in component_tabs_block.group(0)
+    assert "z-index: 2;" in component_tabs_block.group(0)
+
+    dish_tabs_block = re.search(r"\.builder-dish-shell-chips\s*\{[^}]*\}", css, re.S)
+    assert dish_tabs_block is not None
+    assert "position: sticky;" in dish_tabs_block.group(0)
+    assert "top: 72px;" in dish_tabs_block.group(0)
+    assert "z-index: 2;" in dish_tabs_block.group(0)
 
     final_component_modal_panel_block = re.search(
         r"\.builder-workspace-v1 #componentDetailEditorModal\.modal:not\(\.hidden\) > \.modal-content-component-detail\s*\{[^}]*!important;[^}]*\}",
@@ -1113,6 +1148,7 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
     assert final_component_modal_panel_block is not None
     assert "width: min(1120px, calc(100vw - 40px)) !important;" in final_component_modal_panel_block.group(0)
     assert "min-width: 0 !important;" in final_component_modal_panel_block.group(0)
+    assert "height: min(700px, calc(100vh - 48px)) !important;" in final_component_modal_panel_block.group(0)
     assert "min-height: 320px !important;" in final_component_modal_panel_block.group(0)
     assert "max-height: calc(100vh - 48px) !important;" in final_component_modal_panel_block.group(0)
     assert "overflow-x: hidden !important;" in final_component_modal_panel_block.group(0)

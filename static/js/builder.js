@@ -4232,6 +4232,7 @@ function renderDishOverviewKlossPreview(composition) {
     const componentIdValue = String(component.component_id || "");
     const cached = findCachedComponentById(componentIdValue);
     const categoryTheme = resolveComponentCategoryThemeKey(cached || component);
+    const secondaryLabel = formatDishComponentSecondaryLabel(cached || component);
 
     const li = document.createElement("li");
     li.className = "component-list-item";
@@ -4248,6 +4249,14 @@ function renderDishOverviewKlossPreview(composition) {
     name.textContent = String(component.component_name || component.component_id || "");
 
     surface.appendChild(name);
+
+    if (secondaryLabel) {
+      const secondary = document.createElement("div");
+      secondary.className = "builder-component-card-secondary";
+      secondary.textContent = secondaryLabel;
+      surface.appendChild(secondary);
+    }
+
     card.appendChild(surface);
     li.appendChild(card);
     previewList.appendChild(li);

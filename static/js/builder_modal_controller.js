@@ -400,6 +400,72 @@ function createBuilderModalController(config) {
     });
   }
 
+  function updateDishOverviewRailOverflowState(previewList) {
+    if (!previewList) {
+      return;
+    }
+    const hasOverflow = previewList.scrollWidth > previewList.clientWidth + 2;
+    const showLeftFade = hasOverflow && previewList.scrollLeft > 1;
+    const showRightFade = hasOverflow && previewList.scrollLeft + previewList.clientWidth < previewList.scrollWidth - 1;
+    previewList.classList.toggle("has-overflow-left", showLeftFade);
+    previewList.classList.toggle("has-overflow-right", showRightFade);
+  }
+
+  function bindDishOverviewRailOverflowState(previewList) {
+    if (!previewList || previewList.dataset.overflowFadeBound === "1") {
+      return;
+    }
+    previewList.dataset.overflowFadeBound = "1";
+    const scheduleUpdate = () => {
+      window.requestAnimationFrame(() => updateDishOverviewRailOverflowState(previewList));
+    };
+    previewList.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+    scheduleUpdate();
+  }
+
+  function renderDishOverviewComponentBlock(component, options) {
+    const settings = options || {};
+    const componentIdValue = String(component.component_id || "");
+    const displayedName = String(settings.displayedName || component.component_name || component.component_id || "");
+    const secondaryLabel = String(settings.secondaryLabel || "");
+    const themeKey = String(settings.themeKey || _resolveComponentTheme(component));
+
+    const li = document.createElement("li");
+    li.className = "component-list-item";
+
+    const card = document.createElement("article");
+    card.className = "builder-component-card builder-component-card-compact builder-dish-overview-component-card dish-linked-component-card";
+    card.classList.add("builder-component-card-theme-" + themeKey);
+
+    const surface = document.createElement("button");
+    surface.type = "button";
+    surface.className = "builder-component-card-surface";
+    surface.addEventListener("click", async () => {
+      await _openLinkedComponentEditor(componentIdValue);
+    });
+
+    const copy = document.createElement("div");
+    copy.className = "builder-component-card-copy";
+
+    const name = document.createElement("div");
+    name.className = "component-library-card-name";
+    name.textContent = displayedName;
+    copy.appendChild(name);
+
+    if (secondaryLabel) {
+      const secondary = document.createElement("div");
+      secondary.className = "builder-component-card-secondary";
+      secondary.textContent = secondaryLabel;
+      copy.appendChild(secondary);
+    }
+
+    surface.appendChild(copy);
+    card.appendChild(surface);
+    li.appendChild(card);
+    return li;
+  }
+
   function renderDishOverviewKlossPreview(composition) {
     const previewList = compositionRoot.querySelector("#dishOverviewKlossPreview");
     if (!previewList) {
@@ -418,6 +484,7 @@ function createBuilderModalController(config) {
       li.className = "component-build-surface-empty";
       li.textContent = "Inga komponenter ännu.";
       previewList.appendChild(li);
+      updateDishOverviewRailOverflowState(previewList);
       return;
     }
 
@@ -426,28 +493,16 @@ function createBuilderModalController(config) {
       const canonicalComponent = _resolveCanonicalComponent(component);
       const displayedName = String((canonicalComponent && canonicalComponent.component_name) || component.component_name || component.component_id || "");
       const themeKey = _resolveComponentTheme(canonicalComponent || component);
-      const li = document.createElement("li");
-      li.className = "component-list-item";
-
-      const card = document.createElement("article");
-      card.className = "builder-component-card builder-component-card-compact builder-dish-overview-component-card dish-linked-component-card";
-      card.classList.add("builder-component-card-theme-" + themeKey);
-
-      const surface = document.createElement("div");
-      surface.className = "builder-component-card-surface";
-
-      const name = document.createElement("div");
-      name.className = "component-library-card-name";
-      name.textContent = displayedName;
-
-      surface.appendChild(name);
-      card.appendChild(surface);
-      card.addEventListener("click", async () => {
-        await _openLinkedComponentEditor(componentIdValue);
-      });
-      li.appendChild(card);
-      previewList.appendChild(li);
+      const secondaryLabel = _formatComponentSecondaryLabel(canonicalComponent || component);
+      previewList.appendChild(renderDishOverviewComponentBlock(canonicalComponent || component, {
+        displayedName,
+        secondaryLabel,
+        themeKey,
+      }));
     }
+
+    bindDishOverviewRailOverflowState(previewList);
+    updateDishOverviewRailOverflowState(previewList);
   }
 
   function renderDishComponentsPanel(composition) {
