@@ -173,8 +173,11 @@ body:not(.builder-workspace-v1) ul {
 }
 
 .modal-section-title {
+  color: #557086;
+  font-size: 12px;
   font-weight: 600;
   margin: 0 0 6px;
+  letter-spacing: 0;
 }
 
 .modal-status-line {
@@ -1258,12 +1261,12 @@ body:not(.builder-workspace-v1) ul {
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #617386;
+  margin-bottom: 8px;
 }
 
 .builder-workspace-v1 h1,
 .builder-workspace-v1 h2,
-.builder-workspace-v1 h3 {
+  padding-bottom: 8px;
   margin: 0;
   font-weight: 600;
   color: #1b2a38;
@@ -2194,10 +2197,60 @@ body:not(.builder-workspace-v1) ul {
 }
 
 .builder-workspace-v1 .modal-content-dish {
+  position: relative;
   width: min(1120px, calc(100vw - 40px));
+  max-width: calc(100vw - 40px);
   height: min(640px, calc(100vh - 48px));
-  box-sizing: border-box;
+  min-height: 320px;
+  max-height: calc(100vh - 48px);
+  margin: 0;
+  padding: 12px;
   overflow: auto;
+  font-family: var(--yp-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
+  font-size: 14px;
+  line-height: 1.45;
+  color: #203040;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  box-sizing: border-box;
+}
+
+.builder-workspace-v1 .modal-content-dish::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.builder-workspace-v1 .modal-content-dish::before,
+.builder-workspace-v1 .modal-content-dish::after {
+  content: "";
+  position: sticky;
+  display: block;
+  height: 24px;
+  margin: 0 -12px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  z-index: 3;
+}
+
+.builder-workspace-v1 .modal-content-dish::before {
+  top: 0;
+  margin-bottom: -24px;
+  background: linear-gradient(to bottom, rgba(252, 253, 254, 0.98) 0%, rgba(252, 253, 254, 0) 100%);
+}
+
+.builder-workspace-v1 .modal-content-dish::after {
+  bottom: 0;
+  margin-top: -24px;
+  background: linear-gradient(to top, rgba(252, 253, 254, 0.98) 0%, rgba(252, 253, 254, 0) 100%);
+}
+
+.builder-workspace-v1 .modal-content-dish.has-scroll-top-fade::before {
+  opacity: 1;
+}
+
+.builder-workspace-v1 .modal-content-dish.has-scroll-bottom-fade::after {
+  opacity: 1;
 }
 
 .builder-workspace-v1 #componentDetailEditorModal .modal-content-component-detail {
@@ -2208,8 +2261,53 @@ body:not(.builder-workspace-v1) ul {
   min-height: 320px;
   max-height: calc(100vh - 48px);
   margin: 0;
+  padding: 12px;
   overflow: auto;
+  font-family: var(--yp-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
+  font-size: 14px;
+  line-height: 1.45;
+  color: #203040;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   box-sizing: border-box;
+}
+
+.builder-workspace-v1 #componentDetailEditorModal .modal-content-component-detail::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.builder-workspace-v1 #componentDetailEditorModal .modal-content-component-detail::before,
+.builder-workspace-v1 #componentDetailEditorModal .modal-content-component-detail::after {
+  content: "";
+  position: sticky;
+  display: block;
+  height: 24px;
+  margin: 0 -12px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  z-index: 3;
+}
+
+.builder-workspace-v1 #componentDetailEditorModal .modal-content-component-detail::before {
+  top: 0;
+  margin-bottom: -24px;
+  background: linear-gradient(to bottom, rgba(252, 253, 254, 0.98) 0%, rgba(252, 253, 254, 0) 100%);
+}
+
+.builder-workspace-v1 #componentDetailEditorModal .modal-content-component-detail::after {
+  bottom: 0;
+  margin-top: -24px;
+  background: linear-gradient(to top, rgba(252, 253, 254, 0.98) 0%, rgba(252, 253, 254, 0) 100%);
+}
+
+.builder-workspace-v1 #componentDetailEditorModal .modal-content-component-detail.has-scroll-top-fade::before {
+  opacity: 1;
+}
+
+.builder-workspace-v1 #componentDetailEditorModal .modal-content-component-detail.has-scroll-bottom-fade::after {
+  opacity: 1;
 }
 
 .workspace-modal-header {
@@ -2979,8 +3077,8 @@ body:not(.builder-workspace-v1) ul {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 14px;
-  padding-top: 8px;
+  margin-bottom: 10px;
+  padding-top: 4px;
   background: linear-gradient(180deg, #fcfdfe 0%, #f2f6f9 100%);
 }
 
@@ -3094,6 +3192,8 @@ body:not(.builder-workspace-v1) ul {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  font: inherit;
+  color: #203647;
   background: var(--builder-overview-input-bg);
   border-color: var(--builder-overview-input-border);
 }
@@ -3164,6 +3264,8 @@ body:not(.builder-workspace-v1) ul {
   border-radius: 10px;
   border: 1px solid #d3dee8;
   padding: 6px 9px;
+  font: inherit;
+  color: #203647;
 }
 
 .builder-component-tags-empty {
@@ -3219,31 +3321,31 @@ body:not(.builder-workspace-v1) ul {
 .builder-component-allergen-layout {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
 }
 
 .builder-component-allergen-card {
   border: 1px solid var(--builder-allergen-card-border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--builder-allergen-card-bg);
-  box-shadow: var(--builder-allergen-card-shadow);
-  padding: 10px;
+  box-shadow: none;
+  padding: 9px;
   display: grid;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
 .builder-component-allergen-helper {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--builder-allergen-muted-text);
 }
 
 .builder-component-allergen-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
   width: 100%;
   min-width: 0;
 }
@@ -3264,13 +3366,14 @@ body:not(.builder-workspace-v1) ul {
 .builder-component-allergen-chip span {
   display: flex;
   align-items: center;
-  min-height: 38px;
+  min-height: 34px;
   border: 1px solid var(--builder-allergen-input-border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--builder-allergen-input-bg);
-  padding: 8px 10px;
-  font-size: 13px;
-  color: #2a4254;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1f3749;
   transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
 }
 
@@ -3295,11 +3398,13 @@ body:not(.builder-workspace-v1) ul {
 }
 
 .builder-component-allergen-note-field textarea {
-  min-height: 88px;
+  min-height: 84px;
   max-height: 128px;
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  font: inherit;
+  color: #203647;
   background: var(--builder-allergen-input-bg);
   border-color: var(--builder-allergen-input-border);
 }
@@ -3313,8 +3418,8 @@ body:not(.builder-workspace-v1) ul {
   --builder-recipe-input-border: var(--builder-overview-input-border, #c7d5e2);
   --builder-recipe-card-shadow: var(--builder-overview-card-shadow, 0 8px 20px rgba(18, 38, 54, 0.08));
   display: grid;
-  gap: 10px;
-  padding: 8px;
+  gap: 6px;
+  padding: 4px;
   background: var(--builder-recipe-panel-bg);
   border-radius: 12px;
 }
@@ -3322,32 +3427,41 @@ body:not(.builder-workspace-v1) ul {
 .builder-component-recipe-layout {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 14px;
+  gap: 8px;
   min-width: 0;
 }
 
 .builder-component-recipe-card {
   border: 1px solid var(--builder-recipe-card-border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--builder-recipe-card-bg);
-  box-shadow: none;
-  padding: 12px;
+  box-shadow: 0 1px 2px rgba(24, 44, 61, 0.04);
+  padding: 8px;
   display: grid;
-  gap: 10px;
+  gap: 6px;
   min-width: 0;
 }
 
 .builder-component-card-label {
   margin: 0;
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--builder-recipe-muted-text);
+}
+
+.builder-component-recipe-card-ingredients .builder-component-card-label::before {
+  content: "1. ";
+}
+
+.builder-component-recipe-card-method .builder-component-card-label::before {
+  content: "2. ";
 }
 
 .builder-component-recipe-header {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) 92px 86px 40px;
+  grid-template-columns: minmax(0, 1.6fr) minmax(82px, 0.55fr) minmax(72px, 0.5fr) 32px;
   gap: 8px;
   align-items: center;
   width: 100%;
@@ -3366,7 +3480,7 @@ body:not(.builder-workspace-v1) ul {
 
 .builder-component-recipe-rows {
   display: grid;
-  gap: 8px;
+  gap: 7px;
   margin: 0;
   width: 100%;
   max-width: 860px;
@@ -3377,27 +3491,40 @@ body:not(.builder-workspace-v1) ul {
 
 .builder-component-recipe-row {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) 92px 86px 40px;
+  grid-template-columns: minmax(0, 1.6fr) minmax(82px, 0.55fr) minmax(72px, 0.5fr) 32px;
   gap: 8px;
   align-items: center;
   width: 100%;
   min-width: 0;
+  box-sizing: border-box;
+  padding: 4px;
+  border: 1px solid #dbe4ec;
+  border-radius: 10px;
+  background: #fbfdff;
 }
 
 .builder-component-recipe-row input {
-  min-height: 36px;
+  min-height: 34px;
   padding: 6px 8px;
   margin: 0;
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  font: inherit;
+  color: #203647;
   background: var(--builder-recipe-input-bg);
   border-color: var(--builder-recipe-input-border);
+  font-variant-numeric: tabular-nums;
+}
+
+.builder-component-recipe-row [data-recipe-field="amount_value"],
+.builder-component-recipe-row [data-recipe-field="amount_unit"] {
+  text-align: center;
 }
 
 .builder-row-remove-icon {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: 999px;
   border: 1px solid #d5dce4;
   background: #ffffff;
@@ -3433,6 +3560,10 @@ body:not(.builder-workspace-v1) ul {
   justify-self: start;
 }
 
+.builder-component-recipe-actions .builder-button-ghost {
+  padding-inline: 10px;
+}
+
 .builder-component-recipe-notes-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3445,14 +3576,18 @@ body:not(.builder-workspace-v1) ul {
   display: grid;
   gap: 4px;
   font-size: 12px;
+  font-weight: 700;
+  color: #557086;
 }
 
 .builder-component-recipe-note-field textarea {
-  min-height: 96px;
+  min-height: 92px;
   max-height: 140px;
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  font: inherit;
+  color: #203647;
   background: var(--builder-recipe-input-bg);
   border-color: var(--builder-recipe-input-border);
 }
@@ -3466,8 +3601,8 @@ body:not(.builder-workspace-v1) ul {
   --builder-calc-input-border: var(--builder-overview-input-border, #c7d5e2);
   --builder-calc-card-shadow: var(--builder-overview-card-shadow, 0 8px 20px rgba(18, 38, 54, 0.08));
   display: grid;
-  gap: 10px;
-  padding: 8px;
+  gap: 12px;
+  padding: 10px;
   background: var(--builder-calc-panel-bg);
   border-radius: 12px;
 }
@@ -3475,18 +3610,18 @@ body:not(.builder-workspace-v1) ul {
 .builder-component-calc-layout {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
 }
 
 .builder-component-calc-card {
   border: 1px solid var(--builder-calc-card-border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--builder-calc-card-bg);
-  box-shadow: none;
+  box-shadow: 0 1px 2px rgba(24, 44, 61, 0.04);
   padding: 12px;
   display: grid;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -3498,7 +3633,7 @@ body:not(.builder-workspace-v1) ul {
 
 .builder-component-calc-rows {
   display: grid;
-  gap: 8px;
+  gap: 7px;
   margin-bottom: 12px;
   width: 100%;
   max-width: 980px;
@@ -3508,34 +3643,60 @@ body:not(.builder-workspace-v1) ul {
 
 .builder-component-calc-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) 88px 82px 100px 104px 104px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(76px, 0.55fr) minmax(68px, 0.5fr) minmax(96px, 0.7fr) minmax(104px, 0.7fr) minmax(108px, 0.72fr);
   gap: 8px;
   align-items: center;
   width: 100%;
   min-width: 0;
+  box-sizing: border-box;
+  padding: 6px;
+  border: 1px solid #dbe4ec;
+  border-radius: 10px;
+  background: #fbfdff;
 }
 
 .builder-component-calc-row input {
-  min-height: 36px;
+  min-height: 34px;
   padding: 6px 8px;
   margin: 0;
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  font: inherit;
   background: var(--builder-calc-input-bg);
   border-color: var(--builder-calc-input-border);
+  font-variant-numeric: tabular-nums;
 }
 
 .builder-component-calc-row [data-calc-field="ingredient_name"],
 .builder-component-calc-row [data-calc-field="amount_value"],
 .builder-component-calc-row [data-calc-field="amount_unit"] {
-  background: #f6f8fb;
+  background: #f5f8fb;
+  color: #5a6b7b;
+}
+
+.builder-component-calc-row [data-calc-field="price_value"],
+.builder-component-calc-row [data-calc-field="price_unit"] {
+  background: #ffffff;
+  color: #203647;
+  font-weight: 600;
+}
+
+.builder-component-calc-row [data-calc-field="calculated_cost"] {
+  background: #edf4ff;
+  color: #1f425c;
+  font-weight: 700;
+  text-align: right;
 }
 
 .builder-component-calc-actions {
   width: 100%;
   max-width: 980px;
   justify-self: start;
+}
+
+.builder-component-calc-actions .builder-button-ghost {
+  padding-inline: 10px;
 }
 
 .builder-component-calc-total {
@@ -3546,6 +3707,10 @@ body:not(.builder-workspace-v1) ul {
   margin: 0;
   font-size: 12px;
   color: var(--builder-calc-muted-text);
+  padding: 10px 12px;
+  border: 1px solid #dbe4ec;
+  border-radius: 10px;
+  background: #ffffff;
 }
 
 #componentDetailCalcCost {
@@ -3557,6 +3722,7 @@ body:not(.builder-workspace-v1) ul {
   border-radius: 10px;
   min-height: 34px;
   padding: 6px 10px;
+  text-align: right;
 }
 
 .builder-component-calc-note-field {
@@ -3564,6 +3730,8 @@ body:not(.builder-workspace-v1) ul {
   display: grid;
   gap: 4px;
   font-size: 12px;
+  font-weight: 700;
+  color: #557086;
 }
 
 .builder-component-calc-note-field textarea {
@@ -3572,6 +3740,8 @@ body:not(.builder-workspace-v1) ul {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  font: inherit;
+  color: #203647;
   background: var(--builder-calc-input-bg);
   border-color: var(--builder-calc-input-border);
 }
@@ -3596,7 +3766,6 @@ body:not(.builder-workspace-v1) ul {
 
   .builder-component-calc-row {
     grid-template-columns: minmax(0, 1fr) repeat(2, minmax(84px, 1fr)) repeat(3, minmax(92px, 1fr));
-    min-width: 640px;
   }
 
   .builder-component-recipe-header {
@@ -3604,12 +3773,8 @@ body:not(.builder-workspace-v1) ul {
   }
 
   .builder-component-recipe-row {
-    grid-template-columns: minmax(0, 1fr) minmax(88px, 1fr) minmax(80px, 1fr) 32px;
-    min-width: 420px;
-  }
-
-  .builder-component-recipe-row input:first-child {
-    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1.35fr) minmax(72px, 0.58fr) minmax(66px, 0.5fr) 32px;
+    min-width: 0;
   }
 
   .builder-component-recipe-notes-grid {
@@ -3622,6 +3787,20 @@ body:not(.builder-workspace-v1) ul {
 }
 
 @media (max-width: 640px) {
+  .builder-component-recipe-row,
+  .builder-component-calc-row {
+    gap: 6px;
+    padding: 5px;
+  }
+
+  .builder-component-recipe-row {
+    grid-template-columns: minmax(0, 1fr) minmax(72px, 0.56fr) minmax(62px, 0.48fr) 30px;
+  }
+
+  .builder-component-calc-row {
+    grid-template-columns: minmax(0, 1fr) minmax(68px, 0.5fr) minmax(60px, 0.44fr) minmax(82px, 0.58fr) minmax(88px, 0.62fr) minmax(96px, 0.66fr);
+  }
+
   .builder-component-allergen-grid {
     grid-template-columns: 1fr;
   }
@@ -4269,12 +4448,12 @@ body:not(.builder-workspace-v1) ul {
 
 #dishAllergensPanel .builder-dish-allergen-summary {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 #dishAllergensPanel .builder-dish-allergen-summary-section {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 #dishAllergensPanel .builder-dish-allergen-summary-section h4 {
@@ -4287,24 +4466,26 @@ body:not(.builder-workspace-v1) ul {
 #dishAllergensPanel .builder-dish-allergen-summary-empty {
   margin: 0;
   color: #586c7e;
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 #dishAllergensPanel .builder-dish-allergen-grid,
 #dishAllergensPanel .builder-dish-allergen-marker-grid {
   display: grid;
-  gap: 8px;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 #dishAllergensPanel .builder-dish-allergen-card,
 #dishAllergensPanel .builder-dish-allergen-marker {
   display: grid;
-  gap: 4px;
-  padding: 8px 10px;
+  gap: 3px;
+  padding: 7px 9px;
   border: 1px solid #d5dee8;
-  border-radius: 10px;
+  border-radius: 9px;
   background: #fbfdff;
+  box-shadow: none;
 }
 
 #dishAllergensPanel .builder-dish-allergen-chip,
@@ -4312,12 +4493,12 @@ body:not(.builder-workspace-v1) ul {
   display: inline-flex;
   align-items: center;
   width: fit-content;
-  padding: 2px 8px;
+  padding: 2px 7px;
   border-radius: 999px;
   background: #eef4f9;
   border: 1px solid #d7e2ec;
   color: #22394d;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -4326,8 +4507,8 @@ body:not(.builder-workspace-v1) ul {
 #dishAllergensPanel .builder-dish-allergen-marker-source {
   margin: 0;
   color: #586c7e;
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 #dishCalculationPanel .builder-dish-calculation-summary {

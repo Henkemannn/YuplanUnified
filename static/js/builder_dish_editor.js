@@ -280,6 +280,18 @@ function createBuilderDishEditor(config) {
     renderDishCalculationSummaryMessage("Samlar kalkyldata från komponenterna...");
   }
 
+  function updateDishOverviewScrollState() {
+    if (typeof updateBuilderModalScrollFadeState === "function") {
+      updateBuilderModalScrollFadeState("resolveModal", ".modal-content-dish");
+    }
+  }
+
+  function bindDishOverviewScrollState() {
+    if (typeof bindBuilderModalScrollFadeState === "function") {
+      bindBuilderModalScrollFadeState("resolveModal", ".modal-content-dish");
+    }
+  }
+
   function parseDishStrictNumericValue(value) {
     const text = String(value || "").trim();
     if (!text) {
@@ -887,6 +899,8 @@ function createBuilderDishEditor(config) {
     syncDishModalHeader,
     syncDishOverviewInputs,
     syncDishMenuNameVisibility,
+    updateDishOverviewScrollState,
+    bindDishOverviewScrollState,
     setDishOverviewStatus,
     dishOverviewCategoryLabel,
     renderDishAllergenSummary,

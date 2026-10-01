@@ -3401,12 +3401,24 @@ const CONFLICT_TOKEN_META = {
 };
 
 const SIGNAL_TOKEN_META = {
+  gluten_cereals: { icon: "🌾", label: "Glutenhaltiga spannmål" },
+  crustaceans: { icon: "🦐", label: "Kräftdjur" },
+  eggs: { icon: "🥚", label: "Ägg" },
+  fish: { icon: "🐟", label: "Fisk" },
+  peanuts: { icon: "🥜", label: "Jordnötter" },
+  soybeans: { icon: "🌱", label: "Sojabönor" },
+  milk_lactose: { icon: "🥛", label: "Mjölk/laktos" },
+  nuts: { icon: "🌰", label: "Nötter" },
+  celery: { icon: "🌿", label: "Selleri" },
+  mustard: { icon: "🟡", label: "Senap" },
+  sesame: { icon: "⚪", label: "Sesamfrön" },
+  sulphur_dioxide_sulphites: { icon: "💨", label: "Svaveldioxid och sulfiter" },
+  lupin: { icon: "🌸", label: "Lupin" },
+  molluscs: { icon: "🐚", label: "Blötdjur" },
   milk: { icon: "🥛", label: "Milk" },
   lactose: { icon: "🥛", label: "Lactose" },
   gluten: { icon: "🌾", label: "Gluten" },
-  fish: { icon: "🐟", label: "Fish" },
   egg: { icon: "🥚", label: "Egg" },
-  nuts: { icon: "🥜", label: "Nuts" },
 };
 
 let currentCompositionConflictsByComponentId = {};

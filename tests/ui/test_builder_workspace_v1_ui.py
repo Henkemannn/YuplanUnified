@@ -456,7 +456,7 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'id="componentDetailEditorModal"' in html
     assert 'data-builder-modal-root="component-detail"' in html
     assert 'class="modal-content modal-content-component-detail"' in html
-    assert '<p class="workspace-modal-kicker">Component</p>' in html
+    assert '<p class="workspace-modal-kicker">KOMPONENT</p>' in html
     assert '<h3 id="componentDetailEditorTitle">Komponent</h3>' in html
     modal_start = html.find('id="componentDetailEditorModal"')
     resolve_start = html.find('id="resolveModal"')
@@ -507,7 +507,8 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'Rensa amn' not in html
     assert 'Kategori' in html
     assert 'Taggar' in html
-    assert 'Beskrivning / längre namn' in html
+    assert 'builder-component-overview-field-description">Beskrivning' in html
+    assert 'Beskrivning / längre namn' not in html
     assert 'ID: -' in html
     assert 'Tillbaka till komponenter' in html
     assert 'Category color' not in html
@@ -607,6 +608,7 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'Sojabönor' in html
     assert 'Mjölk/laktos' in html
     assert 'Nötter' in html
+    assert 'Komponentdetaljer laddade.' not in html
     assert 'Selleri' in html
     assert 'Senap' in html
     assert 'Sesamfrön' in html
@@ -947,6 +949,7 @@ def test_builder_component_editor_sets_category_on_every_open(client_admin) -> N
     assert 'function openComponentDetailEditor(componentId, initialTab, openerContext) {' in script
     assert 'function clearComponentDetailFeedback() {' in script
     assert 'clearComponentDetailFeedback();' in script
+    assert 'Komponentdetaljer laddade.' not in script
     assert 'Could not save changes.' in script
     assert 'const nextCategory = String(component.category || "").trim().toLowerCase();' in script
     assert 'categoryInput.value = ["main", "side", "sauce", "dessert", "ovrigt"].includes(nextCategory)' in script
@@ -1133,14 +1136,110 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
     assert "max-height: calc(100vh - 48px);" in component_modal_panel_block.group(0)
     assert "min-height: 320px;" in component_modal_panel_block.group(0)
     assert "overflow: auto;" in component_modal_panel_block.group(0)
+    assert "font-family: var(--yp-font-family, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif);" in component_modal_panel_block.group(0)
+    assert "font-size: 14px;" in component_modal_panel_block.group(0)
+    assert "line-height: 1.45;" in component_modal_panel_block.group(0)
+    assert "color: #203040;" in component_modal_panel_block.group(0)
+    assert "scrollbar-width: none;" in component_modal_panel_block.group(0)
+    assert "-ms-overflow-style: none;" in component_modal_panel_block.group(0)
     assert "box-sizing: border-box;" in component_modal_panel_block.group(0)
+
+    component_modal_scrollbar_block = re.search(
+        r"\.builder-workspace-v1 #componentDetailEditorModal \.modal-content-component-detail::-webkit-scrollbar\s*\{[^}]*\}",
+        css,
+        re.S,
+    )
+    assert component_modal_scrollbar_block is not None
+    assert "width: 0;" in component_modal_scrollbar_block.group(0)
+    assert "height: 0;" in component_modal_scrollbar_block.group(0)
+
+    component_modal_fade_block = re.search(
+        r"\.builder-workspace-v1 #componentDetailEditorModal \.modal-content-component-detail::before,\s*"
+        r"\.builder-workspace-v1 #componentDetailEditorModal \.modal-content-component-detail::after\s*\{[^}]*\}",
+        css,
+        re.S,
+    )
+    assert component_modal_fade_block is not None
+    assert "position: sticky;" in component_modal_fade_block.group(0)
+    assert "display: block;" in component_modal_fade_block.group(0)
+    assert "pointer-events: none;" in component_modal_fade_block.group(0)
+    assert "opacity: 0;" in component_modal_fade_block.group(0)
+
+    component_modal_top_fade_block = re.search(
+        r"\.builder-workspace-v1 #componentDetailEditorModal \.modal-content-component-detail::before\s*\{[^}]*\}",
+        css,
+        re.S,
+    )
+    assert component_modal_top_fade_block is not None
+    assert "background: linear-gradient(to bottom, rgba(252, 253, 254, 0.98) 0%, rgba(252, 253, 254, 0) 100%);" in css
+
+    component_modal_bottom_fade_block = re.search(
+        r"\.builder-workspace-v1 #componentDetailEditorModal \.modal-content-component-detail::after\s*\{[^}]*\}",
+        css,
+        re.S,
+    )
+    assert component_modal_bottom_fade_block is not None
+    assert "background: linear-gradient(to top, rgba(252, 253, 254, 0.98) 0%, rgba(252, 253, 254, 0) 100%);" in css
+
+    component_modal_top_fade_active_block = re.search(
+        r"\.builder-workspace-v1 #componentDetailEditorModal \.modal-content-component-detail\.has-scroll-top-fade::before\s*\{[^}]*\}",
+        css,
+        re.S,
+    )
+    assert component_modal_top_fade_active_block is not None
+    assert "opacity: 1;" in component_modal_top_fade_active_block.group(0)
+
+    component_modal_bottom_fade_active_block = re.search(
+        r"\.builder-workspace-v1 #componentDetailEditorModal \.modal-content-component-detail\.has-scroll-bottom-fade::after\s*\{[^}]*\}",
+        css,
+        re.S,
+    )
+    assert component_modal_bottom_fade_active_block is not None
+    assert "opacity: 1;" in component_modal_bottom_fade_active_block.group(0)
 
     dish_modal_panel_block = re.search(r"\.builder-workspace-v1 \.modal-content-dish\s*\{[^}]*\}", css, re.S)
     assert dish_modal_panel_block is not None
+    assert "position: relative;" in dish_modal_panel_block.group(0)
     assert "width: min(1120px, calc(100vw - 40px));" in dish_modal_panel_block.group(0)
     assert "height: min(640px, calc(100vh - 48px));" in dish_modal_panel_block.group(0)
     assert "overflow: auto;" in dish_modal_panel_block.group(0)
+    assert "scrollbar-width: none;" in dish_modal_panel_block.group(0)
     assert "box-sizing: border-box;" in dish_modal_panel_block.group(0)
+
+    dish_modal_scrollbar_block = re.search(
+        r"\.builder-workspace-v1 \.modal-content-dish::-webkit-scrollbar\s*\{[^}]*\}",
+        css,
+        re.S,
+    )
+    assert dish_modal_scrollbar_block is not None
+    assert "width: 0;" in dish_modal_scrollbar_block.group(0)
+    assert "height: 0;" in dish_modal_scrollbar_block.group(0)
+
+    dish_modal_fade_block = re.search(
+        r"\.builder-workspace-v1 \.modal-content-dish::before,\s*"
+        r"\.builder-workspace-v1 \.modal-content-dish::after\s*\{[^}]*\}",
+        css,
+        re.S,
+    )
+    assert dish_modal_fade_block is not None
+    assert "pointer-events: none;" in dish_modal_fade_block.group(0)
+    assert "opacity: 0;" in dish_modal_fade_block.group(0)
+
+    dish_modal_top_fade_active_block = re.search(
+        r"\.builder-workspace-v1 \.modal-content-dish\.has-scroll-top-fade::before\s*\{[^}]*\}",
+        css,
+        re.S,
+    )
+    assert dish_modal_top_fade_active_block is not None
+    assert "opacity: 1;" in dish_modal_top_fade_active_block.group(0)
+
+    dish_modal_bottom_fade_active_block = re.search(
+        r"\.builder-workspace-v1 \.modal-content-dish\.has-scroll-bottom-fade::after\s*\{[^}]*\}",
+        css,
+        re.S,
+    )
+    assert dish_modal_bottom_fade_active_block is not None
+    assert "opacity: 1;" in dish_modal_bottom_fade_active_block.group(0)
 
     component_tabs_block = re.search(r"\.builder-component-detail-tabs\s*\{[^}]*\}", css, re.S)
     assert component_tabs_block is not None
@@ -1220,6 +1319,8 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
         re.S,
     )
     assert overview_input_block is not None
+    assert "font: inherit;" in overview_input_block.group(0)
+    assert "color: #203647;" in overview_input_block.group(0)
     assert "background: var(--builder-overview-input-bg);" in overview_input_block.group(0)
     assert "border-color: var(--builder-overview-input-border);" in overview_input_block.group(0)
 
@@ -1227,6 +1328,58 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
     assert overview_description_block is not None
     assert "min-height: 60px;" in overview_description_block.group(0)
     assert "max-height: 92px;" in overview_description_block.group(0)
+
+    modal_section_title_block = re.search(r"\.modal-section-title\s*\{[^}]*\}", css, re.S)
+    assert modal_section_title_block is not None
+    assert "font-size: 12px;" in modal_section_title_block.group(0)
+    assert "font-weight: 600;" in modal_section_title_block.group(0)
+    assert "color: #557086;" in modal_section_title_block.group(0)
+
+    component_card_label_block = re.search(r"\.builder-component-card-label\s*\{[^}]*\}", css, re.S)
+    assert component_card_label_block is not None
+    assert "font-size: 12px;" in component_card_label_block.group(0)
+    assert "font-weight: 700;" in component_card_label_block.group(0)
+    assert "text-transform: none;" in component_card_label_block.group(0)
+
+    recipe_row_input_block = re.search(r"\.builder-component-recipe-row input\s*\{[^}]*\}", css, re.S)
+    assert recipe_row_input_block is not None
+    assert "font: inherit;" in recipe_row_input_block.group(0)
+    assert "color: #203647;" in recipe_row_input_block.group(0)
+
+    recipe_note_field_block = re.search(r"\.builder-component-recipe-note-field\s*\{[^}]*\}", css, re.S)
+    assert recipe_note_field_block is not None
+    assert "font-weight: 700;" in recipe_note_field_block.group(0)
+    assert "color: #557086;" in recipe_note_field_block.group(0)
+
+    recipe_note_textarea_block = re.search(r"\.builder-component-recipe-note-field textarea\s*\{[^}]*\}", css, re.S)
+    assert recipe_note_textarea_block is not None
+    assert "font: inherit;" in recipe_note_textarea_block.group(0)
+    assert "color: #203647;" in recipe_note_textarea_block.group(0)
+
+    calc_row_input_block = re.search(r"\.builder-component-calc-row input\s*\{[^}]*\}", css, re.S)
+    assert calc_row_input_block is not None
+    assert "font: inherit;" in calc_row_input_block.group(0)
+
+    calc_note_field_block = re.search(r"\.builder-component-calc-note-field\s*\{[^}]*\}", css, re.S)
+    assert calc_note_field_block is not None
+    assert "font-weight: 700;" in calc_note_field_block.group(0)
+    assert "color: #557086;" in calc_note_field_block.group(0)
+
+    calc_note_textarea_block = re.search(r"\.builder-component-calc-note-field textarea\s*\{[^}]*\}", css, re.S)
+    assert calc_note_textarea_block is not None
+    assert "font: inherit;" in calc_note_textarea_block.group(0)
+    assert "color: #203647;" in calc_note_textarea_block.group(0)
+
+    allergen_chip_block = re.search(r"\.builder-component-allergen-chip span\s*\{[^}]*\}", css, re.S)
+    assert allergen_chip_block is not None
+    assert "font-size: 12px;" in allergen_chip_block.group(0)
+    assert "font-weight: 600;" in allergen_chip_block.group(0)
+    assert "color: #1f3749;" in allergen_chip_block.group(0)
+
+    allergen_note_block = re.search(r"\.builder-component-allergen-note-field textarea\s*\{[^}]*\}", css, re.S)
+    assert allergen_note_block is not None
+    assert "font: inherit;" in allergen_note_block.group(0)
+    assert "color: #203647;" in allergen_note_block.group(0)
 
     tags_editor_block = re.search(r"\.builder-component-tags-editor\s*\{[^}]*\}", css, re.S)
     assert tags_editor_block is not None
@@ -1427,31 +1580,32 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
     recipe_layout_block = re.search(r"\.builder-component-recipe-layout\s*\{[^}]*\}", css, re.S)
     assert recipe_layout_block is not None
     assert "display: grid;" in recipe_layout_block.group(0)
-    assert "gap: 14px;" in recipe_layout_block.group(0)
+    assert "gap: 8px;" in recipe_layout_block.group(0)
 
     recipe_card_block = re.search(r"\.builder-component-recipe-card\s*\{[^}]*\}", css, re.S)
     assert recipe_card_block is not None
     assert "border: 1px solid var(--builder-recipe-card-border);" in recipe_card_block.group(0)
     assert "background: var(--builder-recipe-card-bg);" in recipe_card_block.group(0)
-    assert "box-shadow: none;" in recipe_card_block.group(0)
+    assert "box-shadow: 0 1px 2px rgba(24, 44, 61, 0.04);" in recipe_card_block.group(0)
 
     recipe_header_block = re.search(r"\.builder-component-recipe-header\s*\{[^}]*\}", css, re.S)
     assert recipe_header_block is not None
-    assert "grid-template-columns: minmax(240px, 1fr) 92px 86px 40px;" in recipe_header_block.group(0)
+    assert "grid-template-columns: minmax(0, 1.6fr) minmax(82px, 0.55fr) minmax(72px, 0.5fr) 32px;" in recipe_header_block.group(0)
     assert "max-width: 860px;" in recipe_header_block.group(0)
     assert "justify-self: start;" in recipe_header_block.group(0)
 
     recipe_rows_block = re.search(r"\.builder-component-recipe-rows\s*\{[^}]*\}", css, re.S)
     assert recipe_rows_block is not None
     assert "display: grid;" in recipe_rows_block.group(0)
-    assert "gap: 8px;" in recipe_rows_block.group(0)
+    assert "gap: 7px;" in recipe_rows_block.group(0)
     assert "overflow-x: auto;" in recipe_rows_block.group(0)
     assert "max-width: 860px;" in recipe_rows_block.group(0)
     assert "justify-self: start;" in recipe_rows_block.group(0)
 
     recipe_row_block = re.search(r"\.builder-component-recipe-row\s*\{[^}]*\}", css, re.S)
     assert recipe_row_block is not None
-    assert "grid-template-columns: minmax(240px, 1fr) 92px 86px 40px;" in recipe_row_block.group(0)
+    assert "grid-template-columns: minmax(0, 1.6fr) minmax(82px, 0.55fr) minmax(72px, 0.5fr) 32px;" in recipe_row_block.group(0)
+    assert "box-sizing: border-box;" in recipe_row_block.group(0)
 
     recipe_actions_block = re.search(r"\.builder-component-recipe-actions\s*\{[^}]*\}", css, re.S)
     assert recipe_actions_block is not None
@@ -1460,12 +1614,12 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
 
     recipe_row_input_block = re.search(r"\.builder-component-recipe-row input\s*\{[^}]*\}", css, re.S)
     assert recipe_row_input_block is not None
-    assert "min-height: 36px;" in recipe_row_input_block.group(0)
+    assert "min-height: 34px;" in recipe_row_input_block.group(0)
     assert "background: var(--builder-recipe-input-bg);" in recipe_row_input_block.group(0)
 
     recipe_remove_block = re.search(r"\.builder-row-remove-icon\s*\{[^}]*\}", css, re.S)
     assert recipe_remove_block is not None
-    assert "width: 28px;" in recipe_remove_block.group(0)
+    assert "width: 30px;" in recipe_remove_block.group(0)
     assert "display: inline-flex;" in recipe_remove_block.group(0)
     assert "align-items: center;" in recipe_remove_block.group(0)
     assert "justify-content: center;" in recipe_remove_block.group(0)
@@ -1482,7 +1636,7 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
 
     recipe_note_textarea_block = re.search(r"\.builder-component-recipe-note-field textarea\s*\{[^}]*\}", css, re.S)
     assert recipe_note_textarea_block is not None
-    assert "min-height: 96px;" in recipe_note_textarea_block.group(0)
+    assert "min-height: 92px;" in recipe_note_textarea_block.group(0)
     assert "max-height: 140px;" in recipe_note_textarea_block.group(0)
 
     calc_panel_block = re.search(r"#componentDetailPanelCalculation:not\(\.hidden\)\s*\{[^}]*\}", css, re.S)
@@ -1499,11 +1653,12 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
     assert calc_card_block is not None
     assert "border: 1px solid var(--builder-calc-card-border);" in calc_card_block.group(0)
     assert "background: var(--builder-calc-card-bg);" in calc_card_block.group(0)
-    assert "box-shadow: none;" in calc_card_block.group(0)
+    assert "box-shadow: 0 1px 2px rgba(24, 44, 61, 0.04);" in calc_card_block.group(0)
 
     calc_row_block = re.search(r"\.builder-component-calc-row\s*\{[^}]*\}", css, re.S)
     assert calc_row_block is not None
-    assert "grid-template-columns: minmax(220px, 1fr) 88px 82px 100px 104px 104px;" in calc_row_block.group(0)
+    assert "grid-template-columns: minmax(0, 1.4fr) minmax(76px, 0.55fr) minmax(68px, 0.5fr) minmax(96px, 0.7fr) minmax(104px, 0.7fr) minmax(108px, 0.72fr);" in calc_row_block.group(0)
+    assert "box-sizing: border-box;" in calc_row_block.group(0)
 
     calc_rows_block = re.search(r"\.builder-component-calc-rows\s*\{[^}]*\}", css, re.S)
     assert calc_rows_block is not None
@@ -1541,16 +1696,19 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
     assert allergen_card_block is not None
     assert "border: 1px solid var(--builder-allergen-card-border);" in allergen_card_block.group(0)
     assert "background: var(--builder-allergen-card-bg);" in allergen_card_block.group(0)
-    assert "box-shadow: var(--builder-allergen-card-shadow);" in allergen_card_block.group(0)
+    assert "box-shadow: none;" in allergen_card_block.group(0)
+    assert "border-radius: 10px;" in allergen_card_block.group(0)
 
     allergen_grid_block = re.search(r"\.builder-component-allergen-grid\s*\{[^}]*\}", css, re.S)
     assert allergen_grid_block is not None
-    assert "grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));" in allergen_grid_block.group(0)
+    assert "grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));" in allergen_grid_block.group(0)
 
     allergen_chip_block = re.search(r"\.builder-component-allergen-chip span\s*\{[^}]*\}", css, re.S)
     assert allergen_chip_block is not None
     assert "border: 1px solid var(--builder-allergen-input-border);" in allergen_chip_block.group(0)
     assert "background: var(--builder-allergen-input-bg);" in allergen_chip_block.group(0)
+    assert "min-height: 34px;" in allergen_chip_block.group(0)
+    assert "border-radius: 10px;" in allergen_chip_block.group(0)
 
     allergen_checked_block = re.search(
         r"\.builder-component-allergen-chip input\[type=\"checkbox\"\]:checked \+ span\s*\{[^}]*\}",
@@ -1564,7 +1722,7 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
 
     allergen_notes_block = re.search(r"\.builder-component-allergen-note-field textarea\s*\{[^}]*\}", css, re.S)
     assert allergen_notes_block is not None
-    assert "min-height: 88px;" in allergen_notes_block.group(0)
+    assert "min-height: 84px;" in allergen_notes_block.group(0)
     assert "max-height: 128px;" in allergen_notes_block.group(0)
 
     dish_grid_blocks = re.findall(r"\.builder-workspace-v1 \.composition-library-grid\s*\{[^}]*\}", css, re.S)

@@ -2,6 +2,40 @@
  * Canonical Component editor implementation for Builder.
  * All Component-specific behavior lives here.
  */
+function updateBuilderModalScrollFadeState(modalId, scrollOwnerSelector) {
+  const modal = document.getElementById(String(modalId || ""));
+  if (!modal || modal.classList.contains("hidden")) {
+    return;
+  }
+  const scrollOwner = modal.querySelector(String(scrollOwnerSelector || ""));
+  if (!scrollOwner) {
+    return;
+  }
+  const hasOverflow = scrollOwner.scrollHeight > scrollOwner.clientHeight + 2;
+  const showTopFade = hasOverflow && scrollOwner.scrollTop > 1;
+  const showBottomFade = hasOverflow && scrollOwner.scrollTop + scrollOwner.clientHeight < scrollOwner.scrollHeight - 1;
+  scrollOwner.classList.toggle("has-scroll-top-fade", showTopFade);
+  scrollOwner.classList.toggle("has-scroll-bottom-fade", showBottomFade);
+}
+
+function bindBuilderModalScrollFadeState(modalId, scrollOwnerSelector) {
+  const modal = document.getElementById(String(modalId || ""));
+  if (!modal || modal.dataset.scrollFadeBound === "1") {
+    return;
+  }
+  const scrollOwner = modal.querySelector(String(scrollOwnerSelector || ""));
+  if (!scrollOwner) {
+    return;
+  }
+  modal.dataset.scrollFadeBound = "1";
+  const scheduleUpdate = () => {
+    window.requestAnimationFrame(() => updateBuilderModalScrollFadeState(modalId, scrollOwnerSelector));
+  };
+  scrollOwner.addEventListener("scroll", scheduleUpdate, { passive: true });
+  window.addEventListener("resize", scheduleUpdate);
+  scheduleUpdate();
+}
+
 function createBuilderComponentEditor(config) {
   if (!config || typeof config.callApi !== "function") {
     throw new Error("createBuilderComponentEditor: callApi is required");
@@ -325,6 +359,36 @@ function createBuilderComponentEditor(config) {
 
   // ─── C/K: Form feedback ──────────────────────────────────────────────────
 
+  let _componentDetailFeedbackTimer = null;
+
+  function hideComponentDetailFeedback() {
+    if (_componentDetailFeedbackTimer !== null) {
+      window.clearTimeout(_componentDetailFeedbackTimer);
+      _componentDetailFeedbackTimer = null;
+    }
+    const el = document.getElementById("componentDetailOut");
+    if (!el) {
+      return;
+    }
+    el.textContent = "";
+  }
+
+  function showComponentDetailTransientSuccess(message) {
+    const el = document.getElementById("componentDetailOut");
+    if (!el) {
+      return;
+    }
+    if (_componentDetailFeedbackTimer !== null) {
+      window.clearTimeout(_componentDetailFeedbackTimer);
+      _componentDetailFeedbackTimer = null;
+    }
+    el.textContent = String(message || "");
+    _componentDetailFeedbackTimer = window.setTimeout(() => {
+      _componentDetailFeedbackTimer = null;
+      hideComponentDetailFeedback();
+    }, 1500);
+  }
+
   function setComponentDetailFeedback(payload) {
     const el = document.getElementById("componentDetailOut");
     if (!el) {
@@ -333,19 +397,18 @@ function createBuilderComponentEditor(config) {
     const data = (payload && payload.data) || {};
     const ok = Boolean(data && data.ok);
     if (ok) {
-      el.textContent = String(data.message || "Saved.");
       return;
     }
-      el.textContent = String(data.message || data.error || "Could not save changes.");
+    if (_componentDetailFeedbackTimer !== null) {
+      window.clearTimeout(_componentDetailFeedbackTimer);
+      _componentDetailFeedbackTimer = null;
+    }
+    el.textContent = String(data.message || data.error || "Could not save changes.");
   }
 
-    function clearComponentDetailFeedback() {
-      const el = document.getElementById("componentDetailOut");
-      if (!el) {
-        return;
-      }
-      el.textContent = "";
-    }
+  function clearComponentDetailFeedback() {
+    hideComponentDetailFeedback();
+  }
 
   // ─── H: Dirty/session tracking ───────────────────────────────────────────
 
@@ -532,6 +595,14 @@ function createBuilderComponentEditor(config) {
     return "overview";
   }
 
+  function updateComponentDetailScrollState() {
+    updateBuilderModalScrollFadeState("componentDetailEditorModal", ".modal-content-component-detail");
+  }
+
+  function bindComponentDetailScrollState() {
+    bindBuilderModalScrollFadeState("componentDetailEditorModal", ".modal-content-component-detail");
+  }
+
   function setComponentDetailTab(tabValue) {
     const nextTab = componentDetailTabValue(tabValue);
     _setState("_activeComponentDetailTab", nextTab);
@@ -565,6 +636,7 @@ function createBuilderComponentEditor(config) {
         syncCalculationRowsFromRecipeRows();
       }
     }
+    updateComponentDetailScrollState();
   }
 
   // ─── D/E: Recipe & method editing ────────────────────────────────────────
@@ -1024,15 +1096,12 @@ function createBuilderComponentEditor(config) {
       meta.textContent = "ID: " + String(component.component_id || "");
     }
     _showLoading("componentDetailOut");
-      clearComponentDetailFeedback();
+    clearComponentDetailFeedback();
     applyComponentDetailDraftToForm(defaultComponentDetailDraft());
     try {
       const draft = await fetchComponentDetailDraft(idValue);
       applyComponentDetailDraftToForm(draft);
-      setComponentDetailFeedback({
-        status: 200,
-        data: { ok: true, message: "Komponentdetaljer laddade." },
-      });
+      clearComponentDetailFeedback();
     } catch (_error) {
       applyComponentDetailDraftToForm(defaultComponentDetailDraft());
       setComponentDetailFeedback({
@@ -1043,6 +1112,8 @@ function createBuilderComponentEditor(config) {
     setComponentDetailTab(requestedTab || "overview");
     resetComponentDetailDirty();
     _openSimpleModal("componentDetailEditorModal");
+    bindComponentDetailScrollState();
+    updateComponentDetailScrollState();
     updateComponentDetailBackAction();
     updateComponentDetailReturnAction();
   }
@@ -1076,10 +1147,7 @@ function createBuilderComponentEditor(config) {
       const compositionLink = _getCachedCompositions().find(
         (composition) => Array.isArray(composition.components) && composition.components.some((item) => String(item.component_id || "") === idValue),
       ) || null;
-      setComponentDetailFeedback({
-        status: 200,
-        data: { ok: true, message: "Komponentdetaljer sparade." },
-      });
+      showComponentDetailTransientSuccess("Komponentdetaljer sparade.");
       try {
         await _refreshCurrentCompositionView();
       } catch (refreshError) {
@@ -1097,7 +1165,7 @@ function createBuilderComponentEditor(config) {
     _closeModalById("componentDetailEditorModal");
     _setState("_activeComponentDetailId", "");
     _setState("_componentDetailDirty", false);
-      clearComponentDetailFeedback();
+    clearComponentDetailFeedback();
     _clearPendingComponentCreateForComposition();
   }
 

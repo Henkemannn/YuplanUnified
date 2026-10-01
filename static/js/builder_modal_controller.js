@@ -628,6 +628,12 @@ function createBuilderModalController(config) {
     modal.style.display = "";
     modal.removeAttribute("aria-hidden");
     modal.inert = false;
+    if (_dishEditor && typeof _dishEditor.bindDishOverviewScrollState === "function") {
+      _dishEditor.bindDishOverviewScrollState();
+    }
+    if (_dishEditor && typeof _dishEditor.updateDishOverviewScrollState === "function") {
+      _dishEditor.updateDishOverviewScrollState();
+    }
   }
 
   function closeCompositionModal() {
