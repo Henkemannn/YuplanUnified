@@ -138,10 +138,6 @@ def _build_days(
             v = m.get(vk)
             if v and v.get("dish_name"):
                 return str(v.get("dish_name"))
-        # fallback any dish
-        for v in m.values():
-            if v.get("dish_name"):
-                return str(v.get("dish_name"))
         return None
 
     for i in range(7):

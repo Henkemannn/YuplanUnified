@@ -1,3 +1,4 @@
+import json
 from datetime import date as _date
 from datetime import datetime
 import pytest
@@ -129,6 +130,78 @@ def test_portal_week_endpoint_populate(client_admin, app_session, seed_portal_de
     assert r2.status_code == 304
     assert r2.get_data() in (b"", b"\n")
     assert r2.headers.get("ETag") == etag
+
+
+def test_portal_week_endpoint_does_not_synthesize_alt2_on_single_alt_days(client_admin, seed_portal_department_data, seed_canonical_builder_publication):
+    year = 2025
+    week = 47
+    dept_id = "aaaaaaaa-bbbb-cccc-dddd-333333333333"
+    site_id = "bbbbbbbb-cccc-dddd-eeee-444444444444"
+    seed_portal_department_data(dept_id=dept_id, site_id=site_id, year=year, week=week)
+    seed_canonical_builder_publication(
+        site_id=site_id,
+        year=year,
+        week=week,
+        alt1_name="Pannbiff med lök",
+        alt2_name="Fiskgratäng",
+        dessert_name="Fruktsallad",
+        dinner_name="Kvällsgröt",
+    )
+
+    from core.db import get_session
+
+    db = get_session()
+    try:
+        row = db.execute(
+            text(
+                "SELECT projection_snapshot_json FROM commun_builder_publication_pins WHERE site_id=:site_id AND year=:year AND week=:week"
+            ),
+            {"site_id": site_id, "year": year, "week": week},
+        ).fetchone()
+        assert row and row[0]
+        snapshot = json.loads(row[0])
+        snapshot["rows"].append(
+            {
+                "day": "tuesday",
+                "meal": "lunch",
+                "variant_type": "alt1",
+                "sort_order": 1,
+                "builder_menu_row_id": f"{site_id}-tue-lunch-alt1-1",
+                "composition_id": "builder-alt1",
+                "resolved": True,
+                "text": "Tisdag alt1",
+                "unresolved_text": None,
+                "error": None,
+            }
+        )
+        db.execute(
+            text(
+                "UPDATE commun_builder_publication_pins SET projection_snapshot_json=:snapshot WHERE site_id=:site_id AND year=:year AND week=:week"
+            ),
+            {"snapshot": json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")), "site_id": site_id, "year": year, "week": week},
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    resp = client_admin.get(
+        f"/portal/department/week?year={year}&week={week}",
+        headers=_h(),
+        environ_overrides={"test_claims": {"department_id": dept_id}},
+    )
+    assert resp.status_code == 200
+    payload = resp.get_json()
+
+    monday = payload["days"][0]
+    tuesday = payload["days"][1]
+    assert monday["menu"]["lunch_alt1"] == "Pannbiff med lök"
+    assert monday["menu"]["lunch_alt2"] == "Fiskgratäng"
+    assert monday["menu"]["dessert"] == "Fruktsallad"
+    assert monday["menu"]["dinner"] == "Kvällsgröt"
+    assert tuesday["menu"]["lunch_alt1"] == "Tisdag alt1"
+    assert tuesday["menu"]["lunch_alt2"] is None
+    assert tuesday["menu"]["dessert"] is None
+    assert tuesday["menu"]["dinner"] is None
 
 
 def test_portal_week_endpoint_reads_departments_notes_without_department_notes_table(

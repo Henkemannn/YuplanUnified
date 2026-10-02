@@ -117,6 +117,52 @@ def _seed_zero_choice_publication(seed_canonical_builder_publication, *, site_id
         db.close()
 
 
+def _seed_single_alt_publication(seed_canonical_builder_publication, *, site_id: str, year: int, week: int, builder_version: int = 1) -> None:
+    seed_canonical_builder_publication(
+        site_id=site_id,
+        year=year,
+        week=week,
+        builder_version=builder_version,
+        alt1_name="Pannbiff",
+        alt2_name="Fiskgratäng",
+        dessert_name="Fruktsallad",
+        dinner_name="Kvällsgröt",
+    )
+    db = get_session()
+    try:
+        row = db.execute(
+            text(
+                "SELECT projection_snapshot_json FROM commun_builder_publication_pins WHERE site_id=:site_id AND year=:year AND week=:week"
+            ),
+            {"site_id": site_id, "year": year, "week": week},
+        ).fetchone()
+        assert row and row[0]
+        snapshot = json.loads(row[0])
+        snapshot["rows"].append(
+            {
+                "day": "tuesday",
+                "meal": "lunch",
+                "variant_type": "alt1",
+                "sort_order": 1,
+                "builder_menu_row_id": f"{site_id}-tue-lunch-alt1-{builder_version}",
+                "composition_id": "builder-alt1",
+                "resolved": True,
+                "text": "Tisdag alt1",
+                "unresolved_text": None,
+                "error": None,
+            }
+        )
+        db.execute(
+            text(
+                "UPDATE commun_builder_publication_pins SET projection_snapshot_json=:snapshot WHERE site_id=:site_id AND year=:year AND week=:week"
+            ),
+            {"snapshot": json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")), "site_id": site_id, "year": year, "week": week},
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
 def _status(scope: DepartmentPortalScope, year: int = YEAR, week: int = WEEK):
     return DepartmentPortalWeekSubmissionService().get_status(scope, year, week)
 
@@ -216,6 +262,55 @@ def test_zero_choice_week_can_be_submitted(client_admin, seed_portal_department_
     status_after = _status(scope)
     assert status_after["status"] == "complete"
     assert status_after["submission_is_current"] is True
+
+
+def test_single_alt_days_do_not_count_as_required_choices(client_admin, seed_portal_department_data, seed_canonical_builder_publication):
+    dept_id = "portal-submission-single-alt"
+    _seed_department(seed_portal_department_data, dept_id=dept_id)
+    _seed_single_alt_publication(seed_canonical_builder_publication, site_id=SITE_ID, year=YEAR, week=WEEK)
+
+    scope = _scope(dept_id)
+    status_before = _status(scope)
+    assert status_before["required_choice_count"] == 1
+    assert status_before["completed_choice_count"] == 0
+    assert status_before["status"] == "not_started"
+    assert status_before["is_submittable"] is False
+
+    db = get_session()
+    try:
+        db.execute(
+            text(
+                "INSERT OR REPLACE INTO department_menu_choices(tenant_id, site_id, department_id, year, week, weekday, meal, selected_variant, version, created_at, updated_at) VALUES(1, :site_id, :dept_id, :year, :week, 2, 'lunch', 'alt1', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            ),
+            {"site_id": SITE_ID, "dept_id": dept_id, "year": YEAR, "week": WEEK},
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    status_after_irrelevant_choice = _status(scope)
+    assert status_after_irrelevant_choice["required_choice_count"] == 1
+    assert status_after_irrelevant_choice["completed_choice_count"] == 0
+    assert status_after_irrelevant_choice["status"] == "not_started"
+
+    db = get_session()
+    try:
+        db.execute(
+            text(
+                "INSERT OR REPLACE INTO department_menu_choices(tenant_id, site_id, department_id, year, week, weekday, meal, selected_variant, version, created_at, updated_at) VALUES(1, :site_id, :dept_id, :year, :week, 1, 'lunch', 'alt1', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            ),
+            {"site_id": SITE_ID, "dept_id": dept_id, "year": YEAR, "week": WEEK},
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    status_complete = _status(scope)
+    assert status_complete["required_choice_count"] == 1
+    assert status_complete["completed_choice_count"] == 1
+    assert status_complete["status"] == "in_progress"
+    assert status_complete["is_submittable"] is True
+    assert status_complete["has_submission"] is False
 
 
 def test_choice_change_after_submit_stales_submission(client_admin, seed_portal_department_data, seed_canonical_builder_publication, seed_portal_menu_choice):
