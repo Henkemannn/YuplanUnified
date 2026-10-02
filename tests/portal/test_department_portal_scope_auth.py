@@ -283,6 +283,33 @@ def test_unit_portal_menu_choice_mutation_uses_canonical_scope(
     assert write_resp.get_json()["selected_alt"] == "Alt2"
 
 
+def test_department_week_test_claim_fallback_is_disabled_outside_testing(client_admin):
+    dept_id = "88888888-9999-aaaa-bbbb-cccccccccccc"
+    site_id = "22222222-3333-4444-5555-666666666666"
+    db = client_admin.application
+    with db.app_context():
+        from core.db import get_session
+
+        conn = get_session()
+        try:
+            _seed_scope(conn, dept_id=dept_id, site_id=site_id, tenant_id=1)
+            conn.commit()
+        finally:
+            conn.close()
+
+    original_testing = client_admin.application.config.get("TESTING")
+    client_admin.application.config["TESTING"] = False
+    try:
+        resp = client_admin.get(
+            f"/ui/portal/department/week?year={YEAR}&week={WEEK}",
+            environ_overrides={"test_claims": {"department_id": dept_id}},
+        )
+    finally:
+        client_admin.application.config["TESTING"] = original_testing
+
+    assert resp.status_code == 403
+
+
 def test_admin_cross_tenant_menu_choice_mutation_denied(client_admin):
     dept_id = "77777777-8888-9999-aaaa-bbbbbbbbbbbb"
     site_id = "11111111-2222-3333-4444-555555555555"

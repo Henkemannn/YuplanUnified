@@ -37,17 +37,18 @@ def _get_authenticated_identity() -> tuple[int, str, int]:
     user_id = getattr(g, "user_id", None) or session.get("user_id")
     tenant_id = getattr(g, "tenant_id", None) or session.get("tenant_id")
     role = session.get("role") or getattr(g, "role", None)
+    test_claims = current_app.config.get("TESTING") and isinstance(request.environ.get("test_claims"), dict)
     if isinstance(user_id, str) and user_id.isdigit():
         user_id = int(user_id)
     if isinstance(tenant_id, str) and tenant_id.isdigit():
         tenant_id = int(tenant_id)
     if not isinstance(role, str) or not role.strip():
-        if current_app.config.get("TESTING") and isinstance(request.environ.get("test_claims"), dict):
-            role = "unit_portal"
+        if test_claims:
+            role = "admin"
         else:
             abort(403)
     if not isinstance(user_id, int):
-        if current_app.config.get("TESTING") and isinstance(request.environ.get("test_claims"), dict):
+        if test_claims:
             user_id = 0
         else:
             abort(403)
