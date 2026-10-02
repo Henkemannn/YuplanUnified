@@ -1,286 +1,295 @@
 Status: LOCKED
-Last reviewed: 2026-09-24
+Last reviewed: 2026-10-02
 
 # Yuplan 1.0 Finishline
 
 ## Current Phase
 
-The shared Builder/Menu/Offshore seam remains accepted and frozen.
+Active phase: **Kommun 1.1 — Department Portal completion, then meal-path verification, tablet/iPad pass, and final fresh pilot smoke.**
 
-Active phase: **Yuplan Kommun 1.0 — Product2 Page3 Produktionsunderlag, explicit Specialkost hierarchy, production parity and operational packing.**
+The shared Builder/Menu seam is now closed for Yuplan 1.0. Shared Dish + Component editors are accepted as Yuplan 1.0-ready and must not be reopened for micro-polish before pilot unless a real blocker or regression is found.
 
-Portal / Department choice work has progressed far enough to support the current Planera 2.0 Product2 flow. Remaining portal polish is still required before pilot acceptance, but the main development path is now the end-to-end production chain and its operational UI.
+The current focus is to finish the remaining Kommun operational path without broadening into Builder 1.1, Offshore expansion, Home, Hotel/Banquet, broad refactors, or new generic platform work.
 
-Broad Builder/Menu MVP work remains closed. Only pilot-blocking regressions may reopen that seam before Kommun 1.0 Ready for Pilot.
+## Current Local Development Checkpoint
 
-## Current Checkpoint
-
-Active development branch:
+Active local development branch:
 
 `feat/planera-app-shell-2026-03-03`
 
-Last code checkpoint before this documentation update:
-
-`77d73e637f055378b5e82a9385170b9e84346373`
-
-`checkpoint(planera): align page3 information architecture`
-
-That checkpoint is intentionally **not** a visual acceptance point. It preserves the current Page3 alignment work while known visual and interaction debt remains.
-
-## Already Established
-
-- Builder is the canonical knowledge source.
-- Components -> Dishes/Compositions -> Menus -> Published Menu.
-- Published menu projection is the source for Product2 meal options.
-- Department menu choices are explicit; missing choice does not silently fall back.
-- Product2 Page1 day overview exists.
-- Product2 Page2 human review exists.
-- Option review persistence and review staleness are established.
-- Requirement groups use disjoint recipient-cohort semantics.
-- Multi-requirement recipients are counted once in one combined cohort.
-- Current quantities remain business truth; persisted review stores the human yes/no decision.
-- Review-aware Kommun -> Planera 2.0 adapter is accepted and checkpointed.
-- The adapter can produce a PlanningSlice from the current published option, assignment, review and current requirement quantities.
-- Planera 2.0 Core can calculate baseline, deviation and normal production with destination/unit breakdown.
-- Meal-level Kommun Product2 orchestration is accepted and complete.
-- Orchestration keeps unassigned destinations explicit, requires current review only for demanded options, skips zero-demand options safely and preserves blockers without inventing production.
-- Page3 has an authoritative VM/projection path that consumes Planera 2.0 production truth.
-- A realistic isolated Product2 E2E tenant exists with normal authenticated kitchen user, 18 departments, published menu, menu choices and canonical requirement cohorts.
-- Known READY proof remains:
-  - Vardagsgryta: total 79, normal 79, special 0.
-  - Ugnsbakad fisk: total 62, normal 54, special 8.
-- Existing Kommun Serveringstillägg is valid current operational input and must be preserved during migration.
-- Existing production-list snapshots already demonstrate that Serveringstillägg can be shown with totals and department breakdown.
-- Product2 Page3 local tab switching exists as an implementation foundation; final visual acceptance is still pending.
-
-## Current Active Gate
-
-### Page3 Produktionsunderlag — final information architecture and visual recovery
-
-The target Page3 mental model is locked:
-
-**One production context -> three equal work tabs -> one active work area.**
-
-Main tabs:
-- Översikt
-- Normalkost
-- Specialkost
-
-Only one main work area may be visually active at a time.
-
-The target Page3 direction is:
-
-### Shared header / context
-- global Yuplan topbar remains unchanged
-- compact page title: Produktionsunderlag
-- operational date context, not a giant decorative hero
-- kitchen/site + meal context
-- quiet action back to review
-- review-oriented status wording: **Underlag granskat**, not a generic production-completion "Klar"
-
-### Översikt
-One compact production table. No duplicate summary cards and no large per-dish cards.
-
-Columns:
-- Menyval
-- Totalt
-- Normalkost
-- Specialkost
-
-Values must come from authoritative Page3 / PlanResult truth.
-
-### Normalkost
-Compact destination x published-menu-choice matrix.
-
-Rules:
-- department/destination first column
-- dish/menu choices as columns
-- dish title + total quantity in header
-- zero shown as a quiet dash
-- totals row at bottom
-- horizontal scroll for many dishes rather than squeezing columns unreadably
-- no accidental semantic row highlighting
-
-### Specialkost
-Final target presentation is **primary requirement -> recipient/destination rows -> optional modifiers**.
-
-Example target:
-
-`Timbal 13`
-
-`Avdelning 11 [Ugnsbakad fisk] [Glutenfri] 1`
-
-Where:
-- the primary requirement owns the production group
-- menu choice is neutral context only
-- modifiers are visually distinct, planned as subtle purple pills
-- a recipient/cohort is counted once under its primary production group
-- grouping by `Avdelning | Menyval` is presentation only and must not change totals
-
-Current persistence does **not yet** contain explicit primary/modifier semantics, so Page3 must not infer them from names, sort order or array order.
-
-## Locked Specialkost Primary / Modifier Direction
-
-The current requirement-group persistence stores an unordered exact member set. It cannot distinguish:
-
-- primary Timbal + modifier Glutenfri
-
-from:
-
-- primary Glutenfri + modifier Timbal
-
-The locked 1.0 direction is:
-
-- add explicit primary semantics to the requirement group
-- smallest preferred durable model: nullable `primary_requirement_id` on `department_requirement_groups`
-- the full existing requirement-member set remains intact
-- service validation requires the primary to be one of the group members
-- all remaining members become modifiers
-- Planera 2.0 Core remains generic and continues to consume the full exact combination
-- primary/modifier is registration/application/presentation semantics unless a future production rule truly requires more
-
-Migration rule:
-- existing single-requirement groups are unambiguous and may use that sole requirement as primary
-- existing multi-requirement groups are ambiguous and must not be guessed from name/order
-- unresolved legacy combinations must be surfaced explicitly until resolved
-
-Registration UX target:
-- create/select the primary requirement first
-- inside that primary requirement add 0..N additional requirements/modifiers
-- user-entered hierarchy is authoritative
-
-## Known Page3 Visual Debt at Current Checkpoint
-
-The checkpoint `77d73e6...` still requires visual recovery before acceptance.
-
-Observed current runtime issues include:
-- old large date/hero treatment is still visible
-- old `Klar` wording can still appear in runtime
-- old `Tillbaka till granskning` presentation can still appear
-- `Produktion / Per avdelning` subnavigation can leak into unrelated main views
-- Översikt can render as raw/unstructured text instead of the intended compact table
-- Specialkost still shows current exact-combination semantics because primary/modifier persistence is not implemented yet
-- dark mode contains overly dark/flat sections and needs visual balancing
-- final Light/Dark polish and tab isolation still require manual acceptance
-
-Do not treat green unit/UI tests alone as visual acceptance.
-
-## Product2 E2E Runtime Rule
-
-The normal local debug/reloader path is currently **not trusted as the canonical visual-review runtime**.
-
-A single-process E2E server has been proven to work with:
-- `product2_e2e.db`
-- `product2_e2e_builder.db`
-- one process on port 5000
-- `debug=False`
-- `use_reloader=False`
-- real live POST `/auth/login` returning success for the E2E kitchen user
-
-Until runtime hardening is completed, visual review should use that deterministic single-process pattern.
-
-A later small dev-runtime hardening gate should provide one deterministic Product2 E2E start command/script so review work cannot accidentally attach to `dev.db`, a stale reloader child, or a different process.
-
-## Next Major Milestone
-
-Yuplan Kommun 1.0 — Ready for Pilot.
-
-Order:
-
-1. Builder/Menu/Offshore seam freeze — COMPLETE.
-2. Ground Truth / Planera 2.0 Architecture Lock — COMPLETE.
-3. Portal Foundation / Department menu-choice canonical path — SUFFICIENT FOR ACTIVE PLANERA INTEGRATION; final polish remains.
-4. Product2 Page1 / Page2 flow — COMPLETE FOUNDATION.
-5. Option review persistence / staleness — COMPLETE.
-6. Review-aware Kommun -> Planera 2.0 adapter — COMPLETE.
-7. Realistic 18-department Product2 E2E environment — COMPLETE.
-8. Meal-level orchestration — COMPLETE.
-9. Page3 authoritative production projection — COMPLETE FOUNDATION.
-10. Page3 final information architecture / Light-Dark visual acceptance — ACTIVE.
-11. Explicit Specialkost primary/modifier persistence + registration/application projection.
-12. Final Specialkost Page3 projection using primary groups, neutral menu-choice context and modifier pills.
-13. Full authenticated Kommun E2E: Published Menu -> Department choice -> Page1 -> Page2 -> Planera 2.0 -> Page3.
-14. Planera 1 / Planera 2.0 parallel run and parity review.
-15. Daily destination-aware packing projection.
-16. Preserve existing fixed Serveringstillägg in a separate Servering / Packning operational surface; do not mix them into the default normal/specialkost production worklist.
-17. Validate Serveringsanpassning modernization without hardcoding only current Mos/Sallad/Ovrigt families.
-18. Finish Department Portal / iPad / auth / print / operational polish.
-19. Kommun 1.0 Ready for Pilot.
-20. Return main development focus to Offshore 1.0.
-
-## Kommun 1.0 Packing Finishline
-
-A production total alone is not enough for Kommun operations.
-
-Before Kommun 1.0 is considered operationally pilot-ready, Yuplan must be able to derive a daily pack-oriented view that answers:
-
-- what should be packed
-- how much
-- for which date and meal
-- to which department / destination
-- which production item is standard or adapted
-- which existing standing additions / handling requirements also apply
-
-The packing layer must consume shared production / operational truth. It must not become a second calculation engine.
-
-Specialkost production and Serveringsanpassning remain separate operational tracks. Existing Serveringstillägg must be carried into a separate Servering / Packning surface during transition and must not clutter the default normal/specialkost production worklist.
-
-A later optional total pack list may explicitly combine both tracks for one department, one delivery location or all destinations, for example: Normalkost 8, Timbal 1, Sallad 6 — aldrig tomat, Potatismos istället för kokt potatis 1. This combined view is a downstream projection only; it does not merge the underlying domains.
-
-The architecture must also remain open to future menu-aware substitutions such as:
-- boiled potato -> mashed potato
-- pasta -> mashed potato
-- spaghetti -> macaroni
-- component exclusions such as never tomato
-- handling instructions such as sauce separately
-
-A full arbitrary rule editor is not required to block the first pilot if the architecture and migration path are already safe.
-
-## Parallel Run / Cutover
-
-Planera 1 remains the current comparison baseline during transition.
-
-Before Planera 2.0 becomes Kommun production truth:
-- compare source departments
-- compare baseline quantities
-- compare menu choices
-- compare specialkost / requirement quantities
-- compare normal / standard production
-- compare adaptations
-- compare destination breakdown
-- compare existing Serveringstillägg totals where applicable
-
-A difference must be classified as:
-- regression
-- legacy limitation
-- intentional improved behavior
-
-Do not force Planera 2.0 to reproduce a known legacy limitation merely to achieve numerical equality.
-
-## Freeze Point
-
-Builder/Menu/Offshore broad MVP work remains frozen.
-
-The main launch path is now:
-
-Kommun Product2 flow
--> Page3 visual/product acceptance
--> explicit Specialkost primary/modifier semantics
--> final Specialkost production projection
--> full production E2E
--> production parity
--> separate Servering / Packning projection
--> optional combined total-pack projection
--> operational polish
--> Kommun 1.0 Ready for Pilot
-
-Do not list unrelated Offshore expansion work as a blocker for Kommun launch.
-
-## Related Ground Truth
-
-- `KOMMUN_1_0_MVP_LOCK.md`
-- `PLANERA_2_0_ARCHITECTURE_LOCK.md`
-- `PORTALS_ARCHITECTURE_LOCK.md`
-
-Detailed operational reference:
-- `../planera2/KOMMUN_STANDING_NEEDS_AND_PACKING.md`
+Accepted local code checkpoint:
+
+`bda732af9893b591856b658f034fc6a5f2580589`
+
+`style(builder): finish shared dish and component editors`
+
+At this checkpoint:
+- worktree was clean
+- focused Builder slice was 58/58 green
+- live browser smoke was clean
+- no JS/page/console/request errors
+- no horizontal page overflow
+- native modal scrollbars are visually hidden
+- vertical overflow uses dynamic top/bottom fades
+- Dish Overview horizontal Component rail remains independent and preserves left/right fade behavior
+- Dish allergen presentation uses Swedish display labels
+- Component header uses `KOMPONENT`
+- Component visible description label is `Beskrivning`
+- permanent success copy `Komponentdetaljer laddade.` is removed from normal idle state
+- local `builder_library.db` cleanup was intentionally kept outside the source commit
+
+Important repository state note:
+- the GitHub remote development branch is behind the local development branch as of this documentation update
+- this document records the **local accepted development truth**
+- do not infer current code state from the remote development branch alone
+
+## Shared Builder Editors — 1.0 Ready
+
+The following are accepted for Yuplan 1.0:
+
+### Dish editor
+- same-page canonical shared editor
+- tabs:
+  - Översikt
+  - Komponenter
+  - Kalkyl
+  - Allergener / kostinfo
+- compact Component summary blocks / rail
+- summary-first Dish Kalkyl with inline expandable Component detail
+- one expanded calculation entry at a time
+- shared calculation truth with Component editor
+- Swedish allergen presentation names
+- read-only allergen aggregation from linked Components
+- hidden native vertical scrollbar + dynamic top/bottom fades
+- horizontal Overview rail retains its own left/right overflow fades
+
+### Component editor
+- context-aware return behavior:
+  - direct library -> Tillbaka till komponenter
+  - opened from Dish -> Tillbaka till <dish>
+- tabs:
+  - Översikt
+  - Recept & metod
+  - Kalkyl
+  - Allergener / kostinfo
+- typography aligned with Dish / Yuplan system stack
+- compact recipe and costing rows
+- recipe-derived fields visually read-only in Kalkyl
+- editable price fields remain primary costing inputs
+- shared frontend calculation helper
+- hidden native vertical scrollbar + dynamic top/bottom fades
+- no nested horizontal row scrollbars at accepted desktop/tablet sizes
+- current allergen editing retained and visually aligned
+- visible user-facing language is Swedish
+
+### Shared calculation seam
+One frontend calculation truth is shared by Component and Dish.
+
+Current supported behavior is preserved; do not introduce screen-specific formulas.
+
+Future ingredient-specific conversion/density profiles must extend below or through this shared seam rather than create separate formulas per screen.
+
+## Builder 1.1+ — Explicitly Deferred
+
+Do not reopen these before Yuplan 1.0 pilot readiness unless a true blocker appears:
+
+- full Builder Workspace redesign / authoring workspace IA
+- canonical Ingredient Library
+- reusable standard ingredient pricing
+- price history / supplier article integration
+- recipe ingredients automatically becoming costing rows
+- exclude-from-costing on recipe rows
+- additional costing-only rows
+- organization/user conversion profiles
+- ingredient-specific volume <-> weight conversions
+- Recipe Import / Recipe Draft
+- paste recipe text import
+- document recipe import
+- bulk recipe library import
+- advanced Menu Builder drag-and-drop
+- broader Builder workspace polish
+
+Locked future direction:
+- Builder is Yuplan's advanced authoring workspace
+- daily operations should normally enter canonical editors from Kommun/Offshore flows
+- Component -> Dish -> Menu remains the canonical Builder mental model
+- recipes belong to Components
+- published menu remains external/menu-facing truth
+
+## Already Established Kommun Product Chain
+
+Accepted operational chain:
+
+Registered needs
+-> varied quantity/current requirement truth
+-> published canonical menu + department choices
+-> Product2 Page1
+-> Product2 Page2 review
+-> Planera 2.0
+-> Product2 Page3 Produktionsunderlag
+-> mark complete
+-> Kitchen Weekview
+-> persistence
+-> Admin Weekview
+-> Reports
+
+Key accepted principles:
+- Builder is canonical menu knowledge source
+- published menu projection drives Kommun menu options
+- explicit department menu choice remains its own canonical truth
+- missing choice must not silently become a fallback choice
+- requirement groups represent disjoint recipient cohorts
+- current quantities remain business truth
+- Planera 2.0 Core remains generic
+- Kommun adapters/presentation may add Kommun semantics without leaking them into Core
+- specialkost primary/modifier semantics are explicit; they must not be guessed from display order
+- completion/weekview persistence must remain operational truth, not visual-only state
+
+## Current Active Gate — Department Portal
+
+A Copilot implementation order has already been sent.
+
+**Do not issue another implementation order until that report is returned and reviewed.**
+
+Current gate goal:
+
+Canonical Department Portal week surface at:
+
+`GET /ui/portal/department/week`
+
+The gate is intentionally small.
+
+Required direction:
+- route loads reliably in current Yuplan shell
+- existing tenant/site/department scope is reused
+- canonical published Builder menu is consumed
+- existing department menu-choice truth is reused
+- registered needs are read-only context where already supported
+- no portal-specific shadow menu model
+- no second department-choice model
+- no broad portal redesign
+- no old-route cleanup unless the report proves a tiny redirect is necessary and it is separately approved
+
+Portal architecture remains:
+- portals are experience/communication layers, not production engines
+- Kommun Department Portal is a business-specific adapter over shared portal principles
+- published/external menu truth comes from canonical publication
+- the portal must not read private Cook/Work Menu state as external truth
+
+## Remaining Path to Kommun 1.1 Pilot Ready
+
+Strict sequence:
+
+### 1. Department Portal
+Review the currently outstanding Copilot report first.
+
+Then, only if needed:
+- one small follow-up portal gate at a time
+- establish canonical week experience
+- verify department choice behavior
+- verify read-only registered-needs context
+- verify route/auth/scope behavior
+- tablet smoke
+
+Do not pre-plan multiple portal gates before seeing the report.
+
+### 2. Meal-path verification
+Lunch is already proven.
+
+Still verify the current Product2 path for:
+- dinner/evening meal path
+- dessert mapping where applicable
+- no Kommun-only assumptions leaking into Planera 2.0 Core
+- current published menu identity through the full path
+
+This is verification-first, not redesign-first.
+
+### 3. iPad / tablet acceptance
+Priority sizes:
+- 1024x768
+- 768x1024
+
+Check the real operational Kommun flow, not every page in the repository.
+
+Focus on:
+- no clipped controls
+- usable touch targets
+- no accidental horizontal page overflow
+- readable production/portal tables
+- stable shared editors when entered from Kommun
+
+### 4. Final fresh pilot smoke
+Must include:
+- cold restart
+- login repeatability
+- canonical site/tenant context
+- published menu
+- department choices
+- registered needs
+- Page1 -> Page2 -> Planera 2.0 -> Page3
+- completion/weekview persistence
+- Department Portal
+- report visibility where already in MVP scope
+- browser/console/request cleanliness
+
+### 5. Mark Kommun 1.1 PILOT READY
+Only after the fresh smoke passes.
+
+### 6. Controlled Planera transition
+Run Planera 1 and Planera 2 side-by-side for real operational weeks.
+
+Planera 1 remains a temporary fallback during transition.
+
+Do not remove fallback until real-week parity is proven.
+
+## Remaining Yuplan 1.0 Scope After Kommun
+
+After Kommun 1.1 pilot readiness, return to the already scoped Offshore 1.0 work.
+
+Do not mix Offshore completion into the current Department Portal / Kommun closure.
+
+Yuplan 1.0 remains focused on:
+- Kommun
+- Offshore
+- required shared canonical Builder foundations
+
+Home and Hotel/Banquet remain outside Yuplan 1.0.
+
+## Project Execution Rules
+
+These rules are part of the finishline:
+
+1. **One order -> one Copilot report -> review -> next order.**
+2. Do not send a new implementation order while a report is outstanding.
+3. Real browser evidence outranks DOM-contract confidence for UX acceptance.
+4. Green focused tests do not replace live smoke.
+5. Do not rewrite working functions without a specific reason.
+6. Do not broaden a gate into cleanup/refactor work.
+7. No speculative generic architecture during MVP closure.
+8. Planera 2.0 Core stays generic.
+9. No Builder modal micro-polish before pilot unless a real regression/blocker is proven.
+10. Local accepted commit state is authoritative when the GitHub remote branch is behind.
+
+## STOP Conditions
+
+Stop and report before implementation if:
+- active branch is wrong
+- expected checkpoint differs
+- unrelated dirty files exist
+- the requested change requires a new source of business truth
+- canonical menu/choice/requirement semantics are unclear
+- a portal change would write production truth
+- a change would require broad Builder or Planera 2.0 Core refactoring
+- a migration would guess ambiguous business semantics
+
+## Definition of Yuplan 1.0 Ready for Pilot
+
+Yuplan 1.0 is ready for pilot when:
+- Kommun 1.1 fresh pilot smoke is green
+- Department Portal is usable and canonical
+- meal paths required by the pilot are verified
+- tablet/iPad operation is acceptable
+- Planera 2.0 production truth remains authoritative and generic
+- shared Builder editors remain stable
+- Offshore 1.0 locked MVP scope is complete
+- no pilot-blocking legacy dependency or duplicated source of truth remains
