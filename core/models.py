@@ -227,6 +227,42 @@ class DepartmentMenuChoice(Base):
     )
 
 
+class DepartmentPortalWeekSubmission(Base):
+    __tablename__ = "department_portal_week_submissions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    department_id: Mapped[str] = mapped_column(ForeignKey("departments.id"), nullable=False)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    builder_menu_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    builder_menu_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    choice_signature: Mapped[str] = mapped_column(String(64), nullable=False)
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "site_id",
+            "department_id",
+            "year",
+            "week",
+            name="uq_department_portal_week_submissions_business_key",
+        ),
+        CheckConstraint("year > 0", name="ck_department_portal_week_submissions_year_positive"),
+        CheckConstraint("week BETWEEN 1 AND 53", name="ck_department_portal_week_submissions_week_range"),
+        CheckConstraint("length(trim(builder_menu_id)) > 0", name="ck_department_portal_week_submissions_builder_menu_id_not_empty"),
+        CheckConstraint("builder_menu_version > 0", name="ck_department_portal_week_submissions_builder_menu_version_positive"),
+        CheckConstraint("length(trim(choice_signature)) > 0", name="ck_department_portal_week_submissions_choice_signature_not_empty"),
+    )
+
+
 class DepartmentRequirementGroup(Base):
     __tablename__ = "department_requirement_groups"
 

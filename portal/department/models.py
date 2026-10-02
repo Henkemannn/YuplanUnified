@@ -69,6 +69,23 @@ class PortalEtagMap(TypedDict):
     weekview: str
 
 
+class PortalWeekSubmissionStatus(TypedDict):
+    tenant_id: int
+    site_id: str
+    department_id: str
+    year: int
+    week: int
+    publication_builder_menu_id: str
+    publication_builder_menu_version: int
+    required_choice_count: int
+    completed_choice_count: int
+    has_submission: bool
+    submission_is_current: bool
+    needs_review: bool
+    is_submittable: bool
+    status: Literal["not_started", "in_progress", "complete"]
+
+
 class DepartmentPortalWeekPayload(TypedDict):
     """Composite payload returned by GET /portal/department/week.
 

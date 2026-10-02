@@ -21,9 +21,9 @@ from sqlalchemy import text
 from portal.department.models import DepartmentPortalWeekPayload
 from portal.department.service import build_department_week_payload
 from portal.department.auth import DepartmentPortalScope, resolve_department_portal_scope
+from portal.department.submission_service import DepartmentPortalWeekSubmissionService
 from core.department_menu_choice_repo import MenuChoiceRepo
-from core.http_errors import forbidden
-from core.errors import bad_request
+from core.http_errors import bad_request, conflict, forbidden, not_found
 from core.db import get_session
 
 bp = Blueprint("portal_department", __name__, url_prefix="/portal/department")
@@ -80,6 +80,65 @@ def get_department_week():  # type: ignore[override]
     resp.headers["ETag"] = portal_etag
     resp.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
     return resp
+
+
+def _resolve_year_week_from_request() -> tuple[int, int] | Response:
+    payload = request.get_json(silent=True) or {}
+    year_raw = request.args.get("year") or payload.get("year")
+    week_raw = request.args.get("week") or payload.get("week")
+    try:
+        year = int(year_raw or "")
+        week = int(week_raw or "")
+    except ValueError:
+        return bad_request("invalid_year_or_week")
+    if year < 2000 or year > 2100 or week < 1 or week > 53:
+        return bad_request("invalid_range")
+    try:
+        _iso_week_start(year, week)
+    except ValueError:
+        return bad_request("invalid_week_reference")
+    return year, week
+
+
+@bp.get("/week/status")
+def get_department_week_status():  # type: ignore[override]
+    try:
+        scope = resolve_department_portal_scope()
+    except Exception:
+        return forbidden(detail="department_scope_missing")
+    resolved = _resolve_year_week_from_request()
+    if isinstance(resolved, Response):
+        return resolved
+    year, week = resolved
+    try:
+        status = DepartmentPortalWeekSubmissionService().get_status(scope, year, week)
+    except ValueError as exc:
+        if str(exc) == "publication_missing":
+            return not_found("publication_missing")
+        return bad_request(str(exc) or "bad_request")
+    return jsonify(status)
+
+
+@bp.post("/week/submit")
+def submit_department_week():  # type: ignore[override]
+    try:
+        scope = resolve_department_portal_scope()
+    except Exception:
+        return forbidden(detail="department_scope_missing")
+    resolved = _resolve_year_week_from_request()
+    if isinstance(resolved, Response):
+        return resolved
+    year, week = resolved
+    try:
+        status = DepartmentPortalWeekSubmissionService().submit(scope, year, week)
+    except ValueError as exc:
+        msg = str(exc) or "bad_request"
+        if msg == "publication_missing":
+            return not_found(msg)
+        if msg in {"portal_week_not_submittable", "portal_week_incomplete"}:
+            return conflict(msg)
+        return bad_request(msg)
+    return jsonify(status)
 
 
 @bp.post("/menu-choice/change")
