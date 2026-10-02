@@ -97,7 +97,8 @@ def test_global_navigation_unit_portal_shell_is_department_only(client_admin):
     html = resp.get_data(as_text=True)
     assert '<nav class="main-nav"' in html
     assert 'Avdelningsportal' in html
-    assert '/ui/portal/department/week' in html
+    assert '/ui/portal/department' in html
+    assert '/ui/portal/department?department_id=' not in html
     assert 'Veckovy' not in html
     assert 'Planera' not in html
     assert 'Rapport' not in html
@@ -105,3 +106,23 @@ def test_global_navigation_unit_portal_shell_is_department_only(client_admin):
     assert '/ui/weekview' not in html
     denied = client_admin.get("/ui/admin", headers=_h("unit_portal", user_id=11))
     assert denied.status_code == 403
+
+
+def test_global_navigation_admin_support_can_show_explicit_department_context(client_admin):
+    year = 2025
+    week = 47
+    dept_id = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
+    site_id = "22222222-3333-4444-5555-666666666666"
+    from core.db import get_session
+    db = get_session()
+    try:
+        _seed_portal_week(db, dept_id, site_id, year, week)
+    finally:
+        db.close()
+    resp = client_admin.get(
+        f"/ui/portal/department/week?year={year}&week={week}&department_id={dept_id}",
+        headers=_h("admin", user_id=21),
+    )
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert f'/ui/portal/department?department_id={dept_id}' in html

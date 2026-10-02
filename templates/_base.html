@@ -32,10 +32,10 @@
     <a href="{{ url_for('ui.admin_system_page') }}" class="active">Systemadministration</a>
     {# Optional: add Kunder/Logga ut links if available in routes #}
   {% elif is_unit_portal %}
-    <a href="{{ url_for('portal_dept_ui.portal_department_week_ui') }}" class="{% if request.path.startswith('/ui/portal/department') %}active{% endif %}">Avdelningsportal</a>
+    <a href="{{ portal_home_url or url_for('portal_dept_ui.portal_department_home_ui') }}" class="{% if request.path.startswith('/ui/portal/department') %}active{% endif %}">Avdelningsportal</a>
   {% else %}
     <a href="{{ url_for('ui.weekview_ui') }}">Veckovy</a>
-    <a href="{{ url_for('ui.portal_week') }}" class="{% if request.path.startswith('/portal/week') %}active{% endif %}">Avdelningsportal</a>
+    <a href="{{ portal_home_url or url_for('portal_dept_ui.portal_department_home_ui') }}" class="{% if request.path.startswith('/ui/portal/department') %}active{% endif %}">Avdelningsportal</a>
     <a href="{{ url_for('ui.planera_day_ui_v2') }}">Planera</a>
     <a href="{{ url_for('ui.weekview_report_ui') }}">Rapport</a>
     <a href="{{ url_for('ui.admin_dashboard') }}">Admin</a>
@@ -71,7 +71,9 @@
   <div class="wrap">
     <nav>
       <strong>Yuplan</strong>
-      {% if not is_unit_portal %}
+      {% if portal_home_url %}
+      · <a href="{{ portal_home_url }}" class="portal-shell-context{% if request.path.startswith('/ui/portal/department') %} active{% endif %}">Avdelningsportal</a>
+      {% elif not is_unit_portal %}
       · <a href="{{ url_for('ui.weekview_ui') }}" class="{% if request.endpoint=='ui.weekview_ui' %}active{% endif %}">Översikt</a>
       {% endif %}
       {% if current_user %}<span class="pill">Tenant {{ tenant_id }}</span>{% endif %}
@@ -89,9 +91,9 @@
   <!-- layout markers removed to satisfy CSP -->
   {% block content %}{% endblock %}
 </main>
-<footer>
-  Yuplan &copy; {{ 2025 }} • Request ID: <span id="reqid">{{ g.request_id if g.request_id else '' }}</span>
-  {% if has_role('admin','superuser') %}
+<footer class="{% if portal_compact_footer %}portal-quiet-footer{% endif %}">
+  Yuplan &copy; {{ 2025 }}{% if not portal_compact_footer %} • Request ID: <span id="reqid">{{ g.request_id if g.request_id else '' }}</span>{% endif %}
+  {% if has_role('admin','superuser') and not portal_compact_footer %}
     <a class="support-link" href="{{ url_for('support.support_home').replace('/admin/support/', '/admin/support/ui') }}" target="_blank" rel="noopener">Support</a>
   {% endif %}
   {% if dev_mode %}

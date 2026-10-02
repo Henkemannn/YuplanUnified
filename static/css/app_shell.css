@@ -568,6 +568,10 @@ body {
   min-width: 0;
 }
 
+.app-shell__body--no-sidebar {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .app-shell__sidebar {
   position: sticky;
   top: calc(var(--topbar-offset) + 24px);

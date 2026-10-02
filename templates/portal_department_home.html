@@ -1,0 +1,95 @@
+{% extends "ui/_layout/app_shell_base.html" %}
+{% block page_title %}Avdelningsportal{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/portal_department_home.css') }}">
+{% endblock %}
+{% block content %}
+<div class="portal-home-page">
+  <section class="app-shell__page-header portal-home-identity">
+    <div>
+      <h1 class="app-shell__title">{{ vm.department.name }}</h1>
+      <p class="app-shell__subtitle portal-home-subtitle">
+        {% if vm.department.residence_name %}{{ vm.department.residence_name }} · {% endif %}{{ vm.context.resident_count }} boende
+      </p>
+    </div>
+  </section>
+
+  <div class="portal-home-workarea">
+    <section class="portal-home-panel portal-home-menu-panel">
+      <div class="portal-home-panel-head">
+        <h2 class="app-shell__card-title">Menyval</h2>
+        <p class="app-shell__card-text">Välj och bekräfta publicerade veckor.</p>
+      </div>
+
+      {% if vm.weeks %}
+        <div class="portal-home-week-list" role="list">
+          {% for week in vm.weeks %}
+            <a class="portal-home-week-card portal-home-week-card--{{ week.status_class }}" href="{{ week.url }}" role="listitem" aria-label="Vecka {{ week.week }}, {{ week.status_text }}{% if week.review_text %}, {{ week.review_text }}{% endif %}">
+              <div class="portal-home-week-main">
+                <span class="portal-home-week-title">Vecka {{ week.week }}</span>
+                <div class="portal-home-week-span">{{ week.span }}</div>
+              </div>
+              <span class="portal-home-week-status">{{ week.status_text }}</span>
+              <span class="portal-home-week-action{% if week.status_class == 'in_progress' %} portal-home-week-action--emphasis{% endif %}">
+                <span>{{ week.action_text }}</span>
+                <span class="portal-home-week-arrow" aria-hidden="true">›</span>
+              </span>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="portal-home-empty-state">
+          <p>Inga menyer har publicerats ännu.</p>
+        </div>
+      {% endif %}
+    </section>
+
+    <aside class="portal-home-panel portal-home-context-panel">
+      <div class="portal-home-panel-head">
+        <h2 class="app-shell__card-title">För er avdelning</h2>
+        <p class="app-shell__card-text">Specialkost och servering i kompakt läge.</p>
+      </div>
+
+      {% if vm.requirement_groups %}
+        <section class="portal-home-context-block">
+          <h3>Specialkost / behov</h3>
+          <ul class="portal-home-list">
+            {% for item in vm.requirement_groups %}
+              <li>
+                <div class="portal-home-list-copy">
+                  <div class="portal-home-list-title-line">
+                    <span class="portal-home-list-title">{{ item.label }}</span>
+                    {% if item.secondary_label %}
+                      <span class="portal-home-list-chip">+ {{ item.secondary_label }}</span>
+                    {% endif %}
+                  </div>
+                </div>
+                <strong>{{ item.quantity }}</strong>
+              </li>
+            {% endfor %}
+          </ul>
+        </section>
+      {% endif %}
+
+      {% if vm.service_addons %}
+        <section class="portal-home-context-block">
+          <h3>Servering</h3>
+          <ul class="portal-home-list">
+            {% for item in vm.service_addons %}
+              <li>
+                <div class="portal-home-list-copy">
+                  <span class="portal-home-list-title">{{ item.label }}</span>
+                  {% if item.note %}
+                    <span class="portal-home-list-secondary">{{ item.note }}</span>
+                  {% endif %}
+                </div>
+                <strong>{{ item.count }}</strong>
+              </li>
+            {% endfor %}
+          </ul>
+        </section>
+      {% endif %}
+    </aside>
+  </div>
+</div>
+{% endblock %}

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import date as _date
-from flask import Blueprint, request, render_template, current_app
+from flask import Blueprint, request, render_template, current_app, url_for
 
 from portal.department.auth import DepartmentPortalScope, resolve_department_portal_scope
+from portal.department.home_service import build_department_home_payload
 from portal.department.service import build_department_week_payload
 
 portal_dept_ui_bp = Blueprint("portal_dept_ui", __name__)
@@ -60,6 +61,12 @@ def _format_sv_date_span(start_date: _date, end_date: _date) -> str:
         f"{start_date.day} {_SV_MONTHS[start_date.month]} {start_date.year}–"
         f"{end_date.day} {_SV_MONTHS[end_date.month]} {end_date.year}"
     )
+
+
+def _portal_home_url(scope: DepartmentPortalScope) -> str:
+    if scope.role == "unit_portal":
+        return url_for("portal_dept_ui.portal_department_home_ui")
+    return url_for("portal_dept_ui.portal_department_home_ui", department_id=scope.department_id)
 
 
 @portal_dept_ui_bp.get("/ui/portal/department/week")
@@ -126,6 +133,23 @@ def portal_department_week_ui():  # type: ignore[override]
         "etag_map": payload["etag_map"],
         "summary": payload.get("summary", {"registered_lunch_days": 0, "registered_dinner_days": 0}),
     }
-    return render_template("portal_department_week.html", vm=vm)
+    portal_home_url = _portal_home_url(scope)
+    return render_template("portal_department_week.html", vm=vm, portal_home_url=portal_home_url)
+
+
+@portal_dept_ui_bp.get("/ui/portal/department")
+def portal_department_home_ui():  # type: ignore[override]
+    explicit_department_id = (request.args.get("department_id") or "").strip() or None
+    scope = resolve_department_portal_scope(explicit_department_id=explicit_department_id)
+    vm = build_department_home_payload(scope)
+    portal_home_url = _portal_home_url(scope)
+    return render_template(
+        "portal_department_home.html",
+        vm=vm,
+        portal_home_url=portal_home_url,
+        nav_context="portal_department",
+        hide_sidebar=True,
+        portal_compact_footer=True,
+    )
 
 __all__ = ["portal_dept_ui_bp"]

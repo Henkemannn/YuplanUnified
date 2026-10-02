@@ -30,6 +30,7 @@
 </head>
 <body>
   {% set shell_variant = (vm.get('shell_variant') if vm is defined and vm is mapping else '') %}
+  {% set shell_hide_sidebar = (hide_sidebar if hide_sidebar is defined else (vm.get('shell_hide_sidebar') if vm is defined and vm is mapping and vm.get('shell_hide_sidebar') is not none else false)) %}
   {% set shell_site_label = (vm.get('site_display_name') if vm is defined and vm is mapping and vm.get('site_display_name') else current_site_name) %}
   {% set shell_tenant_label = (vm.get('shell_tenant_label') if vm is defined and vm is mapping and vm.get('shell_tenant_label') else tenant_name) %}
   {% set user_display = session.get('full_name') or session.get('user_email') or session.get('username') or 'Inloggad' %}
@@ -44,7 +45,7 @@
   {% else %}
     {% set user_label = user_display %}
   {% endif %}
-  <div class="app-shell app-shell--full{% if shell_variant == 'kitchen_product' %} app-shell--kitchen-product{% endif %}" aria-label="Yuplan premium app shell" data-testid="app-shell" {% if shell_variant %}data-shell-variant="{{ shell_variant }}"{% endif %}>
+  <div class="app-shell app-shell--full is-ready{% if shell_variant == 'kitchen_product' %} app-shell--kitchen-product{% endif %}" aria-label="Yuplan premium app shell" data-testid="app-shell" {% if shell_variant %}data-shell-variant="{{ shell_variant }}"{% endif %}>
     {% set env_raw = (config.get('DEPLOY_ENV') or config.get('APP_ENV') or 'local') %}
     {% set env_lower = env_raw | lower %}
     {% if env_lower in ('prod', 'production') %}
@@ -116,7 +117,8 @@
       </div>
     {% endif %}
 
-    <div class="app-shell__body">
+    <div class="app-shell__body{% if shell_hide_sidebar %} app-shell__body--no-sidebar{% endif %}">
+      {% if not shell_hide_sidebar %}
       <aside class="app-shell__sidebar" aria-label="Huvudnavigering">
         <div class="app-shell__sidebar-panel">
           {% set current_path = request.path or '' %}
@@ -152,6 +154,10 @@
             <nav class="app-shell__nav">
               <a class="app-shell__nav-item {% if current_path.startswith(sa_overview_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_overview_url }}">Översikt</a>
               <a class="app-shell__nav-item {% if current_path.startswith(sa_customers_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_customers_url }}">Kunder</a>
+            </nav>
+          {% elif nav_context == 'portal_department' %}
+            <nav class="app-shell__nav">
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/portal/department') %}app-shell__nav-item--active{% endif %}" href="{{ portal_home_url or url_for('portal_dept_ui.portal_department_home_ui') }}">Avdelningsportal</a>
             </nav>
           {% elif nav_context == 'admin' %}
             <nav class="app-shell__nav">
@@ -196,12 +202,13 @@
               <a class="app-shell__nav-item {% if current_path.startswith('/ui/reports') %}app-shell__nav-item--active{% endif %}" href="{{ report_url }}">Rapport</a>
               <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin/specialkost') %}app-shell__nav-item--active{% endif %}" href="{{ specialkost_url }}">Specialkost</a>
               {# Admin hidden in pilot #}
-              <a class="app-shell__nav-item {% if current_path.startswith('/ui/portal/week') %}app-shell__nav-item--active{% endif %}" href="{{ portal_url }}">Avdelningsportal</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/portal/') %}app-shell__nav-item--active{% endif %}" href="{{ portal_home_url or portal_url }}">Avdelningsportal</a>
             </nav>
           {% endif %}
           <div class="app-shell__sidebar-footer">Yuplan</div>
         </div>
       </aside>
+      {% endif %}
 
       <main class="app-shell__main">
         {% block content %}{% endblock %}
