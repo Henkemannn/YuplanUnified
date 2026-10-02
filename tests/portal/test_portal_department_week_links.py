@@ -36,3 +36,26 @@ def test_portal_links_removed_from_canonical_department_portal(client_admin):
     assert "Visa rapport" not in html
     assert "/ui/weekview?" not in html
     assert "/ui/reports/weekview?" not in html
+
+
+def test_portal_week_links_preserve_explicit_department_context(client_admin):
+    year = 2025
+    week = 47
+    dept_id = "11112222-3333-4444-5555-666677778888"
+    site_id = "aaaa2222-bbbb-cccc-dddd-eeeeffff0000"
+    from core.db import get_session
+    db = get_session()
+    try:
+        _seed(db, dept_id, site_id, year, week)
+    finally:
+        db.close()
+    resp = client_admin.get(
+        f"/ui/portal/department/week?year={year}&week={week}&department_id={dept_id}",
+        environ_overrides={"test_claims": {"department_id": dept_id}},
+    )
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert f"/ui/portal/department?department_id={dept_id}" in html
+    assert f"/ui/portal/department/week?year={year}&amp;week={week}&amp;department_id={dept_id}" in html
+    assert "portal-week-selector" in html
+    assert f"/portal/department/menu-choice/change?department_id={dept_id}" in html

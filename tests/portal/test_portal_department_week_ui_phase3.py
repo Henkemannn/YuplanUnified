@@ -49,8 +49,6 @@ def test_portal_department_week_ui_has_menu_popup_markup(client_admin):
     resp = client_admin.get(f"/ui/portal/department/week?year={year}&week={week}", environ_overrides={"test_claims": {"department_id": dept_id}})
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
-    assert "<th>Meny</th>" in html
-    assert "class=\"portal-menu-btn\"" in html or "class=\"portal-menu-btn portal-menu-btn" in html
-    assert "data-kvallsmat=" in html
-    assert "id=\"portal-menu-overlay\"" in html
-    assert "Kvällsmat</h3>" in html
+    assert "portal-choice-row" in html
+    assert "portal-week-guidance" not in html
+    assert "portal-menu-overlay" not in html

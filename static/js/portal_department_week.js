@@ -1,453 +1,292 @@
 document.addEventListener("DOMContentLoaded", () => {
   const root = document.getElementById("portal-dept-week-root");
   if (!root) return;
-  const params = new URLSearchParams(window.location.search);
-  const demoMode = params.get("demo") === "1"; // Non-blocking conflict UX for first-time demo
-  // Expose globally for showConflictOverlay logic
-  window.portalDemoMode = demoMode;
-  // Safety: ensure conflict overlay is hidden (user reported persistent overlay on initial load)
-  const initialOverlay = document.getElementById("portal-conflict-overlay");
-  if (initialOverlay) initialOverlay.hidden = true;
-  let menuChoiceEtag = root.dataset.menuChoiceEtag;
-  const year = parseInt(root.dataset.year || "0", 10);
-  const week = parseInt(root.dataset.week || "0", 10);
+
+  const year = Number.parseInt(root.dataset.year || "0", 10);
+  const week = Number.parseInt(root.dataset.week || "0", 10);
+  let menuChoiceEtag = root.dataset.menuChoiceEtag || "";
+  const weekChangeUrl = root.dataset.weekChangeUrl || "/portal/department/menu-choice/change";
+  const weekStatusUrl = root.dataset.weekStatusUrl || "";
+  const weekSubmitUrl = root.dataset.weekSubmitUrl || "";
+  const progressCountEl = document.getElementById("portal-progress-count");
+  const weekStateEl = document.getElementById("portal-week-state");
   const statusEl = document.getElementById("portal-status-message");
-  // Popup elements
-  const overlay = document.getElementById("portal-menu-overlay");
-  const modal = overlay ? overlay.querySelector(".portal-menu-modal") : null;
-  const closeBtn = overlay ? overlay.querySelector(".portal-menu-close-btn") : null;
-  const dayEl = overlay ? overlay.querySelector(".portal-menu-day") : null;
-  const lunchAlt1El = overlay ? overlay.querySelector(".portal-menu-lunch-alt1") : null;
-  const lunchAlt2El = overlay ? overlay.querySelector(".portal-menu-lunch-alt2") : null;
-  const dessertEl = overlay ? overlay.querySelector(".portal-menu-dessert") : null;
-  const kvallsmatEl = overlay ? overlay.querySelector(".portal-menu-kvallsmat") : null;
+  const submitButton = document.getElementById("portal-submit-button");
+  const weekSelector = document.getElementById("portal-week-selector");
+  const scrollOwner = document.getElementById("portal-week-scroll");
+  const dayCards = Array.from(document.querySelectorAll("[data-day-card]"));
+  const choiceButtons = Array.from(document.querySelectorAll("[data-choice-button]"));
+
+  const WEEKDAY_CODE_BY_LABEL = {
+    Måndag: "mon",
+    Tisdag: "tue",
+    Onsdag: "wed",
+    Torsdag: "thu",
+    Fredag: "fri",
+    Lördag: "sat",
+    Söndag: "sun",
+  };
 
   function setStatus(message, kind) {
     if (!statusEl) return;
-    statusEl.innerHTML = message || "";
-    if (kind) statusEl.dataset.kind = kind; else delete statusEl.dataset.kind;
+    statusEl.textContent = message || "";
+    if (kind) {
+      statusEl.dataset.kind = kind;
+    } else {
+      delete statusEl.dataset.kind;
+    }
   }
-  // Expose for external helpers (bindConflictReloadIfVisible defined outside this closure)
-  window.portalSetStatus = setStatus;
 
-  const WEEKDAY_CODE_BY_LABEL = {
-    "Måndag": "mon",
-    "Tisdag": "tue",
-    "Onsdag": "wed",
-    "Torsdag": "thu",
-    "Fredag": "fri",
-    "Lördag": "sat",
-    "Söndag": "sun",
-  };
+  function setWeekState(text) {
+    if (weekStateEl) {
+      weekStateEl.textContent = text;
+    }
+  }
 
-  function getWeekdayLabel(row) {
-    const dayNameCell = row.querySelector(".portal-day-name");
-    if (!dayNameCell) return "";
-    const label = dayNameCell.querySelector("div")?.textContent || dayNameCell.textContent || "";
-    return String(label).trim();
+  function setWeekStateFromSubmission(statusData) {
+    const completed = Number(statusData?.completed_choice_count ?? getCompletedRequiredCount());
+    const submissionIsCurrent = Boolean(statusData?.submission_is_current);
+    if (submissionIsCurrent) {
+      setWeekState("Färdig");
+      return;
+    }
+    if (completed === 0) {
+      setWeekState("Ej påbörjad");
+      return;
+    }
+    setWeekState("Påbörjad");
+  }
+
+  function getRequiredCards() {
+    return dayCards.filter((card) => card.dataset.choiceRequired === "1");
+  }
+
+  function getCompletedRequiredCount() {
+    return getRequiredCards().filter((card) => {
+      const selectedAlt = card.dataset.selectedAlt || "";
+      return selectedAlt === "Alt1" || selectedAlt === "Alt2";
+    }).length;
+  }
+
+  function updateProgressText(completed, required) {
+    if (progressCountEl) {
+      progressCountEl.textContent = `${completed} av ${required} val gjorda`;
+    }
+  }
+
+  function syncButtonSelection(card, selectedAlt) {
+    card.dataset.selectedAlt = selectedAlt || "";
+    card.classList.toggle("is-selected", Boolean(selectedAlt));
+    const buttons = Array.from(card.querySelectorAll("[data-choice-button]"));
+    buttons.forEach((button) => {
+      const isSelected = button.dataset.selectedAlt === selectedAlt;
+      button.classList.toggle("is-selected", isSelected);
+      button.classList.toggle("portal-alt-selected", isSelected);
+      button.setAttribute("aria-pressed", isSelected ? "true" : "false");
+    });
+    syncDayStatus(card, selectedAlt);
+  }
+
+  function syncDayStatus(card, selectedAlt) {
+    const statusEl = card.querySelector(".portal-day-row__status");
+    if (!statusEl || card.dataset.choiceRequired !== "1") return;
+    const isSelected = Boolean(selectedAlt);
+    statusEl.textContent = isSelected ? "Val gjort" : "Val krävs";
+    statusEl.classList.toggle("portal-day-row__status--done", isSelected);
+    statusEl.classList.toggle("portal-day-row__status--required", !isSelected);
+  }
+
+  function syncAllSelectionStates() {
+    choiceButtons.forEach((button) => {
+      const card = button.closest("[data-day-card]");
+      if (!card) return;
+      const selectedAlt = card.dataset.selectedAlt || "";
+      const isSelected = button.dataset.selectedAlt === selectedAlt;
+      button.classList.toggle("is-selected", isSelected);
+      button.classList.toggle("portal-alt-selected", isSelected);
+      button.setAttribute("aria-pressed", isSelected ? "true" : "false");
+    });
+    dayCards.forEach((card) => syncDayStatus(card, card.dataset.selectedAlt || ""));
+    updateProgressText(getCompletedRequiredCount(), getRequiredCards().length);
   }
 
   function weekdayDisplayToApiCode(weekdayDisplay) {
     return WEEKDAY_CODE_BY_LABEL[String(weekdayDisplay || "").trim()] || "";
   }
 
-  function applySelectionHighlight(weekdayName, selectedAlt) {
-    const rows = document.querySelectorAll(".portal-day-row");
-    rows.forEach((row) => {
-      const dayNameCell = row.querySelector(".portal-day-name");
-      if (!dayNameCell) return;
-      const label = dayNameCell.textContent || "";
-      if (!label.includes(weekdayName)) return;
-      const alt1 = row.querySelector(".portal-alt1-cell");
-      const alt2 = row.querySelector(".portal-alt2-cell");
-      if (alt1) {
-        const isSelected = selectedAlt === "Alt1";
-        alt1.classList.toggle("portal-alt-selected", isSelected);
-        alt1.setAttribute("aria-pressed", isSelected ? "true" : "false");
-      }
-      if (alt2) {
-        const isSelected = selectedAlt === "Alt2";
-        alt2.classList.toggle("portal-alt-selected", isSelected);
-        alt2.setAttribute("aria-pressed", isSelected ? "true" : "false");
-      }
-    });
+  function updateWeekScrollFadeState() {
+    if (!scrollOwner) return;
+    const hasOverflow = scrollOwner.scrollHeight > scrollOwner.clientHeight + 2;
+    const showTopFade = hasOverflow && scrollOwner.scrollTop > 1;
+    const showBottomFade = hasOverflow && scrollOwner.scrollTop + scrollOwner.clientHeight < scrollOwner.scrollHeight - 1;
+    scrollOwner.classList.toggle("has-scroll-top-fade", showTopFade);
+    scrollOwner.classList.toggle("has-scroll-bottom-fade", showBottomFade);
   }
 
-  function syncProgressFromDOM() {
-    const rows = Array.from(document.querySelectorAll(".portal-day-row"));
-    const dots = Array.from(document.querySelectorAll(".portal-week-dot"));
-    if (!rows.length || !dots.length) return;
-    let selectedCount = 0;
-    rows.forEach((row, index) => {
-      const weekdayLabel = getWeekdayLabel(row);
-      const alt1 = row.querySelector(".portal-alt1-cell");
-      const alt2 = row.querySelector(".portal-alt2-cell");
-      const isSelected = Boolean((alt1 && alt1.classList.contains("portal-alt-selected")) || (alt2 && alt2.classList.contains("portal-alt-selected")));
-      if (isSelected) selectedCount += 1;
-      const dot = dots[index];
-      if (dot) {
-        dot.classList.toggle("chosen", isSelected);
-        dot.setAttribute("aria-label", `${weekdayLabel}${isSelected ? " vald" : " ej vald"}`);
-      }
-    });
-    const totalCount = dots.length;
-    const progressText = `${selectedCount} / ${totalCount}`;
-    const progressLine = document.querySelector(".portal-progress p");
-    const progressCount = document.querySelector(".portal-week-status-count");
-    if (progressLine) progressLine.textContent = `Valda dagar: ${progressText}`;
-    if (progressCount) progressCount.textContent = progressText;
+  function bindWeekScrollFadeState() {
+    if (!scrollOwner || scrollOwner.dataset.scrollFadeBound === "1") return;
+    scrollOwner.dataset.scrollFadeBound = "1";
+    const scheduleUpdate = () => {
+      window.requestAnimationFrame(updateWeekScrollFadeState);
+    };
+    scrollOwner.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+    scheduleUpdate();
   }
 
-  function getSelectionStateSnapshot() {
-    const snapshot = new Map();
-    const rows = document.querySelectorAll(".portal-day-row");
-    rows.forEach((row) => {
-      const weekdayLabel = getWeekdayLabel(row);
-      const alt1 = row.querySelector(".portal-alt1-cell");
-      const alt2 = row.querySelector(".portal-alt2-cell");
-      let selectedAlt = null;
-      if (alt1 && alt1.classList.contains("portal-alt-selected")) selectedAlt = "Alt1";
-      if (alt2 && alt2.classList.contains("portal-alt-selected")) selectedAlt = "Alt2";
-      snapshot.set(weekdayLabel, selectedAlt);
-    });
-    return snapshot;
-  }
+  function setSubmitState(statusData) {
+    if (!submitButton) return;
+    const completed = Number(statusData?.completed_choice_count ?? getCompletedRequiredCount());
+    const required = Number(statusData?.required_choice_count ?? getRequiredCards().length);
+    const isSubmittable = Boolean(statusData?.is_submittable);
+    const submissionIsCurrent = Boolean(statusData?.submission_is_current);
 
-  function applySelectionState(selectionByWeekday) {
-    const rows = document.querySelectorAll(".portal-day-row");
-    rows.forEach((row) => {
-      const weekdayLabel = getWeekdayLabel(row);
-      applySelectionHighlight(weekdayLabel, selectionByWeekday.get(weekdayLabel) || null);
-    });
-    syncProgressFromDOM();
-  }
+    updateProgressText(completed, required);
 
-  let autoRetriedOnce = false; // for demo mode auto-retry
-  function handleAltClick(cell) {
-    const weekdayName = cell.dataset.weekday;
-    const weekdayCode = weekdayDisplayToApiCode(weekdayName);
-    const selectedAlt = cell.dataset.selectedAlt;
-    const previousSelectionState = getSelectionStateSnapshot();
-    if (!weekdayName || !weekdayCode || !selectedAlt || !menuChoiceEtag) return;
-    setStatus("Sparar val…", "saving");
-    fetch("/portal/department/menu-choice/change", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "If-Match": menuChoiceEtag,
-      },
-      body: JSON.stringify({ year, week, weekday: weekdayCode, selected_alt: selectedAlt }),
-    })
-      .then(async (resp) => {
-        if (resp.status === 200) {
-          const data = await resp.json();
-          if (data && data.new_etag) {
-            menuChoiceEtag = data.new_etag;
-            root.dataset.menuChoiceEtag = data.new_etag;
-          }
-          applySelectionHighlight(weekdayName, selectedAlt);
-          syncProgressFromDOM();
-          setStatus("Val sparat.", "ok");
-        } else if (resp.status === 412) {
-          applySelectionState(previousSelectionState);
-          // Concurrency conflict.
-          if (demoMode) {
-            // Demo: try silent refresh; if still stale, do a one-time full reload
-            setStatus("Demo: uppdaterar…", "conflict");
-            attemptSilentRefresh().then((ok) => {
-              if (ok) {
-                setStatus("Demo: uppdaterad – försök igen.", "ok");
-              } else if (!autoRetriedOnce) {
-                autoRetriedOnce = true;
-                setStatus("Demo: laddar om för att komma i synk…", "conflict");
-                const url = new URL(window.location.href);
-                url.searchParams.set("r", Date.now().toString());
-                window.location.assign(url.toString());
-              } else {
-                setStatus("Demo: kunde inte uppdatera.", "error");
-              }
-            }).catch(() => {
-              setStatus("Demo: fel vid uppdatering.", "error");
-            });
-            return;
-          }
-          // Normal mode: attempt silent refresh of portal state so user can retry without full reload.
-          setStatus("Konflikt upptäckt – försöker uppdatera…", "conflict");
-          attemptSilentRefresh().then((ok) => {
-            if (ok) {
-              setStatus("Uppdaterad – försök igen.", "ok");
-              return; // Skip showing overlay since we've refreshed.
-            }
-            // Fall back to overlay reload UX if refresh failed.
-            setStatus("Informationen är utdaterad – välj åtgärd.", "conflict");
-            showConflictOverlay();
-          }).catch(() => {
-            // On unexpected error just show overlay
-            showConflictOverlay();
-          });
-          return;
-        } else if (resp.status === 400) {
-          applySelectionState(previousSelectionState);
-          setStatus("Ogiltig förfrågan – försök igen eller kontakta admin.", "error");
-        } else {
-          applySelectionState(previousSelectionState);
-          setStatus("Ett fel uppstod vid sparning.", "error");
-        }
-      })
-      .catch(() => {
-        applySelectionState(previousSelectionState);
-        setStatus("Nätverksfel – försök igen.", "error");
-      });
-  }
-
-  function attachHandlers() {
-    const cells = document.querySelectorAll(".portal-alt1-cell, .portal-alt2-cell");
-    cells.forEach((cell) => {
-      cell.addEventListener("click", () => handleAltClick(cell));
-      cell.addEventListener("keydown", (ev) => {
-        if (ev.key === "Enter" || ev.key === " ") {
-          ev.preventDefault();
-          handleAltClick(cell);
-        }
-      });
-    });
-    attachMenuHandlers();
-    // bindConflictReloadIfVisible(); // Removed - overlay permanently disabled
-  }
-
-  function openMenuPopup(btn) {
-    if (!overlay || !modal) return;
-    const weekday = btn.dataset.weekday || "";
-    const date = btn.dataset.date || "";
-    const lunchAlt1 = btn.dataset.lunchAlt1 || "";
-    const lunchAlt2 = btn.dataset.lunchAlt2 || "";
-    const dessert = btn.dataset.dessert || "";
-    const kvallsmat = btn.dataset.kvallsmat || "";
-    if (dayEl) dayEl.textContent = `${weekday} – ${date}`;
-    if (lunchAlt1El) lunchAlt1El.textContent = lunchAlt1 || "Ingen menytext";
-    if (lunchAlt2El) lunchAlt2El.textContent = lunchAlt2 || "Ingen menytext";
-    if (dessertEl) dessertEl.textContent = dessert || "Ingen dessert";
-    if (kvallsmatEl) kvallsmatEl.textContent = kvallsmat || "Ingen kvällsmat";
-    overlay.hidden = false;
-    if (modal) modal.focus();
-  }
-
-  function closeMenuPopup() {
-    if (!overlay) return;
-    overlay.hidden = true;
-  }
-
-  function attachMenuHandlers() {
-    const menuButtons = document.querySelectorAll(".portal-menu-btn");
-    menuButtons.forEach((btn) => {
-      btn.addEventListener("click", () => openMenuPopup(btn));
-      btn.addEventListener("keydown", (ev) => {
-        if (ev.key === "Enter" || ev.key === " ") {
-          ev.preventDefault();
-          openMenuPopup(btn);
-        }
-      });
-    });
-    if (closeBtn) closeBtn.addEventListener("click", closeMenuPopup);
-    if (overlay) {
-      overlay.addEventListener("click", (ev) => {
-        if (ev.target === overlay) closeMenuPopup();
-      });
+    if (submissionIsCurrent) {
+      submitButton.textContent = "Färdig";
+      submitButton.disabled = true;
+      setWeekStateFromSubmission(statusData);
+      return;
     }
-    document.addEventListener("keydown", (ev) => {
-      if (ev.key === "Escape" && overlay && !overlay.hidden) closeMenuPopup();
-    });
+
+    submitButton.textContent = "Skicka val till köket";
+    submitButton.disabled = !isSubmittable;
+    setWeekStateFromSubmission(statusData);
   }
 
-  attachHandlers();
-  syncProgressFromDOM();
-  // Auto attempt refresh if overlay somehow visible on initial load
-  const initialConflict = document.getElementById("portal-conflict-overlay");
-  if (initialConflict && !initialConflict.hidden) {
-    attemptSilentRefresh().then((ok) => {
-      if (ok) {
-        initialConflict.hidden = true;
-        root.classList.remove("portal-conflict-active");
-        setStatus("Uppdaterad – försök igen.", "ok");
-      }
-    });
-  }
-
-  // Phase 7: periodic ETag check (every 20s) to detect remote changes
-  const syncIndicator = document.getElementById("portal-sync-indicator");
-  function checkSync() {
-    if (!root || !syncIndicator) return;
-    const current = root.dataset.menuChoiceEtag;
-    const year = root.dataset.year;
-    const week = root.dataset.week;
-    if (!current || !year || !week) return;
-    const url = `/portal/department/week?year=${year}&week=${week}`;
-    fetch(url, { method: "HEAD" })
-      .then((resp) => {
-        const etag = resp.headers.get("ETag");
-        if (etag && etag !== current) {
-          syncIndicator.classList.add("stale");
-          syncIndicator.textContent = "Ej synkad – ladda om";
-        }
-      })
-      .catch(() => { /* ignore network errors for indicator */ });
-  }
-  setInterval(checkSync, 20000);
-});
-
-function showConflictOverlay() {
-  // Overlay permanently disabled – never show modal.
-  const conflict = document.getElementById("portal-conflict-overlay");
-  const root = document.getElementById("portal-dept-week-root");
-  if (conflict) conflict.hidden = true;
-  if (root) root.classList.remove('portal-conflict-active');
-  console.log("[portal] Conflict overlay suppressed");
-  return;
-}
-
-function _showConflictOverlayActual(root, conflict, reloadBtn, infoEl, retryBtn) {
-  if (conflict) {
-    conflict.hidden = false;
-    if (root) root.classList.add("portal-conflict-active");
-  }
-  const statusEl = document.getElementById("portal-status-message");
-  if (statusEl) {
-    statusEl.textContent = "";
-    statusEl.setAttribute("aria-hidden", "true");
-  }
-  if (reloadBtn) reloadBtn.focus();
-  bindConflictReloadIfVisible();
-  if (infoEl) {
-    infoEl.hidden = false;
-    infoEl.textContent = "Data har ändrats av någon annan. Uppdatera innan du sparar igen.";
-  }
-  if (retryBtn && !retryBtn.dataset.bound) {
-    retryBtn.dataset.bound = "1";
-    retryBtn.addEventListener("click", () => {
-      retryBtn.disabled = true;
-      if (infoEl) infoEl.textContent = "Försöker hämta…";
-      attemptSilentRefresh().then((ok2) => {
-        if (ok2) {
-          if (conflict) conflict.hidden = true;
-          if (root) root.classList.remove("portal-conflict-active");
-          if (typeof window.portalSetStatus === 'function') window.portalSetStatus("Uppdaterad – försök igen.", "ok");
-        } else {
-          if (infoEl) infoEl.textContent = "Misslyckades. Använd Ladda om.";
-          retryBtn.disabled = false;
-        }
-      }).catch(() => {
-        if (infoEl) infoEl.textContent = "Fel vid hämtning. Använd Ladda om.";
-        retryBtn.disabled = false;
-      });
-    });
-  }
-}
-
-// Fetch latest week JSON to update menu choice etag & selections without full page reload.
-async function attemptSilentRefresh() {
-  try {
-    const root = document.getElementById("portal-dept-week-root");
-    if (!root) return false;
-    const year = parseInt(root.dataset.year || "0", 10);
-    const week = parseInt(root.dataset.week || "0", 10);
-    const url = new URL(window.location.origin + `/portal/department/week?year=${year}&week=${week}`);
-    url.searchParams.set("_", Date.now().toString()); // cache-bust
-    console.log("[portal] silent refresh fetch", url.toString());
-    const resp = await fetch(url.toString(), { headers: { "Accept": "application/json" }, credentials: "same-origin" });
-    if (!resp.ok) {
-      console.warn("Silent refresh response not OK", resp.status);
-      // Fallback: fetch UI HTML and try to extract etag from root dataset
-      const uiUrl = new URL(window.location.origin + `/ui/portal/department/week?year=${year}&week=${week}`);
-      uiUrl.searchParams.set("rhtml", Date.now().toString());
-      console.log("[portal] fallback HTML fetch", uiUrl.toString());
-      try {
-        const htmlResp = await fetch(uiUrl.toString(), { credentials: "same-origin" });
-        if (!htmlResp.ok) return false;
-        const htmlText = await htmlResp.text();
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(htmlText, "text/html");
-        const newRoot = doc.getElementById("portal-dept-week-root");
-        if (newRoot && newRoot.dataset.menuChoiceEtag) {
-          root.dataset.menuChoiceEtag = newRoot.dataset.menuChoiceEtag;
-          console.log("[portal] fallback HTML updated etag", root.dataset.menuChoiceEtag);
-          return true;
-        }
-      } catch (e2) {
-        console.warn("Fallback HTML refresh failed", e2);
-      }
-      return false;
-    }
-    const payload = await resp.json();
-    if (!payload || !payload.etag_map || !payload.etag_map.menu_choice) return false;
-    // Update etag
-    root.dataset.menuChoiceEtag = payload.etag_map.menu_choice;
-    // Reapply current selections from payload days
-    if (Array.isArray(payload.days)) {
-      const selectionByWeekday = new Map();
-      payload.days.forEach((d) => {
-        if (!d || !d.weekday_name) return;
-        selectionByWeekday.set(d.weekday_name, d.choice && d.choice.selected_alt ? d.choice.selected_alt : null);
-      });
-      applySelectionState(selectionByWeekday);
-    }
-    console.log("[portal] silent refresh success, new etag", root.dataset.menuChoiceEtag);
-    return true;
-  } catch (e) {
-    console.warn("Silent refresh failed", e);
-    return false;
-  }
-}
-
-// Standalone helper so we can bind even if script loads after a pre-existing conflict state
-function bindConflictReloadIfVisible() {
-  // Permanently disabled - do nothing
-  return;
-  const overlay = document.getElementById("portal-conflict-overlay");
-  const btn = document.getElementById("portal-conflict-reload");
-  const dismissBtn = document.getElementById("portal-conflict-dismiss");
-  if (!overlay || !btn) return;
-  const forceReload = () => {
+  async function refreshSubmissionState() {
+    if (!weekStatusUrl) return;
     try {
-      const url = new URL(window.location.href);
-      // Remove any existing r param first (URL API replaces automatically but we ensure cleanliness)
-      url.searchParams.delete('r');
-      url.searchParams.set('r', Date.now().toString());
-      // Provide immediate feedback by disabling button and changing text
-      btn.disabled = true;
-      btn.textContent = 'Laddar…';
-      // Hide overlay to reduce perceived "stuck" state
-      overlay.hidden = true;
-      window.location.assign(url.toString());
-    } catch (e) {
-      // Fallback
-      window.location.reload();
+      const resp = await fetch(weekStatusUrl, { credentials: "same-origin" });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      setSubmitState(data);
+    } catch {
+      updateProgressText(getCompletedRequiredCount(), getRequiredCards().length);
     }
-  };
-  // Ensure we don't double attach
-  if (!btn.dataset.bound) {
-    btn.dataset.bound = '1';
-    btn.addEventListener('click', forceReload);
-    btn.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Enter' || ev.key === ' ') {
-        ev.preventDefault();
-        forceReload();
+  }
+
+  async function saveChoice(card, selectedAlt) {
+    const weekdayName = card.dataset.weekdayLabel || "";
+    const weekdayCode = weekdayDisplayToApiCode(weekdayName);
+    if (!weekdayCode || !selectedAlt || !menuChoiceEtag) return;
+    const previousSelectedAlt = card.dataset.selectedAlt || "";
+    setStatus("Sparar…", "saving");
+
+    try {
+      const resp = await fetch(weekChangeUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "If-Match": menuChoiceEtag,
+        },
+        body: JSON.stringify({ year, week, weekday: weekdayCode, selected_alt: selectedAlt }),
+      });
+
+      if (resp.status === 200) {
+        const data = await resp.json();
+        if (data?.new_etag) {
+          menuChoiceEtag = data.new_etag;
+          root.dataset.menuChoiceEtag = data.new_etag;
+        }
+        syncButtonSelection(card, selectedAlt);
+        syncAllSelectionStates();
+        await refreshSubmissionState();
+        setStatus("Val sparat.", "ok");
+        return;
       }
-    });
-  }
-  if (dismissBtn && !dismissBtn.dataset.bound) {
-    dismissBtn.dataset.bound = '1';
-    dismissBtn.addEventListener('click', () => {
-      overlay.hidden = true;
-      document.getElementById('portal-dept-week-root')?.classList.remove('portal-conflict-active');
-      const infoEl = document.getElementById('portal-conflict-info');
-      if (infoEl) infoEl.hidden = true;
-      if (typeof window.portalSetStatus === 'function') {
-        window.portalSetStatus("Fortsätter utan uppdatering.", "warn");
+
+      if (resp.status === 412) {
+        syncButtonSelection(card, previousSelectedAlt);
+        syncAllSelectionStates();
+        setStatus("Veckan har ändrats. Ladda om sidan.", "conflict");
+        window.location.reload();
+        return;
       }
+
+      syncButtonSelection(card, previousSelectedAlt);
+      syncAllSelectionStates();
+      setStatus("Kunde inte spara valet.", "error");
+    } catch {
+      syncButtonSelection(card, previousSelectedAlt);
+      syncAllSelectionStates();
+      setStatus("Nätverksfel – försök igen.", "error");
+    }
+  }
+
+  async function submitWeek() {
+    if (!weekSubmitUrl || !submitButton) return;
+    setStatus("Skickar val till köket…", "saving");
+    submitButton.disabled = true;
+
+    try {
+      const resp = await fetch(weekSubmitUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ year, week }),
+      });
+
+      if (!resp.ok) {
+        if (resp.status === 409) {
+          setStatus("Veckan är inte komplett ännu.", "error");
+        } else {
+          setStatus("Kunde inte skicka val till köket.", "error");
+        }
+        await refreshSubmissionState();
+        return;
+      }
+
+      const data = await resp.json();
+      setStatus("Val skickade till köket.", "ok");
+      setSubmitState(data);
+    } catch {
+      setStatus("Nätverksfel vid inlämning.", "error");
+      await refreshSubmissionState();
+    }
+  }
+
+  function bindEvents() {
+    if (weekSelector) {
+      weekSelector.addEventListener("change", () => {
+        if (weekSelector.value) {
+          window.location.assign(weekSelector.value);
+        }
+      });
+    }
+
+    choiceButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const card = button.closest("[data-day-card]");
+        const selectedAlt = button.dataset.selectedAlt || "";
+        if (!card || !selectedAlt) return;
+        saveChoice(card, selectedAlt);
+      });
+      button.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          button.click();
+        }
+      });
     });
+
+    if (submitButton) {
+      submitButton.addEventListener("click", () => {
+        if (!submitButton.disabled) {
+          submitWeek();
+        }
+      });
+    }
   }
-  // If overlay already visible (race) focus button
-  if (!overlay.hidden) {
-    btn.focus();
-  }
-}
+
+  bindEvents();
+  syncAllSelectionStates();
+  bindWeekScrollFadeState();
+  setSubmitState({
+    completed_choice_count: Number(root.dataset.initialCompletedCount || 0),
+    required_choice_count: Number(root.dataset.initialRequiredCount || 0),
+    is_submittable: false,
+    submission_is_current: false,
+  });
+  refreshSubmissionState();
+});

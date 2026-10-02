@@ -200,6 +200,7 @@ def test_department_portal_home_admin_explicit_department_context_still_works(cl
     html = resp.get_data(as_text=True)
     assert "Avd 1" in html
     assert "Solgläntans äldreboende" in html
+    assert f"/ui/portal/department/week?year=2026&amp;week=40&amp;department_id={DEPT_ID}" in html
     assert 'data-theme-toggle' in html
     assert 'class="app-shell__sidebar"' not in html
 

@@ -45,9 +45,6 @@ def test_portal_department_week_ui_phase4(client_admin):
     resp = client_admin.get(f"/ui/portal/department/week?year={year}&week={week}", environ_overrides={"test_claims": {"department_id": dept_id}})
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
-    assert "portal-week-status" in html
-    assert "portal-week-status-label" in html and "Valda dagar:" in html
-    dot_count = len(re.findall(r"portal-week-dot", html))
-    assert dot_count >= 7
-    assert "portal-week-dot chosen" in html
-    assert re.search(r"\b[0-7]\s*/\s*7\b", html)
+    assert "portal-week-progressline" in html
+    assert "0 av 4 val gjorda" in html or re.search(r"\b[0-9]+ av [0-9]+ val gjorda\b", html)
+    assert "portal-week-dot" not in html

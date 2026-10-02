@@ -62,11 +62,8 @@ def test_portal_department_week_ui_phase2_markup(client_admin):
     html = resp.get_data(as_text=True)
     assert 'id="portal-dept-week-root"' in html
     assert 'data-menu-choice-etag="' in html
-    assert 'class="portal-alt-cell portal-alt1-cell' in html
-    assert 'class="portal-alt-cell portal-alt2-cell' in html
-    assert 'data-weekday="Måndag"' in html or 'data-weekday="Tisdag"' in html
-    assert 'data-selected-alt="Alt1"' in html
-    assert 'data-selected-alt="Alt2"' in html
-    assert 'role="button"' in html
-    assert 'tabindex="0"' in html
+    assert 'portal-day-row' in html
+    assert 'portal-choice-row' in html
+    assert 'portal-choice-btn' not in html
     assert 'id="portal-status-message"' in html
+    assert 'portal-submit-button' in html

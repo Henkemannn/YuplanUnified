@@ -77,11 +77,54 @@ def test_portal_department_week_ui_renders_page(client_admin, seed_portal_depart
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
     assert "Vecka 47" in html
-    assert "Avd 1" in html
-    assert "Faktaruta" in html
-    assert "Inga risrätter" in html
-    assert "Pannbiff med lök" in html
-    assert "Legacy Pannbiff" not in html
-    assert "Valda dagar:" in html
-    assert "portal-alt-selected" in html  # Monday Alt2 highlight
-    assert "Gluten" in html or "Laktos" in html
+    assert "app-shell__body--no-sidebar" in html
+    assert "portal-week-progressline" in html
+    assert "Val gjort" in html
+    assert "portal-day-row" in html
+    assert "portal-choice-row" in html
+    assert "Skicka val till köket" in html
+    assert "portal-week-table" not in html
+    assert "Faktaruta" not in html
+    assert "portal-week-status" not in html
+    assert "portal-day-row__secondary" in html
+    assert "Alternativ 1" in html
+    assert "Alternativ 2" in html
+    assert "portal-week-selector" in html
+    assert "portal-alt-selected" in html
+    assert 'aria-pressed="true"' in html
+
+
+def test_portal_department_week_ui_renders_alt1_selected_state(client_admin, seed_portal_department_data, seed_canonical_builder_publication, seed_portal_menu_choice):
+    year = 2025
+    week = 47
+    dept_id = "22222222-3333-4444-5555-666666666667"
+    site_id = "bbbbbbbb-cccc-dddd-eeee-fffffffffff0"
+    seed_portal_department_data(dept_id=dept_id, site_id=site_id, year=year, week=week)
+    seed_canonical_builder_publication(
+        site_id=site_id,
+        year=year,
+        week=week,
+        alt1_name="Pannbiff",
+        alt1_menu_name="Pannbiff med lök",
+        alt2_name="Fisk",
+        dessert_name="Chokladpudding",
+        dinner_name="Kvällsgröt",
+    )
+    seed_portal_menu_choice(
+        tenant_id=1,
+        site_id=site_id,
+        department_id=dept_id,
+        year=year,
+        week=week,
+        weekday=1,
+        selected_variant="Alt1",
+    )
+    resp = client_admin.get(
+        f"/ui/portal/department/week?year={year}&week={week}",
+        environ_overrides={"test_claims": {"department_id": dept_id}},
+    )
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "Val gjort" in html
+    assert 'aria-pressed="true"' in html
+    assert "portal-alt-selected" in html

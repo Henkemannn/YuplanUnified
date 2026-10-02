@@ -1,224 +1,150 @@
-{% extends "_base.html" %}
-{% block title %}Avdelningsportal – Vecka {{ vm.week }}{% endblock %}
-{% block head %}
+{% extends "ui/_layout/app_shell_base.html" %}
+{% block page_title %}Avdelningsportal – Vecka {{ vm.week }}{% endblock %}
+{% macro full_date_label(iso_date) -%}
+  {% set month_names = {
+    '01': 'januari',
+    '02': 'februari',
+    '03': 'mars',
+    '04': 'april',
+    '05': 'maj',
+    '06': 'juni',
+    '07': 'juli',
+    '08': 'augusti',
+    '09': 'september',
+    '10': 'oktober',
+    '11': 'november',
+    '12': 'december',
+  } %}
+  {% set parts = iso_date.split('-') %}
+  {{ parts[2] | int }} {{ month_names[parts[1]] }}
+{%- endmacro %}
+{% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/portal_department_week.css') }}">
 {% endblock %}
 {% block content %}
-<div id="portal-dept-week-root" class="portal-dept-week"
-  {% if request.args.get('demo') == '1' %}data-disable-conflict="1"{% endif %}
+<div
+  id="portal-dept-week-root"
+  class="portal-dept-week"
   data-year="{{ vm.year }}"
   data-week="{{ vm.week }}"
-  data-menu-choice-etag="{{ vm.etag_map.menu_choice }}">
-  <header class="portal-header">
-    <div>
-      <h1>{{ vm.site_name }} – {{ vm.department_name }}</h1>
+  data-menu-choice-etag="{{ vm.etag_map.menu_choice }}"
+  data-week-change-url="{{ portal_week_change_url }}"
+  data-week-status-url="{{ portal_week_status_url }}"
+  data-week-submit-url="{{ portal_week_submit_url }}"
+  data-initial-required-count="{{ vm.choice_progress.required }}"
+  data-initial-completed-count="{{ vm.choice_progress.completed }}"
+>
+  <section class="app-shell__page-header portal-week-hero">
+    <div class="portal-week-hero-copy">
+      <a class="portal-week-backlink" href="{{ portal_home_url }}">← Alla veckor</a>
+      <h1 class="app-shell__title">Veckans menyval</h1>
+      <p class="app-shell__subtitle">{{ vm.department_name }}</p>
     </div>
-    <div class="portal-week-nav">
-      <a href="{{ url_for('portal_dept_ui.portal_department_week_ui', year=vm.year, week=vm.week-1) }}">← Föregående</a>
-      <div class="portal-week-nav-center">
-        <div class="portal-week-badge">Vecka {{ vm.week }}</div>
-        <div class="portal-week-span">{{ vm.week_span_label }}</div>
+
+    <div class="portal-week-hero-actions">
+      <label class="portal-week-selector" for="portal-week-selector">
+        <span class="sr-only">Välj vecka</span>
+        <select id="portal-week-selector" class="portal-week-selector__control" aria-label="Välj vecka">
+          {% for option in portal_week_options %}
+            <option value="{{ option.url }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
+        <span class="portal-week-selector__chevron" aria-hidden="true">▾</span>
+      </label>
+      <div class="portal-week-progressline" aria-live="polite">
+        <span id="portal-progress-count">{{ vm.choice_progress.completed }} av {{ vm.choice_progress.required }} val gjorda</span>
+        <span id="portal-week-state">Ej påbörjad</span>
       </div>
-      <a href="{{ url_for('portal_dept_ui.portal_department_week_ui', year=vm.year, week=vm.week+1) }}">Nästa →</a>
-    </div>
-  </header>
-
-  <section class="portal-facts">
-    <h2>Faktaruta</h2>
-    {% if vm.facts.note %}
-      <p>{{ vm.facts.note }}</p>
-    {% else %}
-      <p class="portal-facts-empty">Ingen särskild information angiven.</p>
-    {% endif %}
-    <div class="portal-facts-residents">
-      {% if vm.facts.residents_default_lunch %}
-        <span>Standard lunch: {{ vm.facts.residents_default_lunch }} boende</span>
-      {% endif %}
-      {% if vm.facts.residents_default_dinner %}
-        <span>Standard kväll: {{ vm.facts.residents_default_dinner }} boende</span>
-      {% endif %}
     </div>
   </section>
 
-  <section class="portal-progress">
-    <p>Valda dagar: {{ vm.progress.days_with_choice }} / {{ vm.progress.total_days }}</p>
-  </section>
+  <section id="portal-week-scroll" class="portal-week-grid" aria-label="Veckans dagar" data-scroll-owner>
+    {% for day in vm.days %}
+      {% set menu = day.menu %}
+      {% set choice = day.choice %}
+      {% set requires_choice = menu.lunch_alt1 and menu.lunch_alt2 %}
+      {% set selected_alt = choice.selected_alt or '' %}
+      {% if requires_choice %}
+        {% set day_status = 'Val gjort' if selected_alt else 'Val krävs' %}
+        {% set day_status_class = 'portal-day-row__status--done' if selected_alt else 'portal-day-row__status--required' %}
+      {% else %}
+        {% set day_status = '' %}
+      {% endif %}
+      <article
+        class="portal-day-row{% if selected_alt %} is-selected{% endif %}"
+        data-day-card
+        data-weekday-label="{{ day.weekday_name }}"
+        data-selected-alt="{{ selected_alt }}"
+        data-choice-required="{{ '1' if requires_choice else '0' }}"
+        data-day-date="{{ day.date }}"
+      >
+        <div class="portal-day-row__rail">
+          <div class="portal-day-row__heading">
+            <h2 class="portal-day-row__weekday">{{ day.weekday_name }}</h2>
+            <div class="portal-day-row__date">{{ full_date_label(day.date) }}</div>
+          </div>
+          {% if day_status %}
+            <div class="portal-day-row__status {{ day_status_class }}">{{ day_status }}</div>
+          {% endif %}
+        </div>
 
-  <div class="portal-week-status" aria-label="Översikt valda dagar" aria-live="polite">
-    <div class="portal-week-status-label">Valda dagar:</div>
-    <div class="portal-week-dots" role="list">
-      {% for day in vm.days %}
-        <div class="portal-week-dot{% if day.choice.selected_alt %} chosen{% endif %}" role="listitem" aria-label="{{ day.weekday_name }}{% if day.choice.selected_alt %} vald{% else %} ej vald{% endif %}"></div>
-      {% endfor %}
-    </div>
-    <div class="portal-week-status-count">{{ vm.progress.days_with_choice }} / {{ vm.progress.total_days }}</div>
-    <div id="portal-sync-indicator" class="portal-sync-indicator">Synkad</div>
-  </div>
-
-  <section class="portal-week-table-wrapper">
-    <table class="portal-week-table">
-      <thead>
-        <tr>
-          <th>Dag</th>
-          <th>Meny</th>
-          <th>Alt 1</th>
-          <th>Alt 2</th>
-          <th>Dessert</th>
-          <th>Kvällsmat</th>
-          <th>Boende (Lunch/Kväll)</th>
-          <th>Specialkost</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for day in vm.days %}
-          {% set menu = day.menu %}
-          {% set choice = day.choice %}
-          {% set flags = day.flags %}
-          {% set residents = day.residents %}
-          {% set diets = day.diets_summary %}
-          <tr class="portal-day-row">
-            <td class="portal-day-name">
-              <div>{{ day.weekday_name }}</div>
-              <div class="portal-day-date">{{ day.date }}</div>
-            </td>
-            <td class="portal-menu-cell">
-              <button
-                type="button"
-                class="portal-menu-btn"
-                data-weekday="{{ day.weekday_name }}"
-                data-date="{{ day.date }}"
-                data-lunch-alt1="{{ menu.lunch_alt1 or '' }}"
-                data-lunch-alt2="{{ menu.lunch_alt2 or '' }}"
-                data-dessert="{{ menu.dessert or '' }}"
-                data-kvallsmat="{{ menu.dinner or '' }}"
-                aria-label="Visa meny för {{ day.weekday_name }}"
-              >🍽</button>
-            </td>
-            <td
-              class="portal-alt-cell portal-alt1-cell {% if choice.selected_alt == 'Alt1' %}portal-alt-selected{% endif %}"
+        <div class="portal-day-row__content" aria-label="Val för {{ day.weekday_name }}">
+          {% if requires_choice %}
+            <button
+              type="button"
+              class="portal-choice-row{% if choice.selected_alt == 'Alt1' %} is-selected portal-alt-selected{% endif %}"
+              data-choice-button
               data-weekday="{{ day.weekday_name }}"
               data-selected-alt="Alt1"
+              aria-pressed="{{ 'true' if choice.selected_alt == 'Alt1' else 'false' }}"
               role="button"
               tabindex="0"
-              aria-pressed="{{ 'true' if choice.selected_alt == 'Alt1' else 'false' }}"
-              aria-label="Välj Alt 1 för {{ day.weekday_name }}"
             >
-              {{ menu.lunch_alt1 or "Ingen rätt" }}
-            </td>
-            <td
-              class="portal-alt-cell portal-alt2-cell {% if choice.selected_alt == 'Alt2' %}portal-alt-selected{% endif %}"
+              <span class="portal-choice-row__label">Alternativ 1</span>
+              <span class="portal-choice-row__copy">{{ menu.lunch_alt1 or 'Ingen rätt' }}</span>
+            </button>
+            <button
+              type="button"
+              class="portal-choice-row{% if choice.selected_alt == 'Alt2' %} is-selected portal-alt-selected{% endif %}"
+              data-choice-button
               data-weekday="{{ day.weekday_name }}"
               data-selected-alt="Alt2"
+              aria-pressed="{{ 'true' if choice.selected_alt == 'Alt2' else 'false' }}"
               role="button"
               tabindex="0"
-              aria-pressed="{{ 'true' if choice.selected_alt == 'Alt2' else 'false' }}"
-              aria-label="Välj Alt 2 för {{ day.weekday_name }}"
             >
-              {{ menu.lunch_alt2 or "Ingen rätt" }}
-            </td>
-            <td class="portal-dessert-cell">
-              {{ menu.dessert or "Ingen dessert" }}
-            </td>
-            <td class="portal-dinner-cell">
-              {{ menu.dinner or "Ingen rätt" }}
-            </td>
-            <td class="portal-residents-cell">
-              Lunch: {{ residents.lunch }}
-              {% if (residents.lunch or 0) > 0 %}
-                <span class="yp-badge-success">Registrerad</span>
-              {% else %}
-                <span class="yp-badge-muted">Ej gjord</span>
+              <span class="portal-choice-row__label">Alternativ 2</span>
+              <span class="portal-choice-row__copy">{{ menu.lunch_alt2 or 'Ingen rätt' }}</span>
+            </button>
+          {% else %}
+            <div class="portal-choice-row portal-choice-row--readonly">
+              <span class="portal-choice-row__label">Alternativ 1</span>
+              <span class="portal-choice-row__copy">{{ menu.lunch_alt1 or 'Ingen rätt' }}</span>
+            </div>
+            <div class="portal-day-row__info-row" aria-hidden="true">Endast ett lunchalternativ idag</div>
+          {% endif %}
+          {% if menu.dessert or menu.dinner %}
+            <div class="portal-day-row__secondary">
+              {% if menu.dessert %}
+                <span class="portal-day-row__secondary-item"><span class="portal-day-row__secondary-label">Dessert</span> {{ menu.dessert }}</span>
               {% endif %}
-              <br>
-              Kväll: {{ residents.dinner }}
-              {% if (residents.dinner or 0) > 0 %}
-                <span class="yp-badge-success">Registrerad</span>
-              {% else %}
-                <span class="yp-badge-muted">Ej gjord</span>
+              {% if menu.dinner %}
+                <span class="portal-day-row__secondary-separator">·</span>
+                <span class="portal-day-row__secondary-item"><span class="portal-day-row__secondary-label">Kvällsmat</span> {{ menu.dinner }}</span>
               {% endif %}
-            </td>
-            <td class="portal-diets-cell">
-              {% if day.has_diets %}
-                <span class="yuplan-diet-pill" aria-label="Specialkost registrerad">🍽 Specialkost</span>
-                {% if diets.lunch or diets.dinner %}
-                {% if diets.lunch %}
-                  <div><strong>Lunch:</strong>
-                    {% for d in diets.lunch %}
-                      {{ d.diet_name }} [{{ d.count }}]{% if not loop.last %}, {% endif %}
-                    {% endfor %}
-                  </div>
-                {% endif %}
-                {% if diets.dinner %}
-                  <div><strong>Kväll:</strong>
-                    {% for d in diets.dinner %}
-                      {{ d.diet_name }} [{{ d.count }}]{% if not loop.last %}, {% endif %}
-                    {% endfor %}
-                  </div>
-                {% endif %}
-                {% endif %}
-              {% else %}
-                <span>Ingen specialkost registrerad.</span>
-              {% endif %}
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    <div id="portal-status-message" class="portal-status" aria-live="polite"></div>
-    <!-- Menu overlay temporarily removed for demo/dev -->
-    <!--
-    <div id="portal-menu-overlay" class="portal-menu-overlay" hidden>
-      <div class="portal-menu-modal" role="dialog" aria-modal="true" aria-labelledby="portal-menu-title" tabindex="-1">
-        <div class="portal-menu-modal-header">
-          <h2 id="portal-menu-title">Meny</h2>
-          <button type="button" class="portal-menu-close-btn" aria-label="Stäng meny">✕</button>
+            </div>
+          {% endif %}
         </div>
-        <div class="portal-menu-modal-body">
-          <p class="portal-menu-day"></p>
-          <div class="portal-menu-section">
-            <h3>Lunch – Alt 1</h3>
-            <p class="portal-menu-lunch-alt1"></p>
-          </div>
-          <div class="portal-menu-section">
-            <h3>Lunch – Alt 2</h3>
-            <p class="portal-menu-lunch-alt2"></p>
-          </div>
-          <div class="portal-menu-section">
-            <h3>Dessert</h3>
-            <p class="portal-menu-dessert"></p>
-          </div>
-          <div class="portal-menu-section">
-            <h3>Kvällsmat</h3>
-            <p class="portal-menu-kvallsmat"></p>
-          </div>
-        </div>
-      </div>
-    </div>
-    -->
+      </article>
+    {% endfor %}
   </section>
-  <section class="portal-summary">
-    <h2>Summering</h2>
-    <p>Registrerad lunch: {{ vm.summary.registered_lunch_days }} dagar</p>
-    <p>Registrerad kväll: {{ vm.summary.registered_dinner_days }} dagar</p>
-    {% if vm.summary.diet_days_count is not none %}
-      <p>Dagar med specialkost: {{ vm.summary.diet_days_count }}</p>
-    {% endif %}
-  </section>
-  <!-- Conflict overlay permanently removed for demo/dev -->
-  <!--
-  <div id="portal-conflict-overlay" class="portal-conflict-overlay" hidden style="display:none">
-    <div class="portal-conflict-modal" role="dialog" aria-modal="true" aria-labelledby="portal-conflict-title" aria-describedby="portal-conflict-desc">
-      <h2 id="portal-conflict-title">Informationen är utdaterad</h2>
-      <p id="portal-conflict-desc">En annan användare har gjort ändringar. Ladda om sidan för att fortsätta.</p>
-      <p id="portal-conflict-info" class="portal-conflict-info" hidden></p>
-      <div class="portal-conflict-actions">
-        <button id="portal-conflict-try-refresh" type="button">Försök igen</button>
-        <button id="portal-conflict-reload" type="button" autofocus>Ladda om</button>
-        <button id="portal-conflict-dismiss" type="button">Fortsätt ändå</button>
-      </div>
+
+  <section class="portal-week-panel portal-week-submit-panel">
+    <div class="portal-week-submit-box">
+      <div id="portal-status-message" class="portal-status" aria-live="polite"></div>
+      <button id="portal-submit-button" type="button" class="portal-submit-button">Skicka val till köket</button>
     </div>
-  </div>
-  -->
+  </section>
 </div>
 {% endblock %}
 {% block scripts %}

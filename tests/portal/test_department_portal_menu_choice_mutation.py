@@ -165,3 +165,35 @@ def test_menu_choice_mutation_persists_reload_counts_and_reflects_canonical_week
     assert payload_after_tuesday["days"][1]["flags"]["alt2_lunch"] is False
     assert payload_after_tuesday["progress"]["days_with_choice"] == 2
     assert payload_after_tuesday["progress"]["total_days"] == 7
+
+
+def test_menu_choice_clear_restores_empty_state(client_admin):
+    from core.db import get_session
+
+    db = get_session()
+    try:
+        _seed_basic(db)
+    finally:
+        db.close()
+
+    old_etag, _ = _get_menu_choice_etag(client_admin)
+    set_resp = client_admin.post(
+        "/portal/department/menu-choice/change",
+        json={"year": YEAR, "week": WEEK, "weekday": "Mon", "selected_alt": "Alt2"},
+        headers={**_h(), "If-Match": old_etag},
+        environ_overrides={"test_claims": {"department_id": DEPT_ID}},
+    )
+    assert set_resp.status_code == 200
+    etag_after_set = set_resp.get_json()["new_etag"]
+
+    clear_resp = client_admin.post(
+        "/portal/department/menu-choice/change",
+        json={"year": YEAR, "week": WEEK, "weekday": "Mon", "selected_alt": None},
+        headers={**_h(), "If-Match": etag_after_set},
+        environ_overrides={"test_claims": {"department_id": DEPT_ID}},
+    )
+    assert clear_resp.status_code == 200
+    assert clear_resp.get_json()["selected_alt"] is None
+
+    _, payload_after_clear = _get_menu_choice_etag(client_admin)
+    assert payload_after_clear["days"][0]["choice"]["selected_alt"] is None

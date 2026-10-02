@@ -52,7 +52,8 @@ def test_portal_department_week_ui_diet_pill_and_summary(client_admin):
     resp = client_admin.get(f"/ui/portal/department/week?year={year}&week={week}", environ_overrides={"test_claims": {"department_id": dept_id}})
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
-    # Should show the pill at least once (Monday)
-    assert "Specialkost" in html
-    # Summary line present
-    assert "Dagar med specialkost" in html
+    assert "Ingen dessert" not in html
+    assert "Ingen kvällsmat" not in html
+    assert "portal-day-card__extra" not in html
+    assert "portal-submit-button" in html
+    assert "portal-menu-overlay" not in html

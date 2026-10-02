@@ -171,6 +171,39 @@ class MenuChoiceRepo:
         finally:
             db.close()
 
+    def clear_choice(
+        self,
+        *,
+        tenant_id: int,
+        site_id: str,
+        department_id: str,
+        year: int,
+        week: int,
+        weekday: int,
+        meal: str = "lunch",
+    ) -> None:
+        db = get_session()
+        try:
+            self._ensure_table(db)
+            existing = (
+                db.query(DepartmentMenuChoice)
+                .filter_by(
+                    tenant_id=int(tenant_id),
+                    site_id=str(site_id),
+                    department_id=str(department_id),
+                    year=int(year),
+                    week=int(week),
+                    weekday=int(weekday),
+                    meal=str(meal),
+                )
+                .first()
+            )
+            if existing is not None:
+                db.delete(existing)
+                db.commit()
+        finally:
+            db.close()
+
     def replace_alt2_days(
         self,
         *,

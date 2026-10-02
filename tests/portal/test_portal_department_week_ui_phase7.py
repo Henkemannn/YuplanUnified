@@ -37,5 +37,6 @@ def test_portal_department_week_ui_phase7_sync_indicator_present(client_admin):
     )
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
-    assert 'id="portal-sync-indicator"' in html
-    assert 'Synkad' in html
+    assert 'portal-sync-indicator' not in html
+    assert 'Synkad' not in html
+    assert 'data-week-api-url' not in html

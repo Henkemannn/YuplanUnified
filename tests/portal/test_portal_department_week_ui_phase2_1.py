@@ -47,9 +47,6 @@ def test_portal_department_week_ui_accessibility_markup(client_admin):
     html = resp.get_data(as_text=True)
     assert 'id="portal-status-message"' in html
     assert 'aria-live="polite"' in html
-    assert 'class="portal-alt-cell portal-alt1-cell' in html
-    assert 'class="portal-alt-cell portal-alt2-cell' in html
-    assert 'role="button"' in html
-    assert 'aria-pressed="true"' in html or 'aria-pressed="false"' in html
-    assert 'aria-label="Välj Alt 1 för' in html
-    assert 'aria-label="Välj Alt 2 för' in html
+    assert 'portal-day-row' in html
+    assert 'portal-choice-row' in html
+    assert 'portal-submit-button' in html

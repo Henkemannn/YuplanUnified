@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date as _date
+from datetime import date as _date, timedelta
 from flask import Blueprint, request, render_template, current_app, url_for
 
 from portal.department.auth import DepartmentPortalScope, resolve_department_portal_scope
@@ -63,10 +63,27 @@ def _format_sv_date_span(start_date: _date, end_date: _date) -> str:
     )
 
 
+def _format_sv_short_date(day: _date) -> str:
+    return f"{day.day} {_SV_MONTHS[day.month][:3]}"
+
+
 def _portal_home_url(scope: DepartmentPortalScope) -> str:
     if scope.role == "unit_portal":
         return url_for("portal_dept_ui.portal_department_home_ui")
     return url_for("portal_dept_ui.portal_department_home_ui", department_id=scope.department_id)
+
+
+def _portal_week_url(year: int, week: int, department_id: str | None = None) -> str:
+    if department_id:
+        return url_for("portal_dept_ui.portal_department_week_ui", year=year, week=week, department_id=department_id)
+    return url_for("portal_dept_ui.portal_department_week_ui", year=year, week=week)
+
+
+def _shift_iso_week(year: int, week: int, delta_weeks: int) -> tuple[int, int]:
+    week_start = _date.fromisocalendar(year, week, 1)
+    shifted = week_start + timedelta(days=7 * delta_weeks)
+    shifted_year, shifted_week, _ = shifted.isocalendar()
+    return int(shifted_year), int(shifted_week)
 
 
 @portal_dept_ui_bp.get("/ui/portal/department/week")
@@ -118,23 +135,93 @@ def portal_department_week_ui():  # type: ignore[override]
         )
     else:
         scope = resolve_department_portal_scope()
+    home_payload = build_department_home_payload(scope)
     payload = build_department_week_payload(scope, year, week)
+    for day in payload["days"]:
+        day_date = _date.fromisoformat(day["date"])
+        day["short_date_label"] = _format_sv_short_date(day_date)
     week_start = _date.fromisoformat(payload["days"][0]["date"])
     week_end = _date.fromisoformat(payload["days"][-1]["date"])
+    week_span_label = _format_sv_date_span(week_start, week_end)
+    contextual_department_id = (request.args.get("department_id") or "").strip() or None
+    if scope.role == "unit_portal":
+        contextual_department_id = None
+    week_options: list[dict[str, object]] = []
+    selected_week_key = f"{year}-{week}"
+    for option in home_payload.get("weeks", []):
+        option_year = int(option.get("year") or 0)
+        option_week = int(option.get("week") or 0)
+        option_url = _portal_week_url(option_year, option_week, contextual_department_id)
+        week_options.append(
+            {
+                "year": option_year,
+                "week": option_week,
+                "label": f"Vecka {option_week} · {option.get('span', '')} {option_year}",
+                "url": option_url,
+                "selected": f"{option_year}-{option_week}" == selected_week_key,
+            }
+        )
+    if not any(option["selected"] for option in week_options):
+        week_options.insert(
+            0,
+            {
+                "year": year,
+                "week": week,
+                "label": f"Vecka {week} · {week_span_label}",
+                "url": _portal_week_url(year, week, contextual_department_id),
+                "selected": True,
+            },
+        )
+    required_choice_count = sum(1 for day in payload["days"] if day["menu"].get("lunch_alt1") and day["menu"].get("lunch_alt2"))
+    completed_choice_count = sum(
+        1
+        for day in payload["days"]
+        if day["menu"].get("lunch_alt1")
+        and day["menu"].get("lunch_alt2")
+        and day["choice"].get("selected_alt") in {"Alt1", "Alt2"}
+    )
     vm = {
         "department_name": payload["department_name"],
         "site_name": payload["site_name"],
         "year": payload["year"],
         "week": payload["week"],
-        "week_span_label": _format_sv_date_span(week_start, week_end),
+        "week_span_label": week_span_label,
         "facts": payload["facts"],
         "progress": payload["progress"],
+        "choice_progress": {
+            "required": required_choice_count,
+            "completed": completed_choice_count,
+        },
         "days": payload["days"],
         "etag_map": payload["etag_map"],
         "summary": payload.get("summary", {"registered_lunch_days": 0, "registered_dinner_days": 0}),
+        "week_selector_label": f"Vecka {week} · {week_span_label}",
     }
     portal_home_url = _portal_home_url(scope)
-    return render_template("portal_department_week.html", vm=vm, portal_home_url=portal_home_url)
+    return render_template(
+        "portal_department_week.html",
+        vm=vm,
+        portal_home_url=portal_home_url,
+        portal_week_change_url=(
+            f"/portal/department/menu-choice/change?department_id={contextual_department_id}"
+            if contextual_department_id
+            else "/portal/department/menu-choice/change"
+        ),
+        portal_week_status_url=(
+            f"/portal/department/week/status?year={year}&week={week}&department_id={contextual_department_id}"
+            if contextual_department_id
+            else f"/portal/department/week/status?year={year}&week={week}"
+        ),
+        portal_week_submit_url=(
+            f"/portal/department/week/submit?department_id={contextual_department_id}"
+            if contextual_department_id
+            else "/portal/department/week/submit"
+        ),
+        portal_week_options=week_options,
+        nav_context="portal_department",
+        hide_sidebar=True,
+        portal_compact_footer=True,
+    )
 
 
 @portal_dept_ui_bp.get("/ui/portal/department")
@@ -142,6 +229,9 @@ def portal_department_home_ui():  # type: ignore[override]
     explicit_department_id = (request.args.get("department_id") or "").strip() or None
     scope = resolve_department_portal_scope(explicit_department_id=explicit_department_id)
     vm = build_department_home_payload(scope)
+    if explicit_department_id and scope.role != "unit_portal":
+        for week in vm.get("weeks", []):
+            week["url"] = _portal_week_url(int(week["year"]), int(week["week"]), explicit_department_id)
     portal_home_url = _portal_home_url(scope)
     return render_template(
         "portal_department_home.html",

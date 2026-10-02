@@ -99,7 +99,7 @@ def test_portal_week_endpoint_populate(client_admin, app_session, seed_portal_de
     etag = r1.headers.get("ETag")
     data = r1.get_json()
     assert data["department_id"] == dept_id
-    assert data["facts"]["note"] == "Inga risrätter"
+    assert "note" not in data["facts"]
     assert data["progress"]["total_days"] == 7
     monday = data["days"][0]
     assert monday["flags"]["alt2_lunch"] is True
@@ -238,7 +238,7 @@ def test_portal_week_endpoint_reads_departments_notes_without_department_notes_t
     )
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
-    assert "Department note from departments" in html
+    assert "Department note from departments" not in html
 
 
 def test_portal_week_endpoint_empty_department_note_is_empty_string(
@@ -260,7 +260,7 @@ def test_portal_week_endpoint_empty_department_note_is_empty_string(
     )
     assert resp.status_code == 200
     payload = resp.get_json()
-    assert payload["facts"]["note"] == ""
+    assert "note" not in payload["facts"]
 
 
 def test_portal_week_payload_unknown_department_is_controlled(client_admin, seed_portal_department_data, seed_canonical_builder_publication):
@@ -363,9 +363,7 @@ def test_portal_week_iso_dates_rendered_html_matches_payload(client_admin, seed_
     assert "Visa rapport" not in html
     assert "/ui/weekview?" not in html
     assert "/ui/reports/weekview?" not in html
-    assert "← Föregående" in html
-    assert "Nästa →" in html
-    assert "/ui/portal/department/week?year=2026&amp;week=34" in html
-    assert "/ui/portal/department/week?year=2026&amp;week=36" in html
+    assert "portal-week-selector" in html
+    assert "/ui/portal/department/week?year=2026&amp;week=35" in html
     for dow in range(1, 8):
         assert _date.fromisocalendar(year, week, dow).isoformat() in html

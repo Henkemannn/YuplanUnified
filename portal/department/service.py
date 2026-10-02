@@ -237,7 +237,6 @@ def build_department_week_payload(
 
     # Facts & progress
     facts: PortalFacts = {
-        "note": note_val,
         "residents_default_lunch": None,
         "residents_default_dinner": None,
     }
