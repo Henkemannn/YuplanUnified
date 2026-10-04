@@ -83,12 +83,12 @@ def test_builder_script_contains_block_model_and_minimized_controls(client_admin
     assert rv.status_code == 200
     script = rv.data.decode("utf-8")
     assert "component-block" in script
-    assert "component-data-icon" in script
+    assert "saveActiveComponentDetailDraft" in script
     assert "component-overflow-menu" in script
     assert "components/reorder" in script
-    assert "draggable = true" in script
-    assert "dragstart" in script
-    assert "drop" in script
+    assert 'const blocks = document.querySelectorAll(".component-block[data-component-id]");' in script
+    assert 'await openComponentDetailEditor(componentIdValue, "overview", currentBuilderComposition ? {' in script
+    assert 'componentDetailEditorModal' in script
 
     # Workbench architecture is fully removed.
     assert "componentWorkbench" not in script
