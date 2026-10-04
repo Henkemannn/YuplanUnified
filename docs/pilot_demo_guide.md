@@ -1,32 +1,122 @@
-# Yuplan Unified — Pilot Demo (Internal)
+# Yuplan Unified — Live Acceptance Flow
 
-## Scope
-- **Admin**: create/edit Departments, set Diet Defaults (diff save), toggle Alt2 (bulk)
-- **Weekview**: visualize Alt2 (yellow), correct menu per day
-- **Report**: correct counts per week (lunch/dinner), ignores Alt2 in statistics
+## Purpose
 
-## Flow (10–12 min)
-1. Login → Dashboard (Yuplan wordmark visible)
-2. Admin → Departments: rename "Avd 1" (show If-Match/ETag in DevTools network panel)
-3. Diet Defaults: change one amount → Save (only changed amounts applied)
-4. Alt2: pick week 51 → tick 1–2 boxes → Save (ETag changes); immediately save again with no change (ETag stable)
-5. Weekview: show Alt2 highlights; switch days to confirm diff
-6. Report: select week 51; verify counts and warnings; confirm Alt2 not altering static totals
-7. Notes: edit site note (If-Match) → reload to show persistence
+This guide replaces the old internal demo script with the real live acceptance chain for KOMMUN 1.1.
+
+It starts from a new customer and follows the actual product path from onboarding to reporting.
+
+## Step 1 — Create Customer
+
+Create a completely new customer/tenant.
+
+Create the site/kitchen and verify tenant/site scoping.
+
+Acceptance checks:
+
+- tenant and site are new
+- scoping is correct
+- no accidental reuse of demo-only data
+
+## Step 2 — Create Departments
+
+Create several new departments.
+
+Set:
+
+- resident counts / current quantities
+- realistic registered needs
+- requirement groups
+- specialkost
+- serving adaptations where relevant
+
+Verify persistence after reload.
+
+## Step 3 — Department Login
+
+Create or bind a unit_portal login for at least one department.
+
+Verify:
+
+- department scope is correct
+- the user cannot escape into another department
+- admin modules are not exposed through the portal path
+
+## Step 4 — Builder
+
+Import a realistic weekly menu.
+
+Resolve or create required dishes and components through the current Builder flow.
+
+Include meals sufficient to verify:
+
+- lunch
+- kvällsmat
+- dessert
+
+Publish the menu.
+
+The canonical publication must be the source consumed downstream.
+
+## Step 5 — Kitchen Weekview
+
+Verify that the newly published menu appears for the same week.
+
+Verify:
+
+- correct days and meals
+- correct department/customer/site context
+
+## Step 6 — Department Portal
+
+Log in as the new department.
+
+Verify:
+
+- the same published menu is visible
+- required Alt1/Alt2 choices can be made
+- single-option days are read-only
+- choices are submitted explicitly
+- status becomes complete
+
+## Step 7 — Portal to Kitchen Propagation
+
+Verify the department's menu choice appears in Kitchen Weekview.
+
+There must be no manual sync and no duplicate choice model.
+
+## Step 8 — Planera
+
+Use the new customer's real data.
+
+Verify planning for:
+
+- lunch
+- kvällsmat
+- dessert
+
+Important:
+
+Do not assume dessert support if the current live implementation does not actually support it.
+
+If lunch works but evening or dessert cannot complete the expected Planera workflow, record that as a real pilot gap or blocker.
+
+Verify that current quantities, registered needs, and menu choices feed the planning result correctly.
+
+## Step 9 — Production
+
+Verify:
+
+Planera Page1 → Page2 review → Planera 2.0 computation → Page3 Produktionsunderlag → mark complete → Kitchen Weekview completion state
+
+## Step 10 — Report
+
+Verify that the relevant weekly/report output reflects the new customer data.
 
 ## Appendix
-### ETag Formats
-- Single resource: `W/"admin:dept:<id>:vN"`
-- Collection: `W/"admin:departments:site:<site-id>:vN"`
-- Alt2 week: `W/"admin:alt2:week:<week>:vN"`
 
-### 412 Recovery UX
-- PUT with stale `If-Match` → 412 + `current_etag` in ProblemDetails
-- Client re-fetches, updates local cache, retries mutation
+### Acceptance Rule
 
-### 304 Cache Behavior
-- Second GET with matching `If-None-Match` → 304 (empty body) + same ETag
-- Frontend reuses cached data → no UI blink
+This guide is a live acceptance path, not a synthetic demo script.
 
-### Contacts
-Henrik Jonsson <henrik@yuplan.se>
+It is intended to surface real customer setup, workflow friction, and pilot blockers.

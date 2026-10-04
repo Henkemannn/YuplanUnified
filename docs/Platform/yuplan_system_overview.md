@@ -1,48 +1,43 @@
 # Yuplan System Overview
 
-## 🎯 Purpose
+## Purpose
 
 This document is the top-level system map for Yuplan.
 
-It connects all architecture documents and ensures that:
+It preserves the architectural separation between the Library Layer, the Menu Context Layer, and the Production Layer while reflecting the current October 2026 implementation truth.
 
-- the platform stays broad
-- Planera 2.0 is correctly understood as a production engine
-- Builder, Menu Context, and Production are not mixed together
+## Core Architecture
 
-This is the entry point for understanding the system.
+Yuplan still consists of three primary layers.
 
----
+### 1. Library Layer (Builder / Knowledge)
 
-# 🧱 CORE ARCHITECTURE
+This layer defines what things are.
 
-Yuplan consists of three primary layers:
+Current truth:
 
-## 1. Library Layer (Builder / Knowledge)
+- Components and Compositions are the canonical library objects.
+- Menu import works.
+- The shared Dish editor is accepted.
+- The shared Component editor is accepted.
+- Recipe/method belongs to the Component editor.
+- Unresolved/import/alias workflows exist and are part of the live system.
+- The canonical published Builder menu is the downstream menu truth.
 
-Defines what things are.
+Related docs:
 
-- Components
-- Compositions (dishes)
-- Recipes
-- Ingredient structures
-- Knowledge sharing
-
-📄 Related docs:
 - component_model_v1.md
 - component_composition_architecture.md
 - component_recipe_architecture.md
 - recipe_knowledge_layer_architecture.md
 
----
+### 2. Menu Context Layer
 
-## 2. Menu Context Layer
+This layer defines where and how library objects are used.
 
-Defines where and how things are used.
+Menus are not limited to weekly schedules.
 
-Menus are NOT limited to weekly schedules.
-
-Supported contexts:
+Supported contexts still include:
 
 - weekly
 - event
@@ -51,125 +46,59 @@ Supported contexts:
 - proposal
 - freeform
 
-📄 Related docs:
+Related docs:
+
 - menu_context_architecture.md
 - menu_component_architecture.md
 - menu_composition_integration.md
 - eventcase_domain_architecture.md
 
----
+### 3. Production Layer (Planera 2.0)
 
-## 3. Production Layer (Planera 2.0)
+This layer defines what must be produced.
 
-Defines what must be produced.
+Planera 2.0 is not a future-only concept. The core engine is substantially built and already exercised in current flows.
 
-Planera 2.0 is a production engine, not a menu system.
+Current truth:
 
----
+- The core engine exists and is used.
+- The Kommun adapter/integration exists.
+- The canonical requirement-group flow exists.
+- The Product2 Page1/Page2/Page3 flow has been exercised.
+- Production-underlag exists.
+- Planera 2.0 remains the production engine, not a menu system.
 
-# 🧠 PLANERA 2.0 – CORE MODEL
+## Planera 2.0 Core Model
 
-## 🔁 Fundamental Model
+The fundamental model remains:
 
 Demand → Categories → Production
 
----
+Baseline demand is the total number of portions required.
 
-## 🧩 Definitions
+Categories are the dynamic production divisions applied to that demand, such as normal, veg, special, VIP, or other context-specific variants.
 
-### Baseline (Demand)
+Production output is the operational result: portions per category, production grouping, and the path to ingredient needs, prep lists, and purchasing.
 
-Total number of portions required.
+The system must think in terms of demand division into production categories, not in terms of who cannot eat the main dish.
 
-Examples:
-- 120 residents
-- 80 crew
-- 200 guests
+The same engine is intended to work across municipality, offshore, catering, restaurant, and events.
 
----
+Related docs:
 
-### Categories / Variants
-
-How demand is divided.
-
-Examples:
-- normal
-- veg
-- special
-- VIP
-- crew_day / crew_night
-- allergen variants
-
-These are:
-- dynamic
-- context-dependent
-- not hardcoded
-
----
-
-### Production Output
-
-What the system produces:
-
-- portions per category
-- production grouping
-- later:
-  - ingredient needs
-  - prep lists
-  - purchasing
-
----
-
-## 🚨 Important Principle
-
-The system must NOT think:
-
-“who cannot eat the main dish?”
-
-It must think:
-
-👉 “how must demand be divided into production categories?”
-
----
-
-## 🌍 Context Neutrality
-
-The same engine must work for:
-
-- municipality
-- offshore
-- catering
-- restaurant
-- events
-
----
-
-# 🔗 DATA FLOW
-
-Menu Row  
-→ Composition  
-→ Components  
-→ Recipe  
-→ Yield  
-→ Production  
-
-📄 Related docs:
 - planera2_motor_flow.md
 - planera2_architecture.md
 - ingredient_purchasing_architecture.md
 
----
+## Data Flow
 
-# 🛠 BUILDER (CURRENT STATE)
+Menu Row → Composition → Components → Recipe → Yield → Production
 
-Builder is responsible for:
+## Builder Status
 
-- importing menus
-- creating compositions
-- building components
-- learning via alias
+Builder is currently responsible for importing menus, creating compositions, building components, and learning via alias.
 
-Current capabilities:
+Current capabilities include:
 
 - unresolved → create + build
 - auto-suggest components
@@ -178,82 +107,81 @@ Current capabilities:
 - alias learning
 - improved UX
 
----
+## AI / Automation
 
-# 🧠 AI / AUTOMATION (FUTURE)
+AI is not part of the core logic.
 
-AI is NOT part of the core logic.
+It may assist, suggest, and learn patterns, but deterministic logic remains the base.
 
-AI will:
-- assist
-- suggest
-- learn patterns
+Related docs:
 
-But:
-
-👉 deterministic logic is always the base
-
-📄 Related docs:
 - planera2_ai.md
 - ai_data_truth_principles.md
 
----
+## Extended Domains
 
-# 🧩 EXTENDED DOMAINS
+Yuplan is still designed to expand into:
 
-Yuplan is designed to expand into:
+- Event / Banquet
+- Purchasing
+- Portals
 
-## Event / Banquet
-- eventcase_domain_architecture.md
+## Design Principles
 
-## Purchasing
-- ingredient_purchasing_architecture.md
+- Library is not planning.
+- Menu is not production.
+- Demand drives everything.
+- Categories are dynamic.
+- There is no hardcoded weekly thinking.
+- UX must stay simple.
+- Backend must stay clean.
 
-## Portals
-- crew_portal_architecture.md
-- department_portal_architecture.md
+## Current Development Order
 
----
+### KOMMUN 1.1
 
-# 🧭 DESIGN PRINCIPLES
+- Automated technical gate is GO.
+- Clean-customer live acceptance is pending.
+- UI/UX race is pending.
+- Only blocker/high-impact fixes should be taken before release candidate freeze.
 
-- Library ≠ Planning
-- Menu ≠ Production
-- Demand drives everything
-- Categories are dynamic
-- No hardcoded “weekly thinking”
-- UX must be simple
-- Backend must stay clean
+### Current next step
 
----
+- Live customer-from-zero acceptance.
+- UI/UX race.
+- Release candidate freeze/tag.
 
-# 🚀 DEVELOPMENT ORDER
+### After Kommun 1.1
 
-## Phase 1 (current)
-Builder stable ✔
+- Offshore 1.0.
 
-## Phase 2
-Library mode (free creation)
+### After that
 
-## Phase 3
-Planera 2.0 integration
+- Broader recipe/yield/ingredient purchasing work.
+- Hotel/Bankett/Event.
+- Other platform expansion.
 
-## Phase 4
-Recipe + yield + ingredient calculation
+## Test Status
 
-## Phase 5
-Purchasing + prep + production optimization
+Current automated truth:
 
----
+- 2342 passed
+- 15 skipped
+- 0 failed
+- 3 warnings
 
-# 💬 FINAL NOTE
+This is the current clean baseline.
 
-This document replaces the need to rely on chat history.
+## Performance Note
 
-If something conflicts:
-👉 this document wins
+TEST-PERF-1:
 
-If something is unclear:
-👉 update this document
+Offshore demo-seed tests consume about 226.8 seconds, or about 42% of the full test runtime.
 
-This is the system truth.
+That is a high optimization opportunity, but it is not a Kommun pilot blocker.
+
+## Final Note
+
+This document is the system truth.
+
+If something conflicts with it, this document wins.

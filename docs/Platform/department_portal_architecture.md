@@ -1,280 +1,127 @@
-🧭 Layer definition
+# Department Portal Architecture
+
+## Layer Definition
 
 Layer: Input / Operational UI
-Depends on: Planera 1.0 (pilot), Planera 2.0 (future)
-Type: Hybrid – Pilot + Future Lab
 
-🎯 Syfte
+Depends on: current Portal 1.0 implementation and the current production engine path
 
-Avdelningsportalen är en modul inom Yuplan som används av avdelningar för att:
+Type: Pilot UI with a clear future-lab boundary
 
-göra menyval
-kommunicera behov till köket
-ge tydlig status på planering
+## Purpose
 
-Den ska:
+The Department Portal is the operational input surface used by departments to make menu choices, communicate needs to the kitchen, and see explicit completion status.
 
-vara extremt enkel att använda
-fungera för personal med låg teknisk vana
-ge tydlig status (klar/ej klar)
-fungera som input till kökets planering
-i framtiden fungera som input-layer till Planera 2.0
-🧠 Kärnprincip
+Current truth:
 
-Portalen ska kännas enkel i UI
-men vara strukturerad i data
+- Portal 1.0 is implemented and closed at the component/E2E gate level.
+- Home + Week workflow exists.
+- Explicit submit/completion truth exists.
+- Canonical Portal menu choice flows directly to Kitchen Weekview.
+- There is no duplicate menu/choice truth.
 
-🟢 Portal V1 – Pilotversion
-🎯 Mål
-fungera stabilt i pilot
-vara visuellt tydlig
-vara självinstruerande
-minimera fel
-🔐 Inloggning
-användare loggar in
-systemet vet vilken avdelning användaren tillhör
-🏠 Startvy (Portal Home)
-A. Välkomsttext
+The portal is an input/experience layer, not a production calculator.
 
-Kort instruktion:
+## Core Principle
 
-"Välj vecka, gör dina val och tryck Klar."
-B. Veckolista
+The UI should feel simple, but the data should stay structured.
 
-Visar publicerade veckor.
+## Current Shell
 
-Per vecka:
+The current unit_portal uses the shared Yuplan topbar/shell.
 
-vecka + datumintervall
-status
-Statusmodell
-Status	Betydelse
-🟢 Klar	Avdelningen har tryckt “Klar”
-🟡 Påbörjad	Några val gjorda
-⚪ Ej påbörjad	Inga val
+Current shell truth:
 
-Klick → öppnar veckovy
+- shared Yuplan topbar/shell
+- no left sidebar for unit_portal
+- no Veckovy
+- no Planera
+- no Rapport
+- no Admin
+- no actionable Specialkost module link
 
-C. Avdelningsinfo
+## Routes
 
-Read-only kort:
+Current routes:
 
-avdelningsnamn
-boendeantal
-specialkost + antal
-faktaruta
-📅 Veckovy (valvy)
+- Portal Home: GET /ui/portal/department
+- Portal Week: GET /ui/portal/department/week
 
-Visar:
+## Identity and Scope
 
-veckans meny
-alla dagar
-Valbart
-t.ex. lunchval / alternativ
-Read-only
-dessert
-kvällsmat
-Funktioner
-göra val per dag
-spara
-“Klar vecka”-knapp
-✅ Klar-logik
+For normal unit_portal usage, the department comes from the authenticated user's department_id.
 
-“Klar” är en explicit handling.
+Query override must not switch the department.
 
-Sparas som:
+Admin/support flows may use explicit department support context, but that is a separate privileged path.
 
-completed_at
-completed_by
+## Home View
 
-Efter “Klar”:
+Portal Home is a read-only operational overview and entry point into the week workflow.
 
-status blir 🟢
-kan låsas (eller kräva “Ångra klar”)
-🧾 Statusmodell (teknisk)
+It may show:
 
-Per:
+- department identity
+- resident count
+- registered specialkost or needs
+- serving adaptations where data exists
 
-department + week
+Security correction:
 
-Tillstånd:
+- Department.notes / Faktaruta is private.
+- It must never be shown to unit_portal.
 
-ej påbörjad
-påbörjad
-klar
-📊 Admin Dashboard-koppling
+## Week View
 
-Visar:
+Portal Week is the choice screen.
 
-“Menyval – kommande veckor”
+It shows:
 
-Regel (pilot)
+- the week menu
+- the days in that week
+- choice rows for the relevant meals
+- explicit completion state
 
-Avdelningar ska ligga minst 4 veckor fram.
+It is not a duplicate menu model. It reflects the published Builder menu and department selections.
 
-Beräkning
-hämta publicerade veckor
-ta nästa 4
-kontrollera vilka som saknar “klar”
-Output
+## Completion Model
 
-Exempel:
-
-3 avdelningar ligger inte i fas
-
-Avd A – saknar v.12, v.13  
-Avd B – ej påbörjad
-🧠 Viktig princip (V1)
-
-Portalen påverkar planering
-men räknar inget själv
-
-🔵 Portal 2.0 – Future Lab
-🎯 Ny roll
-
-Portalen blir:
-
-👉 en strukturerad inputmodul till Planera 2.0
-
-🔄 Arkitekturskifte
-V1
-Portal → påverkar siffror direkt
-V2
-Portal → input  
-Planera 2.0 → beräkning
-🧱 Inputmodell
-
-Portalen levererar:
-
-department_id
-service_day (DATE)
-meal_key
-selection_key
-completed_at
-📅 service_day (kritisk förändring)
-V1
-vecka + veckodag
-V2
-absolut datum
-service_day = 2026-03-17
+Completion is explicit submission truth, not simply a matter of selecting all options.
 
-👉 UI visar vecka
-👉 backend lagrar datum
+Current states:
 
-🔄 4-veckorsregel (framtid)
+- not_started
+- in_progress
+- complete
+- needs_review / stale where applicable
 
-Istället för:
+The canonical truth is:
 
-"4 veckor fram"
+published Builder menu + department menu choices + department portal week submission
 
-Blir:
+If a required choice changes after submission, the submission becomes stale.
 
-alla service_day < (idag + 28 dagar) ska vara completed
-🧱 Föreslagen datamodell
-department_service_selection
+## What Portal Is Not
 
-Fields:
+The portal does not calculate production.
 
-department_id
-site_id
-service_day (DATE)
-meal_key
-selection_key
-started_at
-completed_at
-completed_by
-locked (bool)
-Unik constraint
-(department_id + service_day + meal_key)
-🔌 Integration med Planera 2.0
+It does not own production truth.
 
-Via:
+It does not create a second menu or choice model.
 
-PortalSelectionAdapter
-🧪 Portalens roll
+## Live Acceptance Notes
 
-Portalen levererar:
+The current live acceptance scope is:
 
-vad som valts
-när det valts
-om det är klart
+- verify menu visibility for the same published menu
+- verify required choices
+- verify single-option days are read-only
+- verify explicit submit
+- verify propagation to Kitchen Weekview
+- verify persistence after reload/login
 
-Motorn avgör:
+## Design Boundary
 
-produktion
-kvantiteter
-kategorier
-🧭 Strategisk uppdelning
-Pilot (Unified)
-Portal V1
-enkel logik
-UI-fokus
-stabilitet
-Future Lab
-Portal 2.0
-ren datamodell
-adapter till engine
-kontextneutral
-🚀 Implementationsstrategi
-Nu (pilot)
-bygg V1
-koppla dashboard
-håll enkel
-GZ-tagga
-Sen (2.0)
-bygg engine
-refaktorera portal → input layer
-byt backend utan att ändra UI
-🔥 Viktigaste insikten
+Portal 1.0 is the current operational input surface.
 
-Planera 2.0 är motorn
-Avdelningsportalen är input
-
-🧠 Strategisk roll
-
-Portalen är:
-
-operativ input
-användargränssnitt
-datakälla
-
-Den möjliggör:
-
-automatiserad planering
-bättre datakvalitet
-minskad manuell hantering
-⚠️ Viktiga designprinciper
-1. Ingen logik i UI
-
-All logik:
-
-→ Planera 2.0
-2. Portal = input
-
-Inte:
-
-beräkning
-beslut
-3. Feature flags
-
-Möjlighet att aktivera:
-
-val
-specialkost
-framtida funktioner
-4. Måste fungera utan portal
-
-Planera ska fungera även utan denna modul.
-
-✅ Sammanfattning
-
-Avdelningsportalen är:
-
-i pilot: ett enkelt valverktyg
-i framtid: en central inputmodul
-
-Den:
-
-kopplar användare till systemet
-strukturerar data
-matar Planera 2.0
+Portal 2.0 remains the future input-layer concept for a deeper engine integration, but current documentation must not describe that future state as if it were the present product truth.

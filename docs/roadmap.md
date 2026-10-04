@@ -1,37 +1,38 @@
 # Roadmap
 
-## Phase 1 (Current)
-- Scaffold project + core models
-- Module blueprints registered
-- Basic health endpoint
+## Current — KOMMUN 1.1 Release Candidate
 
-## Phase 2
-- Add Alembic migrations
-- Implement MenuService with SQLAlchemy
-- Implement Authentication & password hashing
-- Diet + Attendance endpoints (read-only)
+### Gate 1: Automated suite
+DONE
 
-## Phase 3
-- Write municipal module endpoints (alt1/alt2 workflow)
-- Implement DOCX import/export adapters
-- Basic reporting (diet distribution, menu coverage)
+- 2342 passed
+- 0 failed
 
-## Phase 4
-- Offshore turnus scheduling port (Shift generation strategies)
-- Tasks + Messaging endpoints
-- Waste metrics log + recommendation algorithm
+### Gate 2: Clean-customer live E2E
+NEXT
 
-## Phase 5
-- Full migration execution from legacy DBs
-- Feature flag admin UI
-- Role-based access control decorators
+### Gate 3: UI/UX race
+NEXT
 
-## Phase 6
-- Testing suite expansion (pytest + coverage)
-- Performance tuning (indices, query plans)
-- Multi-tenancy security hardening
+### Gate 4: Fix only pilot blockers / high-impact UX defects
 
-## Phase 7
-- SSO integration (OAuth2)
-- Real-time notifications (WebSocket/SSE)
-- Advanced analytics exports
+### Gate 5: Final regression smoke/full suite
+
+### Gate 6: Freeze/tag Kommun 1.1 pilot candidate
+
+## Then — Offshore 1.0
+
+- Resume existing Offshore implementation.
+- Verify turnus, menu context, work menu, and prep.
+- Use the shared Builder/Planera architecture.
+- Do not create separate product truth.
+
+## After
+
+- Broader recipe, yield, and ingredient purchasing work.
+- Hotel/Bankett/Event.
+- Other platform expansion.
+
+## Boundary
+
+Future Lab remains separate from the current pilot scope.
