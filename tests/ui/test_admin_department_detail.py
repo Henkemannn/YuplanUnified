@@ -66,11 +66,17 @@ def test_post_updates_fixed_resident_count(app_session: Flask, client_admin: Fla
     dept, _ = DepartmentsRepo().create_department(
         site_id=site["id"], name="Avd Fix", resident_count_mode="fixed", resident_count_fixed=8
     )
-    # POST to update fixed value
+    version = DepartmentsRepo().get_version(dept["id"]) or 0
+    # POST to the real edit endpoint that owns resident-count saves
     r = client_admin.post(
-        f"/ui/admin/departments/{dept['id']}/detail/fixed",
+        f"/ui/admin/departments/{dept['id']}/edit",
         headers=HEADERS_ADMIN,
-        data={"resident_count_fixed": "12"},
+        data={
+            "name": "Avd Fix",
+            "resident_count": "12",
+            "notes": "",
+            "version": str(version),
+        },
         follow_redirects=False,
     )
     assert r.status_code in (302, 303)
@@ -92,7 +98,7 @@ def test_post_creates_weekly_override_and_reflects(app_session: Flask, client_ad
     year, week = _iso_week()
     form = {f"dept_{dept['id']}_lunch": "7", f"dept_{dept['id']}_dinner": "12", "year": str(year), "week": str(week)}
     r = client_admin.post(
-        f"/ui/admin/departments/{dept['id']}/detail",
+        f"/ui/admin/residents/week/{year}/{week}",
         headers=HEADERS_ADMIN,
         data=form,
         follow_redirects=False,
@@ -121,7 +127,7 @@ def test_post_clears_weekly_override(app_session: Flask, client_admin: FlaskClie
     # Clear by posting empty values
     form = {f"dept_{dept['id']}_lunch": "", f"dept_{dept['id']}_dinner": "", "year": str(year), "week": str(week)}
     r = client_admin.post(
-        f"/ui/admin/departments/{dept['id']}/detail",
+        f"/ui/admin/residents/week/{year}/{week}",
         headers=HEADERS_ADMIN,
         data=form,
         follow_redirects=False,
