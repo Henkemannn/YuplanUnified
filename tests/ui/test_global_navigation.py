@@ -69,12 +69,16 @@ def test_global_navigation_present(client_admin):
     )
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
-    assert '<nav class="main-nav"' in html
-    assert 'Avdelningsportal' in html
-    assert 'Veckovy' in html
-    assert 'Planera' in html
-    assert 'Rapport' in html
-    assert 'Admin' in html
+    assert 'app-shell__topbar' in html
+    assert 'app-shell__body--no-sidebar' in html
+    assert 'app-shell__sidebar' not in html
+    assert 'portal-week-backlink' in html
+    assert 'portal-week-selector' in html
+    assert 'portal-submit-button' in html
+    assert 'Veckovy' not in html
+    assert 'Planera' not in html
+    assert 'Rapport' not in html
+    assert 'Admin' not in html
 
 
 def test_global_navigation_unit_portal_shell_is_department_only(client_admin):
@@ -95,8 +99,12 @@ def test_global_navigation_unit_portal_shell_is_department_only(client_admin):
     )
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
-    assert '<nav class="main-nav"' in html
-    assert 'Avdelningsportal' in html
+    assert 'app-shell__topbar' in html
+    assert 'app-shell__body--no-sidebar' in html
+    assert 'app-shell__sidebar' not in html
+    assert 'portal-week-backlink' in html
+    assert 'portal-week-selector' in html
+    assert 'portal-submit-button' in html
     assert '/ui/portal/department' in html
     assert '/ui/portal/department?department_id=' not in html
     assert 'Veckovy' not in html
