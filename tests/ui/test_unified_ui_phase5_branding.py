@@ -207,10 +207,9 @@ class TestFavicons:
         resp = client_cook.get("/ui/cook", headers=_headers("cook"))
         assert resp.status_code == 200
         html = resp.data.decode("utf-8")
-        
-        # Favicon link should be present (canonical Brand Base asset)
+        # Favicon link should be present on the legacy cook shell
         assert 'rel="icon"' in html
-        assert "/static/brand/v1/logo/yuplan-mark-primary.svg" in html
+        assert "/favicon.ico" in html
 
     def test_admin_dashboard_has_favicon(self, app_session: Flask, client_admin: FlaskClient):
         """Admin dashboard should link to favicon"""
