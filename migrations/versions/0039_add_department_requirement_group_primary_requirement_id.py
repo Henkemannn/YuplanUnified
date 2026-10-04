@@ -66,7 +66,11 @@ def upgrade() -> None:
 
     columns = _column_names("department_requirement_groups")
     if "primary_requirement_id" not in columns:
-        with op.batch_alter_table("department_requirement_groups", recreate="always") as batch_op:
+        with op.batch_alter_table(
+            "department_requirement_groups",
+            recreate="always",
+            reflect_kwargs={"resolve_fks": False},
+        ) as batch_op:
             batch_op.add_column(sa.Column("primary_requirement_id", sa.Integer(), nullable=True))
             batch_op.create_foreign_key(
                 "fk_department_requirement_groups_primary_requirement_id",
@@ -85,7 +89,11 @@ def downgrade() -> None:
 
     columns = _column_names("department_requirement_groups")
     if "primary_requirement_id" in columns:
-        with op.batch_alter_table("department_requirement_groups", recreate="always") as batch_op:
+        with op.batch_alter_table(
+            "department_requirement_groups",
+            recreate="always",
+            reflect_kwargs={"resolve_fks": False},
+        ) as batch_op:
             batch_op.drop_constraint(
                 "fk_department_requirement_groups_primary_requirement_id",
                 type_="foreignkey",
