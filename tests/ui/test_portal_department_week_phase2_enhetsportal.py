@@ -15,7 +15,7 @@ def _seed_site_dep_week_with_menu():
         year, week = 2025, 2
         # Create site/department
         db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0)"), {"i": site_id, "n": "PortalSite"})
-        db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, notes, version) VALUES(:i,:s,:n,'fixed',8,'Faktaruta: Inga risrätter',0)"), {"i": dep_id, "s": site_id, "n": "Avd Portal"})
+        db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, notes, version) VALUES(:i,:s,:n,'fixed',8,'PRIVATE_ADMIN_NOTE_DO_NOT_EXPOSE',0)"), {"i": dep_id, "s": site_id, "n": "Avd Portal"})
         # Diet defaults
         db.execute(text("CREATE TABLE IF NOT EXISTS department_diet_defaults (department_id TEXT NOT NULL, diet_type_id TEXT NOT NULL, default_count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(department_id, diet_type_id))"))
         db.execute(text("INSERT INTO department_diet_defaults(department_id, diet_type_id, default_count) VALUES(:d,'Gluten',2)"), {"d": dep_id})
@@ -38,8 +38,9 @@ def test_portal_week_enhetsportal_view(app_session):
     assert "Boendeantal:" in html and "8" in html
     assert "Specialkost på avdelningen" in html
     assert "Gluten" in html and "Laktos" in html
-    # Notes
-    assert "Faktaruta" in html
+    # Notes must stay private
+    assert "PRIVATE_ADMIN_NOTE_DO_NOT_EXPOSE" not in html
+    assert "Faktaruta" not in html
     # Ensure data-can-choose-lunch attribute appears on lunch blocks
     assert 'data-can-choose-lunch="' in html
     # Dinner block indicates read-only

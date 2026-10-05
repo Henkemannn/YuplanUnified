@@ -30,10 +30,6 @@
     <h1 class="portal-department-title">{{ vm.department_name }}</h1>
     <p class="portal-department-meta">Boende: {{ vm.residents_count or "okänt" }}</p>
 
-    {% if vm.info_text %}
-      <p class="portal-department-note">{{ vm.info_text }}</p>
-    {% endif %}
-
     <p class="portal-department-help">
       Om något inte stämmer – kontakta köket eller admin.
     </p>

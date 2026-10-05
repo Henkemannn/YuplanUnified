@@ -37,10 +37,6 @@
     <p>Boendeantal: {{ vm.residents_count }}</p>
     <p>Boende: {{ vm.residents_count }}</p>
 
-    {% if vm.info_text %}
-      <p class="portal-note">{{ vm.info_text }}</p>
-    {% endif %}
-
     <p class="portal-department-special">
       Specialkost på avdelningen
     </p>
@@ -179,9 +175,6 @@
           <h2>{{ grid.department_name }}</h2>
           <span class="veckovy-department-card__residents">{{ grid.residents_by_day.values()|sum }} boende</span>
         </div>
-        {% if grid.info_text %}
-        <div class="veckovy-department-card__info">{{ grid.info_text }}</div>
-        {% endif %}
       </header>
       <div class="veckovy-department-card__table-wrapper">
         <table class="veckovy-table" aria-label="Veckovy för {{ grid.department_name }}">

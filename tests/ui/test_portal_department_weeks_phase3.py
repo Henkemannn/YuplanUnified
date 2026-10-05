@@ -16,7 +16,12 @@ def _seed_site_and_department():
             conn.execute(text("INSERT INTO sites (id, name) VALUES (:id, 'Test Site A')"), {"id": site_id})
         dep = conn.execute(text("SELECT id FROM departments WHERE id=:id"), {"id": dep_id}).fetchone()
         if not dep:
-            conn.execute(text("INSERT INTO departments (id, site_id, name, resident_count_mode, resident_count_fixed) VALUES (:id, :sid, 'Avd A', 'fixed', 5)"), {"id": dep_id, "sid": site_id})
+            conn.execute(
+                text(
+                    "INSERT INTO departments (id, site_id, name, resident_count_mode, resident_count_fixed, notes) VALUES (:id, :sid, 'Avd A', 'fixed', 5, :notes)"
+                ),
+                {"id": dep_id, "sid": site_id, "notes": "PRIVATE_ADMIN_NOTE_DO_NOT_EXPOSE"},
+            )
         conn.commit()
         return site_id, dep_id
     finally:
@@ -26,12 +31,14 @@ def _seed_site_and_department():
 def test_portal_weeks_overview_grid_and_links(app_session):
     client = app_session.test_client()
     site_id, dep_id = _seed_site_and_department()
+    private_note = "PRIVATE_ADMIN_NOTE_DO_NOT_EXPOSE"
 
     # Legacy path
     r1 = client.get(f"/portal/weeks?site_id={site_id}&department_id={dep_id}", headers=HEADERS)
     assert r1.status_code == 200
     html1 = r1.data.decode("utf-8")
     assert "Vecköversikt" in html1
+    assert private_note not in html1
     # Should render 12 week cards (anchors carry data-week attribute)
     assert html1.count('data-week="') == 12
     # Links should point to legacy weekly path
@@ -45,6 +52,7 @@ def test_portal_weeks_overview_grid_and_links(app_session):
     r2 = client.get(f"/ui/portal/weeks?site_id={site_id}&department_id={dep_id}", headers=HEADERS)
     assert r2.status_code == 200
     html2 = r2.data.decode("utf-8")
+    assert private_note not in html2
     assert html2.count('data-week="') == 12
     assert "/ui/portal/week?" in html2
     assert "week-card--current" in html2

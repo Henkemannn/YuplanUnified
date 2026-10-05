@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import date as _date, timedelta
 from typing import List
 
+from sqlalchemy import text
+
 from core.weekview.service import WeekviewService
 from core.admin_repo import Alt2Repo
 from flask import url_for
@@ -31,7 +33,6 @@ class PortalWeeksVM:
     site_name: str
     department_name: str
     residents_count: int | None
-    info_text: str | None
     items: List[PortalWeekItemVM]
 
 
@@ -111,18 +112,16 @@ class PortalWeeksOverviewService:
                 )
             )
 
-        # Department info: resident count and notes
+        # Department info: resident count only
         from core.db import get_session
-        from sqlalchemy import text
         db = get_session()
         try:
-            row = db.execute(text("SELECT resident_count_fixed, COALESCE(notes,'') FROM departments WHERE name=:n"), {"n": department_name}).fetchone()
+            row = db.execute(text("SELECT resident_count_fixed FROM departments WHERE name=:n"), {"n": department_name}).fetchone()
             residents_count = int(row[0] or 0) if row else None
-            info_text = str(row[1] or "") if row else None
         finally:
             db.close()
 
-        return PortalWeeksVM(site_name=site_name, department_name=department_name, residents_count=residents_count, info_text=info_text, items=items)
+        return PortalWeeksVM(site_name=site_name, department_name=department_name, residents_count=residents_count, items=items)
 
 
 __all__ = [

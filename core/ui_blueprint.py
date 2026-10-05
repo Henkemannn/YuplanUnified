@@ -2688,12 +2688,11 @@ def portal_week():
     choice_rows = Alt2Repo().list_for_department_week(department_id, week)
     chosen_days = {int(r.get("weekday") or 0) for r in choice_rows if 1 <= int(r.get("weekday") or 0) <= 7}
 
-    # Department-level defaults and notes summary
+    # Department-level defaults for the portal view
     db2 = get_session()
     try:
-        dept_row = db2.execute(text("SELECT resident_count_fixed, COALESCE(notes,'') FROM departments WHERE id=:id"), {"id": department_id}).fetchone()
+        dept_row = db2.execute(text("SELECT resident_count_fixed FROM departments WHERE id=:id"), {"id": department_id}).fetchone()
         residents_base = int(dept_row[0] or 0) if dept_row else 0
-        notes_text = str(dept_row[1] or "") if dept_row else ""
     finally:
         db2.close()
     defaults = DietDefaultsRepo().list_for_department(department_id)
@@ -2807,7 +2806,6 @@ def portal_week():
         "site_name": site_name,
         "department_name": dep_name,
         "residents_count": residents_base,
-        "info_text": notes_text or None,
         "year": year,
         "week": week,
         "days": day_vms,
@@ -4410,7 +4408,6 @@ def kitchen_veckovy_week():
         "department_id": department_id,
         "department_name": dep_name,
         "residents_by_day": residents_by_day,
-        "info_text": dep.get("notes") or "",
         "rows": rows_out,
         "diet_rows": rows_out,
         "no_diets": not bool(rows_out),
@@ -4436,7 +4433,6 @@ def kitchen_veckovy_week():
     # Fallback defaults for fields not critical to grid mode
     residents_base = 0
     defaults_summary = []
-    notes_text = str(dep.get("notes") or "")
     missing_days = []
 
     vm = {
@@ -4453,7 +4449,6 @@ def kitchen_veckovy_week():
         "has_dinner": has_dinner,
         "residents_total": residents_base,
         "diet_defaults_summary": defaults_summary,
-        "notes": notes_text,
         "force_show_dinner": True,
         "is_enhetsportal": False,
         "show_kost_grid": True,
@@ -4505,7 +4500,6 @@ def _render_portal_weeks(is_enhetsportal: bool):
         vm_core.site_name = "Okänd arbetsplats"
         vm_core.department_name = "Okänd avdelning"
         vm_core.residents_count = None
-        vm_core.info_text = None
         vm_core.items = []
         return render_template("unified_portal_weeks.html", vm=vm_core)
 
