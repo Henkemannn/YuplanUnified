@@ -4,16 +4,43 @@
 
 TECHNICAL AUTOMATED GATE = GO
 
+LIVE ACCEPTANCE GATE 01 — CUSTOMER + SITE = GO
+
 LIVE PILOT ACCEPTANCE = PENDING
 
 ## Baseline
 
 - branch: feat/planera-app-shell-2026-03-03
-- HEAD: 8aad73eb6afea8f9d11fa83df69b8dda4467c4a3
+- HEAD: 04731895afc290b7df4e65bdc15146f2f2b69daa
 - 2342 passed
 - 15 skipped
 - 0 failed
 - 3 warnings
+
+## Gate 01 — Clean Customer + Site Onboarding
+
+Status: GO
+
+Manually proven:
+
+- new customer creation
+- new site creation
+- separate customer Admin login in Firefox
+- correct tenant/site context
+- clean customer without leaked demo data
+- persistence across separate session
+
+## Gate 02 — Departments + Needs
+
+Status: IN PROGRESS
+
+Reached:
+
+- Admin → Avdelningar → Create Department → Department Edit
+
+Department Edit is currently classified as a HIGH UX area and is paused for challenger work before final pilot acceptance.
+
+Gate 02 is not GO yet.
 
 ## Section A — Clean Customer E2E
 
@@ -53,6 +80,82 @@ Record these locks:
 - Weekview = operational projection
 - No manual sync between Portal and Kitchen
 - No second production/menu/choice truth
+
+## Section B2 — Product Direction Locks
+
+### Department Edit information model
+
+Current recommended conceptual grouping:
+
+- AVDELNINGEN
+  - name
+  - residence/facility relationship
+  - baseline resident count
+  - internal Department.notes / Faktaruta
+- BEHOV
+  - registered production-relevant needs
+  - primary requirement
+  - additional deviations
+  - quantities
+- SERVERINGSANPASSNINGAR
+  - serving add-ons / adaptations
+- VECKOVARIATIONER
+  - varying resident counts
+  - other genuinely week/day-specific operational exceptions
+
+Requirement-group is a backend/domain term only; normal Kommun admins should not need to learn that term in the final UI.
+
+### Department Edit UX findings
+
+- UX-13 HIGH: Department Edit lacks a clear mental model/hierarchy.
+- UX-14 HIGH: Multiple independent save actions make save scope unclear.
+- UX-15 HIGH: Specialkost and Registrerade behov overlap semantically in the UI even though they represent different domain concepts.
+- UX-16 HIGH: Requirement-group terminology is too technical for normal Kommun admin.
+- UX-17 MEDIUM/HIGH: Serveringstillägg is presented as a technical row editor instead of clear operational information.
+- UX-18 MEDIUM: Department list provides weak operational differentiation/status.
+
+### Menu choice direction
+
+The menu-choice operational workflow should not primarily live inside Department Edit.
+
+Preferred primary surface for Kommun 1.1:
+
+- Admin → Menyval
+
+MVP scope:
+
+- choose/view a published week
+- show all departments
+- status per department: Klar, Delvis klar, Ej påbörjad
+- simple filter/segmented control: Alla, Behöver åtgärd
+- show the days where a real menu choice is required
+- show the department's current choice
+- allow admin to change a department's menu choice
+- after save, return naturally to the overview
+
+Deferred from Kommun 1.1:
+
+- push/reminder sending
+- choice analytics
+- popularity statistics
+- historical dashboards
+- raw-material forecasts
+- generic cross-vertical choice analytics
+- new statistics engine
+
+### Admin override technical gate
+
+Product intent:
+
+- An admin/kitchen change is authoritative.
+- If Admin changes a department choice, the effective production choice must follow the admin decision.
+
+Current implementation note:
+
+- Portal and Admin currently write into the same canonical department_menu_choices truth.
+- The current implementation does not yet preserve three separate persisted concepts for original Portal choice, Admin override, and effective choice.
+
+This is an open technical gate and must be revisited before implementing Admin → Menyval at full scope.
 
 ## Section C — UI/UX Race
 
@@ -95,6 +198,13 @@ Then:
 18. Department Portal Week
 19. Reports
 
+Accepted product privacy distinction:
+
+- Department-facing structured fact area stays visible to unit_portal.
+- Department.notes / internal Faktaruta is private and must never render to unit_portal.
+
+The privacy defect on the old compatibility Portal week surfaces was closed in commit 04731895afc290b7df4e65bdc15146f2f2b69daa.
+
 UX principle:
 
 Do not redesign everything blindly. First walk the real task, then screenshot, then identify friction, then challenge or redesign only where justified.
@@ -121,6 +231,20 @@ Kommun 1.1 may become final PILOT READY only when:
 - final automated suite is green after any product changes
 - pilot candidate HEAD is frozen/tagged
 
+Current release sequence:
+
+1. Gate 02 — Departments + needs
+2. Department Edit UX challenger
+3. Admin menu-choice technical semantics gate
+4. Thin Admin → Menyval overview if implementation remains small
+5. Continue clean-customer live E2E: published menu, Portal choices, Kitchen propagation, Planera, Produktionsunderlag, completion, Reports, persistence/relogin
+6. UX race fixes
+7. Final regression
+8. Freeze/tag Kommun 1.1
+9. Offshore 1.0
+
 ## Notes
 
 This document is the working ledger for the live acceptance phase and the UX race.
+
+The live acceptance status above reflects the manually proven customer/site onboarding gate and the currently paused Department Edit / department needs work.

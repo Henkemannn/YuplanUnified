@@ -66,10 +66,33 @@ It may show:
 - registered specialkost or needs
 - serving adaptations where data exists
 
+This is the department-facing structured fact area, mentally framed as "Det här gäller för er".
+
+It must remain separate from internal free text and must be built from canonical structured sources, not from ad hoc notes.
+
 Security correction:
 
 - Department.notes / Faktaruta is private.
 - It must never be shown to unit_portal.
+
+### Structured fact sources
+
+The structured fact area may draw from:
+
+- department identity and scope from the authenticated department context
+- current/effective resident count from the resident-count source of truth
+- registered needs / specialkost from requirement-group and needs data
+- serving adaptations from the service-addons/operational adaptation data
+- other explicitly approved structured facts that are individually documented and sourced
+
+The above are operational, read-only facts. They are not the same thing as Department.notes.
+
+### Internal Faktaruta
+
+- Field: Department.notes
+- Purpose: private admin/kitchen free text
+- Visibility: never render to unit_portal
+- Privacy defect history: the old compatibility Portal week surfaces leaked this field and were fixed in commit 04731895afc290b7df4e65bdc15146f2f2b69daa (`fix(portal): keep department notes private`)
 
 ## Week View
 
@@ -83,6 +106,8 @@ It shows:
 - explicit completion state
 
 It is not a duplicate menu model. It reflects the published Builder menu and department selections.
+
+Week View is also where explicit Portal choice completion is reflected, but it still must not render Department.notes.
 
 ## Completion Model
 
@@ -119,6 +144,21 @@ The current live acceptance scope is:
 - verify explicit submit
 - verify propagation to Kitchen Weekview
 - verify persistence after reload/login
+
+## Product Direction Notes
+
+Menu-choice workflow direction:
+
+- Primary operational surface should be Admin → Menyval.
+- Department Edit should only keep a contextual shortcut later, not the main menu-choice workspace.
+- Kommun 1.1 scope is MVP-only: week chooser, all departments, per-department status, filters, current choice, direct change, and natural return to overview.
+- Larger statistics and analytics are deferred to a later release if needed.
+
+Admin override semantics remain an open technical gate:
+
+- Product intent says an admin/kitchen change is authoritative.
+- Current implementation still uses a shared canonical truth table for Portal and Admin writes.
+- Do not describe override persistence as fully solved yet.
 
 ## Design Boundary
 
