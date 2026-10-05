@@ -119,6 +119,71 @@ class TestAdminPhaseB:
         )
         assert r3.status_code == 412
 
+    def test_site_create_provisions_canonical_atomic_catalog_and_isolates_sites(self):
+        app = _mk_app()
+        c = app.test_client()
+        headers = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
+
+        from core.admin_repo import CANONICAL_ATOMIC_REQUIREMENT_NAMES, DietTypesRepo
+
+        site_a = c.post("/admin/sites", headers=headers, json={"name": "North"}).get_json()
+        site_b = c.post("/admin/sites", headers=headers, json={"name": "South"}).get_json()
+
+        rows_a = DietTypesRepo().list_all(site_id=site_a["id"])
+        rows_b = DietTypesRepo().list_all(site_id=site_b["id"])
+        assert len(rows_a) == len(CANONICAL_ATOMIC_REQUIREMENT_NAMES)
+        assert len(rows_b) == len(CANONICAL_ATOMIC_REQUIREMENT_NAMES)
+        assert {row["name"] for row in rows_a} == set(CANONICAL_ATOMIC_REQUIREMENT_NAMES)
+        assert {row["name"] for row in rows_b} == set(CANONICAL_ATOMIC_REQUIREMENT_NAMES)
+        assert all(row["semantics"] == "atomic" for row in rows_a)
+        assert all(row["semantics"] == "atomic" for row in rows_b)
+        assert {row["site_id"] for row in rows_a} == {site_a["id"]}
+        assert {row["site_id"] for row in rows_b} == {site_b["id"]}
+        assert {row["requirement_key"] for row in rows_a}.isdisjoint({row["requirement_key"] for row in rows_b})
+
+        with app.app_context():
+            from core.db import get_session
+
+            conn = get_session()
+            try:
+                DietTypesRepo().provision_canonical_atomic_catalog(conn, site_id=site_a["id"], tenant_id=1)
+                DietTypesRepo().provision_canonical_atomic_catalog(conn, site_id=site_a["id"], tenant_id=1)
+                conn.commit()
+            finally:
+                conn.close()
+
+        rows_once = DietTypesRepo().list_all(site_id=site_a["id"])
+        rows_twice = DietTypesRepo().list_all(site_id=site_a["id"])
+
+        assert len(rows_once) == len(rows_a)
+        assert len(rows_twice) == len(rows_a)
+        assert {row["name"] for row in rows_twice} == set(CANONICAL_ATOMIC_REQUIREMENT_NAMES)
+
+    def test_site_create_rolls_back_when_catalog_provisioning_fails(self, monkeypatch):
+        app = _mk_app()
+        c = app.test_client()
+        headers = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
+
+        from core.admin_repo import DietTypesRepo
+
+        def _boom(self, db, *, site_id, tenant_id=None):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(DietTypesRepo, "provision_canonical_atomic_catalog", _boom)
+
+        r = c.post("/admin/sites", headers=headers, json={"name": "Broken Site"})
+        assert r.status_code == 500
+
+        from core.db import get_session
+        from sqlalchemy import text
+
+        db = get_session()
+        try:
+            row = db.execute(text("SELECT id FROM sites WHERE name=:name"), {"name": "Broken Site"}).fetchone()
+        finally:
+            db.close()
+        assert row is None
+
     def test_rbac_and_ff(self):
         app = _mk_app()
         c = app.test_client()

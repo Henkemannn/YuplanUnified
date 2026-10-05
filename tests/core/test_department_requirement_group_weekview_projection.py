@@ -98,6 +98,31 @@ def test_primary_and_modifier_semantics_and_same_member_set_primary_order(app_se
         assert set(second.modifier_labels) == {"Timbal"}
 
 
+def test_composite_group_display_label_prefers_member_names_over_stale_single_label(app_session) -> None:
+    with app_session.app_context():
+        site, department, group_repo, timbal_id, glutenfri_id, _lactosefri_id = _seed_site_department_and_requirements("Stale label site")
+        group = group_repo.create_group(
+            department["id"],
+            2,
+            [timbal_id, glutenfri_id],
+            label="Timbal",
+            primary_requirement_id=timbal_id,
+        )
+
+        projection = build_department_requirement_group_weekview_projection(
+            tenant_id=None,
+            site_id=site["id"],
+            department_id=department["id"],
+            service_date=date(2026, 10, 8),
+            meal_key="lunch",
+        )
+
+        need = next(item for item in projection.needs if item.group_id == group["id"])
+        assert need.display_label == "Timbal + Glutenfri"
+        assert need.primary_label == "Timbal"
+        assert set(need.modifier_labels) == {"Glutenfri"}
+
+
 def test_unresolved_group_keeps_exact_combination_without_guessing_primary(app_session) -> None:
     with app_session.app_context():
         site, department, group_repo, timbal_id, glutenfri_id, _lactosefri_id = _seed_site_department_and_requirements("Unresolved site")
@@ -181,6 +206,28 @@ def test_default_weekday_exact_override_and_zero_omits_active_need(app_session) 
         )
         assert projection_zero.needs == ()
 
+
+def test_inactive_group_is_omitted_from_weekview_projection(app_session) -> None:
+    with app_session.app_context():
+        site, department, group_repo, timbal_id, glutenfri_id, _lactosefri_id = _seed_site_department_and_requirements("Inactive group site")
+        group = group_repo.create_group(
+            department["id"],
+            2,
+            [timbal_id, glutenfri_id],
+            label="Timbal + Glutenfri",
+            primary_requirement_id=timbal_id,
+        )
+        group_repo.update_group(group["id"], is_active=False)
+
+        projection = build_department_requirement_group_weekview_projection(
+            tenant_id=None,
+            site_id=site["id"],
+            department_id=department["id"],
+            service_date=date(2026, 10, 8),
+            meal_key="lunch",
+        )
+
+        assert projection.needs == ()
 
 def test_completion_true_false_missing_and_date_meal_independence(app_session) -> None:
     with app_session.app_context():

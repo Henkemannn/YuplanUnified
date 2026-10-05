@@ -129,6 +129,13 @@ def test_admin_specialkost_new_creates_diet_type(client_admin: FlaskClient):
     assert "Allergi / Exkludering" in html
     assert "Specialkost" in html
 
+    from core.admin_repo import DietTypesRepo
+
+    rows = DietTypesRepo().list_all(site_id="site-1")
+    created = next(row for row in rows if str(row.get("name")) == "Laktosfri")
+    assert created["semantics"] == "atomic"
+    assert str(created["requirement_key"]).startswith("req_")
+
 
 def test_admin_specialkost_new_with_default_select(client_admin: FlaskClient):
     """New route creates dietary type with formarkeras checkbox enabled."""
@@ -143,11 +150,16 @@ def test_admin_specialkost_new_with_default_select(client_admin: FlaskClient):
     
     # Verify created with default_select
     assert "Vegansk" in html
-    # Would need to query DB or check edit form to verify default_select=1
+    from core.admin_repo import DietTypesRepo
+
+    rows = DietTypesRepo().list_all(site_id="site-1")
+    created = next(row for row in rows if str(row.get("name")) == "Vegansk")
+    assert created["semantics"] == "atomic"
+    assert created["default_select"] is True
 
 
-def test_admin_specialkost_new_rejects_case_insensitive_duplicate(client_admin: FlaskClient):
-    """Create route should block duplicate names regardless of casing."""
+def test_admin_specialkost_new_repairs_case_insensitive_duplicate(client_admin: FlaskClient):
+    """Create route should upsert duplicate names as canonical atomic rows."""
     response = client_admin.post(
         "/ui/admin/specialkost/new",
         data={"name": "vegetarisk", "default_select": ""},
@@ -156,7 +168,14 @@ def test_admin_specialkost_new_rejects_case_insensitive_duplicate(client_admin: 
     )
     assert response.status_code == 200
     html = response.data.decode()
-    assert "Kosttyp med samma namn finns redan." in html
+    assert "vegetarisk" in html.lower()
+
+    from core.admin_repo import DietTypesRepo
+
+    rows = DietTypesRepo().list_all(site_id="site-1")
+    created = next(row for row in rows if str(row.get("name")).lower() == "vegetarisk")
+    assert created["semantics"] == "atomic"
+    assert str(created["requirement_key"]).startswith("req_")
 
 
 def test_admin_specialkost_edit_rejects_case_insensitive_duplicate(client_admin: FlaskClient):

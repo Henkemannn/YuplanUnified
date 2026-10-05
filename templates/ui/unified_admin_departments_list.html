@@ -11,13 +11,7 @@
         <section class="app-shell__page-header">
             <div>
                 <h1 class="app-shell__title">Avdelningar</h1>
-                <p class="app-shell__subtitle">
-                    {% if vm.site_name %}
-                        {{ vm.site_name }}
-                    {% else %}
-                        Hantera avdelningar för din enhet.
-                    {% endif %}
-                </p>
+                <p class="app-shell__subtitle">Hantera avdelningar och boende per enhet.</p>
             </div>
         </section>
 
@@ -46,13 +40,10 @@
                             <div class="app-shell__list-main">
                                 <a class="app-shell__list-title" href="{{ url_for('ui.admin_department_detail', department_id=dept.id) }}">{{ dept.name }}</a>
                                 <div class="app-shell__list-meta">
-                                    {{ dept.site_name }} •
+                                    {{ dept.resident_count_fixed }} boende ·
                                     <span class="admin-departments__mode-badge {% if dept.has_variation %}is-variable{% else %}is-fixed{% endif %}">
                                         {% if dept.has_variation %}Varierat{% else %}Fast{% endif %}
                                     </span>
-                                    {% if not dept.has_variation %}
-                                        • {{ dept.resident_count_fixed }} boende
-                                    {% endif %}
                                 </div>
                                 <div class="app-shell__list-note">Boende: {{ dept.residence_name or 'Ej valt' }}</div>
                                 {% if dept.notes %}

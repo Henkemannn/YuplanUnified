@@ -4,425 +4,210 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_departments.css') }}">
 {% endblock %}
 
-{% block admin_title %}{{ 'Ny avdelning' if vm.mode == 'new' else 'Redigera Avdelning' }}{% endblock %}
+{% block admin_title %}{{ 'Ny avdelning' if vm.mode == 'new' else 'Avdelningar' }}{% endblock %}
 {% block admin_subtitle %}
-    {% if vm.mode == 'edit' %}
-        <span class="app-shell__env-badge">{{ vm.site_name or current_site_name or '—' }}</span>
-    {% else %}
-        Hantera avdelningsuppgifter och boendeantal.
-    {% endif %}
+    Hantera avdelningsuppgifter och boendeantal.
 {% endblock %}
 {% block admin_context_meta %}
-    {% if vm.mode != 'edit' %}
-        {{ super() }}
-    {% endif %}
 {% endblock %}
 {% block admin_week_meta %}
-    {% if vm.mode != 'edit' %}
-        {{ super() }}
-    {% endif %}
 {% endblock %}
 
 {% block admin_main %}
 
 {% if vm.mode == 'edit' and vm.department %}
-<form id="department-form" method="POST"
-      action="{{ url_for('ui.admin_departments_update', dept_id=vm.department.id) }}"
-      class="yp-form department-form">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <input type="hidden" name="version" value="{{ vm.department.version }}">
-</form>
+{% set department_profile = namespace(residence_name='') %}
+{% for residence in vm.residences or [] %}
+    {% if vm.selected_residence_id and vm.selected_residence_id == residence.id %}
+        {% set department_profile.residence_name = residence.name %}
+    {% endif %}
+{% endfor %}
+
+{% set resident_variation = namespace(changes=0, preview='') %}
+{% if vm.weekly_table %}
+    {% for row in vm.weekly_table %}
+        {% if row.lunch != vm.department.resident_count_fixed %}
+            {% set resident_variation.changes = resident_variation.changes + 1 %}
+            {% if not resident_variation.preview %}
+                {% set resident_variation.preview = row.weekday ~ ' lunch ' ~ row.lunch %}
+            {% endif %}
+        {% endif %}
+        {% if row.dinner != vm.department.resident_count_fixed %}
+            {% set resident_variation.changes = resident_variation.changes + 1 %}
+            {% if not resident_variation.preview %}
+                {% set resident_variation.preview = row.weekday ~ ' kväll ' ~ row.dinner %}
+            {% endif %}
+        {% endif %}
+    {% endfor %}
 {% endif %}
 
-<section class="app-shell__grid{% if vm.mode == 'edit' and vm.department %} admin-department-edit__grid{% endif %}">
-    {% if vm.mode == 'edit' and vm.department %}
-        <article class="app-shell__card">
-            <h2 class="app-shell__card-title">Avdelningsuppgifter</h2>
-            <!-- Keep legacy-cased string for tests -->
-            <span class="u-visually-hidden">Redigera avdelning</span>
+<section class="admin-department-profile">
+    <header class="admin-department-profile__header">
+        <div class="admin-department-profile__identity">
+            <h1 class="admin-department-profile__title">{{ vm.department.name }}</h1>
+            <p class="admin-department-profile__meta">{{ department_profile.residence_name or 'Ej valt boende' }} · {{ vm.department.resident_count_fixed }} boende</p>
+        </div>
+    </header>
 
-            <div class="yp-form-field">
-                <label for="name" class="yp-label">
-                    Namn <span class="required">*</span>
-                </label>
-                  <input type="text"
-                       id="name"
-                       name="name"
-                       class="yp-input"
-                      form="department-form"
-                       value="{{ vm.department.name }}"
-                       required
-                       aria-required="true"
-                       placeholder="T.ex. Avdelning 1">
-                <p class="yp-form-help">Namnet på avdelningen (synligt för personal)</p>
-            </div>
-
-            <div class="yp-form-field">
-                <label for="notes" class="yp-label">
-                    Faktaruta
-                </label>
-                <textarea id="notes" name="notes" class="yp-input" rows="4" placeholder="Valfri beskrivning" form="department-form">{{ vm.department.notes }}</textarea>
-                <p class="yp-form-help">Intern faktaruta/anteckningar för avdelningen</p>
-            </div>
-
-            <div class="yp-form-field">
-                <label for="residence_id" class="yp-label">
-                    Boende
-                </label>
-                <div class="admin-inline-actions">
-                    <select
-                        id="residence_id"
-                        name="residence_id"
-                        class="yp-input"
-                        form="department-form"
-                    >
-                        <option value="">Välj boende...</option>
-                        {% for residence in vm.residences or [] %}
-                        <option
-                            value="{{ residence.id }}"
-                            {% if vm.selected_residence_id and vm.selected_residence_id == residence.id %}selected{% endif %}
-                        >{{ residence.name }}</option>
-                        {% endfor %}
-                    </select>
-                    <button
-                        type="button"
-                        class="yp-button yp-button-secondary"
-                        data-modal-target="#residence-create-modal"
-                        aria-label="Lägg till boende"
-                    >+ Lägg till</button>
-                </div>
-                <p class="yp-form-help">Koppla avdelningen till ett boende eller skapa ett nytt.</p>
-            </div>
-        </article>
-
-        <article class="app-shell__card">
-            <h2 class="app-shell__card-title">Boendeantal</h2>
-            <div class="yp-form-field">
-                <label for="resident_count" class="yp-label">
-                    Fast antal <span class="required">*</span>
-                </label>
-                <input type="number"
-                       id="resident_count"
-                       name="resident_count"
-                       class="yp-input"
-                       form="department-form"
-                       value="{{ vm.department.resident_count_fixed }}"
-                       min="0"
-                       required
-                       aria-required="true"
-                       placeholder="0">
-                <p class="yp-form-help">Normalt antal (fast). Denna vecka kan vara varierad.</p>
-            </div>
-            {% if vm.weekly_table %}
-            <div class="ua-effective-week admin-weekly-preview">
-                <p class="ua-muted admin-weekly-preview__status">Denna vecka: <strong>Varierat</strong></p>
-                <table class="ua-table ua-table-compact admin-weekly-preview__table">
-                    <tr>
-                        <th>Dag</th>
-                        <th><span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🍽️</span> Lunch</span></th>
-                        <th><span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🌙</span> Kväll</span></th>
-                    </tr>
-                    {% for row in vm.weekly_table %}
-                    <tr>
-                        <td>{{ row.weekday }}</td>
-                        <td>{{ row.lunch }}</td>
-                        <td>{{ row.dinner }}</td>
-                    </tr>
-                    {% endfor %}
-                </table>
-            </div>
-            {% endif %}
-            <div class="admin-variation-group">
-                <div class="variation-actions">
-                    <button type="button" id="openVariationBtn" class="yp-button yp-button-secondary js-open-modal" data-modal-target="#residents-variation-modal">Varierat boendeantal</button>
-                </div>
-                <p class="yp-form-help">Spara avvikande antal per vecka eller tills vidare.</p>
-            </div>
-        </article>
-
-        <article class="app-shell__card">
-            <h2 class="app-shell__card-title">Menyval</h2>
-            <div class="admin-menuval-group">
+    <section class="app-shell__grid admin-department-edit__stack">
+        <article class="app-shell__card admin-section admin-section--profile">
+            <div class="admin-section__header">
                 <div>
-                    <button type="button" id="openAlt2Modal" class="yp-button yp-button-secondary js-open-alt2" data-department-id="{{ vm.department.id }}" data-site-id="{{ vm.department.site_id }}">Ändra menyval</button>
+                    <h2 class="app-shell__card-title">Avdelningen</h2>
+                    <p class="admin-section__lead">Intern information för kök och administration.</p>
                 </div>
-                <p class="yp-form-help">Här kan du ändra avdelningens menyval.</p>
+                <button type="button" class="yp-button yp-button-secondary" data-modal-target="#department-edit-modal">Redigera avdelning</button>
+            </div>
+            <div class="admin-section__body admin-section__body--profile">
+                <div class="admin-profile-row admin-profile-row--read">
+                    <div class="admin-profile-row__label">Boende / anläggning</div>
+                    <div class="admin-profile-row__value">{{ department_profile.residence_name or 'Ej valt boende' }}</div>
+                </div>
+
+                <div class="admin-profile-row admin-profile-row--read">
+                    <div class="admin-profile-row__label">Normalt antal boende</div>
+                    <div class="admin-profile-row__value admin-profile-row__value--with-action">
+                        <span>{{ vm.department.resident_count_fixed }} · {{ vm.resident_variation_status }}</span>
+                        <button type="button" class="yp-button yp-button-secondary js-open-modal" data-modal-target="#residents-variation-modal">Hantera variation</button>
+                    </div>
+                </div>
+
+                <div class="admin-profile-row admin-profile-row--read admin-profile-row--notes">
+                    <div class="admin-profile-row__label">Intern faktaruta</div>
+                    <div class="admin-profile-row__value">{{ vm.department.notes or 'Ingen information ännu.' }}</div>
+                </div>
             </div>
         </article>
-        <article class="app-shell__card">
-        <h2 class="app-shell__card-title">Specialkost</h2>
-        <p class="yp-form-help">Använd avvikande schema här när avvikelsen beror på en viss specialkost. Detta ändrar inte boendeantalet automatiskt.</p>
-        <div class="yp-form">
-            {% if vm.diet_types and vm.diet_types|length > 0 %}
-            <div class="specialkost-edit-search-row" data-specialkost-filter-root>
-                <input
-                    type="search"
-                    class="yp-input specialkost-edit-search"
-                    placeholder="Sök specialkost..."
-                    aria-label="Sök specialkost"
-                    data-specialkost-filter-input
-                >
+
+        <article class="app-shell__card admin-section admin-section--needs">
+            <div class="admin-section__header">
+                <div>
+                    <h2 class="app-shell__card-title">Behov</h2>
+                    <p class="admin-section__lead">Registrerade behov visas som de faktiskt gäller för avdelningen.</p>
+                </div>
+                <button type="button"
+                        class="yp-button yp-button-secondary admin-section__create-toggle"
+                        data-modal-target="#need-modal"
+                        data-need-mode="create">+ Lägg till behov</button>
             </div>
-            {% set diet_categories = ['Textur', 'Allergi / Exkludering', 'Anpassning', 'Kostval', 'Övrigt'] %}
-            {% set totals = namespace(value=0) %}
-            {% for t in vm.diet_types %}
-                {% set dtid = t.id %}
-                {% set val = (vm.diet_defaults.get(dtid|string, 0) if vm.diet_defaults else 0)|int %}
-                {% set totals.value = totals.value + val %}
-            {% endfor %}
-            <p class="app-shell__card-text specialkost-edit-total"><strong>Totalt:</strong> {{ totals.value }} personer</p>
-            <div class="specialkost-edit-groups" role="group" aria-label="Specialkost antal per kategori">
-                {% for category in diet_categories %}
-                    {% set ns = namespace(rows=[]) %}
-                    {% for t in vm.diet_types %}
-                        {% set t_family = t.diet_family if t.diet_family in diet_categories else 'Övrigt' %}
-                        {% if t_family == category %}
-                            {% set ns.rows = ns.rows + [t] %}
-                        {% endif %}
-                    {% endfor %}
-                    {% if ns.rows %}
-                    <details class="specialkost-edit-group" data-specialkost-group open>
-                        <summary class="specialkost-edit-group__summary">{{ category }}</summary>
-                        <div class="specialkost-edit-grid" role="group" aria-label="Specialkost antal {{ category }}">
-                            {% set families = namespace(names=[]) %}
-                            {% for t in ns.rows %}
-                                {% set family_base = t.name.replace('–', '-').split('-')[0].strip() %}
-                                {% set family_base = family_base if family_base else (t.name or 'Övrigt') %}
-                                {% if family_base not in families.names %}
-                                    {% set families.names = families.names + [family_base] %}
-                                {% endif %}
-                            {% endfor %}
-                            {% for family_name in families.names %}
-                            <details class="specialkost-edit-family" data-specialkost-subgroup>
-                                <summary class="specialkost-edit-family__summary">{{ family_name }}</summary>
-                                <div class="specialkost-edit-family__list">
-                                    {% for t in ns.rows %}
-                                        {% set row_family_base = t.name.replace('–', '-').split('-')[0].strip() %}
-                                        {% set row_family_base = row_family_base if row_family_base else (t.name or 'Övrigt') %}
-                                        {% if row_family_base == family_name %}
+
+            <div class="admin-needs-list" role="list" aria-label="Registrerade behov">
+                {% for group in vm.requirement_groups or [] %}
+                {% set group_display_name = (group.member_names|join(' + ')) if group.member_names else (group.label or group.primary_name or 'Behov saknas') %}
+                <div class="admin-need-item" role="listitem">
+                    <div class="admin-need-item__main">
+                        <strong class="admin-need-item__name">{{ group_display_name }}</strong>
+                        <div class="admin-need-item__meta-line">
+                            <span class="admin-need-item__count">{{ group.default_quantity }} person{% if group.default_quantity != 1 %}er{% endif %}</span>
+                            <span class="admin-need-item__state">{% if group.has_variation %}Varierat{% else %}Samma antal{% endif %}</span>
+                        </div>
+                    </div>
+                    <div class="admin-need-item__actions">
+                        <button type="button"
+                                class="yp-button yp-button-secondary admin-need-item__edit-trigger"
+                                data-modal-target="#need-modal"
+                                data-need-mode="edit"
+                                data-need-group-id="{{ group.id }}"
+                                data-need-primary-id="{{ group.primary_requirement_id or '' }}"
+                                data-need-modifier-ids="{{ group.modifier_ids|join(',') }}"
+                            data-need-default-quantity="{{ group.default_quantity }}"
+                                data-need-label="{{ group_display_name }}">Redigera</button>
+                    </div>
+                </div>
+                {% else %}
+                <p class="ua-muted">Inga registrerade behov ännu.</p>
+                {% endfor %}
+                                </div>
+
+                            <details class="admin-specialkost-config">
+                                <summary class="admin-specialkost-config__summary">Standardvärden / avancerade inställningar</summary>
+                                <div class="admin-specialkost-config__body">
+                                    <p class="yp-form-help admin-specialkost-config__lead">Standardvärden för behov. Den här inställningen är stödjande och ändrar inte de registrerade behoven ovan.</p>
+                                    <div class="yp-form">
+                                        {% if vm.diet_types and vm.diet_types|length > 0 %}
+                                        <div class="specialkost-edit-search-row" data-specialkost-filter-root>
+                                            <input type="search" class="yp-input specialkost-edit-search" placeholder="Sök specialkost..." aria-label="Sök specialkost" data-specialkost-filter-input>
+                                        </div>
+                                        {% set diet_categories = ['Textur', 'Allergi / Exkludering', 'Anpassning', 'Kostval', 'Övrigt'] %}
+                                        {% set totals = namespace(value=0) %}
+                                        {% for t in vm.diet_types %}
                                             {% set dtid = t.id %}
-                                            {% set val = vm.diet_defaults.get(dtid|string, 0) if vm.diet_defaults else 0 %}
-                                            <div class="specialkost-edit-row" data-specialkost-item>
-                                                <label class="specialkost-edit-label" data-specialkost-name for="diet_default_{{ dtid }}">{{ t.name }}</label>
-                                                <div class="specialkost-edit-actions">
-                                                    <input
-                                                        type="number"
-                                                        id="diet_default_{{ dtid }}"
-                                                        name="diet_default_{{ dtid }}"
-                                                        class="yp-input specialkost-edit-input sk-input"
-                                                        form="department-form"
-                                                        min="0"
-                                                        value="{{ val }}"
-                                                    >
-                                                    <button
-                                                        type="button"
-                                                        class="yp-button yp-button-secondary specialkost-edit-override{% if vm.diet_overrides_present and vm.diet_overrides_present.get(dtid|string) %} is-active{% endif %} js-open-diet-override"
-                                                        data-modal-target="#dietOverrideModal"
-                                                        data-department-id="{{ vm.department.id }}"
-                                                        data-site-id="{{ vm.department.site_id }}"
-                                                        data-diet-type-id="{{ dtid }}"
-                                                        data-diet-name="{{ t.name }}"
-                                                        aria-label="Avvikande schema{% if vm.diet_overrides_present and vm.diet_overrides_present.get(dtid|string) %} (aktivt){% endif %}"
-                                                    >Avvikande schema</button>
-                                                </div>
-                                            </div>
+                                            {% set val = (vm.diet_defaults.get(dtid|string, 0) if vm.diet_defaults else 0)|int %}
+                                            {% set totals.value = totals.value + val %}
+                                        {% endfor %}
+                                        <p class="app-shell__card-text specialkost-edit-total"><strong>Totalt:</strong> {{ totals.value }} personer</p>
+                                        <div class="specialkost-edit-groups" role="group" aria-label="Specialkost antal per kategori">
+                                            {% for category in diet_categories %}
+                                                {% set ns = namespace(rows=[]) %}
+                                                {% for t in vm.diet_types %}
+                                                    {% set t_family = t.diet_family if t.diet_family in diet_categories else 'Övrigt' %}
+                                                    {% if t_family == category %}
+                                                        {% set ns.rows = ns.rows + [t] %}
+                                                    {% endif %}
+                                                {% endfor %}
+                                                {% if ns.rows %}
+                                                <details class="specialkost-edit-group" data-specialkost-group open>
+                                                    <summary class="specialkost-edit-group__summary">{{ category }}</summary>
+                                                    <div class="specialkost-edit-grid" role="group" aria-label="Specialkost antal {{ category }}">
+                                                        {% set families = namespace(names=[]) %}
+                                                        {% for t in ns.rows %}
+                                                            {% set family_base = t.name.replace('–', '-').split('-')[0].strip() %}
+                                                            {% set family_base = family_base if family_base else (t.name or 'Övrigt') %}
+                                                            {% if family_base not in families.names %}
+                                                                {% set families.names = families.names + [family_base] %}
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                        {% for family_name in families.names %}
+                                                        <details class="specialkost-edit-family" data-specialkost-subgroup>
+                                                            <summary class="specialkost-edit-family__summary">{{ family_name }}</summary>
+                                                            <div class="specialkost-edit-family__list">
+                                                                {% for t in ns.rows %}
+                                                                    {% set row_family_base = t.name.replace('–', '-').split('-')[0].strip() %}
+                                                                    {% set row_family_base = row_family_base if row_family_base else (t.name or 'Övrigt') %}
+                                                                    {% if row_family_base == family_name %}
+                                                                        {% set dtid = t.id %}
+                                                                        {% set val = vm.diet_defaults.get(dtid|string, 0) if vm.diet_defaults else 0 %}
+                                                                        <div class="specialkost-edit-row" data-specialkost-item>
+                                                                            <label class="specialkost-edit-label" data-specialkost-name for="diet_default_{{ dtid }}">{{ t.name }}</label>
+                                                                            <div class="specialkost-edit-actions">
+                                                                                <input type="number" id="diet_default_{{ dtid }}" name="diet_default_{{ dtid }}" class="yp-input specialkost-edit-input sk-input" form="department-form" min="0" value="{{ val }}">
+                                                                                <button type="button" class="yp-button yp-button-secondary specialkost-edit-override{% if vm.diet_overrides_present and vm.diet_overrides_present.get(dtid|string) %} is-active{% endif %} js-open-diet-override" data-modal-target="#dietOverrideModal" data-department-id="{{ vm.department.id }}" data-site-id="{{ vm.department.site_id }}" data-diet-type-id="{{ dtid }}" data-diet-name="{{ t.name }}" aria-label="Avvikande schema{% if vm.diet_overrides_present and vm.diet_overrides_present.get(dtid|string) %} (aktivt){% endif %}">Avvikande schema</button>
+                                                                            </div>
+                                                                        </div>
+                                                                    {% endif %}
+                                                                {% endfor %}
+                                                            </div>
+                                                        </details>
+                                                        {% endfor %}
+                                                    </div>
+                                                </details>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                        {% else %}
+                                        <p class="ua-muted">Inga specialkosttyper finns på denna site – skapa under <a href="{{ url_for('ui.admin_specialkost_list') }}">Specialkost</a>.</p>
                                         {% endif %}
-                                    {% endfor %}
+                                    </div>
                                 </div>
                             </details>
-                            {% endfor %}
-                        </div>
-                    </details>
-                    {% endif %}
-                {% endfor %}
-            </div>
-            {% else %}
-            <p class="ua-muted">Inga specialkosttyper finns på denna site – skapa under <a href="{{ url_for('ui.admin_specialkost_list') }}">Specialkost</a>.</p>
-            {% endif %}
-        </div>
-        </article>
+                        </article>
 
-        <article class="app-shell__card">
-        <h2 class="app-shell__card-title">Registrerade behov</h2>
-        <p class="yp-form-help">Välj specialkost, lägg till avvikelser och ange antal. Det här är ett separat register och ändrar inte avdelningens specialkostantal.</p>
-
-        <form method="POST" action="{{ url_for('ui.admin_departments_save_requirement_group', dept_id=vm.department.id) }}" class="yp-form specialkost-edit-group">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <div class="specialkost-edit-row">
-                <label class="specialkost-edit-label" for="new_primary_requirement_id">Specialkost</label>
-                <div class="specialkost-edit-actions">
-                    <select id="new_primary_requirement_id" name="primary_requirement_id" class="yp-input">
-                        <option value="">Välj specialkost...</option>
-                        {% for t in vm.requirement_group_diet_types or [] %}
-                        <option value="{{ t.id }}">{{ t.name }}</option>
-                        {% endfor %}
-                    </select>
+        <article class="app-shell__card admin-section admin-section--addons">
+            <div class="admin-section__header">
+                <div>
+                    <h2 class="app-shell__card-title">Serveringsanpassningar</h2>
+                    <p class="admin-section__lead">Återkommande tillägg per avdelning.</p>
                 </div>
+                <button type="button" class="yp-button yp-button-secondary" id="service-addon-add-row">+ Lägg till anpassning</button>
             </div>
-            <div class="specialkost-edit-row">
-                <label class="specialkost-edit-label" for="new_modifier_requirement_ids">Ytterligare avvikelser</label>
-                <div class="specialkost-edit-actions" style="align-items:flex-start;">
-                    <select id="new_modifier_requirement_ids" name="modifier_requirement_ids" class="yp-input" multiple size="5">
-                        {% for t in vm.requirement_group_diet_types or [] %}
-                        <option value="{{ t.id }}">{{ t.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
-            <div class="specialkost-edit-row">
-                <label class="specialkost-edit-label" for="new_default_quantity">Antal</label>
-                <div class="specialkost-edit-actions">
-                    <input type="number" id="new_default_quantity" name="default_quantity" class="yp-input sk-input" min="0" value="1">
-                </div>
-            </div>
-            <div class="specialkost-edit-row">
-                <span class="specialkost-edit-label">Aktiv</span>
-                <div class="specialkost-edit-actions">
-                    <label class="yp-form-help" style="display:flex;align-items:center;gap:.4rem;margin:0;">
-                        <input type="checkbox" name="is_active" value="1" checked>
-                        Aktiv grupp
-                    </label>
-                </div>
-            </div>
-            <div style="margin-top:.5rem;">
-                <button type="submit" class="yp-button yp-button-primary">Skapa grupp</button>
-            </div>
-        </form>
-
-        <div class="specialkost-edit-groups" role="list" aria-label="Registrerade behov">
-            {% for group in vm.requirement_groups or [] %}
-            <form method="POST" action="{{ url_for('ui.admin_departments_save_requirement_group', dept_id=vm.department.id) }}" class="specialkost-edit-group" role="listitem">
+            <form id="service-addons-form" method="POST" action="{{ url_for('ui.admin_departments_edit_save_service_addons', dept_id=vm.department.id) }}" class="yp-form">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <input type="hidden" name="group_id" value="{{ group.id }}">
-                <div class="specialkost-edit-group__summary" style="margin-bottom:.5rem;">
-                    <strong>{% if group.primary_name %}{{ group.primary_name }}{% else %}Huvudsaklig specialkost behöver anges{% endif %}</strong>
-                    {% if group.unresolved_primary %}
-                        <span class="ua-muted">Huvudsaklig specialkost behöver anges innan du sparar.</span>
-                    {% endif %}
-                    {% if group.modifier_names %}
-                        <div class="ua-muted">{% for name in group.modifier_names %}+ {{ name }}{% if not loop.last %}, {% endif %}{% endfor %}</div>
-                    {% endif %}
-                    <div>Antal: {{ group.default_quantity }}</div>
-                </div>
-                <div class="specialkost-edit-row">
-                    <label class="specialkost-edit-label" for="group_{{ group.id }}_primary_requirement_id">Specialkost</label>
-                    <div class="specialkost-edit-actions">
-                        <select id="group_{{ group.id }}_primary_requirement_id" name="primary_requirement_id" class="yp-input">
-                            {% if group.unresolved_primary %}
-                                <option value="">Välj specialkost...</option>
-                            {% endif %}
-                            {% for t in group.primary_options or [] %}
-                            <option value="{{ t.id }}" {% if group.primary_requirement_id and (t.id|string) == (group.primary_requirement_id|string) %}selected{% endif %}>{{ t.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-                <div class="specialkost-edit-row">
-                    <label class="specialkost-edit-label" for="group_{{ group.id }}_modifier_requirement_ids">Ytterligare avvikelser</label>
-                    <div class="specialkost-edit-actions" style="align-items:flex-start;">
-                        <select id="group_{{ group.id }}_modifier_requirement_ids" name="modifier_requirement_ids" class="yp-input" multiple size="5">
-                            {% for t in group.modifier_options or [] %}
-                            <option value="{{ t.id }}" {% if (t.id|string) in (group.modifier_ids or []) %}selected{% endif %}>{{ t.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-                <div class="specialkost-edit-row">
-                    <label class="specialkost-edit-label" for="group_{{ group.id }}_default_quantity">Antal</label>
-                    <div class="specialkost-edit-actions">
-                        <input type="number" id="group_{{ group.id }}_default_quantity" name="default_quantity" class="yp-input sk-input" min="0" value="{{ group.default_quantity }}">
-                    </div>
-                </div>
-                <div class="specialkost-edit-row">
-                    <span class="specialkost-edit-label">Varierat antal</span>
-                    <div class="specialkost-edit-actions" style="align-items:stretch; gap:.5rem; width:100%;">
-                        <details class="specialkost-weekday-variation" open>
-                            <summary class="yp-form-help">Justera återkommande antal per veckodag och måltid</summary>
-                            <table class="ua-table ua-table-compact" style="width:100%; margin-top:.5rem;">
-                                <thead>
-                                    <tr>
-                                        <th>Dag</th>
-                                        <th><span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🍽️</span> Lunch</span></th>
-                                        <th><span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🌙</span> Kväll</span></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for row in group.weekday_rows or [] %}
-                                    <tr>
-                                        <td>{{ row.weekday_label }}</td>
-                                        <td>
-                                            <input
-                                                type="number"
-                                                class="yp-input sk-input"
-                                                name="weekday_quantity_{{ group.id }}_{{ row.weekday }}_lunch"
-                                                value="{{ row.lunch_value }}"
-                                                min="0"
-                                                step="1"
-                                                aria-label="{{ row.weekday_label }} lunch"
-                                            >
-                                        </td>
-                                        <td>
-                                            <input
-                                                type="number"
-                                                class="yp-input sk-input"
-                                                name="weekday_quantity_{{ group.id }}_{{ row.weekday }}_dinner"
-                                                value="{{ row.dinner_value }}"
-                                                min="0"
-                                                step="1"
-                                                aria-label="{{ row.weekday_label }} kväll"
-                                            >
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                            <p class="yp-form-help" style="margin:.35rem 0 0;">Lämna ett fält tomt för att återgå till normala antalet.</p>
-                            {% if group.unresolved_primary %}
-                                <p class="yp-form-help">Den här gruppen saknar huvudsaklig specialkost, men återkommande antal kan fortfarande sparas.</p>
-                            {% endif %}
-                        </details>
-                    </div>
-                </div>
-                <div class="specialkost-edit-row">
-                    <span class="specialkost-edit-label">Aktiv</span>
-                    <div class="specialkost-edit-actions">
-                        <label class="yp-form-help" style="display:flex;align-items:center;gap:.4rem;margin:0;">
-                            <input type="checkbox" name="is_active" value="1" {% if group.is_active %}checked{% endif %}>
-                            Aktiv grupp
-                        </label>
-                    </div>
-                </div>
-                <div style="margin-top:.5rem;">
-                    <button type="submit" class="yp-button yp-button-secondary">Spara grupp</button>
-                </div>
-            </form>
-            {% else %}
-            <p class="ua-muted">Inga registrerade behov ännu.</p>
-            {% endfor %}
-        </div>
-        </article>
-
-        <article class="app-shell__card">
-        <h2 class="app-shell__card-title">Serveringstillägg</h2>
-        <p class="yp-form-help">Återkommande tillägg per avdelning (t.ex. Mos, Sallad, Sås separat).</p>
-        <form id="service-addons-form" method="POST" action="{{ url_for('ui.admin_departments_edit_save_service_addons', dept_id=vm.department.id) }}" class="yp-form">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <table class="ua-table service-addon-table" id="service-addon-table">
-                <thead>
-                    <tr>
-                        <th>Tillägg</th>
-                        <th>Familj</th>
-                        <th>Lunch</th>
-                        <th>Kväll</th>
-                        <th>Notering</th>
-                        <th>Ta bort</th>
-                    </tr>
-                </thead>
-                <tbody id="service-addon-body">
+                <div id="service-addon-body" class="service-addon-body">
                     {% if vm.department_service_addons and vm.department_service_addons|length > 0 %}
                         {% for row in vm.department_service_addons %}
-                        <tr class="service-addon-row">
-                            <td class="service-addon-col-addon">
+                        <div class="service-addon-row">
+                            <div class="service-addon-field service-addon-field--addon">
+                                <label class="service-addon-field__label">Tillägg</label>
                                 <select name="service_addon_id[]" class="yp-input service-addon-select">
                                     <option value="">Välj tillägg</option>
                                     {% for opt in vm.service_addons_master %}
@@ -431,28 +216,20 @@
                                 </select>
                                 <div class="service-addon-create">
                                     <button type="button" class="yp-button yp-button-secondary service-addon-create-toggle js-service-addon-create-toggle">+ Skapa nytt tillägg</button>
-                                    <div class="service-addon-new-wrap">
-                                        <input type="text" name="service_addon_new_name[]" class="yp-input service-addon-new" placeholder="Namn på nytt tillägg">
-                                    </div>
+                                    <div class="service-addon-new-wrap"><input type="text" name="service_addon_new_name[]" class="yp-input service-addon-new" placeholder="Namn på nytt tillägg"></div>
                                 </div>
-                            </td>
-                            <td>
-                                {% set row_family = (row.addon_family or 'ovrigt')|lower %}
-                                <select name="service_addon_family[]" class="yp-input">
-                                    <option value="mos" {% if row_family == 'mos' %}selected{% endif %}>Mos</option>
-                                    <option value="sallad" {% if row_family == 'sallad' %}selected{% endif %}>Sallad</option>
-                                    <option value="ovrigt" {% if row_family == 'ovrigt' %}selected{% endif %}>Övrigt</option>
-                                </select>
-                            </td>
-                            <td><input type="number" min="0" name="service_addon_lunch_count[]" class="yp-input" value="{{ row.lunch_count if row.lunch_count is not none else '' }}"></td>
-                            <td><input type="number" min="0" name="service_addon_dinner_count[]" class="yp-input" value="{{ row.dinner_count if row.dinner_count is not none else '' }}"></td>
-                            <td><input type="text" name="service_addon_note[]" class="yp-input" value="{{ row.note or '' }}" placeholder="Valfri notering"></td>
-                            <td><button type="button" class="yp-button yp-button-secondary js-service-addon-remove">Ta bort</button></td>
-                        </tr>
+                            </div>
+                            <label class="service-addon-field"><span class="service-addon-field__label">Familj</span>{% set row_family = (row.addon_family or 'ovrigt')|lower %}<select name="service_addon_family[]" class="yp-input"><option value="mos" {% if row_family == 'mos' %}selected{% endif %}>Mos</option><option value="sallad" {% if row_family == 'sallad' %}selected{% endif %}>Sallad</option><option value="ovrigt" {% if row_family == 'ovrigt' %}selected{% endif %}>Övrigt</option></select></label>
+                            <label class="service-addon-field"><span class="service-addon-field__label">Lunch</span><input type="number" min="0" name="service_addon_lunch_count[]" class="yp-input" value="{{ row.lunch_count if row.lunch_count is not none else '' }}"></label>
+                            <label class="service-addon-field"><span class="service-addon-field__label">Kväll</span><input type="number" min="0" name="service_addon_dinner_count[]" class="yp-input" value="{{ row.dinner_count if row.dinner_count is not none else '' }}"></label>
+                            <label class="service-addon-field service-addon-field--note"><span class="service-addon-field__label">Notering</span><input type="text" name="service_addon_note[]" class="yp-input" value="{{ row.note or '' }}" placeholder="Valfri notering"></label>
+                            <div class="service-addon-field service-addon-field--remove"><span class="service-addon-field__label">Ta bort</span><button type="button" class="yp-button yp-button-secondary js-service-addon-remove">Ta bort</button></div>
+                        </div>
                         {% endfor %}
                     {% else %}
-                        <tr class="service-addon-row">
-                            <td class="service-addon-col-addon">
+                        <div class="service-addon-row">
+                            <div class="service-addon-field service-addon-field--addon">
+                                <label class="service-addon-field__label">Tillägg</label>
                                 <select name="service_addon_id[]" class="yp-input service-addon-select">
                                     <option value="">Välj tillägg</option>
                                     {% for opt in vm.service_addons_master %}
@@ -461,181 +238,68 @@
                                 </select>
                                 <div class="service-addon-create">
                                     <button type="button" class="yp-button yp-button-secondary service-addon-create-toggle js-service-addon-create-toggle">+ Skapa nytt tillägg</button>
-                                    <div class="service-addon-new-wrap">
-                                        <input type="text" name="service_addon_new_name[]" class="yp-input service-addon-new" placeholder="Namn på nytt tillägg">
-                                    </div>
+                                    <div class="service-addon-new-wrap"><input type="text" name="service_addon_new_name[]" class="yp-input service-addon-new" placeholder="Namn på nytt tillägg"></div>
                                 </div>
-                            </td>
-                            <td>
-                                <select name="service_addon_family[]" class="yp-input">
-                                    <option value="mos">Mos</option>
-                                    <option value="sallad">Sallad</option>
-                                    <option value="ovrigt" selected>Övrigt</option>
-                                </select>
-                            </td>
-                            <td><input type="number" min="0" name="service_addon_lunch_count[]" class="yp-input" value=""></td>
-                            <td><input type="number" min="0" name="service_addon_dinner_count[]" class="yp-input" value=""></td>
-                            <td><input type="text" name="service_addon_note[]" class="yp-input" value="" placeholder="Valfri notering"></td>
-                            <td><button type="button" class="yp-button yp-button-secondary js-service-addon-remove">Ta bort</button></td>
-                        </tr>
+                            </div>
+                            <label class="service-addon-field"><span class="service-addon-field__label">Familj</span><select name="service_addon_family[]" class="yp-input"><option value="mos">Mos</option><option value="sallad">Sallad</option><option value="ovrigt" selected>Övrigt</option></select></label>
+                            <label class="service-addon-field"><span class="service-addon-field__label">Lunch</span><input type="number" min="0" name="service_addon_lunch_count[]" class="yp-input" value=""></label>
+                            <label class="service-addon-field"><span class="service-addon-field__label">Kväll</span><input type="number" min="0" name="service_addon_dinner_count[]" class="yp-input" value=""></label>
+                            <label class="service-addon-field service-addon-field--note"><span class="service-addon-field__label">Notering</span><input type="text" name="service_addon_note[]" class="yp-input" value="" placeholder="Valfri notering"></label>
+                            <div class="service-addon-field service-addon-field--remove"><span class="service-addon-field__label">Ta bort</span><button type="button" class="yp-button yp-button-secondary js-service-addon-remove">Ta bort</button></div>
+                        </div>
                     {% endif %}
-                </tbody>
-            </table>
-            <div class="service-addon-actions">
-                <button type="button" class="yp-button yp-button-secondary" id="service-addon-add-row">+ Lägg till rad</button>
-                <button type="submit" class="yp-button yp-button-primary">Spara serveringstillägg</button>
-            </div>
-        </form>
+                </div>
+                <div class="service-addon-actions">
+                    <button type="submit" class="yp-button yp-button-primary">Spara serveringsanpassningar</button>
+                </div>
+            </form>
         </article>
-    {% else %}
-    <article class="app-shell__card">
-        <h2 class="app-shell__card-title">Avdelningsuppgifter</h2>
-        <!-- Keep legacy-cased string for tests -->
-        {% if vm.mode != 'new' %}
-        <span style="display:none">Redigera avdelning</span>
-        {% endif %}
-        {% if vm.site_name %}
-        <p class="app-shell__card-text">{{ vm.site_name }}</p>
-        {% endif %}
-
-        <form method="POST" 
-                    action="{% if vm.mode == 'new' %}{{ url_for('ui.admin_departments_create') }}{% else %}{{ url_for('ui.admin_departments_update', dept_id=vm.department.id) }}{% endif %}"
-                    class="yp-form department-form">
-
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                {% if vm.mode == 'edit' and vm.department %}
-                <input type="hidden" name="version" value="{{ vm.department.version }}">
-                {% endif %}
-
-                <div class="yp-form-field">
-                    <label for="name" class="yp-label">
-                        🏷️ Namn <span class="required">*</span>
-                    </label>
-                    <input type="text" 
-                           id="name" 
-                           name="name" 
-                           class="yp-input"
-                           value="{% if vm.department %}{{ vm.department.name }}{% endif %}"
-                           required
-                           aria-required="true"
-                           placeholder="T.ex. Avdelning 1">
-                    <p class="yp-form-help">Namnet på avdelningen (synligt för personal)</p>
-                </div>
-
-                {% if vm.mode == 'new' %}
-                <div class="yp-form-field">
-                    <label for="residence_id" class="yp-label">
-                        🏠 Boende <span class="required">*</span>
-                    </label>
-                    <div class="admin-inline-actions">
-                        <select
-                            id="residence_id"
-                            name="residence_id"
-                            class="yp-input"
-                            required
-                            aria-required="true"
-                        >
-                            <option value="">Välj boende...</option>
-                            {% for residence in vm.residences or [] %}
-                            <option
-                                value="{{ residence.id }}"
-                                {% if vm.selected_residence_id and vm.selected_residence_id == residence.id %}selected{% endif %}
-                            >{{ residence.name }}</option>
-                            {% endfor %}
-                        </select>
-                        <button
-                            type="button"
-                            class="yp-button yp-button-secondary"
-                            data-modal-target="#residence-create-modal"
-                            aria-label="Lägg till boende"
-                        >+ Lägg till</button>
-                    </div>
-                    <p class="yp-form-help">Välj boende för avdelningen eller skapa ett nytt direkt.</p>
-                </div>
-                {% endif %}
-
-                <div class="yp-form-field">
-                    <label for="resident_count" class="yp-label">
-                        🔢 Antal boende <span class="required">*</span>
-                    </label>
-                    <input type="number" 
-                           id="resident_count" 
-                           name="resident_count" 
-                           class="yp-input"
-                           value="{% if vm.department %}{{ vm.department.resident_count_fixed }}{% else %}0{% endif %}"
-                           min="0"
-                           required
-                           aria-required="true"
-                           placeholder="0">
-                    <p class="yp-form-help">Normalt antal (fast). Denna vecka kan vara varierad.</p>
-                    {% if vm.weekly_table %}
-                    <div class="ua-effective-week admin-weekly-preview">
-                        <p class="ua-muted admin-weekly-preview__status">Denna vecka: <strong>Varierat</strong></p>
-                        <table class="ua-table ua-table-compact admin-weekly-preview__table">
-                            <tr>
-                                <th>Dag</th>
-                                <th><span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🍽️</span> Lunch</span></th>
-                                <th><span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🌙</span> Kväll</span></th>
-                            </tr>
-                            {% for row in vm.weekly_table %}
-                            <tr>
-                                <td>{{ row.weekday }}</td>
-                                <td>{{ row.lunch }}</td>
-                                <td>{{ row.dinner }}</td>
-                            </tr>
-                            {% endfor %}
-                        </table>
-                    </div>
-                    {% endif %}
-                    {% if vm.mode == 'edit' and vm.department %}
-                    <div class="variation-actions" style="margin-top:8px;">
-                        <button type="button" id="openVariationBtn" class="yp-button yp-button-secondary js-open-modal" data-modal-target="#residents-variation-modal">Varierat boendeantal</button>
-                    </div>
-                    {% endif %}
-                </div>
-
-                <div class="yp-form-field">
-                    <label for="notes" class="yp-label">
-                        📝 Faktaruta
-                    </label>
-                    <textarea id="notes" name="notes" class="yp-input" rows="4" placeholder="Valfri beskrivning">{% if vm.department %}{{ vm.department.notes }}{% endif %}</textarea>
-                    <p class="yp-form-help">Intern faktaruta/anteckningar för avdelningen</p>
-                </div>
-
-                {% if vm.mode == 'edit' and vm.department %}
-                <div class="yp-form-field">
-                    <label class="yp-label">🍽️ Menyval (Alt1/Alt2)</label>
-                    <div>
-                        <button type="button" id="openAlt2Modal" class="yp-button yp-button-secondary js-open-alt2" data-department-id="{{ vm.department.id }}" data-site-id="{{ vm.department.site_id }}">Visa veckans Alt2</button>
-                    </div>
-                    <p class="yp-form-help">Läs-läge (Slice 1). Uppdatering kommer i nästa steg.</p>
-                </div>
-                {% endif %}
-
-                <div class="form-actions">
-                    <button type="submit" class="yp-button yp-button-primary">
-                        {% if vm.mode == 'new' %}
-                        💾 Skapa avdelning
-                        {% else %}
-                        💾 Spara ändringar
-                        {% endif %}
-                    </button>
-                    <a href="{{ url_for('ui.admin_departments_list') }}" class="yp-button yp-button-secondary">✖ Avbryt</a>
-                </div>
-
-    </form>
-    </article>
-    {% endif %}
+    </section>
 </section>
 
-{% if vm.mode == 'edit' and vm.department %}
-<div class="admin-edit-actions" role="group" aria-label="Åtgärder för redigering">
-    <button type="submit" class="yp-button yp-button-primary" form="department-form">Spara ändringar</button>
-    <a href="{{ url_for('ui.admin_departments_list') }}" class="yp-button yp-button-secondary">Avbryt</a>
-</div>
+{% else %}
+<section class="app-shell__grid">
+    <article class="app-shell__card">
+        <h2 class="app-shell__card-title">Avdelningsuppgifter</h2>
+        <form method="POST"
+              action="{{ url_for('ui.admin_departments_create') }}"
+              class="yp-form department-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="yp-form-field">
+                <label for="name" class="yp-label">Namn <span class="required">*</span></label>
+                <input type="text" id="name" name="name" class="yp-input" value="{% if vm.department %}{{ vm.department.name }}{% endif %}" required aria-required="true" placeholder="T.ex. Avdelning 1">
+            </div>
+            <div class="yp-form-field">
+                <label for="residence_id" class="yp-label">Boende</label>
+                <div class="admin-inline-actions">
+                    <select id="residence_id" name="residence_id" class="yp-input">
+                        <option value="">Välj boende...</option>
+                        {% for residence in vm.residences or [] %}
+                        <option value="{{ residence.id }}" {% if vm.selected_residence_id and vm.selected_residence_id == residence.id %}selected{% endif %}>{{ residence.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="button" class="yp-button yp-button-secondary" data-modal-target="#residence-create-modal" aria-label="Lägg till boende">+ Lägg till</button>
+                </div>
+            </div>
+            <div class="yp-form-field">
+                <label for="resident_count" class="yp-label">Antal boende <span class="required">*</span></label>
+                <input type="number" id="resident_count" name="resident_count" class="yp-input" value="{% if vm.department %}{{ vm.department.resident_count_fixed }}{% else %}0{% endif %}" min="0" required aria-required="true" placeholder="0">
+            </div>
+            <div class="yp-form-field">
+                <label for="notes" class="yp-label">Faktaruta</label>
+                <textarea id="notes" name="notes" class="yp-input" rows="4" placeholder="Valfri beskrivning">{% if vm.department %}{{ vm.department.notes }}{% endif %}</textarea>
+                <p class="yp-form-help">Intern faktaruta/anteckningar för avdelningen</p>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="yp-button yp-button-primary">💾 Skapa avdelning</button>
+                <a href="{{ url_for('ui.admin_departments_list') }}" class="yp-button yp-button-secondary">✖ Avbryt</a>
+            </div>
+        </form>
+    </article>
+</section>
 {% endif %}
 
-{% if vm.mode in ['new', 'edit'] %}
+{% if vm.mode == 'edit' and vm.department %}
 <dialog id="residence-create-modal" class="ua-modal">
     <div class="ua-modal-inner">
         <header class="ua-modal-header">
@@ -644,12 +308,8 @@
         </header>
         <form method="POST" action="{{ url_for('ui.admin_residences_create') }}" class="yp-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            {% if vm.mode == 'edit' and vm.department %}
             <input type="hidden" name="return_to" value="edit">
             <input type="hidden" name="dept_id" value="{{ vm.department.id }}">
-            {% else %}
-            <input type="hidden" name="return_to" value="new">
-            {% endif %}
             <div class="yp-form-field">
                 <label for="residence_name" class="yp-label">Namn <span class="required">*</span></label>
                 <input id="residence_name" name="name" class="yp-input" type="text" required aria-required="true" placeholder="T.ex. Boende Solrosen">
@@ -661,9 +321,7 @@
         </form>
     </div>
 </dialog>
-{% endif %}
 
-{% if vm.mode == 'edit' and vm.department %}
 <dialog id="dietOverrideModal" class="ua-modal admin-diet-override-modal">
     <div class="ua-modal-inner admin-diet-override-modal__inner">
         <header class="ua-modal-header admin-diet-override-modal__header">
@@ -701,16 +359,147 @@
         </footer>
     </div>
 </dialog>
-{% endif %}
 
-<!-- Modal: Varierat boendeantal (edit form) -->
-{% if vm.mode == 'edit' and vm.department %}
+<dialog id="department-edit-modal" class="ua-modal admin-department-edit-modal">
+    <div class="ua-modal-inner">
+        <form method="POST"
+              action="{{ url_for('ui.admin_departments_update', dept_id=vm.department.id) }}"
+              class="admin-department-edit-modal__form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="version" value="{{ vm.department.version }}">
+
+            <header class="ua-modal-header admin-department-edit-modal__header">
+                <div>
+                    <h2 class="admin-department-edit-modal__title">Redigera avdelning</h2>
+                    <p class="admin-department-edit-modal__subtitle">Grunddata för avdelningen och dess boendeanknytning.</p>
+                </div>
+                <button type="button" class="ua-modal-close" data-modal-close aria-label="Stäng">&times;</button>
+            </header>
+
+            <div class="ua-modal-body admin-department-edit-modal__body">
+                <div class="admin-department-edit-modal__row">
+                    <label for="department-edit-name">Namn</label>
+                    <input type="text"
+                           id="department-edit-name"
+                           name="name"
+                           class="yp-input"
+                           value="{{ vm.department.name }}"
+                           required
+                           aria-required="true">
+                </div>
+
+                <div class="admin-department-edit-modal__row">
+                    <label for="department-edit-residence">Boende / anläggning</label>
+                    <select id="department-edit-residence" name="residence_id" class="yp-input">
+                        <option value="">Välj boende...</option>
+                        {% for residence in vm.residences or [] %}
+                        <option value="{{ residence.id }}" {% if vm.selected_residence_id and vm.selected_residence_id == residence.id %}selected{% endif %}>{{ residence.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="admin-department-edit-modal__row">
+                    <label for="department-edit-resident-count">Normalt antal boende</label>
+                    <input type="number"
+                           id="department-edit-resident-count"
+                           name="resident_count"
+                           class="yp-input"
+                           value="{{ vm.department.resident_count_fixed }}"
+                           min="0"
+                           required
+                           aria-required="true">
+                </div>
+
+                <div class="admin-department-edit-modal__row admin-department-edit-modal__row--notes">
+                    <label for="department-edit-notes">Intern faktaruta</label>
+                    <textarea id="department-edit-notes" name="notes" class="yp-input" rows="4" placeholder="Intern information för kök och administration.">{{ vm.department.notes }}</textarea>
+                </div>
+            </div>
+
+            <footer class="ua-modal-footer admin-department-edit-modal__footer">
+                <button type="button" class="yp-button yp-button-secondary" data-modal-close>Avbryt</button>
+                <button type="submit" class="yp-button yp-button-primary">Spara avdelning</button>
+            </footer>
+        </form>
+    </div>
+</dialog>
+
+<dialog id="need-modal" class="ua-modal admin-need-modal">
+    <div class="ua-modal-inner">
+        <form method="POST" action="{{ url_for('ui.admin_departments_save_requirement_group', dept_id=vm.department.id) }}" class="admin-need-modal__form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="group_id" value="">
+            <header class="ua-modal-header admin-need-modal__header">
+                <div>
+                    <h2 class="admin-need-modal__title" data-need-modal-title>Lägg till behov</h2>
+                    <p class="admin-need-modal__subtitle" data-need-modal-subtitle>Vilket behov gäller på den här avdelningen?</p>
+                </div>
+                <button type="button" class="ua-modal-close" data-modal-close aria-label="Stäng">&times;</button>
+            </header>
+
+            <div class="ua-modal-body admin-need-modal__body">
+                <div class="admin-need-modal__row">
+                    <label class="admin-need-modal__label" for="need-modal-primary-requirement-id">Vilket behov gäller?</label>
+                    <div class="admin-need-modal__control">
+                        <select id="need-modal-primary-requirement-id" name="primary_requirement_id" class="yp-input">
+                            <option value="">Välj behov...</option>
+                            {% for t in vm.requirement_group_diet_types or [] %}
+                            <option value="{{ t.id }}">{{ t.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="admin-need-modal__row admin-need-modal__row--secondary-picker">
+                    <label class="admin-need-modal__label" for="need-modal-modifier-requirement-ids">Finns ytterligare behov för samma personer?</label>
+                    <div class="admin-need-modal__control">
+                        <div class="admin-need-modal__secondary-picker" data-need-picker-wrap>
+                            <div class="admin-need-modal__secondary-caption">Ytterligare kostbehov (valfritt)</div>
+                            <div class="admin-need-modal__chips" data-need-selected-modifiers></div>
+                            <button type="button" class="yp-button yp-button-secondary admin-need-modal__add-modifier" data-need-picker-toggle aria-expanded="false">+ Lägg till kostbehov</button>
+                            <select id="need-modal-modifier-requirement-ids" name="modifier_requirement_ids" class="admin-need-modal__multi" multiple size="6" aria-hidden="true" tabindex="-1">
+                                {% for t in vm.requirement_group_diet_types or [] %}
+                                <option value="{{ t.id }}">{{ t.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="admin-need-modal__row">
+                    <label class="admin-need-modal__label" for="need-modal-default-quantity">Hur många personer gäller det?</label>
+                    <div class="admin-need-modal__control">
+                        <input type="number" id="need-modal-default-quantity" name="default_quantity" class="yp-input sk-input" min="0" value="1">
+                    </div>
+                </div>
+            </div>
+
+            <footer class="ua-modal-footer admin-need-modal__footer">
+                <button type="button" class="yp-button yp-button-secondary" data-modal-close>Avbryt</button>
+                <button type="submit" class="yp-button yp-button-primary">Spara behov</button>
+            </footer>
+        </form>
+    </div>
+    <div class="admin-need-modal__picker" data-need-picker hidden>
+        <div class="admin-need-modal__picker-panel" data-need-picker-panel>
+            <div class="admin-need-modal__picker-heading">Lägg till kostbehov</div>
+            <input type="search" class="yp-input admin-need-modal__search" placeholder="Sök kostbehov..." aria-label="Sök kostbehov" data-need-picker-search>
+            <div class="admin-need-modal__picker-list" data-need-picker-list></div>
+            <p class="yp-form-help admin-need-modal__picker-empty" data-need-picker-empty hidden>Inga träffar.</p>
+            <div class="admin-need-modal__picker-actions">
+                <span class="admin-need-modal__picker-count" data-need-picker-count>0 valda</span>
+                <button type="button" class="yp-button yp-button-primary" data-need-picker-close>Klar</button>
+            </div>
+        </div>
+    </div>
+</dialog>
+
 <dialog id="residents-variation-modal" class="ua-modal admin-variation-modal">
     <div class="ua-modal-inner admin-variation-modal__inner">
         <header class="ua-modal-header admin-variation-modal__header">
             <div class="admin-variation-modal__title-wrap">
-                <h2 class="admin-variation-modal__title">Varierat boendeantal</h2>
-                <p class="admin-variation-modal__subtitle">Mån-Sön · Lunch/Kväll</p>
+                <h2 class="admin-variation-modal__title" data-variation-modal-title>Varierat boendeantal</h2>
+                <p class="admin-variation-modal__subtitle" data-variation-modal-subtitle>Mån-Sön · Lunch/Kväll</p>
                 <span class="admin-detail-site-chip admin-variation-modal__dept-chip">{{ vm.department.name }}</span>
             </div>
             <button type="button" class="ua-modal-close" data-modal-close aria-label="Stäng">&times;</button>
@@ -718,32 +507,32 @@
         <div class="ua-modal-body admin-variation-modal__body">
             <form id="residents-variation-form" method="post" action="{{ url_for('ui.admin_department_save_variation', department_id=vm.department.id) }}" class="admin-variation-modal__form">
                 {{ csrf_token_input()|safe }}
+                <input type="hidden" name="selected_year" value="{{ vm.current_year }}">
                 <input type="hidden" name="selected_week" value="{{ vm.selected_week if vm.selected_week else (vm.current_week if vm.current_week else 1) }}">
-                <table class="ua-table admin-variation-table">
-                    <tr>
-                        <th>Dag</th>
-                        <th>
-                            <span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🍽️</span> Lunch</span>
-                        </th>
-                        <th>
-                            <span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🌙</span> Kväll</span>
-                        </th>
-                    </tr>
-                    {% set day_names = ['Mån','Tis','Ons','Tors','Fre','Lör','Sön'] %}
-                    {% for dow in range(1,8) %}
-                        {% set lunch_default = vm.department.resident_count_fixed %}
-                        {% set dinner_default = vm.department.resident_count_fixed %}
-                        {% if vm.weekly_table %}
-                            {% set lunch_default = vm.weekly_table[dow-1].lunch %}
-                            {% set dinner_default = vm.weekly_table[dow-1].dinner %}
-                        {% endif %}
+                <input type="hidden" name="variation_focus_group_id" value="">
+                <section class="admin-variation-residents">
+                    <table class="ua-table admin-variation-table">
                         <tr>
-                            <td>{{ day_names[dow-1] }}</td>
-                            <td><input type="number" name="day_{{ dow }}_lunch" value="{{ lunch_default }}" min="0" class="yp-input admin-variation-input"></td>
-                            <td><input type="number" name="day_{{ dow }}_dinner" value="{{ dinner_default }}" min="0" class="yp-input admin-variation-input"></td>
+                            <th>Dag</th>
+                            <th><span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🍽️</span> Lunch</span></th>
+                            <th><span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🌙</span> Kväll</span></th>
                         </tr>
-                    {% endfor %}
-                </table>
+                        {% set day_names = ['Mån','Tis','Ons','Tors','Fre','Lör','Sön'] %}
+                        {% for dow in range(1,8) %}
+                            {% set lunch_default = vm.department.resident_count_fixed %}
+                            {% set dinner_default = vm.department.resident_count_fixed %}
+                            {% if vm.weekly_table %}
+                                {% set lunch_default = vm.weekly_table[dow-1].lunch %}
+                                {% set dinner_default = vm.weekly_table[dow-1].dinner %}
+                            {% endif %}
+                            <tr>
+                                <td>{{ day_names[dow-1] }}</td>
+                                <td><input type="number" name="day_{{ dow }}_lunch" value="{{ lunch_default }}" min="0" class="yp-input admin-variation-input"></td>
+                                <td><input type="number" name="day_{{ dow }}_dinner" value="{{ dinner_default }}" min="0" class="yp-input admin-variation-input"></td>
+                            </tr>
+                        {% endfor %}
+                    </table>
+                </section>
 
                 <section class="admin-variation-scope" aria-label="Gäller">
                     <div class="admin-variation-scope__row">
@@ -766,6 +555,36 @@
                     </div>
                 </section>
 
+                <section class="admin-variation-needs">
+                    <h3 class="admin-variation-scope__title">Påverkar ändringen något registrerat behov?</h3>
+                    <p class="yp-form-help">Lämna grupperna oförändrade om endast boendeantalet ändras. Endast aktiva behov visas.</p>
+                    {% for group in vm.requirement_groups or [] %}
+                        {% if group.is_active %}
+                        <details class="admin-variation-need" {% if loop.first %}open{% endif %} data-variation-group-id="{{ group.id }}">
+                            <summary class="admin-variation-need__summary">
+                                <span class="admin-variation-need__name">{{ group.primary_name or group.label or 'Registrerat behov' }}</span>
+                                <span class="admin-variation-need__meta">{{ group.default_quantity }} normalt{% if group.has_variation %} · Varierar{% endif %}</span>
+                            </summary>
+                            <table class="ua-table admin-variation-table admin-variation-table--need">
+                                <tr>
+                                    <th>Dag</th>
+                                    <th><span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🍽️</span> Lunch</span></th>
+                                    <th><span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🌙</span> Kväll</span></th>
+                                </tr>
+                                {% set group_rows = group.variation_rows or group.weekday_rows or [] %}
+                                {% for row in group_rows %}
+                                <tr>
+                                    <td>{{ row.weekday_label }}</td>
+                                    <td><input type="number" min="0" step="1" class="yp-input admin-variation-input" name="need_day_{{ group.id }}_{{ row.weekday }}_lunch" value="{{ row.lunch_value }}"></td>
+                                    <td><input type="number" min="0" step="1" class="yp-input admin-variation-input" name="need_day_{{ group.id }}_{{ row.weekday }}_dinner" value="{{ row.dinner_value }}"></td>
+                                </tr>
+                                {% endfor %}
+                            </table>
+                        </details>
+                        {% endif %}
+                    {% endfor %}
+                </section>
+
                 <input type="hidden" name="return_to" value="edit">
             </form>
         </div>
@@ -775,187 +594,7 @@
         </footer>
     </div>
 </dialog>
-
-<dialog id="alt2Modal" class="ua-modal admin-alt2-modal">
-    <div class="ua-modal-inner admin-alt2-modal__inner">
-        <header class="ua-modal-header admin-alt2-modal__header">
-            <div class="admin-alt2-modal__title-wrap">
-                <h2 class="admin-alt2-modal__title">Menyval</h2>
-                <p class="admin-alt2-modal__subtitle">Välj explicit Alt1 eller Alt2 per dag denna vecka.</p>
-                <span class="admin-detail-site-chip admin-alt2-modal__dept-chip">{{ vm.department.name }}</span>
-            </div>
-            <button type="button" class="ua-modal-close" data-modal-close aria-label="Stäng">&times;</button>
-        </header>
-        <div class="ua-modal-body admin-alt2-modal__body">
-            <form class="ua-form admin-alt2-modal__filters" onsubmit="return false;">
-                <input type="hidden" id="alt2-days" name="alt2_days" value="">
-                <div class="ua-grid ua-grid-2cols">
-                    <div>
-                        <label class="yp-label" for="alt2-year">År</label>
-                        <input id="alt2-year" class="yp-input" type="number" min="2000" max="2100" value="{{ vm.current_year }}">
-                    </div>
-                    <div>
-                        <label class="yp-label" for="alt2-week">Vecka</label>
-                        <input id="alt2-week" class="yp-input" type="number" min="1" max="53" value="{{ vm.current_week }}">
-                    </div>
-                </div>
-            </form>
-            <div id="alt2ModalBody" class="admin-alt2-modal__days-wrap">
-                <div class="ua-badges alt2-toggles">
-                    <button type="button" class="alt2-day js-alt2-day" data-day="mon">Mån</button>
-                    <button type="button" class="alt2-day js-alt2-day" data-day="tue">Tis</button>
-                    <button type="button" class="alt2-day js-alt2-day" data-day="wed">Ons</button>
-                    <button type="button" class="alt2-day js-alt2-day" data-day="thu">Tors</button>
-                    <button type="button" class="alt2-day js-alt2-day" data-day="fri">Fre</button>
-                    <button type="button" class="alt2-day js-alt2-day" data-day="sat">Lör</button>
-                    <button type="button" class="alt2-day js-alt2-day" data-day="sun">Sön</button>
-                </div>
-            </div>
-        </div>
-        <footer class="ua-modal-footer admin-alt2-modal__footer">
-            <span id="alt2-status" class="ua-muted" aria-live="polite"></span>
-            <button type="button" id="alt2-save" class="yp-button yp-button-primary js-alt2-save">Spara</button>
-            <button type="button" class="yp-button yp-button-secondary" data-modal-close>Stäng</button>
-        </footer>
-    </div>
-    
-</dialog>
 {% endif %}
-
-<style>
-.department-form-container {
-    max-width: 600px;
-    margin: 0 auto;
-}
-
-.form-header {
-    margin-bottom: var(--spacing-xl);
-}
-
-.form-heading {
-    margin: 0 0 var(--spacing-xs) 0;
-    font-size: var(--font-size-xxl);
-    font-weight: 700;
-    color: var(--admin-text-primary);
-}
-
-.form-subtitle {
-    margin: 0;
-    font-size: var(--font-size-lg);
-    color: var(--admin-text-secondary);
-}
-
-.form-card {
-    background-color: var(--admin-bg-card);
-    border-radius: var(--radius-lg);
-    box-shadow: 0 2px 4px var(--admin-shadow);
-    padding: var(--spacing-xxl);
-}
-
-.department-form {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-xl);
-}
-
-.form-group {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-sm);
-}
-
-.form-label {
-    font-weight: 600;
-    color: var(--admin-text-primary);
-    font-size: var(--font-size-base);
-}
-
-.required {
-    color: #e74c3c;
-}
-
-.form-input {
-    padding: var(--spacing-md);
-    border: 1px solid var(--admin-border);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-base);
-    font-family: var(--font-family);
-    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.form-input:focus {
-    outline: none;
-    border-color: var(--admin-accent);
-    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
-}
-
-.form-input::placeholder {
-    color: #bdc3c7;
-}
-
-.form-help {
-    margin: 0;
-    font-size: var(--font-size-sm);
-    color: var(--admin-text-secondary);
-}
-
-.form-actions {
-    display: flex;
-    gap: var(--spacing-md);
-    padding-top: var(--spacing-md);
-    border-top: 1px solid var(--admin-border);
-}
-
-.btn {
-    flex: 1;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-md) var(--spacing-lg);
-    border-radius: var(--radius-md);
-    font-weight: 600;
-    text-decoration: none;
-    transition: all var(--transition-fast);
-    border: none;
-    cursor: pointer;
-    font-size: var(--font-size-base);
-}
-
-.btn-primary {
-    background-color: var(--admin-accent);
-    color: white;
-}
-
-.btn-primary:hover {
-    background-color: var(--admin-accent-hover);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
-}
-
-.btn-secondary {
-    background-color: #ecf0f1;
-    color: var(--admin-text-primary);
-}
-
-.btn-secondary:hover {
-    background-color: #d5dbdb;
-}
-
-@media (max-width: 768px) {
-    .form-card {
-        padding: var(--spacing-lg);
-    }
-    
-    .form-actions {
-        flex-direction: column;
-    }
-    
-    .btn {
-        width: 100%;
-    }
-}
-</style>
 
 {% endblock %}
 

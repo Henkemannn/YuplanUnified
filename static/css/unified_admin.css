@@ -313,14 +313,20 @@
      Modal Styles (dialog + fallback)
      ============================================================================ */
 dialog.ua-modal { border: none; padding: 0; background: transparent; }
-dialog.ua-modal::backdrop { background: rgba(0,0,0,0.4); }
+dialog.ua-modal::backdrop {
+    background: rgba(7, 15, 30, 0.52);
+    -webkit-backdrop-filter: blur(12px) saturate(120%);
+    backdrop-filter: blur(12px) saturate(120%);
+}
 .ua-modal-open { /* Fallback overlay when showModal() unavailable */
     position: fixed;
     inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0,0,0,0.4);
+    background: rgba(7, 15, 30, 0.52);
+    -webkit-backdrop-filter: blur(12px) saturate(120%);
+    backdrop-filter: blur(12px) saturate(120%);
     z-index: 1000;
 }
 .ua-modal-inner {

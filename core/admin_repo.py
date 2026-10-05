@@ -15,6 +15,18 @@ from .etag import ConcurrencyError
 
 SERVICE_ADDON_FAMILIES: tuple[str, str, str] = ("mos", "sallad", "ovrigt")
 ALLOWED_REQUIREMENT_SEMANTICS = {"legacy_bucket", "atomic"}
+CANONICAL_ATOMIC_REQUIREMENT_NAMES: tuple[str, ...] = (
+    "Glutenfri",
+    "Laktosfri",
+    "Vegetarisk",
+    "Timbal",
+    "Grovpaté",
+    "Äggfri",
+)
+
+
+class CatalogProvisioningError(RuntimeError):
+    """Raised when a newly created site cannot get its canonical requirement catalog."""
 
 
 def normalize_addon_family(value: str | None) -> str:
@@ -70,6 +82,20 @@ def _sites_has_tenant_col(db) -> bool:
             return chk.fetchone() is not None
         except Exception:
             return False
+
+
+def _resolve_site_tenant_id(db, site_id: str | None, tenant_id: int | None) -> int | None:
+    if tenant_id is not None:
+        return int(tenant_id)
+    if not site_id:
+        return None
+    try:
+        row = db.execute(text("SELECT tenant_id FROM sites WHERE id=:id"), {"id": str(site_id)}).fetchone()
+        if row and row[0] is not None:
+            return int(row[0])
+    except Exception:
+        pass
+    return None
 
 
 def _table_has_column(db, table_name: str, column_name: str) -> bool:
@@ -544,6 +570,11 @@ class SitesRepo:
                     ),
                     {"id": sid, "name": name, "tenant_id": tenant_value},
                 )
+            try:
+                DietTypesRepo().provision_canonical_atomic_catalog(db, site_id=sid, tenant_id=tenant_value)
+            except Exception as exc:
+                db.rollback()
+                raise CatalogProvisioningError("catalog_provision_failed") from exc
             db.commit()
             return {"id": sid, "name": name}, 0
         except Exception as exc:
@@ -1753,6 +1784,188 @@ class DietTypeDeleteBlockedError(Exception):
 class DietTypesRepo:
     """Repository for managing dietary types (specialkost), now scoped per site."""
 
+    def _upsert_atomic_in_db(
+        self,
+        db,
+        *,
+        site_id: str,
+        name: str,
+        diet_family: str | None = None,
+        default_select: bool | None = None,
+        tenant_id: int | None = None,
+    ) -> int:
+        self._ensure_table(db)
+        clean_site_id = str(site_id).strip()
+        clean_name = str(name).strip()
+        if not clean_site_id:
+            raise ValueError("site_id is required")
+        if not clean_name:
+            raise ValueError("name is required")
+
+        row = self._get_by_name(db, site_id=clean_site_id, name=clean_name)
+        clean_family = normalize_diet_family(diet_family) if diet_family is not None else None
+
+        if row is not None:
+            row_id = int(row[0])
+            existing_family = normalize_diet_family(str(row[3] or ""))
+            existing_semantics = str(row[5] or "").strip().lower() or "legacy_bucket"
+            existing_default_select = bool(row[6])
+            target_family = clean_family or existing_family
+            target_default_select = existing_default_select if default_select is None else bool(default_select)
+            target_requirement_key = str(row[4] or "").strip()
+            if existing_semantics != "atomic" or not target_requirement_key.startswith("req_"):
+                target_requirement_key = _atomic_requirement_key()
+            db.execute(
+                text(
+                    "UPDATE dietary_types SET diet_family=:f, default_select=:d, semantics='atomic', requirement_key=:rk WHERE id=:id"
+                ),
+                {
+                    "f": target_family,
+                    "d": 1 if target_default_select else 0,
+                    "rk": target_requirement_key,
+                    "id": row_id,
+                },
+            )
+            return row_id
+
+        requirement_key = _atomic_requirement_key()
+        resolved_tenant_id = _resolve_site_tenant_id(db, clean_site_id, tenant_id)
+        params: dict[str, object] = {
+            "s": clean_site_id,
+            "n": clean_name,
+            "f": clean_family or infer_diet_family(clean_name),
+            "rk": requirement_key,
+            "sem": "atomic",
+            "d": 1 if bool(default_select) else 0,
+        }
+        if tenant_id is not None:
+            db.execute(
+                text(
+                    "INSERT INTO dietary_types(tenant_id, site_id, name, diet_family, requirement_key, semantics, default_select) "
+                    "VALUES(:t, :s, :n, :f, :rk, :sem, :d)"
+                ),
+                {**params, "t": int(resolved_tenant_id) if resolved_tenant_id is not None else 1},
+            )
+        else:
+            cols = {r[1] for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
+            if "tenant_id" in cols:
+                notnull_map = {str(r[1]): int(r[3] or 0) for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
+                needs_tenant = bool(notnull_map.get("tenant_id", 0))
+                if needs_tenant:
+                    resolved_tenant_id = 1 if resolved_tenant_id is None else resolved_tenant_id
+                    db.execute(
+                        text(
+                            "INSERT INTO dietary_types(tenant_id, site_id, name, diet_family, requirement_key, semantics, default_select) "
+                            "VALUES(:t, :s, :n, :f, :rk, :sem, :d)"
+                        ),
+                        {**params, "t": int(resolved_tenant_id)},
+                    )
+                    row = db.execute(text("SELECT last_insert_rowid()" )).fetchone()
+                    return int(row[0]) if row else 0
+            db.execute(
+                text(
+                    "INSERT INTO dietary_types(site_id, name, diet_family, requirement_key, semantics, default_select) "
+                    "VALUES(:s, :n, :f, :rk, :sem, :d)"
+                ),
+                params,
+            )
+        row = db.execute(text("SELECT last_insert_rowid()" )).fetchone()
+        return int(row[0]) if row else 0
+
+    def provision_canonical_atomic_catalog(self, db, *, site_id: str, tenant_id: int | None = None) -> list[int]:
+        """Provision the canonical Kommun atomic requirement catalog for one site."""
+        self._ensure_table(db)
+        provisioned_ids: list[int] = []
+        for name in CANONICAL_ATOMIC_REQUIREMENT_NAMES:
+            provisioned_ids.append(
+                self._upsert_atomic_in_db(
+                    db,
+                    site_id=site_id,
+                    name=name,
+                    diet_family=infer_diet_family(name),
+                    default_select=False,
+                    tenant_id=tenant_id,
+                )
+            )
+        return provisioned_ids
+
+    def _get_by_name(self, db, *, site_id: str | None, name: str):
+        params: dict[str, object] = {"name": str(name).strip()}
+        if site_id:
+            params["site_id"] = str(site_id)
+            return db.execute(
+                text(
+                    "SELECT id, site_id, name, diet_family, requirement_key, semantics, default_select "
+                    "FROM dietary_types WHERE site_id=:site_id AND lower(trim(name)) = lower(trim(:name)) LIMIT 1"
+                ),
+                params,
+            ).fetchone()
+        return db.execute(
+            text(
+                "SELECT id, site_id, name, diet_family, requirement_key, semantics, default_select "
+                "FROM dietary_types WHERE lower(trim(name)) = lower(trim(:name)) LIMIT 1"
+            ),
+            params,
+        ).fetchone()
+
+    def upsert_atomic(
+        self,
+        *,
+        site_id: str,
+        name: str,
+        diet_family: str | None = None,
+        default_select: bool | None = None,
+        tenant_id: int | None = None,
+    ) -> int:
+        """Create or repair one site dietary type as canonical atomic requirement truth.
+
+        If a row already exists under the same site/name, it is updated in place:
+        - legacy_bucket rows are promoted to atomic
+        - requirement_key is replaced with a canonical atomic key when needed
+        - diet family and default_select are refreshed when provided
+
+        The operation is idempotent and preserves the site/name uniqueness contract.
+        """
+        db = get_session()
+        try:
+            new_id = self._upsert_atomic_in_db(
+                db,
+                site_id=site_id,
+                name=name,
+                diet_family=diet_family,
+                default_select=default_select,
+                tenant_id=tenant_id,
+            )
+            db.commit()
+            return int(new_id)
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    def repair_site_atomic_catalog(self, site_id: str, tenant_id: int | None = None) -> list[int]:
+        """Promote the current site dietary catalog to atomic requirements in place.
+
+        This is the repair path for existing sites whose specialkost catalog was
+        seeded as legacy_bucket rows. The operation is idempotent: already-atomic
+        rows keep their ids and requirement keys, while legacy rows are promoted
+        in place.
+        """
+        rows = self.list_all(site_id=site_id)
+        repaired_ids: list[int] = []
+        for row in rows:
+            repaired_ids.append(
+                self.upsert_atomic(
+                    site_id=site_id,
+                    tenant_id=tenant_id,
+                    name=str(row.get("name") or ""),
+                    diet_family=str(row.get("diet_family") or "Övrigt"),
+                    default_select=bool(row.get("default_select")),
+                )
+            )
+        return repaired_ids
+
     def _requirement_identity_backfill(self, db) -> None:
         try:
             cols = {r[1] for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
@@ -2067,9 +2280,23 @@ class DietTypesRepo:
         try:
             self._ensure_table(db)
             semantics = _normalize_requirement_semantics(kwargs.get("semantics"))
-            requirement_key = _atomic_requirement_key() if semantics == "atomic" else None
+            if semantics == "atomic":
+                new_id = self._upsert_atomic_in_db(
+                    db,
+                    site_id=site_id,
+                    name=name,
+                    diet_family=diet_family,
+                    default_select=default_select,
+                    tenant_id=tenant_id,
+                )
+                db.commit()
+                return int(new_id)
+
+            requirement_key = None
             if self._name_exists(db, name=name, site_id=(str(site_id) if site_id else None)):
                 raise ValueError("duplicate_name")
+
+            resolved_tenant_id = _resolve_site_tenant_id(db, site_id if site_id else None, tenant_id)
 
             if _is_sqlite(db):
                 cols = {r[1] for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
@@ -2077,7 +2304,7 @@ class DietTypesRepo:
                     notnull_map = {str(r[1]): int(r[3] or 0) for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
                     needs_tenant = bool(notnull_map.get("tenant_id", 0))
                     if needs_tenant:
-                        tenant_value = int(tenant_id) if tenant_id is not None else 1
+                        tenant_value = int(resolved_tenant_id) if resolved_tenant_id is not None else 1
                         db.execute(
                             text(
                                 "INSERT INTO dietary_types(tenant_id, site_id, name, diet_family, requirement_key, semantics, default_select) "
@@ -2126,14 +2353,14 @@ class DietTypesRepo:
                 row = db.execute(text("SELECT last_insert_rowid()" )).fetchone()
                 new_id = int(row[0]) if row else 0
             else:
-                if tenant_id is not None:
+                if resolved_tenant_id is not None:
                     res = db.execute(
                         text(
                             "INSERT INTO dietary_types(tenant_id, site_id, name, diet_family, requirement_key, semantics, default_select) "
                             "VALUES(:t, :s, :n, :f, :rk, :sem, :d) RETURNING id"
                         ),
                         {
-                            "t": int(tenant_id),
+                            "t": int(resolved_tenant_id),
                             "s": site_id,
                             "n": name,
                             "f": diet_family,

@@ -70,7 +70,327 @@
     // ========================================================================
     // Modal Handlers (data-modal-target / data-modal-close)
     // ========================================================================
+    function escapeHtml(value) {
+        return String(value || '').replace(/[&<>"']/g, function(character) {
+            return {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[character];
+        });
+    }
+
     function setupModalHandlers() {
+        let activeNeedPickerDialog = null;
+        let activeNeedPickerTrigger = null;
+
+        function updateNeedModalChips(dialog) {
+            const chipsNode = dialog.querySelector('[data-need-selected-modifiers]');
+            const modifierSelect = dialog.querySelector('select[name="modifier_requirement_ids"]');
+            const pickerToggle = dialog.querySelector('[data-need-picker-toggle]');
+            if (!chipsNode || !modifierSelect) {
+                return;
+            }
+            const selectedOptions = Array.from(modifierSelect.options).filter(function(option) {
+                return option.selected && option.value;
+            });
+            if (!selectedOptions.length) {
+                if (pickerToggle) {
+                    pickerToggle.textContent = '+ Lägg till kostbehov';
+                }
+                chipsNode.innerHTML = '';
+                return;
+            }
+            chipsNode.innerHTML = selectedOptions.map(function(option) {
+                return '<span class="admin-need-modal__chip">' + escapeHtml(option.textContent || option.value) + '<button type="button" class="admin-need-modal__chip-remove" data-need-chip-remove="' + escapeHtml(option.value) + '" aria-label="Ta bort ' + escapeHtml(option.textContent || option.value) + '">×</button></span>';
+            }).join('');
+            if (pickerToggle) {
+                pickerToggle.textContent = '+ Lägg till kostbehov';
+            }
+            updateNeedPickerCount(dialog);
+            syncNeedPickerSelection(dialog);
+        }
+
+        function getNeedPickerNodes(dialog) {
+            if (!dialog || !dialog.querySelector) {
+                return {
+                    pickerNode: null,
+                    pickerPanel: null,
+                    pickerSearch: null,
+                    pickerList: null,
+                    pickerCount: null,
+                    pickerEmpty: null,
+                    pickerToggle: null,
+                    modifierSelect: null,
+                };
+            }
+            const pickerNode = dialog.querySelector('[data-need-picker]');
+            const pickerPanel = pickerNode ? pickerNode.querySelector('[data-need-picker-panel]') : null;
+            const pickerSearch = dialog.querySelector('[data-need-picker-search]');
+            const pickerList = dialog.querySelector('[data-need-picker-list]');
+            const pickerCount = dialog.querySelector('[data-need-picker-count]');
+            const pickerEmpty = dialog.querySelector('[data-need-picker-empty]');
+            const pickerToggle = dialog.querySelector('[data-need-picker-toggle]');
+            const modifierSelect = dialog.querySelector('select[name="modifier_requirement_ids"]');
+            return { pickerNode, pickerPanel, pickerSearch, pickerList, pickerCount, pickerEmpty, pickerToggle, modifierSelect };
+        }
+
+        function getNeedPickerOptions(dialog) {
+            const nodes = getNeedPickerNodes(dialog);
+            if (!nodes.modifierSelect) {
+                return [];
+            }
+            return Array.from(nodes.modifierSelect.options).filter(function(option) {
+                return !!option.value;
+            });
+        }
+
+        function updateNeedPickerCount(dialog) {
+            const nodes = getNeedPickerNodes(dialog);
+            if (!nodes.pickerCount || !nodes.modifierSelect) {
+                return;
+            }
+            const selectedCount = Array.from(nodes.modifierSelect.options).filter(function(option) {
+                return option.selected && !!option.value;
+            }).length;
+            nodes.pickerCount.textContent = selectedCount + ' valda';
+        }
+
+        function syncNeedPickerSelection(dialog) {
+            const nodes = getNeedPickerNodes(dialog);
+            if (!nodes.pickerList || !nodes.modifierSelect) {
+                return;
+            }
+            const selectedValues = new Set(Array.from(nodes.modifierSelect.options).filter(function(option) {
+                return option.selected && !!option.value;
+            }).map(function(option) {
+                return String(option.value);
+            }));
+            nodes.pickerList.querySelectorAll('[data-need-picker-option]').forEach(function(optionButton) {
+                const optionValue = String(optionButton.getAttribute('data-need-picker-option') || '');
+                const isSelected = selectedValues.has(optionValue);
+                optionButton.classList.toggle('is-selected', isSelected);
+                optionButton.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+            });
+            if (nodes.pickerEmpty) {
+                const visibleOptions = Array.from(nodes.pickerList.querySelectorAll('[data-need-picker-option]')).filter(function(optionButton) {
+                    return !optionButton.hidden;
+                });
+                nodes.pickerEmpty.hidden = visibleOptions.length > 0;
+            }
+            updateNeedPickerCount(dialog);
+        }
+
+        function renderNeedPickerOptions(dialog) {
+            const nodes = getNeedPickerNodes(dialog);
+            if (!nodes.pickerList || !nodes.modifierSelect) {
+                return;
+            }
+            nodes.pickerList.innerHTML = '';
+            getNeedPickerOptions(dialog).forEach(function(option) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'admin-need-modal__picker-option';
+                button.setAttribute('data-need-picker-option', String(option.value));
+                button.setAttribute('aria-pressed', option.selected ? 'true' : 'false');
+                const labelWrap = document.createElement('span');
+                labelWrap.className = 'admin-need-modal__picker-option-label';
+                const title = document.createElement('span');
+                title.className = 'admin-need-modal__picker-option-title';
+                title.textContent = option.textContent || option.value;
+                const check = document.createElement('span');
+                check.className = 'admin-need-modal__picker-option-check';
+                labelWrap.appendChild(title);
+                button.appendChild(labelWrap);
+                button.appendChild(check);
+                nodes.pickerList.appendChild(button);
+            });
+            updateNeedPickerCount(dialog);
+            syncNeedPickerSelection(dialog);
+        }
+
+        function filterNeedPickerOptions(dialog, query) {
+            const nodes = getNeedPickerNodes(dialog);
+            if (!nodes.pickerList) {
+                return;
+            }
+            const normalizedQuery = String(query || '').trim().toLowerCase();
+            nodes.pickerList.querySelectorAll('[data-need-picker-option]').forEach(function(optionButton) {
+                const optionLabel = String(optionButton.textContent || '').trim().toLowerCase();
+                optionButton.hidden = !!normalizedQuery && optionLabel.indexOf(normalizedQuery) === -1;
+            });
+            if (nodes.pickerEmpty) {
+                const visibleOptions = Array.from(nodes.pickerList.querySelectorAll('[data-need-picker-option]')).filter(function(optionButton) {
+                    return !optionButton.hidden;
+                });
+                nodes.pickerEmpty.hidden = visibleOptions.length > 0;
+            }
+        }
+
+        function positionNeedPicker(dialog) {
+            const nodes = getNeedPickerNodes(dialog);
+            if (!nodes.pickerNode || !nodes.pickerPanel) {
+                return;
+            }
+            dialog.classList.add('is-need-picker-open');
+            nodes.pickerNode.style.position = 'fixed';
+            nodes.pickerNode.style.inset = '0';
+            nodes.pickerNode.style.display = 'grid';
+            nodes.pickerNode.style.placeItems = 'center';
+            nodes.pickerNode.style.pointerEvents = 'auto';
+            nodes.pickerNode.style.zIndex = '1060';
+            nodes.pickerNode.dataset.needPickerPlacement = 'center';
+            nodes.pickerNode.hidden = false;
+            nodes.pickerNode.removeAttribute('aria-hidden');
+
+            nodes.pickerPanel.style.left = '';
+            nodes.pickerPanel.style.top = '';
+            nodes.pickerPanel.style.width = '';
+            nodes.pickerPanel.style.maxWidth = '';
+            nodes.pickerPanel.style.maxHeight = '';
+            nodes.pickerPanel.dataset.needPickerPlacement = 'center';
+            nodes.pickerPanel.style.visibility = 'visible';
+        }
+
+        function openNeedPicker(dialog, trigger) {
+            const nodes = getNeedPickerNodes(dialog);
+            if (!nodes.pickerNode) {
+                return;
+            }
+            activeNeedPickerDialog = dialog;
+            activeNeedPickerTrigger = trigger;
+            renderNeedPickerOptions(dialog);
+            if (nodes.pickerSearch) {
+                nodes.pickerSearch.value = '';
+            }
+            nodes.pickerNode.hidden = false;
+            nodes.pickerNode.setAttribute('aria-hidden', 'false');
+            if (nodes.pickerPanel) {
+                nodes.pickerPanel.style.visibility = 'hidden';
+            }
+            requestAnimationFrame(function() {
+                if (activeNeedPickerDialog !== dialog) {
+                    return;
+                }
+                positionNeedPicker(dialog);
+                if (nodes.pickerSearch && typeof nodes.pickerSearch.focus === 'function') {
+                    nodes.pickerSearch.focus();
+                }
+            });
+        }
+
+        function closeNeedPicker(dialog, restoreFocus) {
+            const nodes = getNeedPickerNodes(dialog);
+            if (!nodes.pickerNode) {
+                return;
+            }
+            dialog.classList.remove('is-need-picker-open');
+            nodes.pickerNode.hidden = true;
+            nodes.pickerNode.setAttribute('aria-hidden', 'true');
+            nodes.pickerNode.style.pointerEvents = '';
+            nodes.pickerNode.style.display = '';
+            nodes.pickerNode.style.placeItems = '';
+            if (nodes.pickerPanel) {
+                nodes.pickerPanel.removeAttribute('data-need-picker-placement');
+                nodes.pickerPanel.style.left = '';
+                nodes.pickerPanel.style.top = '';
+                nodes.pickerPanel.style.width = '';
+                nodes.pickerPanel.style.maxWidth = '';
+                nodes.pickerPanel.style.maxHeight = '';
+                nodes.pickerPanel.style.visibility = '';
+            }
+            if (restoreFocus && nodes.pickerToggle && typeof nodes.pickerToggle.focus === 'function') {
+                nodes.pickerToggle.focus();
+            }
+            if (activeNeedPickerDialog === dialog) {
+                activeNeedPickerDialog = null;
+                activeNeedPickerTrigger = null;
+            }
+        }
+
+        function toggleNeedPickerOption(dialog, value) {
+            const nodes = getNeedPickerNodes(dialog);
+            if (!nodes.modifierSelect) {
+                return;
+            }
+            const option = Array.from(nodes.modifierSelect.options).find(function(candidate) {
+                return String(candidate.value) === String(value);
+            });
+            if (!option || !option.value) {
+                return;
+            }
+            option.selected = !option.selected;
+            updateNeedModalChips(dialog);
+            syncNeedPickerSelection(dialog);
+            filterNeedPickerOptions(dialog, nodes.pickerSearch ? nodes.pickerSearch.value : '');
+        }
+
+        function syncNeedModal(dialog, trigger) {
+            const form = dialog.querySelector('form');
+            const titleNode = dialog.querySelector('[data-need-modal-title]');
+            const subtitleNode = dialog.querySelector('[data-need-modal-subtitle]');
+            const groupIdInput = dialog.querySelector('input[name="group_id"]');
+            const primarySelect = dialog.querySelector('select[name="primary_requirement_id"]');
+            const modifierSelect = dialog.querySelector('select[name="modifier_requirement_ids"]');
+            const quantityInput = dialog.querySelector('input[name="default_quantity"]');
+            const pickerNode = dialog.querySelector('[data-need-picker]');
+            const pickerSearch = dialog.querySelector('[data-need-picker-search]');
+            const mode = (trigger.getAttribute('data-need-mode') || (trigger.getAttribute('data-need-group-id') ? 'edit' : 'create') || 'create').toLowerCase();
+            const groupLabel = (trigger.getAttribute('data-need-label') || '').trim();
+            const groupId = (trigger.getAttribute('data-need-group-id') || '').trim();
+            const primaryId = (trigger.getAttribute('data-need-primary-id') || '').trim();
+            const modifierIds = (trigger.getAttribute('data-need-modifier-ids') || '').split(',').map(function(item) { return item.trim(); }).filter(Boolean);
+            const defaultQuantity = (trigger.getAttribute('data-need-default-quantity') || '1').trim();
+
+            if (form && typeof form.reset === 'function') {
+                form.reset();
+            }
+            closeNeedPicker(dialog, false);
+            if (groupIdInput) {
+                groupIdInput.value = mode === 'edit' ? groupId : '';
+            }
+            if (titleNode) {
+                titleNode.textContent = mode === 'edit' ? 'Redigera behov' : 'Lägg till behov';
+            }
+            if (subtitleNode) {
+                subtitleNode.textContent = mode === 'edit'
+                    ? (groupLabel ? groupLabel : 'Uppdatera det registrerade behovet.')
+                    : 'Vilket behov gäller på den här avdelningen?';
+            }
+            if (primarySelect) {
+                primarySelect.value = primaryId;
+                if (!primarySelect.value && primarySelect.options.length) {
+                    primarySelect.selectedIndex = 0;
+                }
+            }
+            if (modifierSelect) {
+                Array.from(modifierSelect.options).forEach(function(option) {
+                    option.selected = modifierIds.includes(String(option.value));
+                });
+            }
+            if (quantityInput) {
+                quantityInput.value = defaultQuantity || '1';
+            }
+            if (pickerNode) {
+                pickerNode.hidden = true;
+                pickerNode.removeAttribute('data-need-picker-placement');
+                pickerNode.setAttribute('aria-hidden', 'true');
+                pickerNode.style.pointerEvents = '';
+                dialog.classList.remove('is-need-picker-open');
+            }
+            if (pickerSearch) {
+                pickerSearch.value = '';
+            }
+            updateNeedModalChips(dialog);
+            renderNeedPickerOptions(dialog);
+            const firstField = primarySelect || dialog.querySelector('input, select, textarea');
+            if (firstField && typeof firstField.focus === 'function') {
+                firstField.focus();
+            }
+        }
+
         // Open handler
         document.addEventListener('click', function (event) {
             const trigger = event.target.closest('[data-modal-target]');
@@ -81,6 +401,27 @@
 
             const dialog = document.querySelector(selector);
             if (!dialog) return;
+
+            const variationTitle = trigger.getAttribute('data-variation-title');
+            const variationFocusGroupId = trigger.getAttribute('data-variation-focus-group-id');
+            const titleNode = dialog.querySelector('[data-variation-modal-title]');
+            const subtitleNode = dialog.querySelector('[data-variation-modal-subtitle]');
+            const focusGroupInput = dialog.querySelector('input[name="variation_focus_group_id"]');
+
+            if (titleNode && variationTitle) {
+                titleNode.textContent = variationTitle;
+            }
+            if (subtitleNode && variationTitle) {
+                subtitleNode.textContent = 'Mån-Sön · Lunch/Kväll';
+            }
+            if (focusGroupInput) {
+                focusGroupInput.value = variationFocusGroupId || '';
+            }
+
+            if (dialog.id === 'need-modal') {
+                closeNeedPicker(dialog, false);
+                syncNeedModal(dialog, trigger);
+            }
 
             try {
                 if (typeof dialog.showModal === 'function') {
@@ -104,6 +445,10 @@
             const dialog = closeBtn.closest('dialog.ua-modal');
             if (!dialog) return;
 
+            if (dialog.id === 'need-modal') {
+                closeNeedPicker(dialog, false);
+            }
+
             try {
                 if (typeof dialog.close === 'function') {
                     dialog.close();
@@ -114,6 +459,166 @@
                 dialog.removeAttribute('open');
             }
             dialog.classList.remove('ua-modal-open');
+
+            const titleNode = dialog.querySelector('[data-variation-modal-title]');
+            const subtitleNode = dialog.querySelector('[data-variation-modal-subtitle]');
+            const focusGroupInput = dialog.querySelector('input[name="variation_focus_group_id"]');
+            if (titleNode) {
+                titleNode.textContent = 'Varierat boendeantal';
+            }
+            if (subtitleNode) {
+                subtitleNode.textContent = 'Mån-Sön · Lunch/Kväll';
+            }
+            if (focusGroupInput) {
+                focusGroupInput.value = '';
+            }
+        });
+
+        document.addEventListener('change', function (event) {
+            const modifierSelect = event.target;
+            if (!modifierSelect || !modifierSelect.matches || !modifierSelect.matches('#need-modal select[name="modifier_requirement_ids"]')) return;
+            const dialog = modifierSelect.closest('dialog');
+            if (dialog) {
+                updateNeedModalChips(dialog);
+            }
+        });
+
+        document.addEventListener('click', function (event) {
+            const pickerOption = event.target.closest('[data-need-picker-option]');
+            if (pickerOption) {
+                const dialog = pickerOption.closest('dialog');
+                const value = pickerOption.getAttribute('data-need-picker-option');
+                if (dialog && value) {
+                    toggleNeedPickerOption(dialog, value);
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+
+            const chipRemove = event.target.closest('[data-need-chip-remove]');
+            if (chipRemove) {
+                const dialog = chipRemove.closest('dialog');
+                const modifierSelect = dialog ? dialog.querySelector('select[name="modifier_requirement_ids"]') : null;
+                if (dialog && modifierSelect) {
+                    const value = String(chipRemove.getAttribute('data-need-chip-remove') || '');
+                    Array.from(modifierSelect.options).forEach(function(option) {
+                        if (String(option.value) === value) {
+                            option.selected = false;
+                        }
+                    });
+                    updateNeedModalChips(dialog);
+                    syncNeedPickerSelection(dialog);
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+
+            const pickerClose = event.target.closest('[data-need-picker-close]');
+            if (pickerClose) {
+                const dialog = pickerClose.closest('dialog');
+                closeNeedPicker(dialog, true);
+                const pickerToggle = dialog ? dialog.querySelector('[data-need-picker-toggle]') : null;
+                if (pickerToggle) {
+                    pickerToggle.setAttribute('aria-expanded', 'false');
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+
+            const pickerOverlay = event.target.closest('[data-need-picker]');
+            if (pickerOverlay && event.target === pickerOverlay) {
+                const dialog = pickerOverlay.closest('dialog');
+                closeNeedPicker(dialog, true);
+                const pickerToggle = dialog ? dialog.querySelector('[data-need-picker-toggle]') : null;
+                if (pickerToggle) {
+                    pickerToggle.setAttribute('aria-expanded', 'false');
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+
+            const pickerToggle = event.target.closest('[data-need-picker-toggle]');
+            if (pickerToggle) {
+                const dialog = pickerToggle.closest('dialog');
+                const pickerNode = dialog ? dialog.querySelector('[data-need-picker]') : null;
+                if (pickerNode) {
+                    const shouldOpen = pickerNode.hidden;
+                    if (shouldOpen) {
+                        pickerToggle.setAttribute('aria-expanded', 'true');
+                        openNeedPicker(dialog, pickerToggle);
+                    } else {
+                        pickerToggle.setAttribute('aria-expanded', 'false');
+                        closeNeedPicker(dialog, true);
+                    }
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+
+            const openPicker = event.target.closest('[data-need-picker]');
+            if (openPicker && event.target === openPicker) {
+                const dialog = openPicker.closest('dialog');
+                closeNeedPicker(dialog, true);
+                const pickerToggle = dialog ? dialog.querySelector('[data-need-picker-toggle]') : null;
+                if (pickerToggle) {
+                    pickerToggle.setAttribute('aria-expanded', 'false');
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+            if (openPicker) {
+                event.stopPropagation();
+                return;
+            }
+
+            document.querySelectorAll('dialog.ua-modal [data-need-picker]').forEach(function(pickerNode) {
+                if (pickerNode.hidden) {
+                    return;
+                }
+                const dialog = pickerNode.closest('dialog');
+                const toggle = dialog ? dialog.querySelector('[data-need-picker-toggle]') : null;
+                if (dialog && !pickerNode.contains(event.target) && !(toggle && toggle.contains(event.target))) {
+                    if (toggle) {
+                        toggle.setAttribute('aria-expanded', 'false');
+                    }
+                    closeNeedPicker(dialog, false);
+                }
+            });
+        });
+
+        document.addEventListener('input', function (event) {
+            const searchInput = event.target;
+            if (!searchInput || !searchInput.matches || !searchInput.matches('[data-need-picker-search]')) return;
+            const dialog = searchInput.closest('dialog');
+            if (!dialog) return;
+            filterNeedPickerOptions(dialog, searchInput.value || '');
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key !== 'Escape') {
+                return;
+            }
+            const openPicker = document.querySelector('dialog.ua-modal [data-need-picker]:not([hidden])');
+            if (!openPicker) {
+                return;
+            }
+            const dialog = openPicker.closest('dialog');
+            if (!dialog) {
+                return;
+            }
+            const toggle = dialog.querySelector('[data-need-picker-toggle]');
+            if (toggle) {
+                toggle.setAttribute('aria-expanded', 'false');
+            }
+            closeNeedPicker(dialog, true);
+            event.preventDefault();
+            event.stopPropagation();
         });
     }
 

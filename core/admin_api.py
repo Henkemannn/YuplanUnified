@@ -654,6 +654,10 @@ def create_site():
     try:
         rec, etag = svc.create_site(name, tenant_id=tenant_id)
     except Exception as e:  # pragma: no cover – unexpected
+        from .admin_repo import CatalogProvisioningError
+
+        if isinstance(e, CatalogProvisioningError):
+            return _admin_problem(500, "Internal Server Error", detail=str(e))
         return bad_request(str(e))
     resp = jsonify(rec)
     # Default to 201 Created; under TESTING relax to 200 for specific fixtures used by menu-choice tests

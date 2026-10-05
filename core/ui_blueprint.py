@@ -4571,17 +4571,21 @@ def admin_specialkost_create():
     if not site_id:
         return redirect(url_for("ui.select_site", next=url_for("ui.admin_specialkost_new_form")))
     try:
-        DietTypesRepo().create(
+        tenant_id = session.get("tenant_id")
+        try:
+            tenant_id = int(tenant_id) if tenant_id is not None else None
+        except Exception:
+            tenant_id = None
+        DietTypesRepo().upsert_atomic(
             site_id=site_id,
+            tenant_id=tenant_id,
             name=name,
             diet_family=diet_family,
             default_select=default_select,
         )
-    except ValueError as exc:
-        if str(exc) == "duplicate_name":
-            flash("Kosttyp med samma namn finns redan.", "error")
-            return redirect(url_for("ui.admin_specialkost_new_form"))
-        raise
+    except Exception as exc:
+        flash(f"Kunde inte skapa kosttyp: {str(exc)}", "error")
+        return redirect(url_for("ui.admin_specialkost_new_form"))
     flash("Kosttyp skapad.", "success")
     return redirect(url_for("ui.admin_specialkost_list"))
 
@@ -6711,6 +6715,7 @@ def admin_departments_edit_form(dept_id: str):
     # Prepare variation prefill for current week
     selected_week = current_week
     weekly_table = None
+    resident_variation_has_changes = False
     try:
         from core.residents_schedule_repo import ResidentsScheduleRepo
         sched_repo = ResidentsScheduleRepo()
@@ -6729,6 +6734,8 @@ def admin_departments_edit_form(dept_id: str):
                     rl = forever_idx.get((dow, "lunch"))
                 if rd is None:
                     rd = forever_idx.get((dow, "dinner"))
+                if int(rl if rl is not None else fixed) != fixed or int(rd if rd is not None else fixed) != fixed:
+                    resident_variation_has_changes = True
                 weekly_table.append({
                     "weekday": day_names[dow-1],
                     "lunch": int(rl if rl is not None else fixed),
@@ -6736,6 +6743,10 @@ def admin_departments_edit_form(dept_id: str):
                 })
     except Exception:
         weekly_table = None
+
+    resident_variation_status = "Samma antal"
+    if weekly_table and resident_variation_has_changes:
+        resident_variation_status = "Varierat"
 
     vm = {
         "current_year": current_year,
@@ -6747,6 +6758,7 @@ def admin_departments_edit_form(dept_id: str):
         "selected_residence_id": selected_residence_id,
         "selected_week": selected_week,
         "weekly_table": weekly_table,
+        "resident_variation_status": resident_variation_status,
         "diet_types": [],
         "diet_defaults": {},
         "diet_overrides_present": {},
@@ -6806,7 +6818,7 @@ def admin_departments_edit_form(dept_id: str):
             for row in DietDefaultsRepo().list_for_department(dept_id)
             if str(row.get("diet_type_id") or "").strip()
         }
-        configured_types = [t for t in atomic_types if str(t.get("id")) in configured_default_ids]
+        configured_types = list(atomic_types)
         type_lookup = {str(t.get("id")): t for t in atomic_types}
         group_repo = DepartmentRequirementGroupsRepo()
         groups = group_repo.list_for_department(dept_id)
@@ -6818,26 +6830,35 @@ def admin_departments_edit_form(dept_id: str):
             primary_name = None
             if primary_id:
                 primary_name = str((type_lookup.get(primary_id) or {}).get("name") or "") or None
-            member_options = [item for item in atomic_types if str(item.get("id")) in configured_default_ids or str(item.get("id")) in member_ids]
-            if not member_options:
-                member_options = list(configured_types)
+            member_options = list(atomic_types)
             if primary_id:
                 modifier_options = [item for item in member_options if str(item.get("id")) != primary_id]
             else:
                 modifier_options = list(member_options)
-            if not modifier_options and configured_types:
-                modifier_options = list(configured_types)
             default_quantity = int(group.get("default_quantity") or 0)
             weekday_override_rows = []
             try:
                 weekday_override_rows = DepartmentRequirementGroupWeekdayOverridesRepo().list_for_group(str(group.get("id")))
             except Exception:
                 weekday_override_rows = []
+            variation_rows = []
+            try:
+                from core.department_variation_flow_service import build_requirement_group_variation_rows
+
+                variation_rows = build_requirement_group_variation_rows(str(group.get("id")), year=current_year, week=selected_week)
+            except Exception:
+                variation_rows = []
+            has_variation = False
+            try:
+                has_variation = any(int(row.get("lunch_value") or default_quantity) != default_quantity or int(row.get("dinner_value") or default_quantity) != default_quantity for row in variation_rows)
+            except Exception:
+                has_variation = bool(weekday_override_rows)
             formatted_groups.append(
                 {
                     "id": str(group.get("id")),
                     "label": group.get("label"),
                     "default_quantity": default_quantity,
+                    "has_variation": has_variation,
                     "is_active": bool(group.get("is_active")),
                     "primary_requirement_id": primary_id,
                     "primary_name": primary_name,
@@ -6849,6 +6870,7 @@ def admin_departments_edit_form(dept_id: str):
                     "modifier_names": [str((type_lookup.get(member_id) or {}).get("name") or member_id) for member_id in member_ids if member_id != primary_id],
                     "unresolved_primary": primary_id is None,
                     "weekday_rows": _build_weekday_quantity_rows(default_quantity=default_quantity, override_rows=weekday_override_rows),
+                    "variation_rows": variation_rows,
                 }
             )
         vm["requirement_groups"] = formatted_groups
@@ -7255,7 +7277,6 @@ def admin_departments_edit_save_diets(dept_id: str):
 def admin_departments_save_requirement_group(dept_id: str):
     from flask import flash, redirect, url_for
     from core.admin_repo import DietTypesRepo
-    from core.admin_repo import DietDefaultsRepo
     from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
 
     from .context import get_active_context as _get_ctx
@@ -7281,7 +7302,8 @@ def admin_departments_save_requirement_group(dept_id: str):
     primary_requirement_id = (request.form.get("primary_requirement_id") or "").strip() or None
     modifier_requirement_ids = [str(item).strip() for item in request.form.getlist("modifier_requirement_ids") if str(item).strip()]
     default_quantity = request.form.get("default_quantity")
-    is_active = str(request.form.get("is_active") or "").strip().lower() in {"1", "true", "on", "yes"}
+    raw_is_active = request.form.get("is_active")
+    is_active = None if raw_is_active is None else str(raw_is_active).strip().lower() in {"1", "true", "on", "yes"}
     weekday_changes: list[tuple[int, str, int | None]] = []
     try:
         submitted_default_quantity = int(default_quantity or 0)
@@ -7289,13 +7311,14 @@ def admin_departments_save_requirement_group(dept_id: str):
         submitted_default_quantity = 0
 
     try:
-        configured_default_ids = {
-            str(row.get("diet_type_id") or "").strip()
-            for row in DietDefaultsRepo().list_for_department(dept_id)
-            if str(row.get("diet_type_id") or "").strip()
+        all_types = DietTypesRepo().list_all(site_id=active_site_id)
+        atomic_requirement_ids = {
+            str(row.get("id") or "").strip()
+            for row in all_types
+            if str(row.get("id") or "").strip() and str(row.get("semantics") or "").strip().lower() == "atomic"
         }
     except Exception:
-        configured_default_ids = set()
+        atomic_requirement_ids = set()
 
     existing_member_ids: set[str] = set()
     if group_id:
@@ -7329,11 +7352,11 @@ def admin_departments_save_requirement_group(dept_id: str):
                     return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
                 weekday_changes.append((weekday, meal_key, quantity))
 
-    allowed_requirement_ids = configured_default_ids | existing_member_ids
+    allowed_requirement_ids = atomic_requirement_ids | existing_member_ids
     submitted_requirement_ids = {primary_requirement_id, *modifier_requirement_ids}
     forbidden_requirement_ids = sorted(req_id for req_id in submitted_requirement_ids if req_id not in allowed_requirement_ids)
     if forbidden_requirement_ids:
-        flash("Välj bara specialkost som redan är kopplad till avdelningen.", "error")
+        flash("Välj bara behovstyper som finns i platsens katalog.", "error")
         return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
 
     if not primary_requirement_id:
@@ -7358,7 +7381,7 @@ def admin_departments_save_requirement_group(dept_id: str):
             requirement_ids=requirement_ids,
             primary_requirement_id=primary_requirement_id,
             label=label,
-            is_active=is_active,
+            is_active=(True if group_id is None and is_active is None else is_active),
         )
         if group_id:
             for weekday, meal_key, quantity in weekday_changes:
@@ -7388,7 +7411,7 @@ def admin_departments_save_requirement_group(dept_id: str):
 @require_roles(*ADMIN_ROLES)
 def admin_department_save_variation(department_id: str):
     from flask import flash, redirect, url_for
-    from core.residents_schedule_repo import ResidentsScheduleRepo
+    from core.department_variation_flow_service import save_department_variation_submission
 
     from .context import get_active_context as _get_ctx
     ctx = _get_ctx()
@@ -7409,47 +7432,46 @@ def admin_department_save_variation(department_id: str):
         flash("Avdelningen hittades inte för vald site.", "error")
         return redirect(url_for("ui.admin_departments_list"))
 
-    mode = (request.form.get("mode") or "week").strip().lower()
+    selected_year_raw = request.form.get("selected_year") or request.form.get("year") or ""
     selected_week_raw = request.form.get("selected_week_override") or request.form.get("selected_week") or ""
-    if mode == "forever":
-        target_week: int | None = None
-    else:
-        try:
-            target_week = int(str(selected_week_raw).strip() or 0)
-        except Exception:
-            target_week = 0
-        if target_week <= 0:
-            from datetime import date as _date
+    from datetime import date as _date
 
-            target_week = _date.today().isocalendar()[1]
-
-    items: list[dict[str, int | str]] = []
-    for weekday in range(1, 8):
-        for meal in ("lunch", "dinner"):
-            raw_value = (request.form.get(f"day_{weekday}_{meal}") or "").strip()
-            if raw_value == "":
-                continue
-            try:
-                count = int(raw_value)
-            except ValueError:
-                flash("Antal måste vara ett heltal.", "error")
-                return redirect(url_for("ui.admin_departments_edit_form", dept_id=department_id))
-            if count < 0:
-                flash("Antal måste vara 0 eller högre.", "error")
-                return redirect(url_for("ui.admin_departments_edit_form", dept_id=department_id))
-            items.append({"weekday": weekday, "meal": meal, "count": count})
-
-    repo = ResidentsScheduleRepo()
+    today = _date.today()
     try:
-        if target_week is None:
-            repo.delete_forever(department_id)
+        selected_year = int(str(selected_year_raw).strip() or today.isocalendar()[0])
+    except Exception:
+        selected_year = today.isocalendar()[0]
+    try:
+        selected_week = int(str(selected_week_raw).strip() or today.isocalendar()[1])
+    except Exception:
+        selected_week = today.isocalendar()[1]
+
+    try:
+        result = save_department_variation_submission(
+            department_id=department_id,
+            site_id=str(active_site_id),
+            form=request.form,
+            year=selected_year,
+            week=selected_week,
+        )
+        if result.resident_changes and result.need_changes:
+            flash("Variationer sparade.", "success")
+        elif result.need_changes:
+            flash("Registrerat behovs variation sparad.", "success")
         else:
-            repo.delete_week(department_id, target_week)
-        if items:
-            repo.upsert_items(department_id, target_week, items)
-        flash("Varierat boendeantal sparat.", "success")
+            flash("Varierat boendeantal sparat.", "success")
+    except ValueError as exc:
+        msg = str(exc)
+        if msg == "quantity_negative":
+            flash("Antal måste vara 0 eller högre.", "error")
+        elif msg == "impossible_state":
+            flash("Kunde inte spara variationen: registrerade behov får inte överstiga boendeantalet.", "error")
+        elif msg == "variation_payload_empty":
+            flash("Ingen variation att spara.", "error")
+        else:
+            flash(f"Kunde inte spara variationen: {msg}", "error")
     except Exception as exc:
-        flash(f"Kunde inte spara varierat boendeantal: {str(exc)}", "error")
+        flash(f"Kunde inte spara variationen: {str(exc)}", "error")
     return redirect(url_for("ui.admin_departments_edit_form", dept_id=department_id))
 
 

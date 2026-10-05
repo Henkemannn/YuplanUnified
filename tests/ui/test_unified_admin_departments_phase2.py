@@ -53,6 +53,7 @@ def test_departments_list_happy_path_admin(client_admin):
     assert "Testavdelning" in html
     assert "25" in html
     assert "Boende: Ej valt" in html
+    assert "TestSite •" not in html
     assert "app-shell__page-header" in html
     assert "app-shell__grid" in html
     assert "app-shell__card" in html
@@ -108,11 +109,31 @@ def test_departments_list_empty_state(client_admin):
 
 def test_departments_new_form_happy_path(client_admin):
     """Test new department form renders correctly."""
+    app = client_admin.application
+    site_id = str(uuid.uuid4())
+    from core.db import create_all, get_session
+    from sqlalchemy import text
+
+    with app.app_context():
+        create_all()
+        db = get_session()
+        try:
+            db.execute(text("INSERT INTO sites (id, name, version) VALUES (:id, :name, 0)"), {"id": site_id, "name": "TestSite"})
+            db.commit()
+        finally:
+            db.close()
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
+
     resp = client_admin.get("/ui/admin/departments/new", headers=_h("admin"))
     html = resp.data.decode("utf-8")
     
     assert resp.status_code == 200
     assert "Ny avdelning" in html
+    assert html.count("Kund:") == 1
+    assert html.count("Arbetsplats:") == 1
+    assert "Vecka " not in html
     assert 'name="name"' in html
     assert 'name="residence_id"' in html
     assert 'name="resident_count"' in html

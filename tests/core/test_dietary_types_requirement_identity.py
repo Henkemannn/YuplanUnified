@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 from pathlib import Path
 
 from alembic import command
@@ -418,4 +420,65 @@ def test_tenant_isolation_for_legacy_diet_service_crud(app_session) -> None:
         finally:
             db.close()
 
-        assert remaining == [("Diet B", 1)]
+
+def test_upsert_atomic_repairs_legacy_row_and_is_idempotent(app_session) -> None:
+    from core.admin_repo import DietTypesRepo, SitesRepo
+
+    with app_session.app_context():
+        site, _ = SitesRepo().create_site(f"Atomic repair site {uuid.uuid4()}")
+        repo = DietTypesRepo()
+        legacy_id = repo.create(site_id=site["id"], name="Legacy Timbal", default_select=False)
+
+        repaired_id = repo.upsert_atomic(site_id=site["id"], name="Legacy Timbal", diet_family="Textur", default_select=True)
+        repaired = repo.get_by_id(repaired_id)
+        assert repaired is not None
+        assert repaired_id == legacy_id
+        assert repaired["semantics"] == "atomic"
+        assert str(repaired["requirement_key"]).startswith("req_")
+        assert repaired["diet_family"] == "Textur"
+        assert repaired["default_select"] is True
+
+        repaired_again_id = repo.upsert_atomic(site_id=site["id"], name="Legacy Timbal", diet_family="Textur", default_select=True)
+        repaired_again = repo.get_by_id(repaired_again_id)
+        assert repaired_again is not None
+        assert repaired_again_id == repaired_id
+        assert repaired_again["semantics"] == "atomic"
+        assert repaired_again["requirement_key"] == repaired["requirement_key"]
+
+
+def test_upsert_atomic_creates_new_atomic_row(app_session) -> None:
+    from core.admin_repo import DietTypesRepo, SitesRepo
+
+    with app_session.app_context():
+        site, _ = SitesRepo().create_site(f"Atomic create site {uuid.uuid4()}")
+        repo = DietTypesRepo()
+
+        new_id = repo.upsert_atomic(site_id=site["id"], name="Glutenfri", diet_family="Allergi / Exkludering", default_select=False)
+        created = repo.get_by_id(new_id)
+        assert created is not None
+        assert created["name"] == "Glutenfri"
+        assert created["semantics"] == "atomic"
+        assert str(created["requirement_key"]).startswith("req_")
+        assert created["diet_family"] == "Allergi / Exkludering"
+        assert created["default_select"] is False
+
+
+def test_repair_site_atomic_catalog_promotes_all_legacy_rows(app_session) -> None:
+    from core.admin_repo import CANONICAL_ATOMIC_REQUIREMENT_NAMES, DietTypesRepo, SitesRepo
+
+    with app_session.app_context():
+        site, _ = SitesRepo().create_site(f"Atomic repair catalog site {uuid.uuid4()}")
+        repo = DietTypesRepo()
+        repo.create(site_id=site["id"], name="Legacy Timbal", default_select=False)
+        repo.create(site_id=site["id"], name="Legacy Vegan", default_select=True)
+
+        repaired_ids = repo.repair_site_atomic_catalog(site["id"])
+        assert len(repaired_ids) == len(CANONICAL_ATOMIC_REQUIREMENT_NAMES) + 2
+
+        rows = repo.list_all(site_id=site["id"])
+        by_name = {str(row["name"]): row for row in rows}
+        assert by_name["Legacy Timbal"]["semantics"] == "atomic"
+        assert by_name["Legacy Vegan"]["semantics"] == "atomic"
+        assert str(by_name["Legacy Timbal"]["requirement_key"]).startswith("req_")
+        assert str(by_name["Legacy Vegan"]["requirement_key"]).startswith("req_")
+        assert by_name["Legacy Vegan"]["default_select"] is True

@@ -158,7 +158,7 @@ def build_department_requirement_group_weekview_projection(
             )
             modifier_ids = tuple(req_id for req_id in member_ids if req_id != primary_requirement_id_int)
             modifier_labels = tuple(label for req_id, label in zip(member_ids, member_labels) if req_id != primary_requirement_id_int)
-            display_label = str(group.get("label") or "").strip() or _join_labels((primary_label,) + modifier_labels)
+            display_label = _join_labels((primary_label,) + modifier_labels) or str(group.get("label") or "").strip() or primary_label
             unresolved_primary = False
         else:
             primary_requirement_id_int = None
