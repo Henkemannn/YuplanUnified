@@ -1001,51 +1001,241 @@
   margin: 0;
 }
 
-.service-addon-body {
+.admin-service-addon-list {
   display: grid;
   gap: 10px;
 }
 
-.service-addon-row {
+.admin-service-addon-empty {
+  margin: 0;
+}
+
+.admin-service-addon-item {
   display: grid;
-  grid-template-columns: minmax(200px, 1.5fr) minmax(120px, 0.7fr) minmax(92px, 0.42fr) minmax(92px, 0.42fr) minmax(180px, 1fr) auto;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
   align-items: start;
-  padding: 10px;
+  padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface-2);
 }
 
-.service-addon-field {
+.admin-service-addon-item__main {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
-.service-addon-field__label {
+.admin-service-addon-item__name {
+  font-size: 1.02rem;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+.admin-service-addon-item__meta-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.admin-service-addon-item__count,
+.admin-service-addon-item__note {
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.admin-service-addon-item__family {
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.admin-service-addon-item__note {
+  white-space: pre-wrap;
+  font-weight: 500;
+}
+
+.admin-service-addon-item__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.admin-service-addon-modal {
+  width: min(700px, calc(100vw - 24px));
+}
+
+.admin-service-addon-modal .ua-modal-inner {
+  max-width: 700px;
+  max-height: min(86vh, calc(100vh - 24px));
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.admin-service-addon-modal [data-service-addon-state][hidden] {
+  display: none !important;
+}
+
+.admin-service-addon-modal [data-service-addon-remove-form][hidden] {
+  display: none !important;
+}
+
+.admin-service-addon-modal__form {
+  display: grid;
+  gap: 0;
+  min-height: 0;
+}
+
+.admin-service-addon-modal__shell-header {
+  align-items: flex-start;
+  padding: 0 20px 10px;
+}
+
+.admin-service-addon-modal__title {
+  margin: 0;
+}
+
+.admin-service-addon-modal__subtitle,
+.admin-service-addon-modal__meta {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.admin-service-addon-modal__state {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.admin-service-addon-modal__body {
+  display: grid;
+  gap: 8px;
+  padding: 0 20px 4px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.admin-service-addon-modal__identity {
+  display: grid;
+  gap: 2px;
+}
+
+.admin-service-addon-modal__remove-card {
+  display: grid;
+  gap: 6px;
+  padding: 0 20px 4px;
+}
+
+.admin-service-addon-modal__picker-state {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-service-addon-modal__picker-head {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-service-addon-modal__label {
   color: var(--text);
   font-weight: 650;
 }
 
-.service-addon-field--addon {
+.admin-service-addon-modal__select {
+  width: 100%;
+}
+
+.admin-service-addon-modal__secondary-action {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.admin-service-addon-modal__quantity-grid,
+.admin-service-addon-modal__field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.admin-service-addon-modal__field {
+  display: grid;
+  gap: 5px;
   min-width: 0;
 }
 
-.service-addon-field--remove {
-  justify-items: start;
+.admin-service-addon-modal__field--wide {
+  grid-column: 1 / -1;
 }
 
-.service-addon-row .yp-input,
-.service-addon-row .yp-button {
-  min-height: 38px;
+.admin-service-addon-modal__note {
+  min-height: 52px;
+  resize: none;
 }
 
-.service-addon-row .service-addon-new-wrap {
+.admin-service-addon-modal__help {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.admin-service-addon-modal__family-block {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-service-addon-modal__family-custom {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-service-addon-modal__family-custom[hidden] {
+  display: none !important;
+}
+
+.admin-service-addon-modal__remove-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+
+.admin-service-addon-modal__remove-title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.admin-service-addon-modal__remove-copy {
+  margin: 0;
+  color: var(--muted);
+}
+
+.admin-service-addon-modal__remove-copy--name {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.admin-service-addon-modal__footer {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  padding: 0 20px 16px;
   margin-top: 0;
+  min-height: 0;
 }
 
-.service-addon-row .service-addon-create {
-  margin-top: 6px;
+.admin-service-addon-modal__footer--add,
+.admin-service-addon-modal__footer--create,
+.admin-service-addon-modal__footer--edit,
+.admin-service-addon-modal__footer--remove {
+  display: flex;
+}
+
+.admin-service-addon-modal__footer--remove {
+  justify-content: space-between;
 }
 
 .admin-department-detail__diet-list {
@@ -1563,60 +1753,6 @@
   padding: 6px 8px;
 }
 
-.service-addon-table .service-addon-new {
-  margin-top: 0;
-}
-
-.service-addon-table {
-  table-layout: fixed;
-}
-
-.service-addon-table th,
-.service-addon-table td {
-  vertical-align: top;
-}
-
-.service-addon-table .yp-input,
-.service-addon-table .yp-button {
-  min-height: 38px;
-}
-
-.service-addon-col-addon {
-  min-width: 320px;
-}
-
-.service-addon-select {
-  width: 100%;
-}
-
-.service-addon-create {
-  margin-top: 8px;
-  display: grid;
-  gap: 8px;
-}
-
-.service-addon-create-toggle {
-  width: fit-content;
-}
-
-.service-addon-new-wrap {
-  display: none;
-}
-
-.service-addon-new-wrap.is-visible {
-  display: block;
-}
-
-.service-addon-table td:nth-child(2),
-.service-addon-table td:nth-child(3),
-.service-addon-table td:nth-child(4) {
-  min-width: 110px;
-}
-
-.service-addon-table td:nth-child(6) {
-  white-space: nowrap;
-}
-
 .boende-label {
   display: inline-flex;
   align-items: center;
@@ -1626,14 +1762,6 @@
 .boende-icon {
   font-size: 0.95rem;
   opacity: 0.9;
-}
-
-.service-addon-actions {
-  margin-top: 10px;
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  flex-wrap: wrap;
 }
 
 @media (max-width: 720px) {

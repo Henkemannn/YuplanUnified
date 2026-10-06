@@ -7514,64 +7514,166 @@ def admin_departments_edit_save_service_addons(dept_id: str):
     notes = request.form.getlist("service_addon_note[]")
     new_names = request.form.getlist("service_addon_new_name[]")
     families = request.form.getlist("service_addon_family[]")
+    addon_row_id = (request.form.get("service_addon_row_id") or "").strip()
+    addon_mode = (request.form.get("service_addon_mode") or "").strip().lower()
+    addon_action = (request.form.get("service_addon_action") or "").strip().lower()
+    addon_id = (request.form.get("service_addon_id") or "").strip()
+    new_name = (request.form.get("service_addon_new_name") or "").strip()
+    family = (request.form.get("service_addon_family") or "").strip()
+    family_custom = (request.form.get("service_addon_family_custom") or "").strip()
+    note = (request.form.get("service_addon_note") or "").strip()
 
-    max_len = max(len(addon_ids), len(lunches), len(dinners), len(notes), len(new_names), len(families), 0)
-    master_repo = ServiceAddonsRepo()
-    out_rows: list[dict] = []
-    for i in range(max_len):
-        addon_id = str(addon_ids[i]).strip() if i < len(addon_ids) else ""
-        new_name = str(new_names[i]).strip() if i < len(new_names) else ""
-        addon_family = normalize_addon_family(families[i] if i < len(families) else "ovrigt")
-        if not addon_id and new_name:
+    def _parse_count(raw: str | None) -> int | None:
+        value = str(raw or "").strip()
+        if value == "":
+            return None
+        return int(value)
+
+    def _load_ints() -> tuple[int | None, int | None]:
+        raw_l = request.form.get("service_addon_lunch_count")
+        raw_d = request.form.get("service_addon_dinner_count")
+        lunch = _parse_count(raw_l)
+        dinner = _parse_count(raw_d)
+        if not ((lunch is not None and lunch > 0) or (dinner is not None and dinner > 0)):
+            raise ValueError("service_addon_counts_required")
+        return lunch, dinner
+
+    def _redirect_back(message: str, category: str = "error"):
+        flash(message, category)
+        return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+
+    def _service_addon_validation_message(exc: Exception) -> str:
+        text_value = str(exc or "").strip()
+        if text_value == "service_addon_counts_required":
+            return "Antalet måste vara större än 0 för minst en måltid."
+        if text_value == "service_addon_count_invalid":
+            return "Antalet kan inte vara negativt."
+        if text_value == "service_addon_count_exceeds_resident_count":
+            db = get_session()
             try:
-                addon_id = master_repo.create_if_missing(
+                row = db.execute(
+                    text("SELECT COALESCE(resident_count_fixed, 0) FROM departments WHERE id=:id LIMIT 1"),
+                    {"id": dept_id},
+                ).fetchone()
+                resident_count = int(row[0] or 0) if row else None
+            finally:
+                db.close()
+            if resident_count is not None:
+                return f"Antalet kan inte vara högre än avdelningens {int(resident_count)} boende."
+            return "Antalet kan inte vara högre än avdelningens boendeantal."
+        if text_value == "service_addon_selection_required":
+            return "Välj en serveringsanpassning."
+        return f"Kunde inte spara serveringsanpassning: {text_value}"
+
+    if addon_action == "remove" and addon_row_id:
+        try:
+            DepartmentServiceAddonsRepo().delete_for_department_row(
+                addon_row_id,
+                dept_id,
+                site_id=str(active_site_id),
+            )
+            flash("Serveringsanpassning borttagen från avdelningen.", "success")
+        except Exception as e:
+            flash(f"Kunde inte ta bort serveringsanpassning: {str(e)}", "error")
+        return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+
+    if addon_mode == "edit" and addon_row_id:
+        try:
+            lunch_count, dinner_count = _load_ints()
+            DepartmentServiceAddonsRepo().update_for_department_row(
+                addon_row_id,
+                dept_id,
+                lunch_count=lunch_count,
+                dinner_count=dinner_count,
+                note=note,
+                site_id=str(active_site_id),
+            )
+            flash("Serveringsanpassning sparad.", "success")
+        except Exception as e:
+            flash(_service_addon_validation_message(e), "error")
+        return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+
+    if addon_mode in {"add", "create"} or addon_id or new_name:
+        try:
+            lunch_count, dinner_count = _load_ints()
+            selected_addon_id = addon_id
+            addon_family = normalize_addon_family(family_custom or family)
+            if addon_mode == "create" or new_name:
+                selected_addon_id = ServiceAddonsRepo().create_if_missing(
                     new_name,
                     site_id=str(active_site_id),
                     addon_family=addon_family,
                 )
-            except Exception:
-                addon_id = ""
-        elif addon_id:
-            try:
-                master_repo.set_family(addon_id, str(active_site_id), addon_family)
-            except Exception:
-                pass
-        raw_l = str(lunches[i]).strip() if i < len(lunches) else ""
-        raw_d = str(dinners[i]).strip() if i < len(dinners) else ""
-        note = str(notes[i]).strip() if i < len(notes) else ""
-        lunch_count = None
-        dinner_count = None
-        try:
-            if raw_l != "":
-                lunch_count = int(raw_l)
-        except Exception:
-            lunch_count = None
-        try:
-            if raw_d != "":
-                dinner_count = int(raw_d)
-        except Exception:
-            dinner_count = None
-        if not addon_id:
-            continue
-        out_rows.append(
-            {
-                "addon_id": addon_id,
-                "lunch_count": lunch_count,
-                "dinner_count": dinner_count,
-                "note": note,
-            }
-        )
+            if not selected_addon_id:
+                raise ValueError("service_addon_selection_required")
+            DepartmentServiceAddonsRepo().add_for_department(
+                dept_id,
+                selected_addon_id,
+                lunch_count=lunch_count,
+                dinner_count=dinner_count,
+                note=note,
+                site_id=str(active_site_id),
+            )
+            flash("Serveringsanpassning sparad.", "success")
+        except Exception as e:
+            flash(_service_addon_validation_message(e), "error")
+        return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
 
-    try:
-        DepartmentServiceAddonsRepo().replace_for_department(
-            dept_id=dept_id,
-            rows=out_rows,
-            site_id=str(active_site_id),
-        )
-        flash("Serveringstillägg sparade.", "success")
-    except Exception as e:
-        flash(f"Kunde inte spara serveringstillägg: {str(e)}", "error")
-    return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+    if addon_ids or lunches or dinners or notes or new_names or families:
+        max_len = max(len(addon_ids), len(lunches), len(dinners), len(notes), len(new_names), len(families), 0)
+        master_repo = ServiceAddonsRepo()
+        out_rows: list[dict] = []
+        for i in range(max_len):
+            addon_id = str(addon_ids[i]).strip() if i < len(addon_ids) else ""
+            new_name = str(new_names[i]).strip() if i < len(new_names) else ""
+            addon_family = normalize_addon_family(families[i] if i < len(families) else "ovrigt")
+            if not addon_id and new_name:
+                try:
+                    addon_id = master_repo.create_if_missing(
+                        new_name,
+                        site_id=str(active_site_id),
+                        addon_family=addon_family,
+                    )
+                except Exception:
+                    addon_id = ""
+            raw_l = str(lunches[i]).strip() if i < len(lunches) else ""
+            raw_d = str(dinners[i]).strip() if i < len(dinners) else ""
+            note = str(notes[i]).strip() if i < len(notes) else ""
+            lunch_count = None
+            dinner_count = None
+            try:
+                if raw_l != "":
+                    lunch_count = int(raw_l)
+            except Exception:
+                lunch_count = None
+            try:
+                if raw_d != "":
+                    dinner_count = int(raw_d)
+            except Exception:
+                dinner_count = None
+            if not addon_id:
+                continue
+            out_rows.append(
+                {
+                    "addon_id": addon_id,
+                    "lunch_count": lunch_count,
+                    "dinner_count": dinner_count,
+                    "note": note,
+                }
+            )
+
+        try:
+            DepartmentServiceAddonsRepo().replace_for_department(
+                dept_id=dept_id,
+                rows=out_rows,
+                site_id=str(active_site_id),
+            )
+            flash("Serveringsanpassningar sparade.", "success")
+        except Exception as e:
+            flash(f"Kunde inte spara serveringsanpassningar: {str(e)}", "error")
+        return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+
+    return _redirect_back("Inga serveringsanpassningar att spara.")
 
 
 @ui_bp.get("/ui/admin/departments/<dept_id>/diet-overrides")

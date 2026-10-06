@@ -30,12 +30,15 @@ class CatalogProvisioningError(RuntimeError):
 
 
 def normalize_addon_family(value: str | None) -> str:
-    raw = str(value or "").strip().lower()
-    if raw == "ovritgt":
-        raw = "ovrigt"
-    if raw in SERVICE_ADDON_FAMILIES:
-        return raw
-    return "ovrigt"
+    raw = str(value or "").strip()
+    if not raw:
+        return "ovrigt"
+    lower = raw.lower()
+    if lower == "ovritgt":
+        lower = "ovrigt"
+    if lower in SERVICE_ADDON_FAMILIES:
+        return lower
+    return raw
 
 
 def _normalize_requirement_semantics(value: str | None, *, default: str = "legacy_bucket") -> str:
@@ -58,7 +61,7 @@ def _atomic_requirement_key() -> str:
 def _addon_family_rank(value: str | None) -> int:
     key = normalize_addon_family(value)
     order = {"mos": 0, "sallad": 1, "ovrigt": 2}
-    return int(order.get(key, 2))
+    return int(order.get(str(key).lower(), 3))
 
 
 def _is_sqlite(db) -> bool:
@@ -467,7 +470,26 @@ def _resolve_default_tenant_id(db) -> int | None:
                 return None
     except Exception:
         return None
-    return None
+
+
+def _resident_count_for_department(db, dept_id: str) -> int:
+    row = db.execute(
+        text("SELECT COALESCE(resident_count_fixed, 0) FROM departments WHERE id=:id LIMIT 1"),
+        {"id": str(dept_id)},
+    ).fetchone()
+    if not row:
+        raise ValueError("department_not_found")
+    return int(row[0] or 0)
+
+
+def _validate_service_addon_count_limit(count: int | None, resident_count: int) -> int | None:
+    if count is None:
+        return None
+    if count < 0:
+        raise ValueError("service_addon_count_invalid")
+    if count > int(resident_count):
+        raise ValueError("service_addon_count_exceeds_resident_count")
+    return int(count)
 
 
 def tenant_exists(db, tenant_id: int | None) -> bool:
@@ -1436,10 +1458,6 @@ class ServiceAddonsRepo:
                     {"n": clean},
                 ).fetchone()
             if row:
-                try:
-                    self.set_family(str(row[0]), str(site_id), family)
-                except Exception:
-                    pass
                 return str(row[0])
 
             # Legacy bridge: if an addon with same name exists without site binding, claim it for this site.
@@ -1452,10 +1470,6 @@ class ServiceAddonsRepo:
                         text("UPDATE service_addons SET site_id=:site_id WHERE id=:id"),
                         {"site_id": str(site_id), "id": any_id},
                     )
-                    try:
-                        self.set_family(any_id, str(site_id), family)
-                    except Exception:
-                        pass
                     db.commit()
                     return any_id
 
@@ -1522,10 +1536,6 @@ class ServiceAddonsRepo:
                             text("UPDATE service_addons SET site_id=:site_id WHERE id=:id"),
                             {"site_id": str(site_id), "id": fallback_id},
                         )
-                try:
-                    self.set_family(fallback_id, str(site_id), family)
-                except Exception:
-                    pass
                 db.commit()
                 return fallback_id
             db.commit()
@@ -1564,6 +1574,60 @@ class ServiceAddonsRepo:
 
 
 class DepartmentServiceAddonsRepo:
+    def get_for_department_row(self, row_id: str, dept_id: str, site_id: str | None = None) -> dict | None:
+        db = get_session()
+        try:
+            _ensure_service_addons_tables(db)
+            has_family_col = _table_has_column(db, "service_addons", "addon_family")
+            has_site_col = _table_has_column(db, "service_addons", "site_id")
+            if has_family_col:
+                sql = (
+                    """
+                    SELECT dsa.id, dsa.department_id, dsa.addon_id, sa.name,
+                           COALESCE(sa.addon_family, 'ovrigt') AS addon_family,
+                           dsa.lunch_count, dsa.dinner_count, COALESCE(dsa.note, '')
+                    FROM department_service_addons dsa
+                    JOIN service_addons sa ON sa.id = dsa.addon_id
+                    JOIN departments d ON d.id = dsa.department_id
+                    WHERE dsa.id=:row_id AND dsa.department_id=:d
+                    """
+                )
+                params: dict[str, str] = {"row_id": str(row_id), "d": str(dept_id)}
+                if has_site_col:
+                    if site_id:
+                        sql += " AND d.site_id=:site_id AND sa.site_id=:site_id"
+                        params["site_id"] = str(site_id)
+                    else:
+                        sql += " AND d.site_id = sa.site_id"
+                row = db.execute(text(sql), params).fetchone()
+            else:
+                row = db.execute(
+                    text(
+                        """
+                        SELECT dsa.id, dsa.department_id, dsa.addon_id, sa.name,
+                               dsa.lunch_count, dsa.dinner_count, COALESCE(dsa.note, '')
+                        FROM department_service_addons dsa
+                        JOIN service_addons sa ON sa.id = dsa.addon_id
+                        WHERE dsa.id=:row_id AND dsa.department_id=:d
+                        """
+                    ),
+                    {"row_id": str(row_id), "d": str(dept_id)},
+                ).fetchone()
+            if not row:
+                return None
+            return {
+                "id": str(row[0]),
+                "department_id": str(row[1]),
+                "addon_id": str(row[2]),
+                "addon_name": str(row[3]),
+                "addon_family": normalize_addon_family((row[4] if has_family_col else "ovrigt")),
+                "lunch_count": (int((row[5] if has_family_col else row[4])) if (row[5] if has_family_col else row[4]) is not None else None),
+                "dinner_count": (int((row[6] if has_family_col else row[5])) if (row[6] if has_family_col else row[5]) is not None else None),
+                "note": str((row[7] if has_family_col else row[6]) or ""),
+            }
+        finally:
+            db.close()
+
     def list_for_department(self, dept_id: str, site_id: str | None = None) -> list[dict]:
         db = get_session()
         try:
@@ -1623,6 +1687,172 @@ class DepartmentServiceAddonsRepo:
         finally:
             db.close()
 
+    def add_for_department(
+        self,
+        dept_id: str,
+        addon_id: str,
+        *,
+        lunch_count: int | None,
+        dinner_count: int | None,
+        note: str | None = None,
+        site_id: str | None = None,
+    ) -> None:
+        db = get_session()
+        try:
+            _ensure_service_addons_tables(db)
+            dept_site_id = _site_id_for_department(db, str(dept_id))
+            if not dept_site_id:
+                raise ValueError("department_not_found")
+            if site_id is not None and str(site_id) != str(dept_site_id):
+                raise AssertionError("department_site_mismatch")
+            resident_count = _resident_count_for_department(db, str(dept_id))
+
+            addon_row = db.execute(
+                text("SELECT site_id FROM service_addons WHERE id=:id LIMIT 1"),
+                {"id": str(addon_id)},
+            ).fetchone()
+            if not addon_row:
+                raise ValueError("service_addon_not_found")
+            addon_site_id = str(addon_row[0] or "")
+            if addon_site_id and addon_site_id != str(dept_site_id):
+                raise AssertionError("service_addon_site_mismatch")
+
+            lunch_i = _validate_service_addon_count_limit(lunch_count, resident_count)
+            dinner_i = _validate_service_addon_count_limit(dinner_count, resident_count)
+            if not ((lunch_i is not None and lunch_i > 0) or (dinner_i is not None and dinner_i > 0)):
+                raise ValueError("service_addon_counts_required")
+
+            db.execute(
+                text(
+                    """
+                    INSERT INTO department_service_addons(
+                        id, department_id, addon_id, lunch_count, dinner_count, note, created_at
+                    ) VALUES(:id, :department_id, :addon_id, :lunch_count, :dinner_count, :note, CURRENT_TIMESTAMP)
+                    """
+                ),
+                {
+                    "id": str(uuid.uuid4()),
+                    "department_id": str(dept_id),
+                    "addon_id": str(addon_id),
+                    "lunch_count": lunch_i,
+                    "dinner_count": dinner_i,
+                    "note": str(note or "").strip() or None,
+                },
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    def update_for_department_row(
+        self,
+        row_id: str,
+        dept_id: str,
+        *,
+        lunch_count: int | None,
+        dinner_count: int | None,
+        note: str | None = None,
+        site_id: str | None = None,
+    ) -> None:
+        db = get_session()
+        try:
+            _ensure_service_addons_tables(db)
+            dept_site_id = _site_id_for_department(db, str(dept_id))
+            if not dept_site_id:
+                raise ValueError("department_not_found")
+            if site_id is not None and str(site_id) != str(dept_site_id):
+                raise AssertionError("department_site_mismatch")
+            resident_count = _resident_count_for_department(db, str(dept_id))
+
+            row = db.execute(
+                text(
+                    """
+                    SELECT dsa.id, dsa.department_id, dsa.addon_id, sa.site_id
+                    FROM department_service_addons dsa
+                    JOIN service_addons sa ON sa.id = dsa.addon_id
+                    WHERE dsa.id=:row_id AND dsa.department_id=:d
+                    LIMIT 1
+                    """
+                ),
+                {"row_id": str(row_id), "d": str(dept_id)},
+            ).fetchone()
+            if not row:
+                raise ValueError("service_addon_row_not_found")
+            addon_site_id = str(row[3] or "")
+            if addon_site_id and addon_site_id != str(dept_site_id):
+                raise AssertionError("service_addon_site_mismatch")
+
+            lunch_i = _validate_service_addon_count_limit(lunch_count, resident_count)
+            dinner_i = _validate_service_addon_count_limit(dinner_count, resident_count)
+            if not ((lunch_i is not None and lunch_i > 0) or (dinner_i is not None and dinner_i > 0)):
+                raise ValueError("service_addon_counts_required")
+
+            db.execute(
+                text(
+                    """
+                    UPDATE department_service_addons
+                    SET lunch_count=:lunch_count,
+                        dinner_count=:dinner_count,
+                        note=:note
+                    WHERE id=:row_id AND department_id=:dept_id
+                    """
+                ),
+                {
+                    "row_id": str(row_id),
+                    "dept_id": str(dept_id),
+                    "lunch_count": lunch_i,
+                    "dinner_count": dinner_i,
+                    "note": str(note or "").strip() or None,
+                },
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    def delete_for_department_row(self, row_id: str, dept_id: str, site_id: str | None = None) -> None:
+        db = get_session()
+        try:
+            _ensure_service_addons_tables(db)
+            dept_site_id = _site_id_for_department(db, str(dept_id))
+            if not dept_site_id:
+                raise ValueError("department_not_found")
+            if site_id is not None and str(site_id) != str(dept_site_id):
+                raise AssertionError("department_site_mismatch")
+
+            row = db.execute(
+                text(
+                    """
+                    SELECT dsa.id, sa.site_id
+                    FROM department_service_addons dsa
+                    JOIN service_addons sa ON sa.id = dsa.addon_id
+                    WHERE dsa.id=:row_id AND dsa.department_id=:d
+                    LIMIT 1
+                    """
+                ),
+                {"row_id": str(row_id), "d": str(dept_id)},
+            ).fetchone()
+            if not row:
+                return
+            addon_site_id = str(row[1] or "")
+            if addon_site_id and addon_site_id != str(dept_site_id):
+                raise AssertionError("service_addon_site_mismatch")
+
+            db.execute(
+                text("DELETE FROM department_service_addons WHERE id=:row_id AND department_id=:dept_id"),
+                {"row_id": str(row_id), "dept_id": str(dept_id)},
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
     def replace_for_department(self, dept_id: str, rows: Iterable[dict], site_id: str | None = None) -> None:
         db = get_session()
         try:
@@ -1632,6 +1862,7 @@ class DepartmentServiceAddonsRepo:
                 raise ValueError("department_not_found")
             if site_id is not None and str(site_id) != str(dept_site_id):
                 raise AssertionError("department_site_mismatch")
+            resident_count = _resident_count_for_department(db, str(dept_id))
 
             has_site_col = _table_has_column(db, "service_addons", "site_id")
             db.execute(
@@ -1656,8 +1887,8 @@ class DepartmentServiceAddonsRepo:
                 lunch = row.get("lunch_count")
                 dinner = row.get("dinner_count")
                 note = str(row.get("note") or "").strip() or None
-                lunch_i = int(lunch) if lunch is not None else None
-                dinner_i = int(dinner) if dinner is not None else None
+                lunch_i = _validate_service_addon_count_limit(int(lunch) if lunch is not None else None, resident_count)
+                dinner_i = _validate_service_addon_count_limit(int(dinner) if dinner is not None else None, resident_count)
                 # Only persist rows that have at least one shown count (>0)
                 if not ((lunch_i is not None and lunch_i > 0) or (dinner_i is not None and dinner_i > 0)):
                     continue
@@ -1764,6 +1995,7 @@ class DepartmentServiceAddonsRepo:
             out.sort(
                 key=lambda x: (
                     _addon_family_rank(str(x.get("addon_family") or "ovrigt")),
+                    str(normalize_addon_family(str(x.get("addon_family") or "ovrigt"))).lower(),
                     -(int(x.get("total_count") or 0)),
                     str(x.get("addon_name") or ""),
                 )

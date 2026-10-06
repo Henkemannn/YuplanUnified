@@ -197,63 +197,221 @@
                     <h2 class="app-shell__card-title">Serveringsanpassningar</h2>
                     <p class="admin-section__lead">Återkommande tillägg per avdelning.</p>
                 </div>
-                <button type="button" class="yp-button yp-button-secondary" id="service-addon-add-row">+ Lägg till anpassning</button>
+                <button type="button"
+                        class="yp-button yp-button-secondary"
+                        data-modal-target="#service-addon-modal"
+                        data-service-addon-mode="create">+ Lägg till serveringsanpassning</button>
             </div>
-            <form id="service-addons-form" method="POST" action="{{ url_for('ui.admin_departments_edit_save_service_addons', dept_id=vm.department.id) }}" class="yp-form">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <div id="service-addon-body" class="service-addon-body">
-                    {% if vm.department_service_addons and vm.department_service_addons|length > 0 %}
-                        {% for row in vm.department_service_addons %}
-                        <div class="service-addon-row">
-                            <div class="service-addon-field service-addon-field--addon">
-                                <label class="service-addon-field__label">Tillägg</label>
-                                <select name="service_addon_id[]" class="yp-input service-addon-select">
-                                    <option value="">Välj tillägg</option>
-                                    {% for opt in vm.service_addons_master %}
-                                    <option value="{{ opt.id }}" {% if opt.id|string == row.addon_id|string %}selected{% endif %}>{{ opt.name }}</option>
-                                    {% endfor %}
-                                </select>
-                                <div class="service-addon-create">
-                                    <button type="button" class="yp-button yp-button-secondary service-addon-create-toggle js-service-addon-create-toggle">+ Skapa nytt tillägg</button>
-                                    <div class="service-addon-new-wrap"><input type="text" name="service_addon_new_name[]" class="yp-input service-addon-new" placeholder="Namn på nytt tillägg"></div>
-                                </div>
-                            </div>
-                            <label class="service-addon-field"><span class="service-addon-field__label">Familj</span>{% set row_family = (row.addon_family or 'ovrigt')|lower %}<select name="service_addon_family[]" class="yp-input"><option value="mos" {% if row_family == 'mos' %}selected{% endif %}>Mos</option><option value="sallad" {% if row_family == 'sallad' %}selected{% endif %}>Sallad</option><option value="ovrigt" {% if row_family == 'ovrigt' %}selected{% endif %}>Övrigt</option></select></label>
-                            <label class="service-addon-field"><span class="service-addon-field__label">Lunch</span><input type="number" min="0" name="service_addon_lunch_count[]" class="yp-input" value="{{ row.lunch_count if row.lunch_count is not none else '' }}"></label>
-                            <label class="service-addon-field"><span class="service-addon-field__label">Kväll</span><input type="number" min="0" name="service_addon_dinner_count[]" class="yp-input" value="{{ row.dinner_count if row.dinner_count is not none else '' }}"></label>
-                            <label class="service-addon-field service-addon-field--note"><span class="service-addon-field__label">Notering</span><input type="text" name="service_addon_note[]" class="yp-input" value="{{ row.note or '' }}" placeholder="Valfri notering"></label>
-                            <div class="service-addon-field service-addon-field--remove"><span class="service-addon-field__label">Ta bort</span><button type="button" class="yp-button yp-button-secondary js-service-addon-remove">Ta bort</button></div>
-                        </div>
-                        {% endfor %}
-                    {% else %}
-                        <div class="service-addon-row">
-                            <div class="service-addon-field service-addon-field--addon">
-                                <label class="service-addon-field__label">Tillägg</label>
-                                <select name="service_addon_id[]" class="yp-input service-addon-select">
-                                    <option value="">Välj tillägg</option>
-                                    {% for opt in vm.service_addons_master %}
-                                    <option value="{{ opt.id }}">{{ opt.name }}</option>
-                                    {% endfor %}
-                                </select>
-                                <div class="service-addon-create">
-                                    <button type="button" class="yp-button yp-button-secondary service-addon-create-toggle js-service-addon-create-toggle">+ Skapa nytt tillägg</button>
-                                    <div class="service-addon-new-wrap"><input type="text" name="service_addon_new_name[]" class="yp-input service-addon-new" placeholder="Namn på nytt tillägg"></div>
-                                </div>
-                            </div>
-                            <label class="service-addon-field"><span class="service-addon-field__label">Familj</span><select name="service_addon_family[]" class="yp-input"><option value="mos">Mos</option><option value="sallad">Sallad</option><option value="ovrigt" selected>Övrigt</option></select></label>
-                            <label class="service-addon-field"><span class="service-addon-field__label">Lunch</span><input type="number" min="0" name="service_addon_lunch_count[]" class="yp-input" value=""></label>
-                            <label class="service-addon-field"><span class="service-addon-field__label">Kväll</span><input type="number" min="0" name="service_addon_dinner_count[]" class="yp-input" value=""></label>
-                            <label class="service-addon-field service-addon-field--note"><span class="service-addon-field__label">Notering</span><input type="text" name="service_addon_note[]" class="yp-input" value="" placeholder="Valfri notering"></label>
-                            <div class="service-addon-field service-addon-field--remove"><span class="service-addon-field__label">Ta bort</span><button type="button" class="yp-button yp-button-secondary js-service-addon-remove">Ta bort</button></div>
-                        </div>
+
+            <div class="admin-service-addon-list" role="list" aria-label="Registrerade serveringsanpassningar">
+                {% if vm.department_service_addons and vm.department_service_addons|length > 0 %}
+                    {% for row in vm.department_service_addons %}
+                    {% set quantity_parts = namespace(items=[]) %}
+                    {% set family_label = {'mos': 'Mos', 'sallad': 'Sallad', 'ovrigt': 'Övrigt'}.get((row.addon_family or 'ovrigt')|lower, row.addon_family) %}
+                    {% if row.lunch_count is not none and row.lunch_count|int > 0 %}
+                        {% set quantity_parts.items = quantity_parts.items + ['Lunch ' ~ row.lunch_count] %}
                     {% endif %}
-                </div>
-                <div class="service-addon-actions">
-                    <button type="submit" class="yp-button yp-button-primary">Spara serveringsanpassningar</button>
-                </div>
-            </form>
+                    {% if row.dinner_count is not none and row.dinner_count|int > 0 %}
+                        {% set quantity_parts.items = quantity_parts.items + ['Kväll ' ~ row.dinner_count] %}
+                    {% endif %}
+                    <div class="admin-service-addon-item" role="listitem">
+                        <div class="admin-service-addon-item__main">
+                            <strong class="admin-service-addon-item__name">{{ row.addon_name }}</strong>
+                            <div class="admin-service-addon-item__meta-line">
+                                {% if family_label %}
+                                <span class="admin-service-addon-item__family">{{ family_label }}</span>
+                                {% endif %}
+                                {% if quantity_parts.items %}
+                                <span class="admin-service-addon-item__count">{{ quantity_parts.items|join(' · ') }}</span>
+                                {% else %}
+                                <span class="admin-service-addon-item__count">Ingen aktiv mängd</span>
+                                {% endif %}
+                                {% if row.note %}
+                                <span class="admin-service-addon-item__note">{{ row.note }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="admin-service-addon-item__actions">
+                            <button type="button"
+                                    class="yp-button yp-button-secondary admin-service-addon-item__edit-trigger"
+                                    data-modal-target="#service-addon-modal"
+                                    data-service-addon-mode="edit"
+                                    data-service-addon-row-id="{{ row.id }}"
+                                    data-service-addon-addon-id="{{ row.addon_id }}"
+                                    data-service-addon-addon-name="{{ row.addon_name }}"
+                                    data-service-addon-addon-family="{{ row.addon_family }}"
+                                    data-service-addon-lunch="{{ row.lunch_count if row.lunch_count is not none else '' }}"
+                                    data-service-addon-dinner="{{ row.dinner_count if row.dinner_count is not none else '' }}"
+                                    data-service-addon-note="{{ row.note or '' }}">Redigera</button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="ua-muted admin-service-addon-empty">Inga registrerade serveringsanpassningar ännu.</p>
+                {% endif %}
+            </div>
         </article>
     </section>
+
+<dialog id="service-addon-modal" class="ua-modal admin-service-addon-modal">
+    <div class="ua-modal-inner admin-service-addon-modal__inner">
+        <form method="POST" action="{{ url_for('ui.admin_departments_edit_save_service_addons', dept_id=vm.department.id) }}" class="admin-service-addon-modal__form" data-service-addon-form data-service-addon-main-form>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="service_addon_mode" value="add">
+            <input type="hidden" name="service_addon_action" value="">
+            <input type="hidden" name="service_addon_row_id" value="">
+            <header class="ua-modal-header admin-service-addon-modal__shell-header">
+                <div>
+                    <h2 class="admin-service-addon-modal__title" data-service-addon-title>Lägg till serveringsanpassning</h2>
+                    <p class="admin-service-addon-modal__subtitle" data-service-addon-subtitle>Välj en aktiv serveringsanpassning för den här siten.</p>
+                </div>
+                <button type="button" class="ua-modal-close" data-modal-close data-service-addon-close aria-label="Stäng">&times;</button>
+            </header>
+            <section class="admin-service-addon-modal__state" data-service-addon-state="add">
+                <div class="ua-modal-body admin-service-addon-modal__body">
+                    <label class="admin-service-addon-modal__field admin-service-addon-modal__field--wide">
+                        <span class="admin-service-addon-modal__label">Serveringsanpassning</span>
+                        <input type="search" class="yp-input admin-service-addon-modal__search" placeholder="Sök aktiv serveringsanpassning..." aria-label="Sök serveringsanpassning" data-service-addon-search>
+                        <select name="service_addon_id" class="yp-input admin-service-addon-modal__select" size="6" data-service-addon-select>
+                            <option value="" selected disabled>Välj serveringsanpassning</option>
+                            {% for opt in vm.service_addons_master or [] %}
+                            <option value="{{ opt.id }}">{{ opt.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+
+                    <div class="admin-service-addon-modal__quantity-grid">
+                        <label class="admin-service-addon-modal__field">
+                            <span class="admin-service-addon-modal__label">Lunch</span>
+                            <input type="number" min="0" max="{{ vm.department.resident_count_fixed }}" name="service_addon_lunch_count" class="yp-input" value="">
+                        </label>
+                        <label class="admin-service-addon-modal__field">
+                            <span class="admin-service-addon-modal__label">Kväll</span>
+                            <input type="number" min="0" max="{{ vm.department.resident_count_fixed }}" name="service_addon_dinner_count" class="yp-input" value="">
+                        </label>
+                    </div>
+
+                    <label class="admin-service-addon-modal__field admin-service-addon-modal__field--wide">
+                        <span class="admin-service-addon-modal__label">Notering</span>
+                        <textarea name="service_addon_note" class="yp-input admin-service-addon-modal__note" rows="2" placeholder="Valfri notering"></textarea>
+                    </label>
+
+                    <div class="admin-service-addon-modal__secondary-action">
+                        <button type="button" class="yp-button yp-button-secondary" data-service-addon-switch-create>+ Skapa ny serveringsanpassning</button>
+                    </div>
+                </div>
+                <footer class="ua-modal-footer admin-service-addon-modal__footer admin-service-addon-modal__footer--add">
+                    <button type="button" class="yp-button yp-button-secondary" data-modal-close data-service-addon-close>Avbryt</button>
+                    <button type="submit" class="yp-button yp-button-primary" data-service-addon-save> Spara</button>
+                </footer>
+            </section>
+
+            <section class="admin-service-addon-modal__state" data-service-addon-state="create" hidden>
+                <div class="ua-modal-body admin-service-addon-modal__body">
+                    <label class="admin-service-addon-modal__field admin-service-addon-modal__field--wide">
+                        <span class="admin-service-addon-modal__label">Beskrivning</span>
+                        <input type="text" name="service_addon_new_name" class="yp-input" placeholder="Beskriv anpassningen, t.ex. Aldrig tomat">
+                    </label>
+                    <div class="admin-service-addon-modal__family-block">
+                        <label class="admin-service-addon-modal__field admin-service-addon-modal__field--wide">
+                            <span class="admin-service-addon-modal__label">Kategori</span>
+                            <select name="service_addon_family" class="yp-input" data-service-addon-family-select>
+                                <option value="mos">Mos</option>
+                                <option value="sallad">Sallad</option>
+                                <option value="ovrigt" selected>Övrigt</option>
+                                {% set ns = namespace(custom_families=[]) %}
+                                {% for opt in vm.service_addons_master or [] %}
+                                    {% set fam = (opt.addon_family or 'ovrigt')|lower %}
+                                    {% if fam not in ['mos', 'sallad', 'ovrigt'] and fam not in ns.custom_families %}
+                                        {% set ns.custom_families = ns.custom_families + [fam] %}
+                                    {% endif %}
+                                {% endfor %}
+                                {% for fam in ns.custom_families %}
+                                <option value="{{ fam }}">{{ fam }}</option>
+                                {% endfor %}
+                                <option value="__custom__">+ Skapa ny familj…</option>
+                            </select>
+                        </label>
+                        <div class="admin-service-addon-modal__family-custom" data-service-addon-family-custom hidden>
+                            <label class="admin-service-addon-modal__field admin-service-addon-modal__field--wide">
+                                <span class="admin-service-addon-modal__label">Ny familj</span>
+                                <input type="text" class="yp-input" name="service_addon_family_custom" placeholder="Ange ny familj">
+                            </label>
+                        </div>
+                    </div>
+                    <div class="admin-service-addon-modal__quantity-grid">
+                        <label class="admin-service-addon-modal__field">
+                            <span class="admin-service-addon-modal__label">Lunch</span>
+                            <input type="number" min="0" max="{{ vm.department.resident_count_fixed }}" name="service_addon_lunch_count" class="yp-input" value="">
+                        </label>
+                        <label class="admin-service-addon-modal__field">
+                            <span class="admin-service-addon-modal__label">Kväll</span>
+                            <input type="number" min="0" max="{{ vm.department.resident_count_fixed }}" name="service_addon_dinner_count" class="yp-input" value="">
+                        </label>
+                    </div>
+                    <label class="admin-service-addon-modal__field admin-service-addon-modal__field--wide">
+                        <span class="admin-service-addon-modal__label">Notering</span>
+                        <textarea name="service_addon_note" class="yp-input admin-service-addon-modal__note" rows="2" placeholder="Valfri notering"></textarea>
+                    </label>
+                </div>
+                <footer class="ua-modal-footer admin-service-addon-modal__footer admin-service-addon-modal__footer--create">
+                    <button type="button" class="yp-button yp-button-secondary" data-modal-close data-service-addon-close>Avbryt</button>
+                    <button type="submit" class="yp-button yp-button-primary" data-service-addon-save>Spara serveringsanpassning</button>
+                </footer>
+            </section>
+
+            <section class="admin-service-addon-modal__state" data-service-addon-state="edit" hidden>
+                <div class="ua-modal-body admin-service-addon-modal__body">
+                    <div class="admin-service-addon-modal__identity">
+                        <p class="admin-service-addon-modal__subtitle" data-service-addon-edit-name></p>
+                        <p class="admin-service-addon-modal__meta" data-service-addon-edit-family></p>
+                    </div>
+                    <div class="admin-service-addon-modal__quantity-grid">
+                        <label class="admin-service-addon-modal__field">
+                            <span class="admin-service-addon-modal__label">Lunch</span>
+                            <input type="number" min="0" max="{{ vm.department.resident_count_fixed }}" name="service_addon_lunch_count" class="yp-input" value="">
+                        </label>
+                        <label class="admin-service-addon-modal__field">
+                            <span class="admin-service-addon-modal__label">Kväll</span>
+                            <input type="number" min="0" max="{{ vm.department.resident_count_fixed }}" name="service_addon_dinner_count" class="yp-input" value="">
+                        </label>
+                    </div>
+                    <label class="admin-service-addon-modal__field admin-service-addon-modal__field--wide">
+                        <span class="admin-service-addon-modal__label">Notering</span>
+                        <textarea name="service_addon_note" class="yp-input admin-service-addon-modal__note" rows="1" placeholder="Valfri notering"></textarea>
+                    </label>
+                </div>
+                <footer class="ua-modal-footer admin-service-addon-modal__footer admin-service-addon-modal__footer--edit">
+                    <button type="button" class="yp-button yp-button-secondary" data-modal-close data-service-addon-close>Avbryt</button>
+                    <button type="button" class="yp-button yp-button-secondary" data-service-addon-remove-start>Ta bort från avdelningen</button>
+                    <button type="submit" class="yp-button yp-button-primary" data-service-addon-save>Spara</button>
+                </footer>
+            </section>
+
+        </form>
+
+        <form method="POST" action="{{ url_for('ui.admin_departments_edit_save_service_addons', dept_id=vm.department.id) }}" class="admin-service-addon-modal__form admin-service-addon-modal__form--remove" data-service-addon-remove-form hidden>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="service_addon_mode" value="edit">
+            <input type="hidden" name="service_addon_action" value="remove">
+            <input type="hidden" name="service_addon_row_id" value="">
+            <section class="admin-service-addon-modal__state" data-service-addon-state="remove" hidden>
+                <div class="ua-modal-body admin-service-addon-modal__body">
+                    <h2 class="admin-service-addon-modal__title">Ta bort serveringsanpassning?</h2>
+                    <div class="admin-service-addon-modal__remove-card">
+                        <p class="admin-service-addon-modal__remove-copy admin-service-addon-modal__remove-copy--name" data-service-addon-remove-name></p>
+                        <p class="admin-service-addon-modal__remove-copy">{{ vm.department.name }}</p>
+                        <p class="admin-service-addon-modal__remove-copy">Serveringsanpassningen tas bort från avdelningen. Den finns fortfarande kvar i katalogen.</p>
+                    </div>
+                </div>
+                <footer class="ua-modal-footer admin-service-addon-modal__footer admin-service-addon-modal__footer--remove">
+                    <button type="button" class="yp-button yp-button-secondary" data-service-addon-remove-cancel>Avbryt</button>
+                    <button type="submit" class="yp-button yp-button-danger" data-service-addon-remove-confirm>Ta bort från avdelningen</button>
+                </footer>
+            </section>
+        </form>
+    </div>
+</dialog>
 </section>
 
 {% else %}
