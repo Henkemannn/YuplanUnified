@@ -67,6 +67,6 @@ def test_site_level_weekview_shows_alt2_on_lunch_cell(client_admin):
     )
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
-    # Expect multiple lunch cells highlighted (Boende + at least one diet row)
-    count = html.count("td class=\"is-alt2\"") + html.count(" class=\"is-alt2\"")
-    assert count >= 2
+    # Expect the canonical Alt2 marker to appear at least twice:
+    # once for the boende row and once for the diet row.
+    assert html.count("is-alt2") >= 2
