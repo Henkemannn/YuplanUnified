@@ -29,6 +29,53 @@ def _build_weekday_override_payload(*, group_id: str, primary_requirement_id: in
             payload[key] = "" if value is None else str(value)
     return payload
 
+
+def _department_resident_count(dept_id: str) -> int:
+    db = get_session()
+    try:
+        row = db.execute(text("SELECT COALESCE(resident_count_fixed, 0) FROM departments WHERE id=:id"), {"id": dept_id}).fetchone()
+        return int(row[0] or 0) if row else 0
+    finally:
+        db.close()
+
+
+def _active_requirement_total(dept_id: str) -> int:
+    groups = DepartmentRequirementGroupsRepo().list_for_department(dept_id)
+    return sum(int(group.get("default_quantity") or 0) for group in groups if group.get("is_active"))
+
+
+def _seed_need_conflict_state(sess, *, new_requirement_id: int, default_quantity: int = 2) -> None:
+    sess["admin_need_conflict_state"] = {
+        "kind": "need",
+        "mode": "create",
+        "group_id": None,
+        "primary_requirement_id": str(new_requirement_id),
+        "modifier_requirement_ids": [],
+        "requirement_ids": [str(new_requirement_id)],
+        "default_quantity": default_quantity,
+        "is_active": True,
+        "label": None,
+        "weekday_changes": [],
+        "resident_count": 12,
+        "current_total": 13,
+        "minimum_valid_total": 13,
+        "body": "",
+    }
+
+
+def _seed_tuesday_resident_context(department_id: str, *, lunch: int, dinner: int) -> None:
+    from core.residents_schedule_repo import ResidentsScheduleRepo
+
+    week = date.today().isocalendar()[1]
+    ResidentsScheduleRepo().upsert_items(
+        department_id,
+        week,
+        [
+            {"weekday": 2, "meal": "lunch", "count": lunch},
+            {"weekday": 2, "meal": "dinner", "count": dinner},
+        ],
+    )
+
 def test_edit_form_shows_specialkost_heading(client_admin):
     # Create a department
     dep_id = str(uuid.uuid4())
@@ -1003,6 +1050,331 @@ def test_edit_form_saves_weekday_quantities_and_resets_without_touching_legacy_t
     assert exact_repo.resolve_effective_quantity(group["id"], date(2026, 9, 10), "lunch") == 5
     assert DietDefaultsRepo().list_for_department(dep["id"]) == legacy_defaults_before
     assert DepartmentDietOverridesRepo().list_for_department(dep["id"]) == legacy_overrides_before
+
+
+def test_edit_form_shows_requirement_conflict_modal_for_overflow_and_preserves_submission_state(client_admin):
+    site, _ = SitesRepo().create_site(f"Requirement conflict site {uuid.uuid4()}")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Conflict",
+        resident_count_mode="fixed",
+        resident_count_fixed=12,
+    )
+    current_id = DietTypesRepo().create(site_id=site["id"], name="Timbal", default_select=False, semantics="atomic")
+    new_id = DietTypesRepo().create(site_id=site["id"], name="Vegan", default_select=False, semantics="atomic")
+    DepartmentRequirementGroupsRepo().create_group(
+        dep["id"],
+        11,
+        [current_id],
+        label="Current",
+        primary_requirement_id=current_id,
+    )
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+
+    resp = client_admin.post(
+        f"/ui/admin/departments/{dep['id']}/requirement-groups",
+        data={
+            "primary_requirement_id": str(new_id),
+            "default_quantity": "2",
+            "is_active": "1",
+        },
+        follow_redirects=True,
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "Antalet stämmer inte" in html
+    assert "Registrerade kostbehov blir totalt 13 personer, men avdelningen har 12 boende." in html
+    assert "Boendeantalet har ändrats" in html
+    assert "Antalet kostbehov är fel" in html
+    assert 'data-auto-open-need-conflict' in html
+    assert 'data-conflict-dismiss="true"' in html
+    assert f'data-need-primary-id="{new_id}"' in html
+    assert 'data-need-default-quantity="2"' in html
+
+
+def test_edit_form_blocks_varied_tuesday_context_and_preserves_pending_form_state(client_admin):
+    site, _ = SitesRepo().create_site(f"Requirement varied Tuesday conflict site {uuid.uuid4()}")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Varied Tuesday",
+        resident_count_mode="fixed",
+        resident_count_fixed=12,
+    )
+    current_id = DietTypesRepo().create(site_id=site["id"], name="Timbal", default_select=False, semantics="atomic")
+    new_id = DietTypesRepo().create(site_id=site["id"], name="Vegan", default_select=False, semantics="atomic")
+    DepartmentRequirementGroupsRepo().create_group(
+        dep["id"],
+        9,
+        [current_id],
+        label="Current",
+        primary_requirement_id=current_id,
+    )
+    _seed_tuesday_resident_context(dep["id"], lunch=11, dinner=11)
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+
+    resp = client_admin.post(
+        f"/ui/admin/departments/{dep['id']}/requirement-groups",
+        data={
+            "primary_requirement_id": str(new_id),
+            "default_quantity": "3",
+            "is_active": "1",
+        },
+        follow_redirects=True,
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "Antalet stämmer inte" in html
+    assert "På tisdag lunch är 12 personer registrerade med kostbehov, men avdelningen har 11 boende." in html
+    assert 'data-department-resident-count="11"' in html
+    assert 'data-auto-open-need-conflict' in html
+    assert 'data-conflict-dismiss="true"' in html
+    groups = DepartmentRequirementGroupsRepo().list_for_department(dep["id"])
+    assert len(groups) == 1
+    assert groups[0]["default_quantity"] == 9
+    assert len([group for group in groups if group["is_active"]]) == 1
+
+
+def test_edit_form_allows_contextual_hundred_percent_and_weekday_override_replacement(client_admin):
+    site, _ = SitesRepo().create_site(f"Requirement contextual percent site {uuid.uuid4()}")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Contextual Percent",
+        resident_count_mode="fixed",
+        resident_count_fixed=12,
+    )
+    current_id = DietTypesRepo().create(site_id=site["id"], name="Timbal", default_select=False, semantics="atomic")
+    current_group = DepartmentRequirementGroupsRepo().create_group(
+        dep["id"],
+        9,
+        [current_id],
+        label="Current",
+        primary_requirement_id=current_id,
+    )
+    _seed_tuesday_resident_context(dep["id"], lunch=11, dinner=11)
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+
+    resp = client_admin.post(
+        f"/ui/admin/departments/{dep['id']}/requirement-groups",
+        data={
+            "group_id": str(current_group["id"]),
+            "primary_requirement_id": str(current_id),
+            "default_quantity": "3",
+            "weekday_quantity_{0}_2_lunch".format(current_group["id"]): "2",
+            "weekday_quantity_{0}_2_dinner".format(current_group["id"]): "2",
+            "is_active": "1",
+        },
+        follow_redirects=True,
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "Antalet stämmer inte" not in html
+    groups = DepartmentRequirementGroupsRepo().list_for_department(dep["id"])
+    reread = next(group for group in groups if str(group["id"]) == str(current_group["id"]))
+    assert reread["default_quantity"] == 3
+    weekday_overrides = DepartmentRequirementGroupWeekdayOverridesRepo().list_for_group(str(current_group["id"]))
+    assert {row["quantity"] for row in weekday_overrides if row["weekday"] == 2 and row["meal_key"] in {"lunch", "dinner"}} == {2}
+
+
+@pytest.mark.parametrize("resident_count", [13, 14])
+def test_edit_form_conflict_path_a_applies_pending_need_after_resident_update(client_admin, resident_count):
+    site, _ = SitesRepo().create_site(f"Requirement conflict path A site {uuid.uuid4()}")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Path A",
+        resident_count_mode="fixed",
+        resident_count_fixed=12,
+    )
+    current_id = DietTypesRepo().create(site_id=site["id"], name="Timbal", default_select=False, semantics="atomic")
+    new_id = DietTypesRepo().create(site_id=site["id"], name="Vegan", default_select=False, semantics="atomic")
+    DepartmentRequirementGroupsRepo().create_group(
+        dep["id"],
+        11,
+        [current_id],
+        label="Current",
+        primary_requirement_id=current_id,
+    )
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+        _seed_need_conflict_state(sess, new_requirement_id=new_id, default_quantity=2)
+
+    db = get_session()
+    try:
+        row = db.execute(text("SELECT COALESCE(version, 0) FROM departments WHERE id=:id"), {"id": dep["id"]}).fetchone()
+        version = int(row[0] or 0) if row else 0
+    finally:
+        db.close()
+
+    save_resp = client_admin.post(
+        f"/ui/admin/departments/{dep['id']}/edit",
+        data={
+            "name": "Avd Path A",
+            "resident_count": str(resident_count),
+            "version": str(version),
+            "notes": "",
+        },
+        follow_redirects=True,
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert save_resp.status_code == 200
+    assert _active_requirement_total(dep["id"]) == 13
+    assert any(group["default_quantity"] == 2 for group in DepartmentRequirementGroupsRepo().list_for_department(dep["id"]) if group["is_active"])
+    assert _department_resident_count(dep["id"]) == resident_count
+
+
+def test_edit_form_conflict_path_a_rolls_back_if_group_write_fails(client_admin, monkeypatch):
+    site, _ = SitesRepo().create_site(f"Requirement conflict rollback group site {uuid.uuid4()}")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Path A Rollback Group",
+        resident_count_mode="fixed",
+        resident_count_fixed=12,
+    )
+    current_id = DietTypesRepo().create(site_id=site["id"], name="Timbal", default_select=False, semantics="atomic")
+    new_id = DietTypesRepo().create(site_id=site["id"], name="Vegan", default_select=False, semantics="atomic")
+    DepartmentRequirementGroupsRepo().create_group(
+        dep["id"],
+        11,
+        [current_id],
+        label="Current",
+        primary_requirement_id=current_id,
+    )
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+        _seed_need_conflict_state(sess, new_requirement_id=new_id, default_quantity=2)
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("core.department_requirement_group_repo.DepartmentRequirementGroupsRepo.save_group_in_session", _boom)
+
+    db = get_session()
+    try:
+        row = db.execute(text("SELECT COALESCE(version, 0) FROM departments WHERE id=:id"), {"id": dep["id"]}).fetchone()
+        version = int(row[0] or 0) if row else 0
+    finally:
+        db.close()
+
+    save_resp = client_admin.post(
+        f"/ui/admin/departments/{dep['id']}/edit",
+        data={
+            "name": "Avd Path A Rollback Group",
+            "resident_count": "13",
+            "version": str(version),
+            "notes": "",
+        },
+        follow_redirects=True,
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert save_resp.status_code == 200
+    assert _department_resident_count(dep["id"]) == 12
+    assert _active_requirement_total(dep["id"]) == 11
+
+
+def test_edit_form_conflict_path_a_rolls_back_if_resident_update_fails(client_admin, monkeypatch):
+    site, _ = SitesRepo().create_site(f"Requirement conflict rollback resident site {uuid.uuid4()}")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Path A Rollback Resident",
+        resident_count_mode="fixed",
+        resident_count_fixed=12,
+    )
+    current_id = DietTypesRepo().create(site_id=site["id"], name="Timbal", default_select=False, semantics="atomic")
+    new_id = DietTypesRepo().create(site_id=site["id"], name="Vegan", default_select=False, semantics="atomic")
+    DepartmentRequirementGroupsRepo().create_group(
+        dep["id"],
+        11,
+        [current_id],
+        label="Current",
+        primary_requirement_id=current_id,
+    )
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+        _seed_need_conflict_state(sess, new_requirement_id=new_id, default_quantity=2)
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("core.admin_repo.DepartmentsRepo.update_department_in_session", _boom)
+
+    db = get_session()
+    try:
+        row = db.execute(text("SELECT COALESCE(version, 0) FROM departments WHERE id=:id"), {"id": dep["id"]}).fetchone()
+        version = int(row[0] or 0) if row else 0
+    finally:
+        db.close()
+
+    save_resp = client_admin.post(
+        f"/ui/admin/departments/{dep['id']}/edit",
+        data={
+            "name": "Avd Path A Rollback Resident",
+            "resident_count": "13",
+            "version": str(version),
+            "notes": "",
+        },
+        follow_redirects=True,
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert save_resp.status_code == 200
+    assert _department_resident_count(dep["id"]) == 12
+    assert _active_requirement_total(dep["id"]) == 11
+
+
+def test_edit_form_conflict_path_a_rejects_below_minimum_without_partial_persist(client_admin):
+    site, _ = SitesRepo().create_site(f"Requirement conflict minimum site {uuid.uuid4()}")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Path A Minimum",
+        resident_count_mode="fixed",
+        resident_count_fixed=12,
+    )
+    current_id = DietTypesRepo().create(site_id=site["id"], name="Timbal", default_select=False, semantics="atomic")
+    new_id = DietTypesRepo().create(site_id=site["id"], name="Vegan", default_select=False, semantics="atomic")
+    DepartmentRequirementGroupsRepo().create_group(
+        dep["id"],
+        11,
+        [current_id],
+        label="Current",
+        primary_requirement_id=current_id,
+    )
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+        _seed_need_conflict_state(sess, new_requirement_id=new_id, default_quantity=2)
+
+    db = get_session()
+    try:
+        row = db.execute(text("SELECT COALESCE(version, 0) FROM departments WHERE id=:id"), {"id": dep["id"]}).fetchone()
+        version = int(row[0] or 0) if row else 0
+    finally:
+        db.close()
+
+    save_resp = client_admin.post(
+        f"/ui/admin/departments/{dep['id']}/edit",
+        data={
+            "name": "Avd Path A Minimum",
+            "resident_count": "12",
+            "version": str(version),
+            "notes": "",
+        },
+        follow_redirects=True,
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert save_resp.status_code == 200
+    assert "Registrerade kostbehov blir fler än det nya boendeantalet." in save_resp.get_data(as_text=True)
+    assert _department_resident_count(dep["id"]) == 12
+    assert _active_requirement_total(dep["id"]) == 11
 
 
 def test_edit_form_rejects_cross_department_and_negative_weekday_quantities(client_admin):

@@ -385,6 +385,48 @@
             }
         }
 
+        function parseVariationNumber(value) {
+            const parsed = parseInt(String(value == null ? '' : value).trim() || '0', 10);
+            return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+        }
+
+        function syncVariationResidentDelta(input) {
+            if (!input || !input.name) {
+                return;
+            }
+            const match = /^need_day_(.+)_(\d+)_(lunch|dinner)$/.exec(String(input.name));
+            if (!match) {
+                return;
+            }
+            const form = input.closest('#residents-variation-form');
+            if (!form) {
+                return;
+            }
+            const weekday = match[2];
+            const mealKey = match[3];
+            const residentInput = form.querySelector('input[name="day_' + weekday + '_' + mealKey + '"]');
+            if (!residentInput) {
+                return;
+            }
+            const previousValue = input.dataset.variationDeltaValue == null
+                ? parseVariationNumber(input.value)
+                : parseVariationNumber(input.dataset.variationDeltaValue);
+            const nextValue = parseVariationNumber(input.value);
+            const residentValue = parseVariationNumber(residentInput.value);
+            const nextResidentValue = Math.max(0, residentValue + (nextValue - previousValue));
+            residentInput.value = String(nextResidentValue);
+            input.dataset.variationDeltaValue = String(nextValue);
+        }
+
+        function seedVariationResidentDelta(form) {
+            if (!form || !form.querySelectorAll) {
+                return;
+            }
+            form.querySelectorAll('input[type="number"][name^="need_day_"]').forEach(function(input) {
+                input.dataset.variationDeltaValue = String(parseVariationNumber(input.value));
+            });
+        }
+
         function toggleNeedPickerOption(dialog, value) {
             const nodes = getNeedPickerNodes(dialog);
             if (!nodes.modifierSelect) {
@@ -482,6 +524,27 @@
             }
         }
 
+        function closeDialog(dialog) {
+            if (!dialog) {
+                return;
+            }
+            try {
+                if (typeof dialog.close === 'function') {
+                    dialog.close();
+                } else {
+                    dialog.removeAttribute('open');
+                }
+            } catch (e) {
+                dialog.removeAttribute('open');
+            }
+            dialog.classList.remove('ua-modal-open');
+        }
+
+        const autoOpenNeedConflict = document.querySelector('[data-auto-open-need-conflict]');
+        if (autoOpenNeedConflict) {
+            autoOpenNeedConflict.click();
+        }
+
         // Open handler
         document.addEventListener('click', function (event) {
             const trigger = event.target.closest('[data-modal-target]');
@@ -498,7 +561,14 @@
             const titleNode = dialog.querySelector('[data-variation-modal-title]');
             const subtitleNode = dialog.querySelector('[data-variation-modal-subtitle]');
             const focusGroupInput = dialog.querySelector('input[name="variation_focus_group_id"]');
+            const residentCountOverride = trigger.getAttribute('data-department-resident-count');
 
+            if (trigger.getAttribute('data-conflict-dismiss') === 'true') {
+                const conflictDialog = trigger.closest('dialog.ua-modal');
+                if (conflictDialog && conflictDialog.id === 'need-conflict-modal') {
+                    closeDialog(conflictDialog);
+                }
+            }
             if (titleNode && variationTitle) {
                 titleNode.textContent = variationTitle;
             }
@@ -508,10 +578,19 @@
             if (focusGroupInput) {
                 focusGroupInput.value = variationFocusGroupId || '';
             }
+            if (residentCountOverride && dialog.id === 'department-edit-modal') {
+                const residentInput = dialog.querySelector('#department-edit-resident-count');
+                if (residentInput) {
+                    residentInput.value = residentCountOverride;
+                }
+            }
 
             if (dialog.id === 'need-modal') {
                 closeNeedPicker(dialog, false);
                 syncNeedModal(dialog, trigger);
+            }
+            if (dialog.id === 'residents-variation-modal') {
+                seedVariationResidentDelta(dialog.querySelector('#residents-variation-form'));
             }
 
             try {
@@ -538,17 +617,10 @@
 
             if (dialog.id === 'need-modal') {
                 closeNeedModal(dialog);
+            } else if (dialog.id === 'need-conflict-modal') {
+                closeDialog(dialog);
             } else {
-                try {
-                    if (typeof dialog.close === 'function') {
-                        dialog.close();
-                    } else {
-                        dialog.removeAttribute('open');
-                    }
-                } catch (e) {
-                    dialog.removeAttribute('open');
-                }
-                dialog.classList.remove('ua-modal-open');
+                closeDialog(dialog);
             }
 
             const titleNode = dialog.querySelector('[data-variation-modal-title]');
@@ -603,6 +675,16 @@
                 updateNeedModalChips(dialog);
             }
         });
+
+        document.addEventListener('input', function (event) {
+            const target = event.target;
+            if (!target || !target.matches || !target.matches('#residents-variation-form input[type="number"][name^="need_day_"]')) {
+                return;
+            }
+            syncVariationResidentDelta(target);
+        });
+
+        seedVariationResidentDelta(document.querySelector('#residents-variation-form'));
 
         document.addEventListener('click', function (event) {
             const pickerOption = event.target.closest('[data-need-picker-option]');

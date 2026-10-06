@@ -209,38 +209,6 @@ def _resident_rows_for_scope_in_session(db, *, department_id: str, year: int, we
     return out
 
 
-def _current_need_totals_in_session(db, *, department_id: str, year: int, week: int) -> dict[tuple[int, str], int]:
-    rows = db.execute(
-        text(
-            """
-            SELECT id, default_quantity, is_active
-            FROM department_requirement_groups
-            WHERE department_id=:department_id
-            ORDER BY id ASC
-            """
-        ),
-        {"department_id": department_id},
-    ).fetchall()
-    totals: dict[tuple[int, str], int] = {}
-    for weekday, service_date in enumerate(_selected_week_dates(year, week), start=1):
-        for meal_key in ("lunch", "dinner"):
-            total = 0
-            for row in rows:
-                group_id = str(row[0])
-                default_quantity = int(row[1] or 0)
-                is_active = bool(row[2])
-                total += resolve_effective_quantity_in_session(
-                    db,
-                    group_id,
-                    default_quantity,
-                    is_active,
-                    service_date,
-                    meal_key,
-                )
-            totals[(weekday, meal_key)] = total
-    return totals
-
-
 def _parse_resident_items(form: Any) -> list[dict[str, int | str]]:
     items: list[dict[str, int | str]] = []
     for weekday in range(1, 8):
@@ -411,15 +379,34 @@ def _apply_need_changes(db, *, department_id: str, scope: str, year: int, week: 
 
 
 def _validate_effective_state(db, *, department_id: str, year: int, week: int) -> None:
+    from .department_requirement_group_invariant import RequirementCountExceededError, RequirementCountViolation, resolve_effective_special_diet_total_in_session
+
     residents_by_day = _resident_rows_for_scope_in_session(db, department_id=department_id, year=year, week=week)
-    need_totals = _current_need_totals_in_session(db, department_id=department_id, year=year, week=week)
-    for weekday in range(1, 8):
+    for weekday, service_date in enumerate(_selected_week_dates(year, week), start=1):
         day_residents = residents_by_day.get(weekday, {"lunch": 0, "dinner": 0})
         for meal_key in ("lunch", "dinner"):
             resident_total = int(day_residents.get(meal_key, 0) or 0)
-            need_total = int(need_totals.get((weekday, meal_key), 0) or 0)
-            if need_total > resident_total:
-                raise ValueError("impossible_state")
+            total_special = int(
+                resolve_effective_special_diet_total_in_session(
+                    db,
+                    department_id,
+                    service_date=service_date,
+                    meal_key=meal_key,
+                )
+            )
+            if total_special > resident_total:
+                raise RequirementCountExceededError(
+                    RequirementCountViolation(
+                        group_id="",
+                        group_name="Registrerade kostbehov",
+                        quantity=total_special,
+                        resident_count=resident_total,
+                        scope="total",
+                        service_date=service_date,
+                        weekday=weekday,
+                        meal_key=meal_key,
+                    )
+                )
 
 
 def save_department_variation_submission(

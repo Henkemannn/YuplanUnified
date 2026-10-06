@@ -7,6 +7,13 @@ from typing import Iterable
 from sqlalchemy import text
 
 from .db import get_session
+from .department_requirement_group_invariant import (
+    department_fixed_resident_count,
+    collect_active_group_context_violations_in_session,
+    resolve_effective_special_diet_total_in_session,
+    format_requirement_count_violations,
+    validate_special_diet_total_in_session,
+)
 from .models import (
     Department,
     DepartmentRequirementGroup,
@@ -158,6 +165,14 @@ class DepartmentRequirementGroupsRepo:
                 self._load_atomic_requirement(db, dietary_type_id, department_site_id)
                 for dietary_type_id in normalized_requirement_ids
             ]
+            current_total = resolve_effective_special_diet_total_in_session(db, department_id)
+            resident_count = department_fixed_resident_count(department_id)
+            validate_special_diet_total_in_session(
+                db,
+                department_id,
+                resident_count=resident_count,
+                expected_total=current_total + quantity,
+            )
             group = DepartmentRequirementGroup(
                 id=str(uuid.uuid4()),
                 department_id=str(department_id),
@@ -223,6 +238,7 @@ class DepartmentRequirementGroupsRepo:
             group = db.get(DepartmentRequirementGroup, str(group_id))
             if group is None:
                 return None
+            resulting_active = bool(group.is_active) if is_active is None else bool(is_active)
             if primary_requirement_id is not _UNSET:
                 normalized_primary_requirement_id = self._normalize_primary_requirement_id(primary_requirement_id)
                 current_requirement_ids = self._load_group_requirement_ids(db, group.id)
@@ -230,14 +246,43 @@ class DepartmentRequirementGroupsRepo:
                     primary_requirement_id=normalized_primary_requirement_id,
                     member_requirement_ids=current_requirement_ids,
                 )
-                group.primary_requirement_id = normalized_primary_requirement_id
+                db.execute(
+                    text("UPDATE department_requirement_groups SET primary_requirement_id=:primary_requirement_id WHERE id=:id"),
+                    {
+                        "primary_requirement_id": int(normalized_primary_requirement_id) if normalized_primary_requirement_id is not None else None,
+                        "id": str(group.id),
+                    },
+                )
             if label is not None:
-                group.label = self._normalize_label(label)
+                db.execute(
+                    text("UPDATE department_requirement_groups SET label=:label WHERE id=:id"),
+                    {"label": self._normalize_label(label), "id": str(group.id)},
+                )
             if default_quantity is not None:
-                group.default_quantity = self._normalize_default_quantity(default_quantity)
+                new_quantity = self._normalize_default_quantity(default_quantity)
+                if resulting_active:
+                    current_total = resolve_effective_special_diet_total_in_session(db, group.department_id)
+                    old_quantity = int(group.default_quantity or 0)
+                    resident_count = department_fixed_resident_count(group.department_id)
+                    validate_special_diet_total_in_session(
+                        db,
+                        group.department_id,
+                        resident_count=resident_count,
+                        expected_total=current_total - old_quantity + new_quantity,
+                    )
+                db.execute(
+                    text("UPDATE department_requirement_groups SET default_quantity=:default_quantity WHERE id=:id"),
+                    {"default_quantity": int(new_quantity), "id": str(group.id)},
+                )
             if is_active is not None:
-                group.is_active = bool(is_active)
-            group.updated_at = datetime.now(UTC)
+                db.execute(
+                    text("UPDATE department_requirement_groups SET is_active=:is_active WHERE id=:id"),
+                    {"is_active": bool(is_active), "id": str(group.id)},
+                )
+            db.execute(
+                text("UPDATE department_requirement_groups SET updated_at=:updated_at WHERE id=:id"),
+                {"updated_at": datetime.now(UTC), "id": str(group.id)},
+            )
             db.commit()
             return self.get_group(group.id)
         except Exception:
@@ -310,67 +355,122 @@ class DepartmentRequirementGroupsRepo:
         db = get_session()
         try:
             self._ensure_table(db)
-            department_site_id = self._load_department_site_id(db, department_id)
-            quantity = self._normalize_default_quantity(default_quantity)
-            normalized_requirement_ids = self._normalize_requirement_ids(requirement_ids)
-            normalized_primary_requirement_id = self._normalize_primary_requirement_id(primary_requirement_id)
-            if normalized_primary_requirement_id is None:
-                raise ValueError("primary_requirement_required")
-            self._validate_primary_against_members(
-                primary_requirement_id=normalized_primary_requirement_id,
-                member_requirement_ids=normalized_requirement_ids,
+            result = self.save_group_in_session(
+                db,
+                department_id=department_id,
+                default_quantity=default_quantity,
+                requirement_ids=requirement_ids,
+                primary_requirement_id=primary_requirement_id,
+                group_id=group_id,
+                label=label,
+                is_active=is_active,
             )
-            requirements = [
-                self._load_atomic_requirement(db, dietary_type_id, department_site_id)
-                for dietary_type_id in normalized_requirement_ids
-            ]
+            violations = collect_active_group_context_violations_in_session(db, department_id)
+            if violations:
+                from .department_requirement_group_invariant import RequirementCountExceededError
 
-            now = datetime.now(UTC)
-            group = db.get(DepartmentRequirementGroup, str(group_id)) if group_id else None
-            if group_id and group is None:
-                raise ValueError("department_requirement_group_not_found")
-            if group is not None and str(group.department_id) != str(department_id):
-                raise ValueError("department_requirement_group_not_found")
-            if group is None:
-                group = DepartmentRequirementGroup(
-                    id=str(uuid.uuid4()),
-                    department_id=str(department_id),
-                    primary_requirement_id=normalized_primary_requirement_id,
-                    label=self._normalize_label(label),
-                    default_quantity=quantity,
-                    is_active=True if is_active is None else bool(is_active),
-                    created_at=now,
-                    updated_at=now,
-                )
-                db.add(group)
-            else:
-                group.department_id = str(department_id)
-                if label is not None:
-                    group.label = self._normalize_label(label)
-                group.primary_requirement_id = normalized_primary_requirement_id
-                group.default_quantity = quantity
-                if is_active is not None:
-                    group.is_active = bool(is_active)
-                group.updated_at = now
-                db.query(DepartmentRequirementGroupRequirement).filter(
-                    DepartmentRequirementGroupRequirement.group_id == group.id
-                ).delete(synchronize_session=False)
-
-            for requirement in requirements:
-                db.add(
-                    DepartmentRequirementGroupRequirement(
-                        group_id=group.id,
-                        dietary_type_id=int(requirement.id),
-                    )
-                )
-
+                raise RequirementCountExceededError(violations[0])
             db.commit()
-            return self.get_group(group.id) or self._serialize_group(db, group)
+            return result
         except Exception:
             db.rollback()
             raise
         finally:
             db.close()
+
+    def save_group_in_session(
+        self,
+        db,
+        *,
+        department_id: str,
+        default_quantity: int | str | None,
+        requirement_ids: Iterable[int | str],
+        primary_requirement_id: int | str | None,
+        group_id: str | None = None,
+        label: str | None = None,
+        is_active: bool | None = None,
+    ) -> dict:
+        self._ensure_table(db)
+        department_site_id = self._load_department_site_id(db, department_id)
+        quantity = self._normalize_default_quantity(default_quantity)
+        normalized_requirement_ids = self._normalize_requirement_ids(requirement_ids)
+        normalized_primary_requirement_id = self._normalize_primary_requirement_id(primary_requirement_id)
+        if normalized_primary_requirement_id is None:
+            raise ValueError("primary_requirement_required")
+        self._validate_primary_against_members(
+            primary_requirement_id=normalized_primary_requirement_id,
+            member_requirement_ids=normalized_requirement_ids,
+        )
+        group = db.get(DepartmentRequirementGroup, str(group_id)) if group_id else None
+        if group_id and group is None:
+            raise ValueError("department_requirement_group_not_found")
+        if group is not None and str(group.department_id) != str(department_id):
+            raise ValueError("department_requirement_group_not_found")
+        resulting_active = True if group is None and is_active is None else (bool(group.is_active) if is_active is None else bool(is_active))
+        if resulting_active:
+            current_total = resolve_effective_special_diet_total_in_session(db, department_id)
+            if group is not None:
+                current_total -= int(group.default_quantity or 0)
+            resident_row = db.execute(
+                text("SELECT COALESCE(resident_count_fixed, 0) FROM departments WHERE id=:id"),
+                {"id": str(department_id)},
+            ).fetchone()
+            resident_count = int(resident_row[0] or 0) if resident_row else 0
+            validate_special_diet_total_in_session(
+                db,
+                department_id,
+                resident_count=resident_count,
+                expected_total=current_total + quantity,
+            )
+        requirements = [
+            self._load_atomic_requirement(db, dietary_type_id, department_site_id)
+            for dietary_type_id in normalized_requirement_ids
+        ]
+
+        now = datetime.now(UTC)
+        if group is None:
+            group = DepartmentRequirementGroup(
+                id=str(uuid.uuid4()),
+                department_id=str(department_id),
+                primary_requirement_id=normalized_primary_requirement_id,
+                label=self._normalize_label(label),
+                default_quantity=quantity,
+                is_active=True if is_active is None else bool(is_active),
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(group)
+        else:
+            group.department_id = str(department_id)
+            if label is not None:
+                group.label = self._normalize_label(label)
+            group.primary_requirement_id = normalized_primary_requirement_id
+            db.execute(
+                text("UPDATE department_requirement_groups SET primary_requirement_id=:primary_requirement_id, default_quantity=:default_quantity WHERE id=:id"),
+                {
+                    "primary_requirement_id": int(normalized_primary_requirement_id),
+                    "default_quantity": int(quantity),
+                    "id": str(group.id),
+                },
+            )
+            group.default_quantity = quantity
+            if is_active is not None:
+                group.is_active = bool(is_active)
+            group.updated_at = now
+            db.query(DepartmentRequirementGroupRequirement).filter(
+                DepartmentRequirementGroupRequirement.group_id == group.id
+            ).delete(synchronize_session=False)
+
+        for requirement in requirements:
+            db.add(
+                DepartmentRequirementGroupRequirement(
+                    group_id=group.id,
+                    dietary_type_id=int(requirement.id),
+                )
+            )
+
+        db.flush()
+        return self._serialize_group(db, group)
 
     def deactivate_group(self, group_id: str) -> dict | None:
         return self.update_group(group_id, is_active=False)

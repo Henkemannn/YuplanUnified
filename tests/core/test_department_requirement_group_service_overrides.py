@@ -7,11 +7,14 @@ import pytest
 
 from core.admin_repo import DepartmentsRepo, DietTypesRepo, SitesRepo
 from core.db import get_session
+from core.department_requirement_group_invariant import RequirementCountExceededError
 from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
 from core.department_requirement_group_service_overrides_repo import (
     DepartmentRequirementGroupServiceOverridesRepo,
     resolve_effective_quantity_in_session,
 )
+from core.residents_schedule_repo import ResidentsScheduleRepo
+from core.weekview.service import resolve_effective_resident_counts_for_day
 
 
 def _seed_group_with_requirements(site_name: str = "Service override site", requirement_count: int = 1):
@@ -154,3 +157,29 @@ def test_shared_effective_quantity_helper_uses_open_session_without_nested_sessi
             assert resolve_effective_quantity_in_session(db, group["id"], 2, False, date(2026, 9, 8), "lunch") == 0
         finally:
             db.close()
+
+
+def test_exact_date_validation_uses_canonical_day_resident_counts(app_session) -> None:
+    with app_session.app_context():
+        _site, department, group = _seed_group_with_requirements(site_name="Exact date resident source site", requirement_count=1)
+        service_date = date(2026, 9, 8)
+        iso_year, iso_week, iso_weekday = service_date.isocalendar()
+        ResidentsScheduleRepo().upsert_items(
+            department["id"],
+            iso_week,
+            [
+                {"weekday": iso_weekday, "meal": "lunch", "count": 10},
+                {"weekday": iso_weekday, "meal": "dinner", "count": 6},
+            ],
+        )
+
+        resident_counts = resolve_effective_resident_counts_for_day(department["id"], iso_year, iso_week, iso_weekday)
+        assert resident_counts["dinner"] == 6
+        assert resident_counts["source"] == "schedule_week"
+
+        repo = DepartmentRequirementGroupServiceOverridesRepo()
+        ok = repo.set_override(group["id"], service_date, "dinner", 6)
+        assert ok["quantity"] == 6
+
+        with pytest.raises(RequirementCountExceededError):
+            repo.set_override(group["id"], service_date, "dinner", 7)

@@ -673,6 +673,42 @@
     </div>
 </dialog>
 
+{% if vm.need_conflict %}
+<button type="button" hidden tabindex="-1" aria-hidden="true" data-auto-open-need-conflict data-modal-target="#need-conflict-modal">Öppna konflikt</button>
+<dialog id="need-conflict-modal" class="ua-modal admin-need-conflict-modal">
+    <div class="ua-modal-inner">
+        <header class="ua-modal-header admin-need-conflict-modal__header">
+            <div>
+                <h2 class="admin-need-conflict-modal__title">Antalet stämmer inte</h2>
+            </div>
+            <button type="button" class="ua-modal-close" data-modal-close aria-label="Stäng">&times;</button>
+        </header>
+        <div class="ua-modal-body admin-need-conflict-modal__body">
+            <p class="admin-need-conflict-modal__copy">{{ vm.need_conflict.body|safe if vm.need_conflict.body else 'Registrerade kostbehov blir totalt ' ~ vm.need_conflict.proposed_total ~ ' personer, men avdelningen har ' ~ vm.need_conflict.resident_count ~ ' boende.' }}</p>
+            <p class="admin-need-conflict-modal__question">Vad har ändrats?</p>
+        </div>
+        <footer class="ua-modal-footer admin-need-conflict-modal__footer">
+            <button type="button" class="yp-button yp-button-secondary" data-modal-close>Avbryt</button>
+            <button type="button"
+                    class="yp-button yp-button-secondary"
+                    data-conflict-dismiss="true"
+                    data-modal-target="#department-edit-modal"
+                    data-department-resident-count="{{ vm.need_conflict.minimum_valid_total }}">Boendeantalet har ändrats</button>
+            <button type="button"
+                    class="yp-button yp-button-primary"
+                    data-conflict-dismiss="true"
+                    data-modal-target="#need-modal"
+                    data-need-mode="{{ vm.need_conflict.mode }}"
+                    data-need-group-id="{{ vm.need_conflict.group_id or '' }}"
+                    data-need-primary-id="{{ vm.need_conflict.primary_requirement_id or '' }}"
+                    data-need-modifier-ids="{{ vm.need_conflict.modifier_requirement_ids|join(',') }}"
+                    data-need-default-quantity="{{ vm.need_conflict.default_quantity }}"
+                    data-need-label="{{ vm.need_conflict.label or '' }}">Antalet kostbehov är fel</button>
+        </footer>
+    </div>
+</dialog>
+{% endif %}
+
 <dialog id="residents-variation-modal" class="ua-modal admin-variation-modal">
     <div class="ua-modal-inner admin-variation-modal__inner">
         <header class="ua-modal-header admin-variation-modal__header">

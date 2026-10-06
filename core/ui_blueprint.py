@@ -67,40 +67,66 @@ def _track_ui_activity_event(event_type: str, site_id: str | None = None) -> Non
         track_activity(event_type=event_type, user_id=user_id, site_id=resolved_site)
     except Exception:
         return
-
-
-@ui_bp.before_app_request
 def _track_pilot_ui_usage():
     try:
         if (request.method or "").upper() != "GET":
             return None
-        path = request.path or ""
-        if path == "/ui/kitchen/planering":
-            _track_ui_activity_event("open_planera")
-        elif path in ("/ui/weekview", "/ui/kitchen/week"):
-            _track_ui_activity_event("open_weekview")
-        elif path == "/ui/admin":
-            _track_ui_activity_event("open_admin")
-    except Exception:
-        return None
-    return None
+            from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
+            from core.department_requirement_group_weekday_overrides_repo import DepartmentRequirementGroupWeekdayOverridesRepo
 
-
-def _format_announcement_display(event_date: _date, event_time: _time | None, message: str) -> str:
-    day_names = {1: "Mån", 2: "Tis", 3: "Ons", 4: "Tors", 5: "Fre", 6: "Lör", 7: "Sön"}
-    day_label = day_names.get(int(event_date.isoweekday()), "")
-    date_part = f"{event_date.day}/{event_date.month}"
-    text = f"{day_label} {date_part} – {message}"
-    if event_time is not None:
-        text = f"{text} kl {event_time.strftime('%H:%M')}"
-    return text
-
-
-def _apply_builder_reader_weekview_overview(vm: dict, *, tenant_id: int, site_id: str, year: int, week: int) -> bool:
-    try:
-        from flask import current_app as _current_app
-
-        helper = getattr(_current_app, "feature_enabled", None)
+            tx_db = get_session()
+            try:
+                pending_group_repo = DepartmentRequirementGroupsRepo()
+                weekday_repo = DepartmentRequirementGroupWeekdayOverridesRepo()
+                with tx_db.begin():
+                    repo.update_department_in_session(
+                        tx_db,
+                        dept_id=dept_id,
+                        expected_version=expected_version,
+                        name=name,
+                        resident_count_fixed=resident_count_int,
+                        residence_id=residence_id,
+                        notes=notes,
+                    )
+                    saved_group = pending_group_repo.save_group_in_session(
+                        tx_db,
+                        group_id=str(pending_need_state.get("group_id") or "").strip() or None,
+                        department_id=dept_id,
+                        default_quantity=pending_need_state.get("default_quantity"),
+                        requirement_ids=pending_need_state.get("requirement_ids") or [],
+                        primary_requirement_id=pending_need_state.get("primary_requirement_id"),
+                        label=pending_need_state.get("label"),
+                        is_active=pending_need_state.get("is_active"),
+                    )
+                    pending_group_id = str(saved_group.get("id") or pending_need_state.get("group_id") or "").strip()
+                    if pending_group_id:
+                        for change in pending_need_state.get("weekday_changes") or []:
+                            weekday = int(change.get("weekday") or 0)
+                            meal_key = str(change.get("meal_key") or "").strip()
+                            quantity = change.get("quantity")
+                            if not weekday or not meal_key:
+                                continue
+                            if quantity is None or int(quantity) == int(pending_need_state.get("default_quantity") or 0):
+                                weekday_repo.delete_override_in_session(tx_db, pending_group_id, weekday, meal_key)
+                            else:
+                                weekday_repo.set_override_in_session(tx_db, pending_group_id, weekday, meal_key, int(quantity))
+                    validate_special_diet_total_in_session(tx_db, dept_id, resident_count=resident_count_int)
+                session.pop("admin_need_conflict_state", None)
+                flash(f"Avdelning '{name}' uppdaterad.", "success")
+                return redirect(url_for("ui.admin_departments_list"))
+            except RequirementCountExceededError as exc:
+                flash(format_requirement_count_violation(exc.violation), "error")
+                return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+            except ConcurrencyError:
+                flash("Avdelningen har ändrats av någon annan. Försök igen.", "error")
+                return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+            except Exception as e:
+                flash(f"Kunde inte uppdatera avdelning: {str(e)}", "error")
+                return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+            finally:
+                tx_db.close()
+        # copy keyword contains 'uppdaterad' for assertions
+        flash(f"Avdelning '{name}' uppdaterad.", "success")
         enabled = bool(helper("commun.builder.reader_v0")) if callable(helper) else False
     except Exception:
         enabled = False
@@ -980,8 +1006,6 @@ def api_planering_mark_produced_special():
                 return jsonify({"error": "server_error"}), 500
     return jsonify({"ok": True, "marked_count": total_ops}), 200
 
-@ui_bp.get("/api/weekview/etag")
-@require_roles("superuser", "admin", "cook", "unit_portal", "kitchen")
 def api_weekview_get_etag():
     """Return current ETag for a department/week to support UI retry after 412.
 
@@ -6508,7 +6532,7 @@ def admin_departments_update_order(dept_id: str):
         flash("Avdelningen uppdaterades i en annan flik. Ladda om och försök igen.", "error")
     except Exception:
         flash("Kunde inte spara sorteringsordning.", "error")
-    return redirect(url_for("ui.admin_departments_list"))
+    return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
 
 
 @ui_bp.get("/ui/admin/departments/new")
@@ -6612,7 +6636,7 @@ def admin_departments_create():
     except Exception as e:
         flash(f"Kunde inte skapa avdelning: {str(e)}", "error")
     
-    return redirect(url_for("ui.admin_departments_list"))
+    return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
 
 
 @ui_bp.post("/ui/admin/residences/new")
@@ -6767,6 +6791,9 @@ def admin_departments_edit_form(dept_id: str):
         "service_addons_master": [],
         "department_service_addons": [],
     }
+    need_conflict_state = session.get("admin_need_conflict_state")
+    vm["need_conflict"] = need_conflict_state
+    vm["need_modal_state"] = (need_conflict_state or {}).get("form_state") or {}
     # Load diet types and existing defaults for this department
     try:
         from core.admin_repo import DietTypesRepo, DietDefaultsRepo
@@ -7168,10 +7195,103 @@ def admin_departments_update(dept_id: str):
         expected_version = int(version_str)
     except ValueError:
         expected_version = current_version
+
+    pending_need_state = session.get("admin_need_conflict_state")
+    if pending_need_state and str(pending_need_state.get("kind") or "").strip().lower() == "need":
+        from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
+        from core.department_requirement_group_weekday_overrides_repo import DepartmentRequirementGroupWeekdayOverridesRepo
+        from .department_requirement_group_invariant import (
+            RequirementCountExceededError,
+            collect_active_group_context_violations_in_session,
+            format_requirement_count_violation,
+        )
+
+        pending_minimum_total = int(pending_need_state.get("minimum_valid_total") or pending_need_state.get("current_total") or 0)
+        if resident_count_int < pending_minimum_total:
+            flash("Registrerade kostbehov blir fler än det nya boendeantalet.", "error")
+            return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+
+        tx_db = get_session()
+        try:
+            repo = DepartmentsRepo()
+            pending_group_repo = DepartmentRequirementGroupsRepo()
+            weekday_repo = DepartmentRequirementGroupWeekdayOverridesRepo()
+            with tx_db.begin():
+                repo.update_department_in_session(
+                    tx_db,
+                    dept_id=dept_id,
+                    expected_version=expected_version,
+                    name=name,
+                    resident_count_fixed=resident_count_int,
+                    residence_id=residence_id,
+                    notes=notes,
+                )
+                pending_group = pending_group_repo.save_group_in_session(
+                    tx_db,
+                    group_id=str(pending_need_state.get("group_id") or "").strip() or None,
+                    department_id=dept_id,
+                    default_quantity=pending_need_state.get("default_quantity"),
+                    requirement_ids=pending_need_state.get("requirement_ids") or [],
+                    primary_requirement_id=pending_need_state.get("primary_requirement_id"),
+                    label=pending_need_state.get("label"),
+                    is_active=pending_need_state.get("is_active"),
+                )
+                pending_group_id = str(pending_group.get("id") or pending_need_state.get("group_id") or "").strip()
+                if pending_group_id:
+                    for change in pending_need_state.get("weekday_changes") or []:
+                        weekday = int(change.get("weekday") or 0)
+                        meal_key = str(change.get("meal_key") or "").strip()
+                        quantity = change.get("quantity")
+                        if not weekday or not meal_key:
+                            continue
+                        if quantity is None or int(quantity) == int(pending_need_state.get("default_quantity") or 0):
+                            weekday_repo.delete_override_in_session(tx_db, pending_group_id, weekday, meal_key)
+                        else:
+                            weekday_repo.set_override_in_session(tx_db, pending_group_id, weekday, meal_key, int(quantity))
+                violations = collect_active_group_context_violations_in_session(tx_db, dept_id)
+                if violations:
+                    raise RequirementCountExceededError(violations[0])
+            session.pop("admin_need_conflict_state", None)
+            flash(f"Avdelning '{name}' uppdaterad.", "success")
+            return redirect(url_for("ui.admin_departments_list"))
+        except RequirementCountExceededError as exc:
+            session["admin_need_conflict_state"] = {
+                "kind": "need",
+                "mode": pending_need_state.get("mode") or "edit",
+                "group_id": pending_need_state.get("group_id"),
+                "primary_requirement_id": pending_need_state.get("primary_requirement_id"),
+                "modifier_requirement_ids": pending_need_state.get("modifier_requirement_ids") or [],
+                "requirement_ids": pending_need_state.get("requirement_ids") or [],
+                "default_quantity": pending_need_state.get("default_quantity"),
+                "is_active": pending_need_state.get("is_active"),
+                "label": pending_need_state.get("label"),
+                "weekday_changes": pending_need_state.get("weekday_changes") or [],
+                "resident_count": int(exc.violation.resident_count),
+                "current_total": int(exc.violation.quantity),
+                "minimum_valid_total": int(exc.violation.quantity),
+                "body": format_requirement_count_violation(exc.violation),
+            }
+            flash(format_requirement_count_violation(exc.violation), "error")
+            return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+        except ConcurrencyError:
+            flash("Avdelningen har ändrats av någon annan. Försök igen.", "error")
+            return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+        except Exception as e:
+            flash(f"Kunde inte uppdatera avdelning: {str(e)}", "error")
+            return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+        finally:
+            tx_db.close()
     
     # Update department
     repo = DepartmentsRepo()
     try:
+        from .department_requirement_group_invariant import RequirementCountExceededError, format_requirement_count_violation, validate_special_diet_total_in_session
+
+        db = get_session()
+        try:
+            validate_special_diet_total_in_session(db, dept_id, resident_count=resident_count_int)
+        finally:
+            db.close()
         new_version = repo.update_department(
             dept_id=dept_id,
             expected_version=expected_version,
@@ -7207,16 +7327,84 @@ def admin_departments_update(dept_id: str):
             except Exception as e:
                 flash(f"Kunde inte spara specialkost: {str(e)}", "error")
                 return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+        pending_need_state = session.get("admin_need_conflict_state")
+        if pending_need_state and str(pending_need_state.get("kind") or "").strip().lower() == "need":
+            from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
+            from core.department_requirement_group_weekday_overrides_repo import DepartmentRequirementGroupWeekdayOverridesRepo
+
+            pending_minimum_total = int(pending_need_state.get("minimum_valid_total") or pending_need_state.get("current_total") or 0)
+            if resident_count_int < pending_minimum_total:
+                flash("Registrerade kostbehov blir fler än det nya boendeantalet.", "error")
+                return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+            tx_db = get_session()
+            try:
+                pending_group_repo = DepartmentRequirementGroupsRepo()
+                weekday_repo = DepartmentRequirementGroupWeekdayOverridesRepo()
+                with tx_db.begin():
+                    repo.update_department_in_session(
+                        tx_db,
+                        dept_id=dept_id,
+                        expected_version=expected_version,
+                        name=name,
+                        resident_count_fixed=resident_count_int,
+                        residence_id=residence_id,
+                        notes=notes,
+                    )
+                    pending_group = pending_group_repo.save_group_in_session(
+                        tx_db,
+                        group_id=str(pending_need_state.get("group_id") or "").strip() or None,
+                        department_id=dept_id,
+                        default_quantity=pending_need_state.get("default_quantity"),
+                        requirement_ids=pending_need_state.get("requirement_ids") or [],
+                        primary_requirement_id=pending_need_state.get("primary_requirement_id"),
+                        label=pending_need_state.get("label"),
+                        is_active=pending_need_state.get("is_active"),
+                    )
+                    pending_group_id = str(pending_group.get("id") or pending_need_state.get("group_id") or "").strip()
+                    if pending_group_id:
+                        for change in pending_need_state.get("weekday_changes") or []:
+                            weekday = int(change.get("weekday") or 0)
+                            meal_key = str(change.get("meal_key") or "").strip()
+                            quantity = change.get("quantity")
+                            if not weekday or not meal_key:
+                                continue
+                            if quantity is None or int(quantity) == int(pending_need_state.get("default_quantity") or 0):
+                                weekday_repo.delete_override_in_session(tx_db, pending_group_id, weekday, meal_key)
+                            else:
+                                weekday_repo.set_override_in_session(tx_db, pending_group_id, weekday, meal_key, int(quantity))
+                    violations = collect_active_group_context_violations_in_session(tx_db, dept_id)
+                    if violations:
+                        raise RequirementCountExceededError(violations[0])
+                session.pop("admin_need_conflict_state", None)
+                flash(f"Avdelning '{name}' uppdaterad.", "success")
+                return redirect(url_for("ui.admin_departments_list"))
+            except RequirementCountExceededError as exc:
+                tx_db.rollback()
+                flash(format_requirement_count_violation(exc.violation), "error")
+                return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+            except ConcurrencyError:
+                tx_db.rollback()
+                flash("Avdelningen har ändrats av någon annan. Försök igen.", "error")
+                return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+            except Exception as e:
+                tx_db.rollback()
+                flash(f"Kunde inte uppdatera avdelning: {str(e)}", "error")
+                return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+            finally:
+                tx_db.close()
         # copy keyword contains 'uppdaterad' for assertions
         flash(f"Avdelning '{name}' uppdaterad.", "success")
     except ConcurrencyError:
         flash("Avdelningen har ändrats av någon annan. Försök igen.", "error")
         return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+    except RequirementCountExceededError as exc:
+        flash(format_requirement_count_violation(exc.violation), "error")
+        return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
     except Exception as e:
         flash(f"Kunde inte uppdatera avdelning: {str(e)}", "error")
         return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
     
-    return redirect(url_for("ui.admin_departments_list"))
+    return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
 
 
 @ui_bp.post("/ui/admin/departments/<dept_id>/edit/diets")
@@ -7322,6 +7510,7 @@ def admin_departments_save_requirement_group(dept_id: str):
         atomic_requirement_ids = set()
 
     existing_member_ids: set[str] = set()
+    existing_group = None
     if group_id:
         existing_group = DepartmentRequirementGroupsRepo().get_group(group_id)
         if existing_group is None or str(existing_group.get("department_id") or "") != str(dept_id):
@@ -7381,23 +7570,84 @@ def admin_departments_save_requirement_group(dept_id: str):
         except Exception:
             label = None
 
+    if group_id is None:
+        resulting_active = True if is_active is None else bool(is_active)
+    else:
+        resulting_active = bool(existing_group.get("is_active")) if is_active is None else bool(is_active)
+
+    from .department_requirement_group_invariant import (
+        RequirementCountExceededError,
+        collect_active_group_context_violations_in_session,
+        format_requirement_count_violation,
+        format_requirement_count_violations,
+        resolve_effective_special_diet_total_in_session,
+        validate_special_diet_total_in_session,
+    )
+
     try:
-        DepartmentRequirementGroupsRepo().save_group(
-            group_id=group_id,
-            department_id=dept_id,
-            default_quantity=default_quantity,
-            requirement_ids=requirement_ids,
-            primary_requirement_id=primary_requirement_id,
-            label=label,
-            is_active=(True if group_id is None and is_active is None else is_active),
-        )
-        if group_id:
-            for weekday, meal_key, quantity in weekday_changes:
-                if quantity is None or quantity == submitted_default_quantity:
-                    weekday_repo.delete_override(group_id, weekday, meal_key)
-                else:
-                    weekday_repo.set_override(group_id, weekday, meal_key, quantity)
-        flash("Registrerat behov sparat.", "success")
+        tx_db = get_session()
+        pending_group_repo = DepartmentRequirementGroupsRepo()
+        weekday_repo = DepartmentRequirementGroupWeekdayOverridesRepo()
+        with tx_db.begin():
+            if resulting_active:
+                resident_count_row = tx_db.execute(
+                    text("SELECT COALESCE(resident_count_fixed, 0) FROM departments WHERE id=:id AND site_id=:sid"),
+                    {"id": dept_id, "sid": active_site_id},
+                ).fetchone()
+                resident_count_fixed = int(resident_count_row[0] or 0) if resident_count_row else 0
+                current_total = resolve_effective_special_diet_total_in_session(tx_db, dept_id)
+                if group_id and existing_group is not None:
+                    current_total -= int(existing_group.get("default_quantity") or 0)
+                validate_special_diet_total_in_session(
+                    tx_db,
+                    dept_id,
+                    resident_count=resident_count_fixed,
+                    expected_total=current_total + submitted_default_quantity,
+                )
+            saved_group = pending_group_repo.save_group_in_session(
+                tx_db,
+                group_id=group_id,
+                department_id=dept_id,
+                default_quantity=default_quantity,
+                requirement_ids=requirement_ids,
+                primary_requirement_id=primary_requirement_id,
+                label=label,
+                is_active=(True if group_id is None and is_active is None else is_active),
+            )
+            pending_group_id = str(saved_group.get("id") or group_id or "").strip()
+            if pending_group_id:
+                for weekday, meal_key, quantity in weekday_changes:
+                    if quantity is None or quantity == submitted_default_quantity:
+                        weekday_repo.delete_override_in_session(tx_db, pending_group_id, weekday, meal_key)
+                    else:
+                        weekday_repo.set_override_in_session(tx_db, pending_group_id, weekday, meal_key, quantity)
+            violations = collect_active_group_context_violations_in_session(tx_db, dept_id)
+            if violations:
+                raise RequirementCountExceededError(violations[0])
+            session.pop("admin_need_conflict_state", None)
+            flash("Registrerat behov sparat.", "success")
+    except RequirementCountExceededError as exc:
+        session["admin_need_conflict_state"] = {
+            "kind": "need",
+            "mode": "edit" if group_id else "create",
+            "group_id": group_id,
+            "primary_requirement_id": primary_requirement_id,
+            "modifier_requirement_ids": modifier_requirement_ids,
+            "requirement_ids": requirement_ids,
+            "default_quantity": submitted_default_quantity,
+            "is_active": resulting_active,
+            "label": label,
+            "weekday_changes": [
+                {"weekday": weekday, "meal_key": meal_key, "quantity": quantity}
+                for weekday, meal_key, quantity in weekday_changes
+            ],
+            "resident_count": int(exc.violation.resident_count),
+            "current_total": int(exc.violation.quantity),
+            "minimum_valid_total": int(exc.violation.resident_count),
+            "body": format_requirement_count_violations([exc.violation]),
+        }
+        flash(format_requirement_count_violation(exc.violation), "error")
+        return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
     except ValueError as exc:
         msg = str(exc)
         if msg == "primary_requirement_required":
@@ -7412,6 +7662,12 @@ def admin_departments_save_requirement_group(dept_id: str):
             flash(f"Kunde inte spara registrerat behov: {msg}", "error")
     except Exception as exc:
         flash(f"Kunde inte spara registrerat behov: {str(exc)}", "error")
+    finally:
+        try:
+            tx_db.close()
+        except Exception:
+            pass
+
     return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
 
 
@@ -7455,6 +7711,8 @@ def admin_department_save_variation(department_id: str):
         selected_week = today.isocalendar()[1]
 
     try:
+        from .department_requirement_group_invariant import RequirementCountExceededError, format_requirement_count_violation
+
         result = save_department_variation_submission(
             department_id=department_id,
             site_id=str(active_site_id),
@@ -7468,6 +7726,24 @@ def admin_department_save_variation(department_id: str):
             flash("Registrerat behovs variation sparad.", "success")
         else:
             flash("Varierat boendeantal sparat.", "success")
+    except RequirementCountExceededError as exc:
+        session["admin_need_conflict_state"] = {
+            "kind": "variation",
+            "mode": "edit",
+            "group_id": "",
+            "primary_requirement_id": "",
+            "modifier_requirement_ids": [],
+            "requirement_ids": [],
+            "default_quantity": int(exc.violation.quantity),
+            "is_active": True,
+            "label": "",
+            "weekday_changes": [],
+            "resident_count": int(exc.violation.resident_count),
+            "current_total": int(exc.violation.quantity),
+            "minimum_valid_total": int(exc.violation.resident_count),
+            "body": format_requirement_count_violation(exc.violation),
+        }
+        flash(format_requirement_count_violation(exc.violation), "error")
     except ValueError as exc:
         msg = str(exc)
         if msg == "quantity_negative":

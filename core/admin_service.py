@@ -255,6 +255,13 @@ class AdminService:
             rcf = int(payload["residents_base_count"]) if str(payload["residents_base_count"]).strip() != "" else 0
             if rcf < 0:
                 raise ValueError("resident_count_fixed_negative")
+            from .department_requirement_group_invariant import validate_special_diet_total_in_session
+
+            db = get_session()
+            try:
+                validate_special_diet_total_in_session(db, department_id, resident_count=rcf)
+            finally:
+                db.close()
             fields["resident_count_fixed"] = rcf
         if "notes" in payload:
             fields["notes"] = str(payload.get("notes") or "")

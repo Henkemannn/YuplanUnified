@@ -3,10 +3,13 @@ from __future__ import annotations
 from datetime import date, timedelta
 import uuid
 
+import pytest
+
 from core.admin_repo import DepartmentsRepo, DietTypesRepo, SitesRepo
 from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
 from core.department_requirement_group_service_overrides_repo import DepartmentRequirementGroupServiceOverridesRepo
 from core.department_requirement_group_weekday_overrides_repo import DepartmentRequirementGroupWeekdayOverridesRepo
+from core.department_requirement_group_invariant import RequirementCountExceededError
 from core.residents_schedule_repo import ResidentsScheduleRepo
 from core.db import get_session
 from sqlalchemy import text
@@ -180,7 +183,7 @@ def test_impossible_state_rejected(client_admin):
     with client_admin.session_transaction() as sess:
         sess["site_id"] = site["id"]
 
-    payload = _resident_form(year=year, week=week, changes={(1, "lunch"): 9})
+    payload = _resident_form(year=year, week=week, changes={(1, "lunch"): 8})
     resp = client_admin.post(f"/ui/admin/departments/{dept['id']}/variation", data=payload, headers=_headers(), follow_redirects=False)
     assert resp.status_code in (302, 303)
     assert ResidentsScheduleRepo().get_week(dept["id"], week) == []
@@ -217,3 +220,73 @@ def test_resident_only_submission_remains_compatible(client_admin):
     assert resident_map[(2, "lunch")] == 11
     assert resident_map[(2, "dinner")] == 11
     assert DepartmentRequirementGroupServiceOverridesRepo().list_for_group(group["id"]) == []
+
+
+def test_atomic_final_state_allows_resident_and_need_reduction(client_admin):
+    site, dept, group = _seed_department_with_need(resident_count=12, default_quantity=10)
+    year, week = _current_week()
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+
+    payload = _resident_form(year=year, week=week, changes={(1, "lunch"): 8})
+    payload.update(_need_payload(group["id"], year=year, week=week, changes={(1, "lunch"): 7}))
+    resp = client_admin.post(f"/ui/admin/departments/{dept['id']}/variation", data=payload, headers=_headers(), follow_redirects=False)
+    assert resp.status_code in (302, 303)
+
+    rows = ResidentsScheduleRepo().get_week(dept["id"], week)
+    resident_map = {(int(row["weekday"]), str(row["meal"])): int(row["count"]) for row in rows}
+    assert resident_map[(1, "lunch")] == 8
+    override_repo = DepartmentRequirementGroupServiceOverridesRepo()
+    monday = date.fromisocalendar(year, week, 1)
+    assert override_repo.resolve_effective_quantity(group["id"], monday, "lunch") == 7
+
+
+def test_inactive_group_is_ignored_in_resident_reduction(client_admin):
+    site, dept, group = _seed_department_with_need(resident_count=12, default_quantity=10)
+    year, week = _current_week()
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+
+    DepartmentRequirementGroupsRepo().update_group(group["id"], is_active=False)
+
+    payload = _resident_form(year=year, week=week, changes={(1, "lunch"): 8})
+    resp = client_admin.post(f"/ui/admin/departments/{dept['id']}/variation", data=payload, headers=_headers(), follow_redirects=False)
+    assert resp.status_code in (302, 303)
+
+    rows = ResidentsScheduleRepo().get_week(dept["id"], week)
+    resident_map = {(int(row["weekday"]), str(row["meal"])): int(row["count"]) for row in rows}
+    assert resident_map[(1, "lunch")] == 8
+
+
+def test_multiple_groups_overflow_rejected(client_admin):
+    site, dept, group = _seed_department_with_need(resident_count=12, default_quantity=2)
+    vegan_id = DietTypesRepo().create(site_id=site["id"], name="Vegan", default_select=False, semantics="atomic")
+    with pytest.raises(RequirementCountExceededError):
+        DepartmentRequirementGroupsRepo().create_group(
+            dept["id"],
+            11,
+            [vegan_id],
+            label="Vegan",
+            primary_requirement_id=vegan_id,
+        )
+
+
+def test_direct_variation_overflow_opens_conflict_modal(client_admin):
+    site, dept, group = _seed_department_with_need(resident_count=11, default_quantity=10)
+    year, week = _current_week()
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+
+    payload = _need_payload(group["id"], year=year, week=week, changes={(2, "lunch"): 13}, mode="week")
+    resp = client_admin.post(
+        f"/ui/admin/departments/{dept['id']}/variation",
+        data=payload,
+        headers=_headers(),
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "Antalet stämmer inte" in html
+    assert "tisdag" in html.lower()
+    assert "11 boende" in html
+    assert 'data-auto-open-need-conflict' in html

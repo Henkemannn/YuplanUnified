@@ -5,6 +5,9 @@ from datetime import UTC, date as _date, datetime as _datetime
 from sqlalchemy import text
 
 from .db import get_session
+from .department_requirement_group_invariant import department_fixed_resident_count, resolve_effective_special_diet_total_in_session, validate_special_diet_total_in_session
+from .department_requirement_group_quantity_resolver import resolve_effective_quantity_in_session as resolve_effective_day_quantity_in_session
+from .weekview.service import resolve_effective_resident_counts_for_day
 from .models import DepartmentRequirementGroup, DepartmentRequirementGroupServiceOverride
 
 
@@ -125,10 +128,37 @@ class DepartmentRequirementGroupServiceOverridesRepo:
         db = get_session()
         try:
             self._ensure_table(db)
-            self._load_group(db, group_id)
+            group = self._load_group(db, group_id)
+            group_row = db.execute(
+                text(
+                    """
+                    SELECT id, default_quantity, department_id, is_active
+                    FROM department_requirement_groups
+                    WHERE id = :group_id
+                    """
+                ),
+                {"group_id": str(group_id)},
+            ).fetchone()
             normalized_date = self._normalize_service_date(service_date)
             normalized_meal_key = self._normalize_meal_key(meal_key)
             normalized_quantity = self._normalize_quantity(quantity)
+            if group_row is not None and bool(group_row[3]):
+                service_year, service_week, service_weekday = normalized_date.isocalendar()
+                allowed_rows = resolve_effective_resident_counts_for_day(str(group_row[2]), int(service_year), int(service_week), int(service_weekday))
+                allowed = int(allowed_rows.get(normalized_meal_key) or 0)
+                current_total = resolve_effective_special_diet_total_in_session(
+                    db,
+                    str(group_row[2]),
+                    service_date=normalized_date,
+                    meal_key=normalized_meal_key,
+                )
+                current_group_quantity = resolve_effective_day_quantity_in_session(db, str(group_row[0]), normalized_date, normalized_meal_key)
+                validate_special_diet_total_in_session(
+                    db,
+                    str(group_row[2]),
+                    resident_count=allowed,
+                    expected_total=current_total - current_group_quantity + normalized_quantity,
+                )
             now = _datetime.now(UTC).isoformat()
             db.execute(
                 text(
