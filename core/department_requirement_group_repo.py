@@ -32,9 +32,9 @@ class DepartmentRequirementGroupsRepo:
         except Exception:
             pass
 
-    def _normalize_default_quantity(self, default_quantity: int | str | None) -> int:
+    def _normalize_default_quantity(self, default_quantity: int | str | None, *, minimum: int = 1) -> int:
         quantity = int(default_quantity or 0)
-        if quantity < 0:
+        if quantity < minimum:
             raise ValueError("default_quantity_negative")
         return quantity
 

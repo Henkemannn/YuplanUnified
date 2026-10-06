@@ -847,6 +847,90 @@
   justify-content: flex-end;
 }
 
+.admin-need-modal.is-need-remove-open {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.admin-need-modal.is-need-remove-open .ua-modal-inner {
+  max-width: 520px;
+}
+
+.admin-need-modal.is-need-remove-open .admin-need-modal__edit-form {
+  display: none;
+}
+
+.admin-need-modal__remove-state[hidden],
+.admin-need-modal__remove-trigger[hidden],
+.admin-need-modal__edit-state[hidden] {
+  display: none !important;
+}
+
+.admin-need-modal__remove-state {
+  display: grid;
+  gap: 12px;
+  padding: 0 0 2px;
+}
+
+.admin-need-modal__remove-form {
+  display: grid;
+  gap: 16px;
+}
+
+.admin-need-modal__remove-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(220, 38, 38, 0.22);
+  border-radius: 14px;
+  background: rgba(220, 38, 38, 0.06);
+}
+
+.admin-need-modal__remove-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.05rem;
+  font-weight: 750;
+}
+
+.admin-need-modal__remove-copy {
+  margin: 0;
+  color: var(--muted);
+}
+
+.admin-need-modal__remove-copy--target {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.admin-need-modal__remove-need {
+  display: inline-block;
+}
+
+.admin-need-modal__remove-copy--hint {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.admin-need-modal__remove-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.yp-button-danger {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.1);
+  color: #b91c1c;
+}
+
+.yp-button-danger:hover,
+.yp-button-danger:focus-visible {
+  border-color: rgba(220, 38, 38, 0.6);
+  background: rgba(220, 38, 38, 0.16);
+}
+
 .admin-need-weekdays {
   display: grid;
   gap: 8px;

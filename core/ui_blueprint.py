@@ -6873,11 +6873,11 @@ def admin_departments_edit_form(dept_id: str):
                     "variation_rows": variation_rows,
                 }
             )
-        vm["requirement_groups"] = formatted_groups
+        vm["requirement_groups"] = [group for group in formatted_groups if bool(group.get("is_active"))]
         vm["requirement_group_diet_types"] = configured_types
     except Exception:
         vm["requirement_groups"] = []
-    
+
     return render_template("ui/unified_admin_departments_form.html", vm=vm)
 
 
@@ -7304,6 +7304,7 @@ def admin_departments_save_requirement_group(dept_id: str):
     default_quantity = request.form.get("default_quantity")
     raw_is_active = request.form.get("is_active")
     is_active = None if raw_is_active is None else str(raw_is_active).strip().lower() in {"1", "true", "on", "yes"}
+    remove_requested = str(request.form.get("remove_request") or "").strip().lower() in {"1", "true", "on", "yes"}
     weekday_changes: list[tuple[int, str, int | None]] = []
     try:
         submitted_default_quantity = int(default_quantity or 0)
@@ -7326,6 +7327,13 @@ def admin_departments_save_requirement_group(dept_id: str):
         if existing_group is None or str(existing_group.get("department_id") or "") != str(dept_id):
             flash("Avdelningen hittades inte för vald site.", "error")
             return redirect(url_for("ui.admin_departments_list"))
+        if remove_requested:
+            try:
+                DepartmentRequirementGroupsRepo().deactivate_group(group_id)
+                flash("Kostbehovet togs bort från avdelningen.", "success")
+            except Exception as exc:
+                flash(f"Kunde inte ta bort kostbehovet: {str(exc)}", "error")
+            return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
         existing_member_ids = {
             str(row.get("dietary_type_id") or "").strip()
             for row in (existing_group.get("requirements") or [])
@@ -7399,7 +7407,7 @@ def admin_departments_save_requirement_group(dept_id: str):
         elif msg == "duplicate_requirement_id":
             flash("Dubblett i ytterligare avvikelser.", "error")
         elif msg == "default_quantity_negative":
-            flash("Antal måste vara 0 eller högre.", "error")
+            flash("Inga personer kvar? Ta bort kostbehovet från avdelningen.", "error")
         else:
             flash(f"Kunde inte spara registrerat behov: {msg}", "error")
     except Exception as exc:

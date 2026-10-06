@@ -137,6 +137,81 @@
             return { pickerNode, pickerPanel, pickerSearch, pickerList, pickerCount, pickerEmpty, pickerToggle, modifierSelect };
         }
 
+        function getNeedRemoveNodes(dialog) {
+            if (!dialog || !dialog.querySelector) {
+                return {
+                    editForm: null,
+                    removeForm: null,
+                    editState: null,
+                    removeState: null,
+                    removeStart: null,
+                    removeCancel: null,
+                    removeConfirm: null,
+                    removeLabel: null,
+                };
+            }
+            return {
+                editForm: dialog.querySelector('.admin-need-modal__edit-form'),
+                removeForm: dialog.querySelector('[data-need-remove-form]'),
+                editState: dialog.querySelector('[data-need-edit-state]'),
+                removeState: dialog.querySelector('[data-need-remove-state]'),
+                removeStart: dialog.querySelector('[data-need-remove-start]'),
+                removeCancel: dialog.querySelector('[data-need-remove-cancel]'),
+                removeConfirm: dialog.querySelector('[data-need-remove-confirm]'),
+                removeLabel: dialog.querySelector('[data-need-remove-label]'),
+            };
+        }
+
+        function setNeedRemoveState(dialog, active, labelText) {
+            const nodes = getNeedRemoveNodes(dialog);
+            const isEditMode = !!dialog && dialog.dataset && dialog.dataset.needMode === 'edit' && !!dialog.dataset.needGroupId;
+            if (active && !isEditMode) {
+                active = false;
+            }
+            if (dialog && dialog.classList) {
+                dialog.classList.toggle('is-need-remove-open', !!active);
+            }
+            if (nodes.editForm) {
+                nodes.editForm.hidden = !!active;
+            }
+            if (nodes.removeForm) {
+                nodes.removeForm.hidden = !active;
+            }
+            if (nodes.editState) {
+                nodes.editState.hidden = !!active;
+            }
+            if (nodes.removeState) {
+                nodes.removeState.hidden = !active;
+            }
+            if (nodes.removeLabel && labelText) {
+                nodes.removeLabel.textContent = labelText;
+            }
+            if (active && nodes.removeConfirm && typeof nodes.removeConfirm.focus === 'function') {
+                nodes.removeConfirm.focus();
+            }
+        }
+
+        function closeNeedModal(dialog) {
+            if (!dialog) {
+                return;
+            }
+            closeNeedPicker(dialog, false);
+            setNeedRemoveState(dialog, false, '');
+            try {
+                if (typeof dialog.close === 'function') {
+                    dialog.close();
+                } else {
+                    dialog.removeAttribute('open');
+                }
+            } catch (e) {
+                dialog.removeAttribute('open');
+            }
+            dialog.classList.remove('ua-modal-open');
+            dialog.classList.remove('is-need-remove-open');
+            dialog.dataset.needMode = 'create';
+            dialog.dataset.needGroupId = '';
+        }
+
         function getNeedPickerOptions(dialog) {
             const nodes = getNeedPickerNodes(dialog);
             if (!nodes.modifierSelect) {
@@ -337,27 +412,34 @@
             const quantityInput = dialog.querySelector('input[name="default_quantity"]');
             const pickerNode = dialog.querySelector('[data-need-picker]');
             const pickerSearch = dialog.querySelector('[data-need-picker-search]');
+            const removeNodes = getNeedRemoveNodes(dialog);
             const mode = (trigger.getAttribute('data-need-mode') || (trigger.getAttribute('data-need-group-id') ? 'edit' : 'create') || 'create').toLowerCase();
             const groupLabel = (trigger.getAttribute('data-need-label') || '').trim();
             const groupId = (trigger.getAttribute('data-need-group-id') || '').trim();
             const primaryId = (trigger.getAttribute('data-need-primary-id') || '').trim();
             const modifierIds = (trigger.getAttribute('data-need-modifier-ids') || '').split(',').map(function(item) { return item.trim(); }).filter(Boolean);
             const defaultQuantity = (trigger.getAttribute('data-need-default-quantity') || '1').trim();
+            const removeLabel = groupLabel || 'detta kostbehov';
 
             if (form && typeof form.reset === 'function') {
                 form.reset();
             }
             closeNeedPicker(dialog, false);
+            dialog.dataset.needMode = mode;
+            dialog.dataset.needGroupId = groupId;
+            if (dialog && dialog.classList) {
+                dialog.classList.remove('is-need-remove-open');
+            }
             if (groupIdInput) {
                 groupIdInput.value = mode === 'edit' ? groupId : '';
             }
             if (titleNode) {
-                titleNode.textContent = mode === 'edit' ? 'Redigera behov' : 'Lägg till behov';
+                titleNode.textContent = mode === 'edit' ? 'Redigera kostbehov' : 'Lägg till kostbehov';
             }
             if (subtitleNode) {
                 subtitleNode.textContent = mode === 'edit'
-                    ? (groupLabel ? groupLabel : 'Uppdatera det registrerade behovet.')
-                    : 'Vilket behov gäller på den här avdelningen?';
+                    ? (groupLabel ? groupLabel : 'Uppdatera det registrerade kostbehovet.')
+                    : 'Vilket kostbehov gäller?';
             }
             if (primarySelect) {
                 primarySelect.value = primaryId;
@@ -383,6 +465,15 @@
             if (pickerSearch) {
                 pickerSearch.value = '';
             }
+            const removeGroupIdInput = dialog.querySelector('[data-need-remove-form] input[name="group_id"]');
+            if (removeNodes.removeStart) {
+                removeNodes.removeStart.hidden = mode !== 'edit';
+            }
+            if (removeGroupIdInput) {
+                removeGroupIdInput.value = mode === 'edit' ? groupId : '';
+            }
+            dialog.dataset.needRemoveLabel = removeLabel;
+            setNeedRemoveState(dialog, false, removeLabel);
             updateNeedModalChips(dialog);
             renderNeedPickerOptions(dialog);
             const firstField = primarySelect || dialog.querySelector('input, select, textarea');
@@ -446,19 +537,19 @@
             if (!dialog) return;
 
             if (dialog.id === 'need-modal') {
-                closeNeedPicker(dialog, false);
-            }
-
-            try {
-                if (typeof dialog.close === 'function') {
-                    dialog.close();
-                } else {
+                closeNeedModal(dialog);
+            } else {
+                try {
+                    if (typeof dialog.close === 'function') {
+                        dialog.close();
+                    } else {
+                        dialog.removeAttribute('open');
+                    }
+                } catch (e) {
                     dialog.removeAttribute('open');
                 }
-            } catch (e) {
-                dialog.removeAttribute('open');
+                dialog.classList.remove('ua-modal-open');
             }
-            dialog.classList.remove('ua-modal-open');
 
             const titleNode = dialog.querySelector('[data-variation-modal-title]');
             const subtitleNode = dialog.querySelector('[data-variation-modal-subtitle]');
@@ -471,6 +562,36 @@
             }
             if (focusGroupInput) {
                 focusGroupInput.value = '';
+            }
+        });
+
+        document.addEventListener('click', function (event) {
+            const removeStart = event.target.closest('[data-need-remove-start]');
+            if (removeStart) {
+                const dialog = removeStart.closest('dialog');
+                if (dialog && dialog.dataset.needMode === 'edit' && dialog.dataset.needGroupId) {
+                    const labelText = (dialog.dataset.needRemoveLabel || '').trim();
+                    setNeedRemoveState(dialog, true, labelText || 'detta kostbehov');
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+
+            const removeCancel = event.target.closest('[data-need-remove-cancel]');
+            if (removeCancel) {
+                const dialog = removeCancel.closest('dialog');
+                if (dialog) {
+                    setNeedRemoveState(dialog, false, '');
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+
+            const removeConfirm = event.target.closest('[data-need-remove-confirm]');
+            if (removeConfirm) {
+                return;
             }
         });
 

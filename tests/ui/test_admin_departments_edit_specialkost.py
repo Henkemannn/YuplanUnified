@@ -4,11 +4,14 @@ import pytest
 from datetime import date
 from pathlib import Path
 
+from flask import request
+
 from core.db import get_session
 from core.admin_repo import DietDefaultsRepo, DepartmentDietOverridesRepo, DietTypesRepo, DepartmentsRepo, SitesRepo
 from core.department_requirement_group_service_overrides_repo import DepartmentRequirementGroupServiceOverridesRepo
 from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
 from core.department_requirement_group_weekday_overrides_repo import DepartmentRequirementGroupWeekdayOverridesRepo
+from core.department_requirement_group_weekview_projection import build_department_requirement_group_weekview_projection
 from sqlalchemy import text
 
 
@@ -40,7 +43,7 @@ def test_edit_form_shows_specialkost_heading(client_admin):
         pytest.skip("Admin UI not enabled in test environment")
     assert r.status_code == 200
     html = r.get_data(as_text=True)
-    assert "Behov" in html
+    assert "Kostbehov" in html
     assert "Standardvärden / avancerade inställningar" in html
     assert "app-shell__env-badge" in html
     assert '<div class="app-shell__card-meta">Vecka ' not in html
@@ -124,11 +127,11 @@ def test_edit_form_renders_compact_desktop_profile_and_section_closure(client_ad
     assert "Avdelningschefen är sur på måndagar" in html
     assert "Tis lunch 11" not in html
     assert "Serveringsanpassningar" in html
-    assert "+ Lägg till behov" in html
+    assert "+ Lägg till kostbehov" in html
     assert "Timbal" in html
     assert "Glutenfri" in html
     assert "2 personer" in html
-    assert "Varierat" in html
+    assert 'admin-need-item__state' not in html
     assert html.count("Hantera variation") == 1
     assert "Redigera" in html
     assert 'id="need-modal"' in html
@@ -138,7 +141,7 @@ def test_edit_form_renders_compact_desktop_profile_and_section_closure(client_ad
     assert 'data-need-mode="edit"' in html
     assert 'id="need-modal-primary-requirement-id"' in html
     assert 'id="need-modal-modifier-requirement-ids"' in html
-    assert html.count('+ Lägg till kostbehov') == 1
+    assert html.count('+ Lägg till kostbehov') >= 2
     assert 'Välj ytterligare behov' not in html
     assert 'data-need-picker-toggle' in html
     assert 'data-need-picker-close' in html
@@ -324,8 +327,8 @@ def test_edit_form_renders_requirement_groups_and_can_create_update(client_admin
     page = client_admin.get(f"/ui/admin/departments/{dep['id']}/edit", headers={"X-User-Role": "admin", "X-Tenant-Id": "1"})
     assert page.status_code == 200
     html = page.get_data(as_text=True)
-    assert "Registrerade behov" in html
-    assert "Behov" in html
+    assert "Registrerade kostbehov" in html
+    assert "Kostbehov" in html
     create_select = re.search(r'<select id="need-modal-primary-requirement-id"[^>]*>(.*?)</select>', html, re.S)
     assert create_select is not None
     create_options = create_select.group(1)
@@ -333,7 +336,7 @@ def test_edit_form_renders_requirement_groups_and_can_create_update(client_admin
     assert "Glutenfri" in create_options
     assert "Flytande kost" in create_options
     assert "Laktosfri" in create_options
-    assert html.count('+ Lägg till kostbehov') == 1
+    assert html.count('+ Lägg till kostbehov') >= 1
     assert 'data-need-picker-toggle' in html
     assert 'data-need-picker-search' in html
     assert 'admin-need-modal__chip' in html
@@ -437,7 +440,7 @@ def test_real_site_create_path_exposes_behovstyp_immediately(client_admin):
     edit_resp = client_admin.get(f"/ui/admin/departments/{department['id']}/edit", headers=headers)
     assert edit_resp.status_code == 200
     html = edit_resp.get_data(as_text=True)
-    assert "Vilket behov gäller?" in html
+    assert "Vilket kostbehov gäller?" in html
     assert 'id="need-modal-primary-requirement-id"' in html
     assert 'name="is_active"' not in html
     assert 'admin-need-modal__advanced' not in html
@@ -457,7 +460,7 @@ def test_real_site_create_path_exposes_behovstyp_immediately(client_admin):
     assert reread_page.status_code == 200
     reread_html = reread_page.get_data(as_text=True)
     assert "1 person" in reread_html
-    assert "Samma antal" in reread_html
+    assert 'admin-need-item__state' not in reread_html
     assert 'data-need-mode="edit"' in reread_html
     assert f'data-need-group-id="{group["id"]}"' in reread_html
     assert group["requirements"][0]["dietary_type_id"] == requirement_id
@@ -537,7 +540,7 @@ def test_edit_form_allows_site_catalog_requirement_creation_without_department_d
     page = client_admin.get(f"/ui/admin/departments/{dep['id']}/edit", headers={"X-User-Role": "admin", "X-Tenant-Id": "1"})
     assert page.status_code == 200
     html = page.get_data(as_text=True)
-    assert "Inga registrerade behov ännu." in html
+    assert "Inga registrerade kostbehov ännu." in html
     assert "Standardvärden / avancerade inställningar" in html
     assert 'id="need-modal-modifier-requirement-ids"' in html
     assert 'data-need-picker-panel' in html
@@ -562,7 +565,7 @@ def test_edit_form_allows_site_catalog_requirement_creation_without_department_d
     assert "Inga registrerade behov ännu." not in html
     assert html.count("Hantera variation") == 1
     assert "Standardvärden / avancerade inställningar" in html
-    assert html.count('+ Lägg till kostbehov') == 1
+    assert html.count('+ Lägg till kostbehov') >= 2
     assert 'Välj ytterligare behov' not in html
     assert 'data-need-picker-panel' in html
     assert 'data-need-picker-list' in html
@@ -618,6 +621,195 @@ def test_edit_form_creates_active_kostbehov_without_active_field_and_preserves_e
     assert created["is_active"] is True
     assert {item["dietary_type_id"] for item in created["requirements"]} == {timbal_id, glutenfri_id}
 
+
+def test_edit_form_can_remove_kostbehov_and_register_it_again_later(client_admin):
+    site, _ = SitesRepo().create_site(f"Requirement remove site {uuid.uuid4()}")
+    dep_a, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Remove A",
+        resident_count_mode="fixed",
+        resident_count_fixed=10,
+    )
+    dep_b, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Remove B",
+        resident_count_mode="fixed",
+        resident_count_fixed=10,
+    )
+    timbal_id = DietTypesRepo().create(site_id=site["id"], name="Timbal", default_select=False, semantics="atomic")
+    glutenfri_id = DietTypesRepo().create(site_id=site["id"], name="Glutenfri", default_select=False, semantics="atomic")
+
+    repo = DepartmentRequirementGroupsRepo()
+    active_group = repo.create_group(
+        dep_a["id"],
+        2,
+        [timbal_id, glutenfri_id],
+        label="Timbal + Glutenfri",
+        primary_requirement_id=timbal_id,
+    )
+    other_group = repo.create_group(
+        dep_b["id"],
+        1,
+        [timbal_id, glutenfri_id],
+        label="Timbal + Glutenfri B",
+        primary_requirement_id=timbal_id,
+    )
+    DepartmentRequirementGroupWeekdayOverridesRepo().set_override(active_group["id"], 4, "lunch", 1)
+    DepartmentRequirementGroupWeekdayOverridesRepo().set_override(active_group["id"], 4, "dinner", 0)
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+
+    page = client_admin.get(f"/ui/admin/departments/{dep_a['id']}/edit", headers={"X-User-Role": "admin", "X-Tenant-Id": "1"})
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    assert 'admin-need-item__remove-trigger' not in html
+    assert 'data-need-remove-start' in html
+    assert 'data-need-remove-state' in html
+
+    remove_resp = client_admin.post(
+        f"/ui/admin/departments/{dep_a['id']}/requirement-groups",
+        data={
+            "group_id": str(active_group["id"]),
+            "remove_request": "1",
+        },
+        follow_redirects=True,
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert remove_resp.status_code == 200
+    removed_html = remove_resp.get_data(as_text=True)
+    assert "Kostbehovet togs bort från avdelningen." in removed_html
+    assert "Timbal + Glutenfri" not in removed_html
+    removed_group = DepartmentRequirementGroupsRepo().get_group(active_group["id"])
+    assert removed_group is not None and removed_group["is_active"] is False
+    assert DepartmentRequirementGroupWeekdayOverridesRepo().list_for_group(active_group["id"]) == [
+        {"group_id": str(active_group["id"]), "weekday": 4, "meal_key": "dinner", "quantity": 0},
+        {"group_id": str(active_group["id"]), "weekday": 4, "meal_key": "lunch", "quantity": 1},
+    ]
+
+    projection = build_department_requirement_group_weekview_projection(
+        tenant_id=1,
+        site_id=site["id"],
+        department_id=dep_a["id"],
+        service_date=date(2026, 10, 8),
+        meal_key="lunch",
+    )
+    assert projection.needs == ()
+
+    other_projection = build_department_requirement_group_weekview_projection(
+        tenant_id=1,
+        site_id=site["id"],
+        department_id=dep_b["id"],
+        service_date=date(2026, 10, 8),
+        meal_key="lunch",
+    )
+    assert other_projection.needs and other_projection.needs[0].effective_quantity == 1
+
+    catalog = DietTypesRepo().list_all(site_id=site["id"])
+    assert {row["name"] for row in catalog} >= {"Timbal", "Glutenfri"}
+
+    readd_resp = client_admin.post(
+        f"/ui/admin/departments/{dep_a['id']}/requirement-groups",
+        data={
+            "primary_requirement_id": str(timbal_id),
+            "modifier_requirement_ids": [str(glutenfri_id)],
+            "default_quantity": "2",
+            "is_active": "1",
+        },
+        follow_redirects=True,
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert readd_resp.status_code == 200
+    active_groups = [group for group in DepartmentRequirementGroupsRepo().list_for_department(dep_a["id"]) if group["is_active"]]
+    assert len(active_groups) == 1
+    assert {item["dietary_type_id"] for item in active_groups[0]["requirements"]} == {timbal_id, glutenfri_id}
+
+
+def test_remove_post_redirects_and_keeps_payload_intact(client_admin):
+    site, _ = SitesRepo().create_site(f"Requirement remove request site {uuid.uuid4()}")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Remove Request",
+        resident_count_mode="fixed",
+        resident_count_fixed=10,
+    )
+    timbal_id = DietTypesRepo().create(site_id=site["id"], name="Timbal", default_select=False, semantics="atomic")
+    glutenfri_id = DietTypesRepo().create(site_id=site["id"], name="Glutenfri", default_select=False, semantics="atomic")
+    repo = DepartmentRequirementGroupsRepo()
+    group = repo.create_group(
+        dep["id"],
+        2,
+        [timbal_id, glutenfri_id],
+        label="Timbal + Glutenfri",
+        primary_requirement_id=timbal_id,
+    )
+
+    captured: dict[str, dict[str, str]] = {}
+
+    def capture_request() -> None:
+        if request.method == "POST" and request.path.endswith("/requirement-groups"):
+            captured["form"] = request.form.to_dict(flat=True)
+
+    client_admin.application.before_request_funcs.setdefault(None, []).append(capture_request)
+    try:
+        with client_admin.session_transaction() as sess:
+            sess["site_id"] = site["id"]
+
+        resp = client_admin.post(
+            f"/ui/admin/departments/{dep['id']}/requirement-groups",
+            data={
+                "group_id": str(group["id"]),
+                "remove_request": "1",
+                "primary_requirement_id": str(timbal_id),
+                "default_quantity": "2",
+            },
+            follow_redirects=False,
+            headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+        )
+    finally:
+        client_admin.application.before_request_funcs.get(None, []).remove(capture_request)
+
+    assert captured["form"]["group_id"] == str(group["id"])
+    assert captured["form"]["remove_request"] == "1"
+    assert captured["form"]["primary_requirement_id"] == str(timbal_id)
+    assert captured["form"]["default_quantity"] == "2"
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith(f"/ui/admin/departments/{dep['id']}/edit")
+
+    follow = client_admin.get(resp.headers["Location"], headers={"X-User-Role": "admin", "X-Tenant-Id": "1"})
+    assert follow.status_code == 200
+    assert repo.get_group(group["id"]) is not None
+    assert repo.get_group(group["id"])["is_active"] is False
+
+
+def test_edit_form_rejects_zero_quantity_for_active_kostbehov(client_admin):
+    site, _ = SitesRepo().create_site(f"Requirement zero quantity site {uuid.uuid4()}")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Zero Quantity",
+        resident_count_mode="fixed",
+        resident_count_fixed=10,
+    )
+    timbal_id = DietTypesRepo().create(site_id=site["id"], name="Timbal", default_select=False, semantics="atomic")
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+
+    resp = client_admin.post(
+        f"/ui/admin/departments/{dep['id']}/requirement-groups",
+        data={
+            "primary_requirement_id": str(timbal_id),
+            "default_quantity": "0",
+            "is_active": "1",
+        },
+        follow_redirects=True,
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "Inga personer kvar? Ta bort kostbehovet från avdelningen." in html
+    assert DepartmentRequirementGroupsRepo().list_for_department(dep["id"]) == []
+
     from core.department_requirement_group_weekview_projection import build_department_requirement_group_weekview_projection
 
     projection_active = build_department_requirement_group_weekview_projection(
@@ -627,36 +819,7 @@ def test_edit_form_creates_active_kostbehov_without_active_field_and_preserves_e
         service_date=date(2026, 10, 8),
         meal_key="lunch",
     )
-    assert len(projection_active.needs) == 1
-    assert projection_active.needs[0].display_label == "Timbal + Glutenfri"
-
-    repo.update_group(created["id"], is_active=False)
-    update_resp = client_admin.post(
-        f"/ui/admin/departments/{dep['id']}/requirement-groups",
-        data={
-            "group_id": created["id"],
-            "primary_requirement_id": str(timbal_id),
-            "modifier_requirement_ids": [str(glutenfri_id)],
-            "default_quantity": "3",
-        },
-        follow_redirects=True,
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
-    )
-    assert update_resp.status_code == 200
-
-    reread = repo.get_group(created["id"])
-    assert reread is not None
-    assert reread["is_active"] is False
-    assert reread["default_quantity"] == 3
-
-    projection_inactive = build_department_requirement_group_weekview_projection(
-        tenant_id=None,
-        site_id=site["id"],
-        department_id=dep["id"],
-        service_date=date(2026, 10, 8),
-        meal_key="lunch",
-    )
-    assert projection_inactive.needs == ()
+    assert len(projection_active.needs) == 0
 def test_edit_form_shows_unresolved_requirement_group_and_requires_primary(client_admin):
     site, _ = SitesRepo().create_site(f"Requirement group unresolved UI site {uuid.uuid4()}")
     dep, _ = DepartmentsRepo().create_department(
@@ -699,8 +862,8 @@ def test_edit_form_shows_unresolved_requirement_group_and_requires_primary(clien
         data={
             "group_id": str(unresolved["id"]),
             "primary_requirement_id": str(timbal_id),
-            "default_quantity": "1",
             "modifier_requirement_ids": [str(laktosfri_id)],
+            "default_quantity": "1",
             "is_active": "1",
         },
         follow_redirects=True,
@@ -751,7 +914,7 @@ def test_edit_form_renders_unified_variation_entrypoints_for_registered_needs(cl
     assert page.status_code == 200
     html = page.get_data(as_text=True)
     assert html.count("Hantera variation") == 1
-    assert html.count('+ Lägg till kostbehov') == 1
+    assert html.count('+ Lägg till kostbehov') >= 2
     assert "Varierar" in html
     assert re.search(r'name="need_day_[^"]+_1_lunch"[^>]*value="2"', html)
     assert re.search(r'name="need_day_[^"]+_4_lunch"[^>]*value="1"', html)
@@ -811,7 +974,6 @@ def test_edit_form_saves_weekday_quantities_and_resets_without_touching_legacy_t
         headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
     assert create_resp.status_code == 200
-
     overrides = DepartmentRequirementGroupWeekdayOverridesRepo().list_for_group(group["id"])
     assert overrides == [
         {"group_id": group["id"], "weekday": 4, "meal_key": "dinner", "quantity": 0},

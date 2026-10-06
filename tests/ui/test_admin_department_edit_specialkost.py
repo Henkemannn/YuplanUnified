@@ -40,7 +40,7 @@ def test_edit_department_shows_diet_types_and_saves_defaults(app_session, client
     r_get = client_admin.get(f"/ui/admin/departments/{dept_id}/edit", headers=_h("admin"))
     assert r_get.status_code == 200
     html = r_get.data.decode("utf-8")
-    assert "Behov" in html
+    assert "Kostbehov" in html
     assert "Standardvärden / avancerade inställningar" in html
     assert "Laktosfri" in html
 

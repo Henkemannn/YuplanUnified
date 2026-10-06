@@ -11,7 +11,7 @@ function renderNeedModalDom() {
   document.body.innerHTML = `
     <dialog id="need-modal" class="ua-modal admin-need-modal">
       <div class="ua-modal-inner">
-        <form method="POST" action="/ui/admin/departments/demo/requirement-groups" class="admin-need-modal__form">
+        <form method="POST" action="/ui/admin/departments/demo/requirement-groups" class="admin-need-modal__form admin-need-modal__edit-form">
           <input type="hidden" name="csrf_token" value="csrf-token">
           <input type="hidden" name="group_id" value="">
           <header class="ua-modal-header admin-need-modal__header">
@@ -63,8 +63,24 @@ function renderNeedModalDom() {
 
           <footer class="ua-modal-footer admin-need-modal__footer">
             <button type="button" class="yp-button yp-button-secondary" data-modal-close>Avbryt</button>
+            <button type="button" class="yp-button yp-button-secondary admin-need-modal__remove-trigger" data-need-remove-start hidden>Ta bort kostbehov</button>
             <button type="submit" class="yp-button yp-button-primary">Spara behov</button>
           </footer>
+        </form>
+        <form class="admin-need-modal__remove-form" data-need-remove-form method="POST" action="/ui/admin/departments/demo/requirement-groups" hidden>
+          <input type="hidden" name="csrf_token" value="csrf-token">
+          <input type="hidden" name="group_id" value="group-1">
+          <input type="hidden" name="remove_request" value="1">
+          <div class="admin-need-modal__remove-state" data-need-remove-state>
+            <div class="admin-need-modal__remove-card">
+              <h3 class="admin-need-modal__remove-title">Ta bort <span data-need-remove-label></span>?</h3>
+              <p class="admin-need-modal__remove-copy">Kostbehovet tas bort från avdelningen.</p>
+              <div class="admin-need-modal__remove-actions">
+                <button type="button" class="yp-button yp-button-secondary" data-need-remove-cancel>Avbryt</button>
+                <button type="submit" class="yp-button yp-button-danger" data-need-remove-confirm>Ta bort kostbehov</button>
+              </div>
+            </div>
+          </div>
         </form>
       </div>
       <div class="admin-need-modal__picker" data-need-picker hidden aria-hidden="true">
@@ -82,6 +98,7 @@ function renderNeedModalDom() {
     </dialog>
 
     <button type="button" id="open-need-modal" data-modal-target="#need-modal" data-need-mode="create">+ Lägg till behov</button>
+    <button type="button" id="edit-need-modal" data-modal-target="#need-modal" data-need-mode="edit" data-need-group-id="group-1" data-need-label="Timbal + Glutenfri" data-need-primary-id="1" data-need-default-quantity="2" data-need-modifier-ids="2,3">Redigera behov</button>
   `;
 
   const dialog = document.getElementById('need-modal');
@@ -270,5 +287,43 @@ describe('Unified admin Kostbehov picker', () => {
     expect(getNeedModal()?.hasAttribute('open')).toBe(true);
     expect(getNeedPicker()?.hidden).toBe(true);
     expect(getNeedModal()?.classList.contains('is-need-picker-open')).toBe(false);
+  });
+
+  it('keeps remove actions locked to edit mode only', () => {
+    openNeedModalOnly();
+
+    const createRemoveStart = document.querySelector('[data-need-remove-start]');
+    const createRemoveState = document.querySelector('[data-need-remove-state]');
+    expect(document.querySelectorAll('[data-need-remove-state]')).toHaveLength(1);
+    expect(createRemoveStart?.hidden).toBe(true);
+    createRemoveStart?.click();
+    expect(createRemoveState?.hidden).toBe(true);
+
+    document.getElementById('edit-need-modal')?.click();
+    expect(createRemoveStart?.hidden).toBe(false);
+    createRemoveStart?.click();
+    expect(getNeedModal()?.classList.contains('is-need-remove-open')).toBe(true);
+    expect(document.querySelector('.admin-need-modal__edit-form')?.hidden).toBe(true);
+    expect(document.querySelector('[data-need-remove-form]')?.hidden).toBe(false);
+    expect(createRemoveState?.hidden).toBe(false);
+    expect(document.querySelector('[data-need-remove-label]')?.textContent).toBe('Timbal + Glutenfri');
+    expect(document.querySelector('[data-need-edit-state]')?.hidden).toBe(true);
+    const removeConfirm = document.querySelector('[data-need-remove-confirm]');
+    expect(removeConfirm).not.toBeNull();
+    expect(removeConfirm?.getAttribute('type')).toBe('submit');
+    expect(removeConfirm?.getAttribute('form')).toBeNull();
+    expect(removeConfirm?.getAttribute('name')).toBeNull();
+    expect(removeConfirm?.getAttribute('value')).toBeNull();
+    expect(document.querySelector('[data-need-remove-form] input[name="remove_request"]')?.value).toBe('1');
+
+    document.querySelector('[data-need-remove-cancel]')?.click();
+    expect(getNeedModal()?.classList.contains('is-need-remove-open')).toBe(false);
+    expect(createRemoveState?.hidden).toBe(true);
+    expect(document.querySelector('[data-need-remove-form]')?.hidden).toBe(true);
+
+    createRemoveStart?.click();
+    removeConfirm?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(getNeedModal()?.hasAttribute('open')).toBe(false);
+    expect(getNeedModal()?.classList.contains('ua-modal-open')).toBe(false);
   });
 });

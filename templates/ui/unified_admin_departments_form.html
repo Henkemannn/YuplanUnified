@@ -82,24 +82,23 @@
         <article class="app-shell__card admin-section admin-section--needs">
             <div class="admin-section__header">
                 <div>
-                    <h2 class="app-shell__card-title">Behov</h2>
-                    <p class="admin-section__lead">Registrerade behov visas som de faktiskt gäller för avdelningen.</p>
+                    <h2 class="app-shell__card-title">Kostbehov</h2>
+                    <p class="admin-section__lead">Registrerade kostbehov för avdelningen.</p>
                 </div>
                 <button type="button"
                         class="yp-button yp-button-secondary admin-section__create-toggle"
                         data-modal-target="#need-modal"
-                        data-need-mode="create">+ Lägg till behov</button>
+                        data-need-mode="create">+ Lägg till kostbehov</button>
             </div>
 
-            <div class="admin-needs-list" role="list" aria-label="Registrerade behov">
+            <div class="admin-needs-list" role="list" aria-label="Registrerade kostbehov">
                 {% for group in vm.requirement_groups or [] %}
-                {% set group_display_name = (group.member_names|join(' + ')) if group.member_names else (group.label or group.primary_name or 'Behov saknas') %}
+                {% set group_display_name = (group.member_names|join(' + ')) if group.member_names else (group.label or group.primary_name or 'Kostbehov saknas') %}
                 <div class="admin-need-item" role="listitem">
                     <div class="admin-need-item__main">
                         <strong class="admin-need-item__name">{{ group_display_name }}</strong>
                         <div class="admin-need-item__meta-line">
                             <span class="admin-need-item__count">{{ group.default_quantity }} person{% if group.default_quantity != 1 %}er{% endif %}</span>
-                            <span class="admin-need-item__state">{% if group.has_variation %}Varierat{% else %}Samma antal{% endif %}</span>
                         </div>
                     </div>
                     <div class="admin-need-item__actions">
@@ -115,14 +114,14 @@
                     </div>
                 </div>
                 {% else %}
-                <p class="ua-muted">Inga registrerade behov ännu.</p>
+                <p class="ua-muted">Inga registrerade kostbehov ännu.</p>
                 {% endfor %}
                                 </div>
 
                             <details class="admin-specialkost-config">
                                 <summary class="admin-specialkost-config__summary">Standardvärden / avancerade inställningar</summary>
                                 <div class="admin-specialkost-config__body">
-                                    <p class="yp-form-help admin-specialkost-config__lead">Standardvärden för behov. Den här inställningen är stödjande och ändrar inte de registrerade behoven ovan.</p>
+                                    <p class="yp-form-help admin-specialkost-config__lead">Standardvärden för kostbehov. Den här inställningen är stödjande och ändrar inte de registrerade kostbehoven ovan.</p>
                                     <div class="yp-form">
                                         {% if vm.diet_types and vm.diet_types|length > 0 %}
                                         <div class="specialkost-edit-search-row" data-specialkost-filter-root>
@@ -426,23 +425,25 @@
 
 <dialog id="need-modal" class="ua-modal admin-need-modal">
     <div class="ua-modal-inner">
-        <form method="POST" action="{{ url_for('ui.admin_departments_save_requirement_group', dept_id=vm.department.id) }}" class="admin-need-modal__form">
+        <form id="need-modal-form" method="POST" action="{{ url_for('ui.admin_departments_save_requirement_group', dept_id=vm.department.id) }}" class="admin-need-modal__form admin-need-modal__edit-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="group_id" value="">
+
+            <div class="admin-need-modal__edit-state" data-need-edit-state>
             <header class="ua-modal-header admin-need-modal__header">
                 <div>
-                    <h2 class="admin-need-modal__title" data-need-modal-title>Lägg till behov</h2>
-                    <p class="admin-need-modal__subtitle" data-need-modal-subtitle>Vilket behov gäller på den här avdelningen?</p>
+                    <h2 class="admin-need-modal__title" data-need-modal-title>Lägg till kostbehov</h2>
+                    <p class="admin-need-modal__subtitle" data-need-modal-subtitle>Vilket kostbehov gäller på den här avdelningen?</p>
                 </div>
                 <button type="button" class="ua-modal-close" data-modal-close aria-label="Stäng">&times;</button>
             </header>
 
             <div class="ua-modal-body admin-need-modal__body">
                 <div class="admin-need-modal__row">
-                    <label class="admin-need-modal__label" for="need-modal-primary-requirement-id">Vilket behov gäller?</label>
+                    <label class="admin-need-modal__label" for="need-modal-primary-requirement-id">Vilket kostbehov gäller?</label>
                     <div class="admin-need-modal__control">
                         <select id="need-modal-primary-requirement-id" name="primary_requirement_id" class="yp-input">
-                            <option value="">Välj behov...</option>
+                            <option value="">Välj kostbehov...</option>
                             {% for t in vm.requirement_group_diet_types or [] %}
                             <option value="{{ t.id }}">{{ t.name }}</option>
                             {% endfor %}
@@ -451,7 +452,7 @@
                 </div>
 
                 <div class="admin-need-modal__row admin-need-modal__row--secondary-picker">
-                    <label class="admin-need-modal__label" for="need-modal-modifier-requirement-ids">Finns ytterligare behov för samma personer?</label>
+                    <label class="admin-need-modal__label" for="need-modal-modifier-requirement-ids">Finns ytterligare kostbehov för samma personer?</label>
                     <div class="admin-need-modal__control">
                         <div class="admin-need-modal__secondary-picker" data-need-picker-wrap>
                             <div class="admin-need-modal__secondary-caption">Ytterligare kostbehov (valfritt)</div>
@@ -469,15 +470,35 @@
                 <div class="admin-need-modal__row">
                     <label class="admin-need-modal__label" for="need-modal-default-quantity">Hur många personer gäller det?</label>
                     <div class="admin-need-modal__control">
-                        <input type="number" id="need-modal-default-quantity" name="default_quantity" class="yp-input sk-input" min="0" value="1">
+                        <input type="number" id="need-modal-default-quantity" name="default_quantity" class="yp-input sk-input" min="1" value="1">
                     </div>
                 </div>
             </div>
 
             <footer class="ua-modal-footer admin-need-modal__footer">
                 <button type="button" class="yp-button yp-button-secondary" data-modal-close>Avbryt</button>
-                <button type="submit" class="yp-button yp-button-primary">Spara behov</button>
+                <button type="button" class="yp-button yp-button-secondary admin-need-modal__remove-trigger" data-need-remove-start hidden>Ta bort kostbehov</button>
+                <button type="submit" class="yp-button yp-button-primary">Spara kostbehov</button>
             </footer>
+            </div>
+        </form>
+
+        <form class="admin-need-modal__remove-form" data-need-remove-form method="POST" action="{{ url_for('ui.admin_departments_save_requirement_group', dept_id=vm.department.id) }}" hidden>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="group_id" value="">
+            <input type="hidden" name="remove_request" value="1">
+            <div class="admin-need-modal__remove-state" data-need-remove-state>
+                <div class="admin-need-modal__remove-card">
+                    <h3 class="admin-need-modal__remove-title">Ta bort kostbehov?</h3>
+                    <p class="admin-need-modal__remove-copy admin-need-modal__remove-copy--target"><span class="admin-need-modal__remove-need" data-need-remove-label></span></p>
+                    <p class="admin-need-modal__remove-copy admin-need-modal__remove-copy--target">{{ vm.department.name }}</p>
+                    <p class="admin-need-modal__remove-copy">Kostbehovet tas bort från avdelningen. Det påverkar inte andra avdelningar eller Kostbehovskatalogen.</p>
+                    <div class="admin-need-modal__remove-actions">
+                        <button type="button" class="yp-button yp-button-secondary" data-need-remove-cancel>Avbryt</button>
+                        <button type="submit" class="yp-button yp-button-danger" data-need-remove-confirm>Ta bort kostbehov</button>
+                    </div>
+                </div>
+            </div>
         </form>
     </div>
     <div class="admin-need-modal__picker" data-need-picker hidden>
