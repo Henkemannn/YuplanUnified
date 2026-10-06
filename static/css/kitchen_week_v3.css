@@ -34,13 +34,21 @@
 
 .kitchen-week .dept-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
   margin-bottom: 6px;
+  gap: 0.15rem;
 }
 
 .kitchen-week .dept-title {
   font-weight: 600;
+}
+
+.kitchen-week .dept-subtitle {
+  color: var(--muted);
+  font-size: 0.86em;
+  line-height: 1.2;
 }
 
 .kitchen-week .dept-empty {

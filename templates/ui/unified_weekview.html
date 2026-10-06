@@ -23,7 +23,12 @@
     <section class="app-shell__page-header weekview-header">
       <div class="no-print">
         <h1 class="app-shell__title weekview-title">Veckovy</h1>
-        <p class="app-shell__subtitle weekview-subtitle">{{ vm.department_name }}, {{ vm.site_name }}</p>
+        <p class="app-shell__subtitle weekview-subtitle">
+          {{ vm.department.name if vm.department else vm.department_name }}
+          {% if vm.department and vm.department.residence_name %}
+            <br>{{ vm.department.residence_name }}
+          {% endif %}
+        </p>
         <div class="app-shell__card-meta">Vecka {{ vm.week }}, {{ vm.year }}</div>
       </div>
       <div class="app-shell__page-actions no-print">
@@ -40,9 +45,10 @@
         <section class="yp-card department-card" data-department-id="{{ vm.department.id }}">
           <div class="department-header">
             <div class="department-header-content">
-              {% set _dn = vm.department.name or '' %}
-              {% set dep_display = _dn if _dn[:4]|lower == 'avd ' else 'Avd ' ~ _dn %}
-              <h2 class="department-name">{{ dep_display }}</h2>
+              <h2 class="department-name">{{ vm.department.name }}</h2>
+              {% if vm.department.residence_name %}
+              <div class="department-residence">{{ vm.department.residence_name }}</div>
+              {% endif %}
               <div class="department-summary">
                 <span class="summary-label">Lunch</span>
                 <span class="summary-count">

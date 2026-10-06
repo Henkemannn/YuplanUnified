@@ -10,7 +10,7 @@ from .db import get_session
 from .menu_service import MenuServiceDB
 from .department_requirement_group_week_grid_adapter import build_week_grid_specialkost_rows
 from .weekview.service import WeekviewService
-from .admin_repo import DietDefaultsRepo, DietTypesRepo
+from .admin_repo import DepartmentsRepo, DietDefaultsRepo, DietTypesRepo, ResidencesRepo
 
 
 def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None = None) -> dict[str, Any]:
@@ -24,21 +24,33 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
         rows = db.execute(
             text(
                 "SELECT id, name, COALESCE(resident_count_fixed,0), COALESCE(notes,'') "
+                ", residence_id "
                 "FROM departments "
                 "WHERE site_id=:s "
                 "ORDER BY COALESCE(display_order, 2147483647), name"
             ),
             {"s": site_id},
         ).fetchall()
-        departments = [
-            {
-                "id": str(r[0]),
-                "name": str(r[1] or ""),
-                "resident_count": int(r[2] or 0),
-                "info_text": (str(r[3] or "").strip()),
-            }
-            for r in rows
-        ]
+        residences = ResidencesRepo().list_for_site(site_id)
+        residence_name_by_id = {str(r.get("id") or ""): str(r.get("name") or "").strip() for r in residences}
+        departments_meta = DepartmentsRepo().list_for_site(site_id)
+        residence_id_by_department_id = {
+            str(r.get("id") or ""): (str(r.get("residence_id") or "").strip() or None)
+            for r in departments_meta
+        }
+        departments = []
+        for r in rows:
+            residence_id = residence_id_by_department_id.get(str(r[0]) or "")
+            departments.append(
+                {
+                    "id": str(r[0]),
+                    "name": str(r[1] or ""),
+                    "resident_count": int(r[2] or 0),
+                    "info_text": (str(r[3] or "").strip()),
+                    "residence_id": residence_id,
+                    "residence_name": residence_name_by_id.get(residence_id or "") or None,
+                }
+            )
     finally:
         db.close()
 
@@ -183,6 +195,8 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
             {
                 "id": dep_id,
                 "name": dep["name"],
+                "residence_id": dep.get("residence_id"),
+                "residence_name": dep.get("residence_name"),
                 "resident_count": dep["resident_count"],
                 "info_text": (info_text if info_text else None),
                 "notes": (info_text if info_text else None),

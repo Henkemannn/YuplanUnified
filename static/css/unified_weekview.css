@@ -231,10 +231,11 @@
 
 .department-header-content {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
   flex-wrap: wrap;
-  gap: var(--yp-gap);
+  gap: 0.2rem;
 }
 
 .department-name {
@@ -248,12 +249,19 @@
   display: flex;
   align-items: center;
   gap: var(--yp-gap-sm);
+  margin-top: 0.15rem;
   color: rgba(255, 255, 255, 0.95);
   font-size: var(--yp-font-size-sm);
   background: rgba(255, 255, 255, 0.15);
   padding: var(--yp-gap-sm) var(--yp-gap);
   border-radius: var(--yp-radius);
   backdrop-filter: blur(10px);
+}
+
+.department-residence {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: var(--yp-font-size-sm);
+  line-height: 1.2;
 }
 
 .summary-label {
