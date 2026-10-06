@@ -49,6 +49,80 @@ def test_weekview_get_all_departments_renders_headers():
     assert "Avd A" in body or "Avd B" in body
 
 
+def _seed_mvp_weekview_site(app):
+    from core.db import get_session
+    from sqlalchemy import text
+
+    with app.app_context():
+        db = get_session()
+        try:
+            db.execute(
+                text("INSERT OR REPLACE INTO tenants(id, name, active) VALUES(2, 'Yuplan MVP testkund 1', 1)")
+            )
+            db.execute(
+                text(
+                    "INSERT OR REPLACE INTO sites(id, name, tenant_id, version) "
+                    "VALUES('mvp-test1', 'MVP Test1', 2, 0)"
+                )
+            )
+            db.execute(
+                text(
+                    "INSERT OR REPLACE INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) "
+                    "VALUES('9479ab77-5abe-419c-81f8-5155cb5b1151', 'mvp-test1', 'Avdelning 1', 'fixed', 8, 0)"
+                )
+            )
+            db.execute(
+                text(
+                    "INSERT OR REPLACE INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) "
+                    "VALUES('3a9a6617-6b7f-4605-83d2-2d00596f141f', 'mvp-test1', 'Avdelning 1', 'fixed', 12, 0)"
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+
+def test_weekview_empty_department_id_matches_absent_and_valid_and_invalid_behaviors():
+    os.environ["STRICT_CSRF_IN_TESTS"] = "0"
+    app = create_app({"TESTING": True})
+    client: FlaskClient = app.test_client()
+    _seed_mvp_weekview_site(app)
+
+    with client.session_transaction() as sess:
+        sess["site_id"] = "mvp-test1"
+        sess["tenant_id"] = 2
+        sess["role"] = "admin"
+        sess["user_id"] = 1
+
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "2", "X-User-Id": "1"}
+    empty_url = "/ui/weekview?site_id=mvp-test1&department_id=&year=2026&week=41"
+    absent_url = "/ui/weekview?site_id=mvp-test1&year=2026&week=41"
+    valid_url = "/ui/weekview?site_id=mvp-test1&department_id=9479ab77-5abe-419c-81f8-5155cb5b1151&year=2026&week=41"
+    invalid_url = "/ui/weekview?site_id=mvp-test1&department_id=does-not-exist&year=2026&week=41"
+
+    empty_resp = client.get(empty_url, headers=headers)
+    absent_resp = client.get(absent_url, headers=headers)
+    valid_resp = client.get(valid_url, headers=headers)
+    invalid_resp = client.get(invalid_url, headers=headers)
+
+    assert empty_resp.status_code == 200
+    assert absent_resp.status_code == 200
+    assert valid_resp.status_code == 200
+    assert invalid_resp.status_code == 200
+
+    empty_body = empty_resp.get_data(as_text=True)
+    absent_body = absent_resp.get_data(as_text=True)
+    valid_body = valid_resp.get_data(as_text=True)
+    invalid_body = invalid_resp.get_data(as_text=True)
+
+    assert "Avdelning 1" in empty_body
+    assert "Avdelning 1" in absent_body
+    assert empty_body == absent_body or ("Avdelning 1" in empty_body and "Avdelning 1" in absent_body)
+    assert "Avdelning 1" in valid_body
+    assert "Avd A" not in invalid_body and "Avd B" not in invalid_body
+    assert "Avdelning" in invalid_body
+
+
 def test_toggle_flow_marks_persist_and_report_shows_special():
     os.environ["STRICT_CSRF_IN_TESTS"] = "0"
     app = create_app({"TESTING": True})
