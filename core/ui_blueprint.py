@@ -7238,13 +7238,15 @@ def admin_departments_update(dept_id: str):
     db = get_session()
     try:
         dept_row = db.execute(
-            text("SELECT version FROM departments WHERE id = :id AND site_id = :sid"),
+            text("SELECT version, COALESCE(resident_count_fixed, 0), COALESCE(residence_id, '') FROM departments WHERE id = :id AND site_id = :sid"),
             {"id": dept_id, "sid": active_site_id}
         ).fetchone()
         if not dept_row:
             flash("Avdelning hittades inte för vald site.", "error")
             return redirect(url_for("ui.admin_departments_list"))
         current_version = int(dept_row[0] or 0)
+        current_resident_count = int(dept_row[1] or 0)
+        current_residence_id = str(dept_row[2] or "").strip() or None
     finally:
         db.close()
     
@@ -7282,7 +7284,13 @@ def admin_departments_update(dept_id: str):
         expected_version = current_version
 
     pending_need_state = session.get("admin_need_conflict_state")
-    if pending_need_state and str(pending_need_state.get("kind") or "").strip().lower() == "need":
+    residence_changed = residence_id != current_residence_id
+    has_pending_need_flow = bool(
+        pending_need_state
+        and str(pending_need_state.get("kind") or "").strip().lower() == "need"
+        and not (residence_changed and resident_count_int == current_resident_count)
+    )
+    if has_pending_need_flow:
         from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
         from core.department_requirement_group_weekday_overrides_repo import DepartmentRequirementGroupWeekdayOverridesRepo
         from .department_requirement_group_invariant import (
@@ -7413,7 +7421,13 @@ def admin_departments_update(dept_id: str):
                 flash(f"Kunde inte spara specialkost: {str(e)}", "error")
                 return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
         pending_need_state = session.get("admin_need_conflict_state")
-        if pending_need_state and str(pending_need_state.get("kind") or "").strip().lower() == "need":
+        residence_changed = residence_id != current_residence_id
+        has_pending_need_flow = bool(
+            pending_need_state
+            and str(pending_need_state.get("kind") or "").strip().lower() == "need"
+            and not (residence_changed and resident_count_int == current_resident_count)
+        )
+        if has_pending_need_flow:
             from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
             from core.department_requirement_group_weekday_overrides_repo import DepartmentRequirementGroupWeekdayOverridesRepo
 

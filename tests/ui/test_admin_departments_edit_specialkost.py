@@ -7,7 +7,7 @@ from pathlib import Path
 from flask import request
 
 from core.db import get_session
-from core.admin_repo import DietDefaultsRepo, DepartmentDietOverridesRepo, DietTypesRepo, DepartmentsRepo, SitesRepo
+from core.admin_repo import DietDefaultsRepo, DepartmentDietOverridesRepo, DietTypesRepo, DepartmentsRepo, ResidencesRepo, SitesRepo
 from core.department_requirement_group_service_overrides_repo import DepartmentRequirementGroupServiceOverridesRepo
 from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
 from core.department_requirement_group_weekday_overrides_repo import DepartmentRequirementGroupWeekdayOverridesRepo
@@ -1375,6 +1375,116 @@ def test_edit_form_conflict_path_a_rejects_below_minimum_without_partial_persist
     assert "Registrerade kostbehov blir fler än det nya boendeantalet." in save_resp.get_data(as_text=True)
     assert _department_resident_count(dep["id"]) == 12
     assert _active_requirement_total(dep["id"]) == 11
+
+
+def test_edit_form_residence_only_change_ignores_stale_need_conflict_state(client_admin):
+    site, _ = SitesRepo().create_site(f"Residence-only conflict guard site {uuid.uuid4()}")
+    residence_repo = ResidencesRepo()
+    residence = residence_repo.create_for_site(site["id"], "Solrosen")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avdelning 1",
+        resident_count_mode="fixed",
+        resident_count_fixed=8,
+    )
+    grovpaté_id = DietTypesRepo().create(site_id=site["id"], name="Grovpaté", default_select=False, semantics="atomic")
+    DepartmentRequirementGroupsRepo().create_group(
+        dep["id"],
+        4,
+        [grovpaté_id],
+        label="Grovpaté",
+        primary_requirement_id=grovpaté_id,
+    )
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+        sess["tenant_id"] = 1
+        sess["role"] = "admin"
+        sess["user_id"] = 1
+        _seed_need_conflict_state(sess, new_requirement_id=grovpaté_id, default_quantity=4)
+        sess["admin_need_conflict_state"]["minimum_valid_total"] = 13
+        sess["admin_need_conflict_state"]["current_total"] = 13
+        sess["admin_need_conflict_state"]["resident_count"] = 13
+
+    db = get_session()
+    try:
+        row = db.execute(text("SELECT COALESCE(version, 0) FROM departments WHERE id=:id"), {"id": dep["id"]}).fetchone()
+        version = int(row[0] or 0) if row else 0
+    finally:
+        db.close()
+
+    save_resp = client_admin.post(
+        f"/ui/admin/departments/{dep['id']}/edit",
+        data={
+            "name": "Avdelning 1",
+            "resident_count": "8",
+            "residence_id": residence["id"],
+            "notes": "",
+            "version": str(version),
+        },
+        follow_redirects=True,
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+
+    assert save_resp.status_code == 200
+    body = save_resp.get_data(as_text=True)
+    assert "Registrerade kostbehov blir fler än det nya boendeantalet." not in body
+    assert _department_resident_count(dep["id"]) == 8
+    assert _active_requirement_total(dep["id"]) == 4
+    db = get_session()
+    try:
+        row = db.execute(
+            text("SELECT residence_id FROM departments WHERE id=:id"),
+            {"id": dep["id"]},
+        ).fetchone()
+        assert row[0] == residence["id"]
+    finally:
+        db.close()
+
+
+def test_edit_form_rejects_lowering_resident_count_below_active_specialkost(client_admin):
+    site, _ = SitesRepo().create_site(f"Resident count guard site {uuid.uuid4()}")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avdelning 1",
+        resident_count_mode="fixed",
+        resident_count_fixed=8,
+    )
+    grovpaté_id = DietTypesRepo().create(site_id=site["id"], name="Grovpaté", default_select=False, semantics="atomic")
+    DepartmentRequirementGroupsRepo().create_group(
+        dep["id"],
+        4,
+        [grovpaté_id],
+        label="Grovpaté",
+        primary_requirement_id=grovpaté_id,
+    )
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+
+    db = get_session()
+    try:
+        row = db.execute(text("SELECT COALESCE(version, 0) FROM departments WHERE id=:id"), {"id": dep["id"]}).fetchone()
+        version = int(row[0] or 0) if row else 0
+    finally:
+        db.close()
+
+    save_resp = client_admin.post(
+        f"/ui/admin/departments/{dep['id']}/edit",
+        data={
+            "name": "Avdelning 1",
+            "resident_count": "3",
+            "residence_id": "",
+            "notes": "",
+            "version": str(version),
+        },
+        follow_redirects=True,
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+
+    assert save_resp.status_code == 200
+    assert _department_resident_count(dep["id"]) == 8
+    assert _active_requirement_total(dep["id"]) == 4
 
 
 def test_edit_form_rejects_cross_department_and_negative_weekday_quantities(client_admin):
