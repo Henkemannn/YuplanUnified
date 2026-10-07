@@ -1,264 +1,364 @@
 Status: LOCKED
-Last reviewed: 2026-09-28
+Last reviewed: 2026-10-07
 
 # Yuplan 1.0 Finishline
 
-
 ## Current Phase
 
-The shared Builder/Menu/Offshore seam remains accepted and frozen.
+Active phase:
 
-Release naming is now explicit:
-- **Kommun 1.0** = existing legacy/pilot comparison baseline.
-- **Kommun 1.1** = the current Product2 + Planera 2.0 track being finished for the next pilot.
-- **Yuplan 1.0** = the wider platform MVP finishline that combines a pilot-ready Kommun track with Offshore 1.0.
+**Kommun 1.1 — close Menyimport canonical editing/open behavior, then global responsive/tablet pass, fresh pilot smoke, and pilot readiness.**
 
-Active phase: **Kommun 1.1 — close the Product2 Page3 -> Weekview completion chain, then reporting/parity and pilot hardening.**
+The broad Builder/Planera architecture is not being reopened.
 
-The Page3 information architecture and Specialkost hierarchy are no longer the main development blocker. Primary/modifier persistence, recurring cohort quantities, cohort Weekview projection and the Kitchen completion write path are implemented. Final micro-polish is deliberately deferred until the remaining functional bridges and E2E/parity checks are complete.
+The current blocker is a narrow integration seam:
 
-Broad Builder/Menu and Offshore MVP expansion remains closed. Only pilot-blocking regressions or shared-platform issues may reopen those seams before Kommun is pilot-ready.
+- canonical menu import works
+- canonical week draft works
+- canonical `Byt rätt` bind works
+- shared canonical search runtime exists
+- the remaining unresolved integration is opening an existing resolved Dish from the week/menu surface in the already-finished shared Dish editor
 
+Do not broaden this into a new Builder, new modal system, new search implementation, Offshore migration, or responsive redesign.
 
-## Current Checkpoint
+## Current committed checkpoint
 
 Active development branch:
 
 `feat/planera-app-shell-2026-03-03`
 
-Latest accepted local code checkpoint before the current uncommitted UI/E2E gate:
+Last committed stable checkpoint:
 
-`2364ba475a7ed8d16087d7f60f9fadf25756c945`
+`a0c84db762567c03b68fac8a3b66457c5358ad23`
 
-`feat(planera): add product2 cohort completion api`
+`fix(kommun): harden weekview pilot feature flag`
 
-Important earlier checkpoints in the current completion chain include:
-- `3daed7e742bc7599148994de63756b5e4f6a3e54` — Kitchen Weekview cohort completion.
-- `fef21ea3988b67881d8748efdd362dcbcb720362` — exact Product2 Page3 cohort completion targets.
-- `5f590346be34204df0cc6b928a97265fc0385ecd` — atomic multi-department cohort completion coordinator.
-- `2364ba475a7ed8d16087d7f60f9fadf25756c945` — Product2 completion API with per-department ETag concurrency.
+GitHub remote development branch currently points to the same commit.
 
-Current local uncommitted gate:
-- Page3 visible completion action and client flow.
-- removal of an incorrect legacy `ff.planera.enabled` guard from the Product2 completion POST.
-- deterministic completion E2E scenario cleanup so the final manual proof starts from known review and Alt 2 state.
+Important:
 
-Do not checkpoint that uncommitted gate until the clean manual Page3 -> Kitchen Weekview -> reload -> Admin Weekview proof passes.
+**All current Menyimport work after `a0c84db` is uncommitted local work.**
 
+Do not infer the current local implementation from GitHub remote source alone.
 
-## Already Established
+Before implementation work, confirm local truth with:
 
-- Builder remains the canonical knowledge source: Components -> Dishes/Compositions -> Menus -> Published Menu.
-- Published-menu projection is the source for Product2 meal options.
-- Department menu choices are explicit; missing choice does not silently fall back.
-- Product2 Page1 day overview exists.
-- Product2 Page2 human review exists.
-- Option-review persistence and review staleness are established.
-- Requirement groups use disjoint recipient-cohort semantics so one recipient with multiple requirements is counted once.
-- Explicit Specialkost primary semantics are persisted through `primary_requirement_id`; the full exact requirement-member set remains intact and all non-primary members are modifiers.
-- Recurring/variable cohort quantity is persisted per registered need with precedence exact service date + meal -> weekday + meal -> default, including valid zero quantities.
-- Review-aware Kommun -> Planera 2.0 adaptation is established.
-- Planera 2.0 Core calculates baseline, normal production and adaptation quantities while remaining generic and Kommun-agnostic.
-- Meal-level Product2 orchestration is established and preserves blockers/unassigned destinations without inventing production.
-- Page3 has an authoritative Planera 2.0-backed production VM.
-- Page3 Specialkost presentation uses the explicit primary/modifier semantics instead of guessing from names or order.
-- Admin and Kitchen Weekview reuse the existing shared week-grid surface; no third Weekview has been introduced.
-- Cohort Weekview projection is established and keeps one registered need as one row, including separate rows for same-primary cohorts.
-- Cohort completion persistence is independent from legacy `weekview_registrations`.
-- Kitchen Weekview can mark cohort rows done while Admin Weekview remains read-only.
-- Weekview base-version compare-and-bump exists and the cohort write path is atomic.
-- Multi-department completion is atomic: all department CAS checks succeed before completion writes, with one commit and full rollback on stale/error.
-- Product2 Page3 exposes exact server-side completion targets from `planning_slice.context["requirement_group_refs"]`; it does not use labels, combinations or diet-type IDs as mutation identity.
-- Product2 completion API derives targets server-side, validates the exact effective-ETag set for all affected departments, hands base versions to the atomic coordinator and returns fresh per-department ETags.
-- Manual live proof has already shown the Page3 completion action can reach success state and mark the corresponding cohort rows in Kitchen Weekview.
-- The completion write path touches cohort completions + Weekview versions only; Alt 2 is a separate `department_menu_choices` truth.
-- A live yellow-cell investigation proved the observed Alt 2 state came from pre-existing E2E menu-choice data, not from completion writes.
-- Existing Serveringstillägg remains valid operational input and must be preserved in a separate Servering / Packning track.
+```powershell
+git branch --show-current
+git rev-parse HEAD
+git status --short
+git diff --check
+```
 
+## Safety snapshot
 
-## Current Active Gate
+Verified snapshot of the current local worktree:
 
-### Close the Page3 -> Weekview completion E2E
+`C:\Users\Henrik Jonsson\Yuplan Unified\backups\YuplanUnified_PRE_RECOVERY_2026-10-07_201644.tar.gz`
 
-This is a finish-the-existing-gate task, not a new test-infrastructure project.
+The snapshot preserves:
+- modified tracked source files
+- all six untracked source files
+- Git metadata / status / diff
+- current local Menyimport work
 
-Required clean proof:
-1. prepare a minimal deterministic completion scenario on top of the existing Product2 E2E seed;
-2. Page2 truth yields exactly the intended four `ADAPTATION_REQUIRED` completion targets;
-3. the target departments start with no completion mark and no confusing Alt 2 background for the target meal;
-4. click Page3 `Markera som gjorda i veckolistan`;
-5. Page3 enters `Markerat i veckolistan ✓` success state;
-6. the exact cohort rows are marked in Kitchen Weekview;
-7. reload preserves the marks;
-8. Admin Weekview shows the same persisted truth read-only.
+Runtime DBs and heavy generated folders are excluded.
 
-Scope guard:
-- the deterministic scenario preparation must remain a very small fixture-only change;
-- no generic E2E framework, seed-system refactor or product-code redesign is allowed for this gate;
-- if the fixture work expands materially, stop and return to the product todo list.
+A later failed restore pass changed three files, and those three were subsequently restored byte-for-byte from the snapshot with matching SHA256 hashes.
 
-### Current known E2E data caveat
+Therefore the current local worktree is back at the verified snapshot state.
 
-The base Product2 E2E seed is intentionally generic:
-- Page2 starts UNREVIEWED;
-- Tuesday menu choices include seeded Alt 2 state for some departments.
+## Closed Kommun desktop gates
 
-Therefore a reused E2E database is not, by itself, a canonical completion scenario. A narrow scenario overlay/reset is needed for a clean manual before/after proof. This is test-fixture hygiene, not a completion-domain change.
+The following are functionally closed for the current desktop pass:
+- Department/Kostbehov flow
+- Kostbehov lifecycle
+- Serveringsanpassningar
+- contextual Kostbehov consistency
+- Department identity / residence presentation
+- all-departments Weekview
+- Weekview desktop density/layout
+- Weekview completion interaction
+- Weekview pilot feature-flag hardening
 
-### Completion semantics lock
+Important accepted commits include:
 
-`quantity` = planned production need.
+- `154c422ffecf2376318060d5681a763a75011e62`
+- `5989e9e60ae2c19e099a2379d7ea86dcae23b737`
+- `37178ac5b839f2bad3358584a24e6fa5c793349d`
+- `99fbc4d599e7893beb6f3a63592cf0d8a5f94bee`
+- `3d84ca2a99e8da7914e69125d3d37169823db833`
+- `67f0265e1f05a89d653068b6c28308bc57aa1a08`
+- `efccfc75badc2439e7ccdee8dff7e7ee6f2a0c85`
+- `d92dcc9873aab6ee13891b47ce8dbbceab9cd239`
+- `21559c7ff9eb958bcb53717abd6e682c7a90f3a7`
+- `a0c84db762567c03b68fac8a3b66457c5358ad23`
 
-`completion/done` = produced/handled operational outcome and future reporting input.
+## Weekview product lock
 
-`Alt 2` = independent department menu-choice state.
+Weekview is an overview/facit/fallback surface.
 
-These truths must remain independent:
-- completion only -> green completion indicator, normal background;
-- Alt 2 only -> yellow meal background, not completed;
-- both legitimately true -> yellow background + green completion indicator.
+It is **not** the primary production-calculation surface.
 
-Yuplan 1.1 does not perform external billing. Reporting/debiting integration remains downstream of the persisted completion + quantity truth.
+Planera remains the primary production workflow.
 
+Weekview must:
+- show resident totals
+- show Kostbehov
+- show variations
+- show meal context
+- show kitchen completion state
 
-## Product2 E2E Runtime Rule
+Weekview must not derive/show Normalkost.
 
-Normal local development remains:
+Kitchen may toggle completion.
 
-`python run.py`
+Admin sees completion read-only.
 
-which uses the ordinary local `dev.db` configuration.
+Green circle = completed.
 
-Canonical Product2 E2E visual/manual review uses the separate disposable databases:
-- `instance/product2_e2e.db`
-- `instance/product2_e2e_builder.db`
+No circle = no completion mark; it does not mean failed or remaining.
 
-Known-good runtime:
-- one process on port 5000;
-- `debug=False`;
-- `use_reloader=False`;
-- explicit E2E database configuration;
-- real `/auth/login` session.
+## Kostbehov truth
 
-Verified E2E accounts:
-- Kitchen/cook: `e2e.kitchen@yuplan.local`
-- Admin: `e2e.admin@yuplan.local`
+User-facing term: **Kostbehov**.
 
-The E2E database must not be confused with `dev.db`. Reused E2E state may contain prior manual review, completion and menu-choice state, so destructive/manual acceptance scenarios must start from a deterministic reset/overlay.
+Resident count = total people.
 
-A small developer-experience helper for deterministic E2E startup may be added later, but it is not allowed to become a launch-blocking side project.
+Active requirement groups are additive.
 
+Composite requirement groups count once.
 
-## Next Major Milestone
+`special_diet_total(context)` is the sum of effective quantities of active requirement groups.
 
-**Kommun 1.1 — Ready for Pilot.**
+`Normalkost = resident_count - special_diet_total`.
 
-Current order:
+Normalkost is derived, never manually stored.
 
-1. Builder/Menu/Offshore shared seam freeze — COMPLETE.
-2. Planera 2.0 architecture lock — COMPLETE.
-3. Product2 Page1 / Page2 foundation — COMPLETE.
-4. Option review persistence / staleness — COMPLETE.
-5. Explicit Specialkost primary/modifier persistence — COMPLETE.
-6. Recurring/variable registered-need quantities — COMPLETE.
-7. Review-aware Kommun -> Planera 2.0 adapter + meal orchestration — COMPLETE.
-8. Page3 authoritative production projection and Specialkost hierarchy — COMPLETE FOUNDATION.
-9. Shared Admin/Kitchen cohort Weekview projection — COMPLETE.
-10. Kitchen cohort completion write with optimistic versioning — COMPLETE.
-11. Page3 exact completion-target contract — COMPLETE.
-12. Atomic multi-department completion coordinator — COMPLETE.
-13. Product2 completion API + concurrency bridge — COMPLETE.
-14. Page3 completion button/client + clean live E2E proof — ACTIVE, NEAR COMPLETE.
-15. Reporting/statistics bridge consuming new cohort quantity + completion truth.
-16. Full Kommun E2E: Admin registered need -> variable qty -> menu -> Planera -> production -> Kitchen Weekview -> completion -> report.
-17. Kommun 1.0 vs Kommun 1.1 parity/cutover review; classify every difference as regression, legacy limitation or intentional semantics.
-18. Consolidated UI/UX finish: compact variable-quantity editing, Specialkost/Registrerade behov presentation, empty/error/status states, iPad and Light/Dark consistency.
-19. Separate Servering / Packning projection and preservation of existing Serveringstillägg.
-20. Kommun 1.1 Ready for Pilot.
-21. Fresh Offshore 1.0 census and finish after the Kommun gate is frozen.
-22. Yuplan 1.0 release gate across included Kommun + Offshore surfaces.
+100% Kostbehov is valid.
 
-## Kommun Product2 Packing Finishline
+>100% is invalid.
 
-A production total alone is not enough for Kommun operations.
+Effective quantity precedence:
 
-Before Kommun 1.0 is considered operationally pilot-ready, Yuplan must be able to derive a daily pack-oriented view that answers:
+exact service date + meal
+-> weekday + meal
+-> default
 
-- what should be packed
-- how much
-- for which date and meal
-- to which department / destination
-- which production item is standard or adapted
-- which existing standing additions / handling requirements also apply
+No silent clamping.
 
-The packing layer must consume shared production / operational truth. It must not become a second calculation engine.
+## Current active gate — Menyimport canonical editing
 
-Specialkost production and Serveringsanpassning remain separate operational tracks. Existing Serveringstillägg must be carried into a separate Servering / Packning surface during transition and must not clutter the default normal/specialkost production worklist.
+The Menyimport gate is currently uncommitted.
 
-A later optional total pack list may explicitly combine both tracks for one department, one delivery location or all destinations, for example: Normalkost 8, Timbal 1, Sallad 6 — aldrig tomat, Potatismos istället för kokt potatis 1. This combined view is a downstream projection only; it does not merge the underlying domains.
+### Proven
 
-The architecture must also remain open to future menu-aware substitutions such as:
-- boiled potato -> mashed potato
-- pasta -> mashed potato
-- spaghetti -> macaroni
-- component exclusions such as never tomato
-- handling instructions such as sauce separately
+Real import UI with `sample_menu.csv`:
+- detected 2025 W49 from source
+- imported successfully
+- produced canonical Builder-linked draft
+- week page renders canonical rows
 
-A full arbitrary rule editor is not required to block the first pilot if the architecture and migration path are already safe.
+Successful live bind:
+- imported unresolved `Köttbullar`
+- bound to `Köttbullar med potatismos`
+- canonical composition id: `cmp_endp4l`
 
-## Parallel Run / Cutover
+Correct bind ownership:
+- picker returns `composition_id`
+- week/menu caller preserves `day` and `meal_slot`
 
-Planera 1 remains the current comparison baseline during transition.
+### Canonical ownership
 
-Before Planera 2.0 becomes Kommun production truth:
-- compare source departments
-- compare baseline quantities
-- compare menu choices
-- compare specialkost / requirement quantities
-- compare normal / standard production
-- compare adaptations
-- compare destination breakdown
-- compare existing Serveringstillägg totals where applicable
+Builder/domain owns:
+- Components
+- Dishes/Compositions
+- library
+- composition identity
+- shared Dish editor
+- shared Component editor
+- composition-search semantics
 
-A difference must be classified as:
-- regression
-- legacy limitation
-- intentional improved behavior
+Week/menu UI owns:
+- week/day context
+- meal slot
+- placement/action context
 
-Do not force Planera 2.0 to reproduce a known legacy limitation merely to achieve numerical equality.
+There must not be a second Builder implementation inside Menyimport.
 
+### Locked action matrix
 
-## Freeze Point
+Resolved Dish:
 
-Builder/Menu/Offshore broad MVP work remains frozen.
+- direct Dish-name click -> existing finished shared Dish editor
+- `⋯ -> Öppna rätt` -> same existing finished shared Dish editor
+- `⋯ -> Byt rätt` -> Rättbibliotek picker
+- `⋯ -> Ta bort från menyn` -> remove menu placement only
 
-The main launch path is now:
+Unresolved imported text:
+- ordinary menu text
+- no technical status such as `Ej kopplad`
+- may prefill Rättbibliotek query
+- resolution path is `Byt rätt`
 
-Page3 -> Weekview completion E2E
--> reporting/statistics bridge
--> full Kommun E2E
--> Kommun 1.0 / 1.1 parity and cutover
--> consolidated operational UI/iPad finish
--> separate Servering / Packning projection
--> Kommun 1.1 Ready for Pilot
--> Offshore 1.0 finish
--> Yuplan 1.0 release gate
+### Shared search runtime
 
-Do not reopen broad Builder work, invent a third Weekview, rewrite working Kommun 1.0 surfaces unnecessarily, or turn E2E fixture cleanup into a separate multi-day project.
+`static/js/builder_composition_search.js`
 
-Out of Yuplan 1.0 MVP scope unless needed for a proven blocker:
-- Yuplan Home;
-- Hotel/Bankett/Event;
-- advanced analytics;
-- billing/Mathilda-style integrations;
-- new recipe engine work;
-- full dead-code cleanup.
+is the canonical shared composition-search runtime.
 
-## Related Ground Truth
+Both Builder and Rättbibliotek must use it.
+
+Current supported semantics are name/id.
+
+Tag/hashtag search is deferred until implemented once in this shared runtime.
+
+No picker-specific matcher.
+
+## Existing-Dish editor regression
+
+The historical working integration exists in Git history.
+
+Key references:
+
+`dd7ffac54593ac114975d78a49b2f4c586caf4f0`
+`feat(kommun): edit menu dishes in shared builder overlay`
+
+`fd9ca3aa9668d91f9130ba19c44ce4deeeca67ca`
+`style(kommun): flatten shared dish editor overlay`
+
+`cbc2cef3c02c511570c529dc7c348bf5d6fedf15`
+`fix(builder): preserve component return context`
+
+Later accepted editor improvements:
+
+`2e0793aa752b3cc8dcb844118e38529769f08af5`
+
+`1798dddff9e2a8146a0fa1945c836f281db6829b`
+
+`bda732af9893b591856b658f034fc6a5f2580589`
+
+Historical integration model:
+
+Menyimport parent
+-> frosted overlay
+-> isolated editor host iframe
+-> `/builder-editor-host?composition_id=<id>`
+-> shared Dish editor
+
+A later attempt mounted Builder modal/runtime directly in the week parent and visually broke the App Shell.
+
+That architecture is rejected.
+
+## Next gate — read-only forensic comparison
+
+Do not implement first.
+
+Compare:
+
+A. historical working integration:
+- `dd7ffac`
+- `fd9ca3aa`
+- `cbc2cef3`
+
+B. later accepted shared editor:
+- `2e0793aa`
+- `1798ddd`
+- `bda732`
+
+C. current verified snapshot worktree
+
+Trace independently:
+1. direct resolved Dish click
+2. `Öppna rätt`
+3. `Byt rätt`
+
+Find the first exact divergence.
+
+Then propose the smallest patch **without applying it**.
+
+Strong target:
+- no more than four production files
+- Offshore out of scope
+- no new modal
+- no new Builder page
+- no duplicate search runtime
+- no broad cleanup
+
+Only after review may implementation start.
+
+## Copilot execution rule
+
+During MVP closure, Copilot does not own surrounding architecture.
+
+For every implementation order:
+
+> **You are implementing one approved seam, not owning the surrounding architecture. Any necessary change outside explicitly allowed files is a STOP condition.**
+
+Also:
+- audit orders are read-only
+- one order -> one report -> review -> next order
+- no “while here” refactors
+- do not follow collateral effects into another module
+- do not change production behavior simply because an existing test expects it
+- real-browser evidence outranks green DOM/unit tests for UX acceptance
+
+## Responsive status
+
+Responsive work is deliberately parked until desktop functional closure.
+
+Observed:
+- iPhone App Shell compresses badly
+- Weekview table compresses badly
+
+Planned order:
+1. global responsive shell / breakpoints / tokens
+2. iPad/tablet operational acceptance
+3. module content
+4. iPhone/mobile
+5. consolidated polish
+
+Do not mix responsive work into the current Menyimport/Dish-open gate.
+
+## Remaining path to Kommun pilot readiness
+
+1. Read-only forensic comparison of existing-Dish open integration.
+2. One minimal reviewed Dish-open patch.
+3. Live user acceptance:
+   - direct click opens shared Dish editor
+   - Öppna rätt opens same editor
+   - Byt rätt opens Rättbibliotek
+4. Rättbibliotek visual acceptance.
+5. Clean focused tests + understood diff.
+6. Commit current Menyimport work in coherent checkpoints.
+7. Global responsive/tablet pass.
+8. Fresh Kommun pilot smoke.
+9. Declare Kommun 1.1 PILOT READY.
+10. Controlled Planera transition / real-week parity.
+11. Return to Offshore 1.0 closure.
+12. Yuplan 1.0 release gate.
+
+## Scope excluded from the current gate
+
+Do not reopen unless a proven pilot blocker requires it:
+- broad Builder Workspace redesign
+- Ingredient Library expansion
+- Recipe Import
+- conversion profiles
+- Home
+- Hotel/Bankett
+- broad Offshore work
+- broad dead-code cleanup
+- generic portal/platform refactors
+
+## Related ground truth
 
 - `KOMMUN_1_0_MVP_LOCK.md`
 - `PLANERA_2_0_ARCHITECTURE_LOCK.md`
 - `PORTALS_ARCHITECTURE_LOCK.md`
+- `BUILDER_MENU_LOCK.md`
+- `KOMMUN_MENUIMPORT_EDITING_LOCK.md`
 
-Detailed operational reference:
-- `../planera2/KOMMUN_STANDING_NEEDS_AND_PACKING.md`
+## One-line finishline state
+
+**Kommun desktop core and Weekview are closed; Menyimport canonical import/selection/bind largely works; existing-Dish open integration is the active blocker; the current local work is safely snapshotted; next action is a read-only historical/current comparison followed by one minimal reviewed patch, then responsive/tablet and pilot smoke.**
