@@ -1,5 +1,5 @@
 Status: LOCKED
-Last reviewed: 2026-09-23
+Last reviewed: 2026-10-07
 
 # Decision Log
 
@@ -69,3 +69,17 @@ Last reviewed: 2026-09-23
 - Scope decides the domain: one recipient "never tomato" is Specialkost, while a whole department wanting salad without tomato is Serveringsanpassning.
 - Page3 production views remain focused on normal and specialkost production. Serveringstillägg / Serveringsanpassningar are exposed through a separate operational surface.
 - A later optional total pack list may deliberately combine normal production, specialkost and resolved serveringsanpassningar for one department, one delivery location or all destinations. This is a downstream projection only and does not merge the underlying data models.
+
+
+## 2026-10-07
+- Kommun desktop Department/Kostbehov, Kostbehov lifecycle, Serveringsanpassningar and Weekview functional gates are closed through `a0c84db`; responsive work is intentionally deferred to one later global pass.
+- Weekview is locked as overview/facit/fallback rather than primary production calculation. It shows resident/Kostbehov/variation/meal/completion context and does not derive Normalkost.
+- Menyimport week editing consumes canonical Builder-linked menu truth. The week surface owns slot context; Builder owns Dish/Component/library identity and editors.
+- Resolved menu-row action ownership is explicit: Dish-name click and `Öppna rätt` open the existing shared Dish editor; `Byt rätt` opens Rättbibliotek; `Ta bort från menyn` removes only menu placement.
+- Rättbibliotek is a thin canonical selector, not another Builder. It returns `composition_id`; the caller supplies `day` and `meal_slot`.
+- `static/js/builder_composition_search.js` is the shared composition-search runtime for both Builder and Rättbibliotek. Picker-specific search semantics are forbidden. Tag/# search is deferred until added once canonically.
+- The historical `dd7ffac` Menyimport -> frosted iframe -> `builder-editor-host?composition_id=...` integration is the reference for opening existing Dishes. Later accepted shared editor improvements through `bda732` must be preserved.
+- Mounting Builder runtime/modal partials directly into the Menyimport parent App Shell is rejected; it caused a real-browser layout collapse despite automated checks.
+- A verified local safety snapshot was created before further recovery work: `YuplanUnified_PRE_RECOVERY_2026-10-07_201644.tar.gz`. A failed restore pass was subsequently undone byte-for-byte for the three files it changed.
+- Copilot authority is narrowed during MVP closure: implementation orders must list allowed production files; a required change outside that list is a STOP condition. Audit orders are read-only by default. Adjacent module migrations/refactors are not allowed without explicit approval.
+- Current Menyimport work after `a0c84db` remains uncommitted until the real-browser action matrix and Rättbibliotek are accepted and the diff is understood.
