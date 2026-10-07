@@ -19,6 +19,19 @@
 {% endblock %}
 
 {% block content %}
+{% set month_labels = {'01': 'jan', '02': 'feb', '03': 'mar', '04': 'apr', '05': 'maj', '06': 'jun', '07': 'jul', '08': 'aug', '09': 'sep', '10': 'okt', '11': 'nov', '12': 'dec'} %}
+{% if vm.departments %}
+  {% set week_days = vm.departments[0].days %}
+  {% set week_start_parts = week_days[0].date.split('-') %}
+  {% set week_end_parts = week_days[-1].date.split('-') %}
+  {% if week_start_parts[1] == week_end_parts[1] %}
+    {% set week_context = week_start_parts[2]|int ~ '–' ~ week_end_parts[2]|int ~ ' ' ~ month_labels.get(week_start_parts[1], week_start_parts[1]) ~ ' ' ~ week_start_parts[0] %}
+  {% else %}
+    {% set week_context = week_start_parts[2]|int ~ ' ' ~ month_labels.get(week_start_parts[1], week_start_parts[1]) ~ '–' ~ week_end_parts[2]|int ~ ' ' ~ month_labels.get(week_end_parts[1], week_end_parts[1]) ~ ' ' ~ week_end_parts[0] %}
+  {% endif %}
+{% else %}
+  {% set week_context = vm.year %}
+{% endif %}
 <div class="ui-weekview">
 <div class="app-page kitchen-week">
   <section class="app-shell__page-header">
@@ -34,7 +47,7 @@
       {% include "ui/_components/week_picker.html" %}
     </div>
   </section>
-  <div class="app-shell__card-meta no-print">År {{ vm.year }} • Vecka {{ vm.week }}</div>
+  <div class="app-shell__card-meta no-print weekview-week-meta">Vecka {{ vm.week }} · {{ week_context }}</div>
 
   <section class="weekview-all{% if is_readonly %} weekview--readonly{% endif %}" data-weekview-readonly="{{ 'true' if is_readonly else 'false' }}">
     {% for dep in vm.departments %}

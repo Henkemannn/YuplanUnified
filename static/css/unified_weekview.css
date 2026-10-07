@@ -148,6 +148,10 @@
   margin-bottom: var(--wv-spacing-xl);
 }
 
+.weekview-week-meta {
+  white-space: nowrap;
+}
+
 .weekview-title {
   font-size: 2rem;
   font-weight: 700;
@@ -353,8 +357,8 @@
   color: var(--yp-color-text);
   margin-bottom: var(--yp-gap-sm);
   font-size: var(--yp-font-size-base);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .day-date {
@@ -416,9 +420,9 @@
   gap: var(--yp-gap-sm);
   font-size: var(--yp-font-size-xs);
   font-weight: var(--yp-font-weight-bold);
-  text-transform: uppercase;
+  text-transform: none;
   color: var(--yp-color-text-muted);
-  letter-spacing: 1px;
+  letter-spacing: 0;
 }
 
 .meal-icon {

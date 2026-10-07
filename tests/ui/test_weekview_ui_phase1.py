@@ -1,5 +1,6 @@
 import re
 import uuid
+from datetime import date
 
 import pytest
 
@@ -8,6 +9,28 @@ ETAG_RE = __import__("re").compile(r'^W/"weekview:dept:.*:year:\d{4}:week:\d{1,2
 
 def _h(role):
     return {"X-User-Role": role, "X-Tenant-Id": "1"}
+
+
+def _week_context(year: int, week: int) -> str:
+    start = date.fromisocalendar(year, week, 1)
+    end = date.fromisocalendar(year, week, 7)
+    month_labels = {
+        1: "jan",
+        2: "feb",
+        3: "mar",
+        4: "apr",
+        5: "maj",
+        6: "jun",
+        7: "jul",
+        8: "aug",
+        9: "sep",
+        10: "okt",
+        11: "nov",
+        12: "dec",
+    }
+    if start.month == end.month:
+        return f"{start.day}–{end.day} {month_labels[start.month]} {start.year}"
+    return f"{start.day} {month_labels[start.month]}–{end.day} {month_labels[end.month]} {end.year}"
 
 
 @pytest.fixture
@@ -129,10 +152,15 @@ def test_weekview_ui_renders_header_menu_and_alt2(client_admin):
     assert "data-testid=\"app-shell\"" in html
     assert "data-testid=\"weekview-grid\"" in html
     assert "data-testid=\"day-menu-icon\"" in html
+    assert f"Vecka {week} · {_week_context(year, week)}" in html
     assert "Veckovy" in html
     assert "app-shell__nav-item app-shell__nav-item--active\" href=\"/ui/weekview\">Veckovy" in html
     assert "Rapport / Statistik" in html
-    assert "Specialkost" in html
+    assert "Kostbehov" in html
+    assert "Boende totalt" in html
+    assert "Lunch" in html
+    assert "Kväll" in html
+    assert "Kvällsmat" not in html
     assert "Menyimport" in html
     assert "Avdelningar" in html
     assert "Planera" not in html
@@ -188,17 +216,20 @@ def test_weekview_ui_no_dinner_hides_columns(client_admin):
     assert "data-testid=\"app-shell\"" in html
     assert "data-testid=\"weekview-grid\"" in html
     assert "data-testid=\"day-menu-icon\"" in html
+    assert f"Vecka {week} · {_week_context(year, week)}" in html
     assert "Veckovy" in html
     assert "app-shell__nav-item app-shell__nav-item--active\" href=\"/ui/weekview\">Veckovy" in html
     assert "Rapport / Statistik" in html
-    assert "Specialkost" in html
+    assert "Kostbehov" in html
+    assert "Boende totalt" in html
     assert "Menyimport" in html
     assert "Avdelningar" in html
     assert "Planera" not in html
     assert "Avdelningsportal" not in html
     assert "DEBUG:" not in html
     assert "Aktiv site:" not in html
-    assert "Vecka" in html and "Avd 2" in html and "Varberg" in html
+    assert "Kväll" not in html
+    assert "Avd 2" in html and "Varberg" in html
 
 
 @pytest.mark.usefixtures("enable_weekview")

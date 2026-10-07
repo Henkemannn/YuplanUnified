@@ -1,36 +1,37 @@
+{% set weekday_labels = {'Mon': 'Mån', 'Tue': 'Tis', 'Wed': 'Ons', 'Thu': 'Tors', 'Fri': 'Fre', 'Sat': 'Lör', 'Sun': 'Sön'} %}
+{% set month_labels = {'01': 'jan', '02': 'feb', '03': 'mar', '04': 'apr', '05': 'maj', '06': 'jun', '07': 'jul', '08': 'aug', '09': 'sep', '10': 'okt', '11': 'nov', '12': 'dec'} %}
+{% macro day_title(day) -%}
+  {% set date_parts = day.date.split('-') %}
+  {% set weekday = weekday_labels.get(day.weekday_name, day.weekday_name) %}
+  {% if date_parts|length == 3 %}
+    {{ weekday }} {{ date_parts[2]|int }} {{ month_labels.get(date_parts[1], date_parts[1]) }}
+  {% else %}
+    {{ weekday }}
+  {% endif %}
+{%- endmacro %}
 <table class="grid-table kw-grid" aria-label="Specialkostöversikt" data-testid="weekview-grid"{% if not interactive %} data-readonly="1"{% endif %}>
   <thead>
     <tr>
-      <th>Kosttyp</th>
-        <th colspan="2">Mån <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="0" data-testid="day-menu-icon">📖</button></th>
-        <th colspan="2" class="day-sep">Tis <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="1" data-testid="day-menu-icon">📖</button></th>
-        <th colspan="2" class="day-sep">Ons <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="2" data-testid="day-menu-icon">📖</button></th>
-        <th colspan="2" class="day-sep">Tors <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="3" data-testid="day-menu-icon">📖</button></th>
-        <th colspan="2" class="day-sep">Fre <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="4" data-testid="day-menu-icon">📖</button></th>
-        <th colspan="2" class="day-sep is-weekend">Lör <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="5" data-testid="day-menu-icon">📖</button></th>
-        <th colspan="2" class="day-sep is-weekend">Sön <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="6" data-testid="day-menu-icon">📖</button></th>
+      <th>Kostbehov</th>
+      {% for dow in range(1,8) %}
+        {% set d = dep.days[dow-1] %}
+        <th colspan="2" class="day-group-header{% if dow > 1 %} day-sep{% endif %}{% if dow >= 6 %} is-weekend{% endif %}">
+          <span class="day-group-title">{{ day_title(d) }}</span>
+          <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="{{ dow-1 }}" data-testid="day-menu-icon">📖</button>
+        </th>
+      {% endfor %}
     </tr>
     <tr class="grid-subhead">
       <th></th>
-      <th class="meal-icon"><span class="meal-icon" aria-hidden="true">🍽️</span><span class="yp-sr-only">Lunch</span></th>
-      <th class="meal-icon"><span class="meal-icon" aria-hidden="true">🌙</span><span class="yp-sr-only">Kväll</span></th>
-      <th class="meal-icon day-sep"><span class="meal-icon" aria-hidden="true">🍽️</span><span class="yp-sr-only">Lunch</span></th>
-      <th class="meal-icon"><span class="meal-icon" aria-hidden="true">🌙</span><span class="yp-sr-only">Kväll</span></th>
-      <th class="meal-icon day-sep"><span class="meal-icon" aria-hidden="true">🍽️</span><span class="yp-sr-only">Lunch</span></th>
-      <th class="meal-icon"><span class="meal-icon" aria-hidden="true">🌙</span><span class="yp-sr-only">Kväll</span></th>
-      <th class="meal-icon day-sep"><span class="meal-icon" aria-hidden="true">🍽️</span><span class="yp-sr-only">Lunch</span></th>
-      <th class="meal-icon"><span class="meal-icon" aria-hidden="true">🌙</span><span class="yp-sr-only">Kväll</span></th>
-      <th class="meal-icon day-sep"><span class="meal-icon" aria-hidden="true">🍽️</span><span class="yp-sr-only">Lunch</span></th>
-      <th class="meal-icon"><span class="meal-icon" aria-hidden="true">🌙</span><span class="yp-sr-only">Kväll</span></th>
-      <th class="meal-icon day-sep is-weekend"><span class="meal-icon" aria-hidden="true">🍽️</span><span class="yp-sr-only">Lunch</span></th>
-      <th class="meal-icon is-weekend"><span class="meal-icon" aria-hidden="true">🌙</span><span class="yp-sr-only">Kväll</span></th>
-      <th class="meal-icon day-sep is-weekend"><span class="meal-icon" aria-hidden="true">🍽️</span><span class="yp-sr-only">Lunch</span></th>
-      <th class="meal-icon is-weekend"><span class="meal-icon" aria-hidden="true">🌙</span><span class="yp-sr-only">Kväll</span></th>
+      {% for dow in range(1,8) %}
+        <th class="meal-label-cell{% if dow > 1 %} day-sep{% endif %}">Lunch</th>
+        <th class="meal-label-cell meal-sep{% if dow >= 6 %} is-weekend{% endif %}">Kväll</th>
+      {% endfor %}
     </tr>
   </thead>
   <tbody>
     <tr class="boende-row">
-      <td class="diet-name boende-label"><span class="boende-icon" aria-hidden="true">👥</span><span>Boende</span></td>
+      <td class="diet-name boende-label"><span class="boende-icon" aria-hidden="true">👥</span><span>Boende totalt</span></td>
       {% for dow in range(1,8) %}
         {% set d = dep.days[dow-1] %}
         <td class="kw-cell day-start{% if dow > 1 %} day-sep{% endif %}{% if d.alt2_lunch %} is-alt2{% endif %}">{% if d.alt2_lunch %}<span class="is-alt2" aria-hidden="true"></span>{% endif %}{{ d.residents.lunch if d and d.residents else 0 }}</td>

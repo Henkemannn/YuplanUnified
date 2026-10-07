@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import date as _date
 
@@ -11,6 +12,28 @@ from core.weekview_vm import build_weekview_vm
 
 def _login_headers(role: str = "admin"):
     return {"X-User-Role": role, "X-Tenant-Id": "1", "X-User-Id": "1"}
+
+
+def _week_context(year: int, week: int) -> str:
+    start = _date.fromisocalendar(year, week, 1)
+    end = _date.fromisocalendar(year, week, 7)
+    month_labels = {
+        1: "jan",
+        2: "feb",
+        3: "mar",
+        4: "apr",
+        5: "maj",
+        6: "jun",
+        7: "jul",
+        8: "aug",
+        9: "sep",
+        10: "okt",
+        11: "nov",
+        12: "dec",
+    }
+    if start.month == end.month:
+        return f"{start.day}–{end.day} {month_labels[start.month]} {start.year}"
+    return f"{start.day} {month_labels[start.month]}–{end.day} {month_labels[end.month]} {end.year}"
 
 
 def setup_data(app_session):
@@ -166,6 +189,12 @@ def test_weekview_identity_hierarchy_renders_residence_names_and_no_avd_prefix(c
     assert all_body.count("Avdelning 1") >= 2
     assert "Avd Avdelning 1" not in all_body
     assert "Avd Avdelning 2" not in all_body
+    assert f"Vecka {week} · {_week_context(year, week)}" in all_body
+    assert "Kostbehov" in all_body
+    assert "Boende totalt" in all_body
+    assert "Lunch" in all_body
+    assert "Kväll" in all_body
+    assert "Kosttyp" not in all_body
 
     single_resp = client_admin.get(f"/ui/weekview?site_id={site['id']}&department_id={dept_a['id']}&year={year}&week={week}", headers=headers)
     assert single_resp.status_code == 200
@@ -173,6 +202,8 @@ def test_weekview_identity_hierarchy_renders_residence_names_and_no_avd_prefix(c
     assert "Avdelning 1" in single_body
     assert "Solrosen" in single_body
     assert "Avd Avdelning 1" not in single_body
+    assert f"Vecka {week} · {_week_context(year, week)}" in single_body
+    assert "Boende totalt" in single_body
 
     with app_session.app_context():
         vm = build_weekview_vm(site["id"], year, week, tenant_id=1)
