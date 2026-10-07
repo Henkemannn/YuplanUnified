@@ -1,9 +1,26 @@
-from sqlalchemy import text
 import pytest
+from sqlalchemy import text
 
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 SITE_ID = "00000000-0000-0000-0000-000000000000"
 DEPARTMENT_ID = "00000000-0000-0000-0000-000000000001"
+
+
+def _enable_weekview_feature(client_admin) -> None:
+    resp = client_admin.post(
+        "/features/set",
+        json={"name": "ff.weekview.enabled", "enabled": True},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert resp.status_code == 200
+
+
+@pytest.fixture
+def enable_weekview(client_admin):
+    _enable_weekview_feature(client_admin)
+
+
+pytestmark = pytest.mark.usefixtures("enable_weekview")
 
 
 def _seed_basics():

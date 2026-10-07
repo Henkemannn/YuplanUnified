@@ -1,8 +1,26 @@
 from flask.testing import FlaskClient
+import pytest
 from sqlalchemy import text
 
 from core.app_factory import create_app
 from core.db import get_session
+
+
+def _enable_weekview_feature(client_admin) -> None:
+    resp = client_admin.post(
+        "/features/set",
+        json={"name": "ff.weekview.enabled", "enabled": True},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert resp.status_code == 200
+
+
+@pytest.fixture
+def enable_weekview(client_admin):
+    _enable_weekview_feature(client_admin)
+
+
+pytestmark = pytest.mark.usefixtures("enable_weekview")
 
 
 def _seed_site(db, site_id: str):

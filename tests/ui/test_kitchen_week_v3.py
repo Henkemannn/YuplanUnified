@@ -5,9 +5,28 @@ from pathlib import Path
 import uuid
 import re
 
+import pytest
+
 from core.db import get_session
 from core.admin_repo import DietTypesRepo, Alt2Repo
 from core.department_menu_choice_repo import MenuChoiceRepo
+
+
+def _set_weekview_flag(client_admin: FlaskClient, enabled: bool) -> None:
+    resp = client_admin.post(
+        "/features/set",
+        json={"name": "ff.weekview.enabled", "enabled": enabled},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert resp.status_code == 200
+
+
+@pytest.fixture
+def enable_weekview(client_admin):
+    _set_weekview_flag(client_admin, True)
+
+
+pytestmark = pytest.mark.usefixtures("enable_weekview")
 
 
 def _seed_site_and_departments(db, site_id: str, deps: list[tuple[str, str, int]]):
@@ -46,6 +65,12 @@ def _link_diets(db, dept_id: str, items: list[tuple[str, int]]):
             {"d": dept_id, "t": str(diet_type_id), "c": int(default_count)},
         )
     db.commit()
+
+
+def _assert_boende_row_is_read_only(html: str) -> None:
+    start = html.index('<tr class="boende-row">')
+    end = html.index('</tr>', start)
+    assert '<button' not in html[start:end]
 
 
 def test_kitchen_week_v3_renders_and_flags(app_session):
@@ -90,6 +115,7 @@ def test_kitchen_week_v3_renders_and_flags(app_session):
     assert "Avd Ett" in html
     assert "Avd Två" in html
     assert "<tr class=\"boende-row\">" in html or "Boende</td>" in html
+    _assert_boende_row_is_read_only(html)
     # Diet names scoped per department
     assert "Glutenfri" in html
     assert "Laktosfri" in html
@@ -303,3 +329,37 @@ def test_kitchen_week_v3_default_select_false_not_premarked_cells(app_session):
         rf'<button[^>]*class="[^"]*kostcell-btn[^"]*is-done[^"]*"(?=[^>]*data-department-id="{dep[0]}")(?=[^>]*data-diet-type-id="{dt}")(?=[^>]*data-day-index="1")(?=[^>]*data-meal="lunch")[^>]*>',
         html,
     )
+
+
+def test_kitchen_week_v3_weekview_disabled_renders_read_only(app_session, client_admin):
+    app = app_session
+    suffix = uuid.uuid4().hex[:8]
+    with app.app_context():
+        db = get_session()
+        try:
+            site_id = f"site-k3-off-{suffix}"
+            dep = (f"dep-k3-off-{suffix}", f"Avd Off {suffix}", 10)
+            _seed_site_and_departments(db, site_id, [dep])
+            dt_repo = DietTypesRepo()
+            dt = dt_repo.create(site_id=site_id, name=f"Glutenfri Off {site_id}", default_select=False)
+            _link_diets(db, dep[0], [(dt, 2)])
+        finally:
+            db.close()
+
+    try:
+        _set_weekview_flag(client_admin, False)
+        headers = {"X-User-Role": "cook", "X-Tenant-Id": "1"}
+        with client_admin.session_transaction() as sess:
+            sess["tenant_id"] = 1
+            sess["site_id"] = site_id
+
+        rv = client_admin.get("/ui/kitchen/week?year=2026&week=6", headers=headers)
+        assert rv.status_code == 200
+        html = rv.data.decode("utf-8")
+        assert 'data-readonly="1"' in html
+        buttons = re.findall(r'<button[^>]*class="[^"]*kostcell-btn[^"]*"[^>]*>', html)
+        assert buttons
+        assert all('disabled' in button and 'aria-disabled="true"' in button for button in buttons)
+        _assert_boende_row_is_read_only(html)
+    finally:
+        _set_weekview_flag(client_admin, True)

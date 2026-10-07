@@ -1,12 +1,30 @@
 import uuid
 from datetime import date as _date
 
+import pytest
 from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 
 from core.db import get_session
 from core.weekview.repo import WeekviewRepo
 from core.weekview.service import WeekviewService
+
+
+def _enable_weekview_feature(client_admin) -> None:
+    resp = client_admin.post(
+        "/features/set",
+        json={"name": "ff.weekview.enabled", "enabled": True},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert resp.status_code == 200
+
+
+@pytest.fixture
+def enable_weekview(client_admin):
+    _enable_weekview_feature(client_admin)
+
+
+pytestmark = pytest.mark.usefixtures("enable_weekview")
 
 
 def _h(role: str):

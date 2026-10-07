@@ -1091,6 +1091,7 @@ def api_planering_mark_produced_special():
                 return jsonify({"error": "server_error"}), 500
     return jsonify({"ok": True, "marked_count": total_ops}), 200
 
+@ui_bp.get("/api/weekview/etag")
 def api_weekview_get_etag():
     """Return current ETag for a department/week to support UI retry after 412.
 
@@ -4330,6 +4331,7 @@ def kitchen_veckovy_week():
             "departments": deps_out,
             "allow_site_switch": False,
             "nav_context": "kitchen",
+            "weekview_enabled": _feature_enabled("ff.weekview.enabled"),
         }
         return render_template("ui/kitchen_week_v3.html", vm=vm, meal_labels=get_meal_labels_for_site(site_id))
     # Legacy path rendering remains unchanged below

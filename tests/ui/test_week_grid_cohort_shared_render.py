@@ -2,12 +2,30 @@ from __future__ import annotations
 
 from datetime import date
 
+import pytest
 from sqlalchemy import text
 
 from core.admin_repo import DietTypesRepo
 from core.admin_repo import DietDefaultsRepo
 from core.department_requirement_group_completion_repo import DepartmentRequirementGroupCompletionRepo
 from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
+
+
+def _enable_weekview_feature(client_admin) -> None:
+    resp = client_admin.post(
+        "/features/set",
+        json={"name": "ff.weekview.enabled", "enabled": True},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert resp.status_code == 200
+
+
+@pytest.fixture
+def enable_weekview(client_admin):
+    _enable_weekview_feature(client_admin)
+
+
+pytestmark = pytest.mark.usefixtures("enable_weekview")
 
 
 def _login(client, *, role: str, site_id: str, tenant_id: int = 1, user_id: int = 1) -> None:
