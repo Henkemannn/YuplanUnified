@@ -24,3 +24,5 @@ class MenuDetail:
     unresolved_text: str | None = None
     note: str | None = None
     sort_order: int = 0
+    display_label: str | None = None
+    row_kind: str = "legacy"

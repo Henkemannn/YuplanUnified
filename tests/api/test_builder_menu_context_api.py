@@ -95,6 +95,66 @@ def test_add_and_list_composition_menu_rows_endpoint() -> None:
     assert rows[0].get("unresolved_text") is None
 
 
+def test_add_update_and_clear_empty_menu_row_endpoint() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_1", "composition_name": "Fish Plate"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_1", "site_id": "site_1", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+
+    created = client.post(
+        "/api/builder/menus/menu_1/rows",
+        json={
+            "day": "monday",
+            "display_label": "Farmors favorit",
+            "composition_ref_type": "empty",
+            "sort_order": 5,
+        },
+        headers=HEADERS,
+    )
+    assert created.status_code == 201
+    created_detail = (created.get_json() or {}).get("menu_detail") or {}
+    detail_id = created_detail.get("menu_detail_id")
+    assert created_detail.get("composition_ref_type") == "empty"
+    assert created_detail.get("display_label") == "Farmors favorit"
+    assert created_detail.get("row_kind") == "dynamic"
+    assert created_detail.get("meal_slot", "").startswith("slot_")
+    assert "Farmors favorit" not in created_detail.get("meal_slot", "")
+
+    updated = client.patch(
+        f"/api/builder/menus/menu_1/rows/{detail_id}",
+        json={"composition_ref_type": "composition", "day": "monday", "meal_slot": created_detail.get("meal_slot"), "composition_id": "plate_1"},
+        headers=HEADERS,
+    )
+    assert updated.status_code == 200
+    updated_detail = (updated.get_json() or {}).get("menu_detail") or {}
+    assert updated_detail.get("menu_detail_id") == detail_id
+    assert updated_detail.get("display_label") == "Farmors favorit"
+    assert updated_detail.get("row_kind") == "dynamic"
+    assert updated_detail.get("composition_ref_type") == "composition"
+    assert updated_detail.get("composition_id") == "plate_1"
+
+    cleared = client.patch(
+        f"/api/builder/menus/menu_1/rows/{detail_id}",
+        json={"composition_ref_type": "empty"},
+        headers=HEADERS,
+    )
+    assert cleared.status_code == 200
+    cleared_detail = (cleared.get_json() or {}).get("menu_detail") or {}
+    assert cleared_detail.get("menu_detail_id") == detail_id
+    assert cleared_detail.get("display_label") == "Farmors favorit"
+    assert cleared_detail.get("row_kind") == "dynamic"
+    assert cleared_detail.get("composition_ref_type") == "empty"
+    assert cleared_detail.get("composition_id") is None
+    assert cleared_detail.get("unresolved_text") is None
+
+
 def test_edit_menu_row_endpoint_switches_composition_and_updates_fields() -> None:
     client = _client()
     client.post(

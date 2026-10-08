@@ -136,6 +136,37 @@ def test_adapter_handles_unresolved_row_explicitly_and_safely() -> None:
     assert row["resolution"]["unresolved_text"] == "Unknown dish"
 
 
+def test_adapter_ignores_empty_rows_in_planera_projection() -> None:
+    menu_service, _, composition_repository = _build_services()
+
+    menu = menu_service.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
+    menu_service.create_empty_menu_detail(
+        menu_detail_id="menu_1-row-1",
+        menu_id="menu_1",
+        day="monday",
+        display_label="Farmors favorit",
+    )
+    menu_service.add_menu_detail(
+        menu_detail_id="menu_1-row-2",
+        menu_id="menu_1",
+        day="monday",
+        meal_slot="dinner",
+        composition_ref_type="unresolved",
+        unresolved_text="Unknown dish",
+        sort_order=20,
+    )
+
+    payload = build_menu_composition_payload(
+        menu=menu,
+        menu_details=menu_service.list_menu_details("menu_1"),
+        composition_repository=composition_repository,
+    )
+
+    assert payload["count"] == 1
+    assert len(payload["rows"]) == 1
+    assert payload["rows"][0]["resolution"]["kind"] == "unresolved"
+
+
 def test_grouped_adapter_keeps_resolved_and_unresolved_rows_visible_in_same_menu() -> None:
     menu_service, composition_service, composition_repository = _build_services()
 

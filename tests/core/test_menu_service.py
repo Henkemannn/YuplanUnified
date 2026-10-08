@@ -63,6 +63,26 @@ def test_add_unresolved_menu_detail() -> None:
     assert detail.composition_id is None
 
 
+def test_create_empty_dynamic_menu_detail_persists_display_label_and_slot_key() -> None:
+    service = MenuService()
+    service.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
+
+    detail = service.create_empty_menu_detail(
+        menu_detail_id=None,
+        menu_id="menu_1",
+        day="monday",
+        display_label="Farmors favorit",
+        sort_order=7,
+    )
+
+    assert detail.composition_ref_type == "empty"
+    assert detail.display_label == "Farmors favorit"
+    assert detail.row_kind == "dynamic"
+    assert detail.menu_detail_id == "menu_1-row-1"
+    assert detail.meal_slot.startswith("slot_")
+    assert "Farmors favorit" not in detail.meal_slot
+
+
 def test_invalid_mixed_states_rejected() -> None:
     service = MenuService()
     service.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
@@ -111,6 +131,29 @@ def test_invalid_mixed_states_rejected() -> None:
             composition_id="comp_1",
         )
 
+    with pytest.raises(ValueError, match="must be empty when composition_ref_type='empty'"):
+        service.add_menu_detail(
+            menu_detail_id="d5",
+            menu_id="menu_1",
+            day="monday",
+            meal_slot="lunch",
+            composition_ref_type="empty",
+            composition_id="comp_1",
+            unresolved_text=None,
+        )
+
+    with pytest.raises(ValueError, match="display_label is required when creating a dynamic empty row"):
+        service.add_menu_detail(
+            menu_detail_id="d6",
+            menu_id="menu_1",
+            day="monday",
+            meal_slot=None,
+            composition_ref_type="empty",
+            composition_id=None,
+            unresolved_text=None,
+            row_kind="dynamic",
+        )
+
 
 def test_update_menu_detail_between_unresolved_and_composition() -> None:
     composition_repo = InMemoryCompositionRepository()
@@ -146,6 +189,35 @@ def test_update_menu_detail_between_unresolved_and_composition() -> None:
     assert as_unresolved.composition_ref_type == "unresolved"
     assert as_unresolved.unresolved_text == "new text"
     assert as_unresolved.composition_id is None
+
+
+def test_assign_and_clear_menu_detail_preserve_row_identity_and_label() -> None:
+    composition_repo = InMemoryCompositionRepository()
+    composition_repo.add(Composition(composition_id="comp_1", composition_name="Plate"))
+
+    service = MenuService(composition_repository=composition_repo)
+    service.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
+    detail = service.create_empty_menu_detail(
+        menu_detail_id="menu_1-row-1",
+        menu_id="menu_1",
+        day="monday",
+        display_label="Barnens val",
+    )
+
+    assigned = service.assign_menu_detail_composition(
+        detail.menu_detail_id,
+        composition_id="comp_1",
+    )
+    cleared = service.clear_menu_detail(detail.menu_detail_id)
+
+    assert assigned.menu_detail_id == detail.menu_detail_id
+    assert assigned.display_label == "Barnens val"
+    assert assigned.row_kind == "dynamic"
+    assert assigned.composition_ref_type == "composition"
+    assert cleared.menu_detail_id == detail.menu_detail_id
+    assert cleared.display_label == "Barnens val"
+    assert cleared.row_kind == "dynamic"
+    assert cleared.composition_ref_type == "empty"
 
 
 def test_remove_menu_detail() -> None:

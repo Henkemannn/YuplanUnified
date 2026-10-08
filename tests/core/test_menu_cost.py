@@ -132,6 +132,34 @@ def test_unresolved_menu_detail_returns_warning_and_unknown_cost() -> None:
     assert result.warnings == ["menu detail unresolved; composition cost unavailable"]
 
 
+def test_empty_menu_detail_returns_empty_warning_and_unknown_cost() -> None:
+    composition_repo = InMemoryCompositionRepository()
+    recipe_repo = InMemoryRecipeRepository()
+    ingredient_repo = InMemoryRecipeIngredientLineRepository()
+
+    menu_detail = MenuDetail(
+        menu_detail_id="md_1",
+        menu_id="menu_1",
+        day="monday",
+        meal_slot="slot_123",
+        composition_ref_type="empty",
+        display_label="Farmors favorit",
+        row_kind="dynamic",
+    )
+
+    result = calculate_menu_detail_cost(
+        menu_detail=menu_detail,
+        composition_repository=composition_repo,
+        recipe_repository=recipe_repo,
+        ingredient_repository=ingredient_repo,
+        target_portions=20,
+    )
+
+    assert result.total_cost is None
+    assert result.cost_per_portion is None
+    assert result.warnings == ["menu detail empty; composition cost unavailable"]
+
+
 def test_missing_composition_returns_warning_and_unknown_cost() -> None:
     composition_repo = InMemoryCompositionRepository()
     recipe_repo = InMemoryRecipeRepository()

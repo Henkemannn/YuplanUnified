@@ -91,6 +91,8 @@ def _serialize_menu_detail(detail) -> dict[str, Any]:
         "menu_id": detail.menu_id,
         "day": detail.day,
         "meal_slot": detail.meal_slot,
+        "display_label": getattr(detail, "display_label", None),
+        "row_kind": getattr(detail, "row_kind", None),
         "composition_ref_type": detail.composition_ref_type,
         "composition_id": detail.composition_id,
         "unresolved_text": detail.unresolved_text,
@@ -106,8 +108,11 @@ def _serialize_menu_row(row: dict[str, Any]) -> dict[str, Any]:
         "menu_id": row.get("menu_id"),
         "day": row.get("day"),
         "meal_slot": row.get("meal_slot"),
+        "display_label": row.get("display_label"),
+        "row_kind": row.get("row_kind"),
         "composition_ref_type": ref_type,
         "is_unresolved": ref_type == "unresolved",
+        "is_empty": ref_type == "empty",
         "composition_id": row.get("composition_id"),
         "composition_name": row.get("composition_name"),
         "unresolved_text": row.get("unresolved_text"),
@@ -333,15 +338,28 @@ def add_composition_menu_row(menu_id: str):
 
     try:
         flow = _get_menu_context_flow()
-        detail = flow.add_composition_menu_row(
-            menu_id=str(menu_id),
-            menu_detail_id=_optional_str(payload, "menu_detail_id"),
-            day=_require_str(payload, "day"),
-            meal_slot=_require_str(payload, "meal_slot"),
-            composition_id=_require_str(payload, "composition_id"),
-            note=_optional_str(payload, "note"),
-            sort_order=_maybe_int(payload.get("sort_order"), field="sort_order") or 0,
-        )
+        composition_ref_type = str(payload.get("composition_ref_type") or "").strip().lower()
+        if composition_ref_type == "empty":
+            display_label = _require_str(payload, "display_label")
+            detail = flow.create_empty_menu_row(
+                menu_id=str(menu_id),
+                menu_detail_id=_optional_str(payload, "menu_detail_id"),
+                day=_require_str(payload, "day"),
+                display_label=display_label,
+                note=_optional_str(payload, "note"),
+                sort_order=_maybe_int(payload.get("sort_order"), field="sort_order") or 0,
+            )
+        else:
+            detail = flow.add_composition_menu_row(
+                menu_id=str(menu_id),
+                menu_detail_id=_optional_str(payload, "menu_detail_id"),
+                day=_require_str(payload, "day"),
+                meal_slot=_require_str(payload, "meal_slot"),
+                composition_id=_require_str(payload, "composition_id"),
+                note=_optional_str(payload, "note"),
+                sort_order=_maybe_int(payload.get("sort_order"), field="sort_order") or 0,
+                display_label=_optional_str(payload, "display_label"),
+            )
     except ValueError as exc:
         return _bad_request(str(exc))
 
@@ -426,15 +444,22 @@ def update_composition_menu_row(menu_id: str, menu_detail_id: str):
 
     try:
         flow = _get_menu_context_flow()
-        detail = flow.update_composition_menu_row(
-            menu_id=str(menu_id),
-            menu_detail_id=str(menu_detail_id),
-            day=_require_str(payload, "day"),
-            meal_slot=_require_str(payload, "meal_slot"),
-            composition_id=_require_str(payload, "composition_id"),
-            note=_optional_str(payload, "note"),
-            sort_order=_maybe_int(payload.get("sort_order"), field="sort_order"),
-        )
+        composition_ref_type = str(payload.get("composition_ref_type") or "").strip().lower()
+        if composition_ref_type == "empty":
+            detail = flow.clear_menu_row_composition(
+                menu_id=str(menu_id),
+                menu_detail_id=str(menu_detail_id),
+            )
+        else:
+            detail = flow.update_composition_menu_row(
+                menu_id=str(menu_id),
+                menu_detail_id=str(menu_detail_id),
+                day=_require_str(payload, "day"),
+                meal_slot=_require_str(payload, "meal_slot"),
+                composition_id=_require_str(payload, "composition_id"),
+                note=_optional_str(payload, "note"),
+                sort_order=_maybe_int(payload.get("sort_order"), field="sort_order"),
+            )
     except ValueError as exc:
         return _bad_request(str(exc))
 

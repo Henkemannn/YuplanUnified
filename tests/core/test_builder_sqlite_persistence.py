@@ -54,6 +54,37 @@ def _create_legacy_composition_db(path: Path) -> None:
         )
 
 
+def _create_legacy_menu_db(path: Path) -> None:
+    with _connect(path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE builder_menus (
+                menu_id TEXT PRIMARY KEY,
+                title TEXT NULL,
+                site_id TEXT NOT NULL,
+                week_key TEXT NOT NULL,
+                version INTEGER NOT NULL DEFAULT 1,
+                status TEXT NOT NULL DEFAULT 'draft',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE builder_menu_rows (
+                menu_detail_id TEXT PRIMARY KEY,
+                menu_id TEXT NOT NULL,
+                day TEXT NOT NULL,
+                meal_slot TEXT NOT NULL,
+                composition_ref_type TEXT NOT NULL,
+                composition_id TEXT NULL,
+                unresolved_text TEXT NULL,
+                note TEXT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(menu_id) REFERENCES builder_menus(menu_id)
+            );
+            """
+        )
+
+
 def _build_builder_flow(db_path: str) -> BuilderFlow:
     component_repo = SQLiteComponentRepository(db_path=db_path)
     composition_repo = SQLiteCompositionRepository(db_path=db_path)
@@ -173,6 +204,33 @@ def test_legacy_composition_schema_upgrade_adds_custom_menu_columns(tmp_path: Pa
     assert loaded.use_custom_menu_name is True
     assert loaded.menu_name == "Test menu name"
     assert loaded.effective_menu_name == "Test menu name"
+
+
+def test_legacy_menu_row_schema_upgrade_adds_display_label_and_row_kind(tmp_path: Path) -> None:
+    db_path = tmp_path / "legacy_builder_menu_rows_test.db"
+    _create_legacy_menu_db(db_path)
+
+    initialize_builder_sqlite(str(db_path))
+
+    with _connect(db_path) as conn:
+        columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info('builder_menu_rows')").fetchall()}
+
+    assert "display_label" in columns
+    assert "row_kind" in columns
+
+    builder_flow = _build_builder_flow(str(db_path))
+    menu_flow = _build_menu_context_flow(builder_flow, str(db_path))
+    menu_flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W17")
+    created = menu_flow.create_empty_menu_row(
+        menu_id="menu_1",
+        day="monday",
+        display_label="Farmors favorit",
+    )
+
+    loaded = menu_flow.list_menu_rows("menu_1")[0]
+    assert loaded["menu_detail_id"] == created.menu_detail_id
+    assert loaded["display_label"] == "Farmors favorit"
+    assert loaded["row_kind"] == "dynamic"
 
 
 def test_composition_menu_name_round_trips(tmp_path: Path) -> None:

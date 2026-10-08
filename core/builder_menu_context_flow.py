@@ -150,6 +150,7 @@ class BuilderMenuContextFlow:
         note: str | None = None,
         sort_order: int = 0,
         menu_detail_id: str | None = None,
+        display_label: str | None = None,
     ) -> MenuDetail:
         detail_id = str(menu_detail_id or "").strip()
         if not detail_id:
@@ -163,6 +164,31 @@ class BuilderMenuContextFlow:
             composition_ref_type="composition",
             composition_id=composition_id,
             unresolved_text=None,
+            note=note,
+            sort_order=sort_order,
+            display_label=display_label or meal_slot,
+            row_kind="legacy",
+        )
+
+    def create_empty_menu_row(
+        self,
+        *,
+        menu_id: str,
+        day: str,
+        display_label: str,
+        note: str | None = None,
+        sort_order: int = 0,
+        menu_detail_id: str | None = None,
+    ) -> MenuDetail:
+        detail_id = str(menu_detail_id or "").strip()
+        if not detail_id:
+            existing = self._menu_service.list_menu_details(menu_id)
+            detail_id = f"{menu_id}-row-{len(existing) + 1}"
+        return self._menu_service.create_empty_menu_detail(
+            menu_detail_id=detail_id,
+            menu_id=menu_id,
+            day=day,
+            display_label=display_label,
             note=note,
             sort_order=sort_order,
         )
@@ -194,6 +220,19 @@ class BuilderMenuContextFlow:
             sort_order=sort_order,
         )
 
+    def clear_menu_row_composition(
+        self,
+        *,
+        menu_id: str,
+        menu_detail_id: str,
+    ) -> MenuDetail:
+        details = self._menu_service.list_menu_details(menu_id)
+        match = next((detail for detail in details if detail.menu_detail_id == menu_detail_id), None)
+        if match is None:
+            raise ValueError("menu_detail_id not found for menu")
+
+        return self._menu_service.clear_menu_detail(menu_detail_id=menu_detail_id)
+
     def delete_menu_row(self, *, menu_id: str, menu_detail_id: str) -> None:
         details = self._menu_service.list_menu_details(menu_id)
         match = next((detail for detail in details if detail.menu_detail_id == menu_detail_id), None)
@@ -215,6 +254,8 @@ class BuilderMenuContextFlow:
                     "menu_id": detail.menu_id,
                     "day": detail.day,
                     "meal_slot": detail.meal_slot,
+                    "display_label": detail.display_label,
+                    "row_kind": detail.row_kind,
                     "composition_ref_type": detail.composition_ref_type,
                     "composition_id": detail.composition_id,
                     "composition_name": composition_name,
@@ -456,6 +497,8 @@ class BuilderMenuContextFlow:
 
         targets = target_portions_by_detail or {}
         for detail in details:
+            if detail.composition_ref_type == "empty":
+                continue
             target_portions = int(targets.get(detail.menu_detail_id, default_target_portions))
             breakdown = calculate_menu_detail_cost(
                 menu_detail=detail,

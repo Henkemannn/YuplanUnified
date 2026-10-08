@@ -25,6 +25,8 @@ def _resolve_menu_row(*, detail: Any, composition_repository: Any) -> dict[str, 
             "menu_id": getattr(detail, "menu_id", None),
             "day": getattr(detail, "day", None),
             "meal_slot": getattr(detail, "meal_slot", None),
+            "display_label": getattr(detail, "display_label", None),
+            "row_kind": getattr(detail, "row_kind", None),
             "note": getattr(detail, "note", None),
             "sort_order": getattr(detail, "sort_order", 0),
         },
@@ -35,6 +37,15 @@ def _resolve_menu_row(*, detail: Any, composition_repository: Any) -> dict[str, 
             "unresolved_text": getattr(detail, "unresolved_text", None),
         },
     }
+
+    if ref_type == "empty":
+        row_payload["resolution"] = {
+            "kind": "empty",
+            "composition_ref_type": ref_type,
+            "composition": None,
+            "unresolved_text": None,
+        }
+        return row_payload
 
     composition_id = str(getattr(detail, "composition_id", "") or "").strip()
     if ref_type == "composition" and composition_id:
@@ -80,6 +91,8 @@ def _build_readiness_summary(rows: list[dict[str, Any]]) -> dict[str, int]:
     for row in rows:
         resolution = row.get("resolution") or {}
         kind = str(resolution.get("kind") or "").strip().lower()
+        if kind == "empty":
+            continue
         if kind != "composition":
             unresolved_rows += 1
             continue
@@ -197,13 +210,14 @@ def build_menu_composition_payload(
         _resolve_menu_row(detail=detail, composition_repository=composition_repository)
         for detail in filtered_details
     ]
+    active_rows = [row for row in rows if str((row.get("resolution") or {}).get("kind") or "").strip().lower() != "empty"]
 
     return {
         "adapter_version": _ADAPTER_VERSION,
         "menu": _serialize_menu_metadata(menu),
-        "count": len(rows),
-        "readiness": _build_readiness_summary(rows),
-        "rows": rows,
+        "count": len(active_rows),
+        "readiness": _build_readiness_summary(active_rows),
+        "rows": active_rows,
     }
 
 
@@ -217,10 +231,15 @@ def build_menu_composition_grouped_payload(
         menu_details=menu_details,
         composition_repository=composition_repository,
     )
+    active_rows = [
+        item
+        for item in ordered_rows
+        if str((((item.get("row") or {}).get("resolution") or {}).get("kind") or "")).strip().lower() != "empty"
+    ]
 
     groups_by_day: dict[str, dict[str, Any]] = {}
     day_order: list[str] = []
-    for item in ordered_rows:
+    for item in active_rows:
         row = item.get("row") or {}
         detail = row.get("menu_detail") or {}
         day = str(detail.get("day") or "")
@@ -313,12 +332,12 @@ def build_menu_composition_grouped_payload(
         cleaned.pop("_first_insertion_index", None)
         cleaned_groups.append(cleaned)
 
-    resolved_rows = [item.get("row") or {} for item in ordered_rows]
+    resolved_rows = [item.get("row") or {} for item in active_rows]
 
     return {
         "adapter_version": _ADAPTER_VERSION,
         "menu": _serialize_menu_metadata(menu),
-        "count": len(ordered_rows),
+        "count": len(active_rows),
         "readiness": _build_readiness_summary(resolved_rows),
         "days": cleaned_groups,
     }
@@ -334,11 +353,16 @@ def build_menu_composition_production_shape_payload(
         menu_details=menu_details,
         composition_repository=composition_repository,
     )
+    active_rows = [
+        item
+        for item in ordered_rows
+        if str((((item.get("row") or {}).get("resolution") or {}).get("kind") or "")).strip().lower() != "empty"
+    ]
 
     blocks_by_context: dict[tuple[str, str], dict[str, Any]] = {}
     context_order: list[tuple[str, str]] = []
 
-    for item in ordered_rows:
+    for item in active_rows:
         row = item.get("row") or {}
         detail = row.get("menu_detail") or {}
         resolution = row.get("resolution") or {}
@@ -416,6 +440,6 @@ def build_menu_composition_production_shape_payload(
     return {
         "adapter_version": "menu-composition-adapter/v1.3-production-shape",
         "menu": _serialize_menu_metadata(menu),
-        "readiness": _build_readiness_summary([item.get("row") or {} for item in ordered_rows]),
+        "readiness": _build_readiness_summary([item.get("row") or {} for item in active_rows]),
         "context_blocks": cleaned_blocks,
     }

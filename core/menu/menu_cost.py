@@ -33,6 +33,18 @@ def calculate_menu_detail_cost(
 
     ref_type = str(menu_detail.composition_ref_type or "").strip().lower()
 
+    if ref_type == "empty":
+        return MenuDetailCostBreakdown(
+            menu_detail_id=menu_detail.menu_detail_id,
+            menu_id=menu_detail.menu_id,
+            composition_id=None,
+            target_portions=int(target_portions),
+            total_cost=None,
+            cost_per_portion=None,
+            warnings=["menu detail empty; composition cost unavailable"],
+            composition_breakdown=None,
+        )
+
     if ref_type == "unresolved":
         return MenuDetailCostBreakdown(
             menu_detail_id=menu_detail.menu_detail_id,

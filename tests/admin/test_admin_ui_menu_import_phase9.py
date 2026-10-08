@@ -422,7 +422,7 @@ def test_week_view_edit_mode_shows_same_page_shell(seeded_week_48, client_admin)
     assert ">Spara<" not in html
     assert "/ui/admin/menu-import/week/2025/48/save" not in html
     assert "/ui/admin/menu-import/week/2025/48/edit" not in html
-    assert "data-week-slot-action-toggle" not in html
+    assert "data-week-slot-action-toggle" in html
     assert "data-week-slot-open-unresolved" not in html
 
 

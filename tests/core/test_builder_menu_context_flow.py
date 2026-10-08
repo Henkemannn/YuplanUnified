@@ -135,6 +135,24 @@ def test_add_composition_menu_row_stores_composition_reference_only() -> None:
     assert detail.unresolved_text is None
 
 
+def test_create_empty_menu_row_generates_opaque_slot_key() -> None:
+    _builder_flow, flow = _build_flows()
+    flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16", title="Week menu")
+
+    detail = flow.create_empty_menu_row(
+        menu_id="menu_1",
+        day="monday",
+        display_label="XYZ",
+        sort_order=10,
+    )
+
+    assert detail.composition_ref_type == "empty"
+    assert detail.display_label == "XYZ"
+    assert detail.row_kind == "dynamic"
+    assert detail.meal_slot.startswith("slot_")
+    assert "XYZ" not in detail.meal_slot
+
+
 def test_list_menu_rows_includes_linked_composition_name() -> None:
     builder_flow, flow = _build_flows()
     builder_flow.create_composition(composition_id="plate_1", composition_name="Fish Plate")

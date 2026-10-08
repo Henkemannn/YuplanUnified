@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 from .menu_domain import Menu, MenuDetail
 from .menu_repository import InMemoryMenuDetailRepository, InMemoryMenuRepository
 
@@ -88,13 +90,15 @@ class MenuService:
         menu_detail_id: str,
         menu_id: str,
         day: str,
-        meal_slot: str,
+        meal_slot: str | None,
         composition_ref_type: str,
         *,
         composition_id: str | None = None,
         unresolved_text: str | None = None,
         note: str | None = None,
         sort_order: int = 0,
+        display_label: str | None = None,
+        row_kind: str | None = None,
     ) -> MenuDetail:
         self._require_menu(menu_id)
 
@@ -108,9 +112,42 @@ class MenuService:
             unresolved_text=unresolved_text,
             note=note,
             sort_order=sort_order,
+            display_label=display_label,
+            row_kind=row_kind,
         )
         self._menu_detail_repository.add(detail)
         return detail
+
+    def create_empty_menu_detail(
+        self,
+        menu_detail_id: str | None,
+        menu_id: str,
+        day: str,
+        display_label: str,
+        *,
+        note: str | None = None,
+        sort_order: int = 0,
+    ) -> MenuDetail:
+        self._require_menu(menu_id)
+
+        menu_detail_id_value = str(menu_detail_id or "").strip()
+        if not menu_detail_id_value:
+            existing = self._menu_detail_repository.list_for_menu(menu_id)
+            menu_detail_id_value = f"{menu_id}-row-{len(existing) + 1}"
+
+        return self.add_menu_detail(
+            menu_detail_id=menu_detail_id_value,
+            menu_id=menu_id,
+            day=day,
+            meal_slot=None,
+            composition_ref_type="empty",
+            composition_id=None,
+            unresolved_text=None,
+            note=note,
+            sort_order=sort_order,
+            display_label=display_label,
+            row_kind="dynamic",
+        )
 
     def update_menu_detail(
         self,
@@ -123,6 +160,8 @@ class MenuService:
         unresolved_text: str | None = None,
         note: str | None = None,
         sort_order: int | None = None,
+        display_label: str | None = None,
+        row_kind: str | None = None,
     ) -> MenuDetail:
         current = self._menu_detail_repository.get(menu_detail_id)
         if current is None:
@@ -142,12 +181,53 @@ class MenuService:
             else unresolved_text,
             note=current.note if note is None else note,
             sort_order=current.sort_order if sort_order is None else sort_order,
+            display_label=current.display_label if display_label is None else display_label,
+            row_kind=current.row_kind if row_kind is None else row_kind,
         )
         self._menu_detail_repository.update(detail)
         return detail
 
     def remove_menu_detail(self, menu_detail_id: str) -> None:
         self._menu_detail_repository.remove(menu_detail_id)
+
+    def clear_menu_detail(self, menu_detail_id: str) -> MenuDetail:
+        current = self._menu_detail_repository.get(menu_detail_id)
+        if current is None:
+            raise ValueError(f"menu detail not found: {menu_detail_id}")
+
+        return self.update_menu_detail(
+            menu_detail_id=menu_detail_id,
+            composition_ref_type="empty",
+            composition_id="",
+            unresolved_text="",
+        )
+
+    def assign_menu_detail_composition(
+        self,
+        menu_detail_id: str,
+        *,
+        composition_id: str,
+        note: str | None = None,
+        sort_order: int | None = None,
+        day: str | None = None,
+        meal_slot: str | None = None,
+        display_label: str | None = None,
+    ) -> MenuDetail:
+        current = self._menu_detail_repository.get(menu_detail_id)
+        if current is None:
+            raise ValueError(f"menu detail not found: {menu_detail_id}")
+
+        return self.update_menu_detail(
+            menu_detail_id=menu_detail_id,
+            day=current.day if day is None else day,
+            meal_slot=current.meal_slot if meal_slot is None else meal_slot,
+            composition_ref_type="composition",
+            composition_id=composition_id,
+            unresolved_text="",
+            note=note,
+            sort_order=sort_order,
+            display_label=current.display_label if display_label is None else display_label,
+        )
 
     def list_menu_details(self, menu_id: str) -> list[MenuDetail]:
         self._require_menu(menu_id)
@@ -169,12 +249,14 @@ class MenuService:
         menu_detail_id: str,
         menu_id: str,
         day: str,
-        meal_slot: str,
+        meal_slot: str | None,
         composition_ref_type: str,
         composition_id: str | None,
         unresolved_text: str | None,
         note: str | None,
         sort_order: int,
+        display_label: str | None,
+        row_kind: str | None,
     ) -> MenuDetail:
         menu_detail_id_value = str(menu_detail_id or "").strip()
         if not menu_detail_id_value:
@@ -187,13 +269,20 @@ class MenuService:
         day_value = str(day or "").strip()
         meal_slot_value = str(meal_slot or "").strip()
         ref_type_value = str(composition_ref_type or "").strip().lower()
-        if ref_type_value not in {"composition", "unresolved"}:
-            raise ValueError("composition_ref_type must be 'composition' or 'unresolved'")
+        if ref_type_value not in {"composition", "unresolved", "empty"}:
+            raise ValueError("composition_ref_type must be 'composition', 'unresolved' or 'empty'")
+
+        row_kind_value = str(row_kind or "legacy").strip().lower() or "legacy"
+        if row_kind_value not in {"legacy", "dynamic"}:
+            raise ValueError("row_kind must be 'legacy' or 'dynamic'")
 
         composition_id_value = str(composition_id or "").strip() or None
         unresolved_text_value = str(unresolved_text or "").strip() or None
+        display_label_value = str(display_label or "").strip() or None
 
         if ref_type_value == "composition":
+            if not meal_slot_value:
+                raise ValueError("meal_slot must be non-empty when composition_ref_type='composition'")
             if composition_id_value is None:
                 raise ValueError("composition_id is required when composition_ref_type='composition'")
             if unresolved_text_value is not None:
@@ -204,13 +293,31 @@ class MenuService:
                 composition = self._composition_repository.get(composition_id_value)
                 if composition is None:
                     raise ValueError(f"composition not found: {composition_id_value}")
-        else:
+        elif ref_type_value == "unresolved":
+            if ref_type_value == "unresolved" and not meal_slot_value:
+                raise ValueError("meal_slot must be non-empty when composition_ref_type='unresolved'")
             if unresolved_text_value is None:
                 raise ValueError("unresolved_text is required when composition_ref_type='unresolved'")
             if composition_id_value is not None:
                 raise ValueError(
                     "composition_id must be empty when composition_ref_type='unresolved'"
                 )
+        else:
+            if composition_id_value is not None:
+                raise ValueError("composition_id must be empty when composition_ref_type='empty'")
+            if unresolved_text_value is not None:
+                raise ValueError("unresolved_text must be empty when composition_ref_type='empty'")
+            if meal_slot_value == "" and row_kind_value == "dynamic":
+                meal_slot_value = f"slot_{uuid.uuid4().hex}"
+            if meal_slot_value == "":
+                raise ValueError("meal_slot must be non-empty when composition_ref_type='empty'")
+            if display_label_value is None:
+                if row_kind_value == "dynamic":
+                    raise ValueError("display_label is required when creating a dynamic empty row")
+                display_label_value = meal_slot_value or None
+
+        if display_label_value is None:
+            display_label_value = meal_slot_value or None
 
         return MenuDetail(
             menu_detail_id=menu_detail_id_value,
@@ -222,4 +329,6 @@ class MenuService:
             unresolved_text=unresolved_text_value,
             note=str(note).strip() if note is not None else None,
             sort_order=int(sort_order),
+            display_label=display_label_value,
+            row_kind=row_kind_value,
         )

@@ -390,6 +390,8 @@ def _to_menu_detail(detail: dict[str, Any]) -> MenuDetail:
         unresolved_text=detail.get("unresolved_text"),
         note=detail.get("note"),
         sort_order=int(detail.get("sort_order") or 0),
+        display_label=detail.get("display_label"),
+        row_kind=str(detail.get("row_kind") or "legacy"),
     )
 
 

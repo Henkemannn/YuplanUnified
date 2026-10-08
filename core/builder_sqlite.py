@@ -175,6 +175,8 @@ def initialize_builder_sqlite(path: str) -> str:
                 unresolved_text TEXT NULL,
                 note TEXT NULL,
                 sort_order INTEGER NOT NULL DEFAULT 0,
+                display_label TEXT NULL,
+                row_kind TEXT NOT NULL DEFAULT 'legacy',
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(menu_id) REFERENCES builder_menus(menu_id),
                 FOREIGN KEY(composition_id) REFERENCES builder_compositions(composition_id)
@@ -248,6 +250,25 @@ def initialize_builder_sqlite(path: str) -> str:
             )
         if "menu_name" not in composition_columns:
             conn.execute("ALTER TABLE builder_compositions ADD COLUMN menu_name TEXT NULL")
+
+        menu_row_columns = {
+            str(row["name"])
+            for row in conn.execute("PRAGMA table_info('builder_menu_rows')").fetchall()
+        }
+        if "display_label" not in menu_row_columns:
+            conn.execute("ALTER TABLE builder_menu_rows ADD COLUMN display_label TEXT NULL")
+        if "row_kind" not in menu_row_columns:
+            conn.execute(
+                "ALTER TABLE builder_menu_rows ADD COLUMN row_kind TEXT NOT NULL DEFAULT 'legacy'"
+            )
+        if "display_label" not in menu_row_columns:
+            conn.execute(
+                """
+                UPDATE builder_menu_rows
+                SET display_label = meal_slot
+                WHERE display_label IS NULL
+                """,
+            )
     return db_path
 
 
@@ -939,8 +960,8 @@ class SQLiteMenuDetailRepository:
                 """
                 INSERT INTO builder_menu_rows (
                     menu_detail_id, menu_id, day, meal_slot, composition_ref_type,
-                    composition_id, unresolved_text, note, sort_order
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    composition_id, unresolved_text, note, sort_order, display_label, row_kind
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     detail.menu_detail_id,
@@ -952,6 +973,8 @@ class SQLiteMenuDetailRepository:
                     detail.unresolved_text,
                     detail.note,
                     int(detail.sort_order),
+                    detail.display_label,
+                    detail.row_kind,
                 ),
             )
 
@@ -963,6 +986,10 @@ class SQLiteMenuDetailRepository:
             ).fetchone()
         if row is None:
             return None
+        display_label = row["display_label"] if "display_label" in row.keys() else None
+        if not display_label:
+            display_label = row["meal_slot"]
+        row_kind = row["row_kind"] if "row_kind" in row.keys() else "legacy"
         return MenuDetail(
             menu_detail_id=str(row["menu_detail_id"]),
             menu_id=str(row["menu_id"]),
@@ -973,6 +1000,8 @@ class SQLiteMenuDetailRepository:
             unresolved_text=row["unresolved_text"],
             note=row["note"],
             sort_order=int(row["sort_order"]),
+            display_label=str(display_label) if display_label is not None else None,
+            row_kind=str(row_kind),
         )
 
     def list_for_menu(self, menu_id: str) -> list[MenuDetail]:
@@ -996,6 +1025,12 @@ class SQLiteMenuDetailRepository:
                 unresolved_text=row["unresolved_text"],
                 note=row["note"],
                 sort_order=int(row["sort_order"]),
+                display_label=(
+                    str(row["display_label"])
+                    if "display_label" in row.keys() and row["display_label"]
+                    else str(row["meal_slot"])
+                ),
+                row_kind=str(row["row_kind"]) if "row_kind" in row.keys() else "legacy",
             )
             for row in rows
         ]
@@ -1006,7 +1041,8 @@ class SQLiteMenuDetailRepository:
                 """
                 UPDATE builder_menu_rows
                 SET menu_id = ?, day = ?, meal_slot = ?, composition_ref_type = ?,
-                    composition_id = ?, unresolved_text = ?, note = ?, sort_order = ?
+                    composition_id = ?, unresolved_text = ?, note = ?, sort_order = ?,
+                    display_label = ?, row_kind = ?
                 WHERE menu_detail_id = ?
                 """,
                 (
@@ -1018,6 +1054,8 @@ class SQLiteMenuDetailRepository:
                     detail.unresolved_text,
                     detail.note,
                     int(detail.sort_order),
+                    detail.display_label,
+                    detail.row_kind,
                     detail.menu_detail_id,
                 ),
             )
