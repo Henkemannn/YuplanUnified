@@ -3,8 +3,8 @@
 {% block page_title %}Menyhantering – Yuplan{% endblock %}
 
 {% block head_extra %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_departments.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_menu_import.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_departments.css', v='20261008f') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_menu_import.css', v='20261008f') }}">
 {% endblock %}
 
 {% block content %}
@@ -28,7 +28,10 @@
 
         <section class="app-shell__grid">
             <article class="app-shell__card admin-menu-import__card">
-                <h2 class="app-shell__card-title">Importera meny</h2>
+                <div class="admin-menu-import__card-header">
+                    <h2 class="app-shell__card-title">Importera meny</h2>
+                    <button type="button" class="yp-btn yp-btn-primary admin-menu-import__new-action" data-admin-menu-new-toggle>+ Skapa meny</button>
+                </div>
 
                 <div id="upload" class="admin-menu-import__upload-card admin-menu-import__section">
                     <form action="{{ url_for('admin_ui.admin_menu_import_upload') }}" method="POST" enctype="multipart/form-data" class="yp-form admin-menu-import__form">
@@ -151,9 +154,108 @@
             </article>
         </section>
     </div>
+
+    <script type="application/json" id="js-admin-menu-import-context">{{ {"year": vm.current_year, "week": vm.current_week, "site_id": vm.site_id}|tojson }}</script>
+
+    <section class="yp-modal-host" hidden aria-hidden="true" data-admin-menu-new-host data-admin-menu-new-endpoint="{{ url_for('admin_ui.admin_menu_import_new') }}" data-current-year="{{ vm.current_year or '' }}" data-current-week="{{ vm.current_week or '' }}">
+        <div class="yp-modal-host__backdrop" data-admin-menu-new-close></div>
+        <div class="yp-modal-host__panel yp-modal-host__panel--lg admin-menu-import__new-menu-panel" role="dialog" aria-modal="true" aria-label="Ny meny" tabindex="-1" data-admin-menu-new-panel>
+            <div class="yp-modal-host__inline-picker" data-admin-menu-new-form>
+                {{ csrf_token_input() | safe }}
+                <header class="yp-modal-host__inline-header">
+                    <div>
+                        <h1>Ny meny</h1>
+                        <p class="yp-modal-host__inline-subtitle">Skapa struktur för en ny veckomeny</p>
+                    </div>
+                    <button type="button" class="yp-btn yp-btn-secondary" data-admin-menu-new-close>Stäng</button>
+                </header>
+
+                <p class="yp-modal-host__inline-context" data-admin-menu-new-context></p>
+
+                <label class="yp-modal-host__inline-search-label" for="adminMenuNewName">Namn på menyn</label>
+                <input
+                    id="adminMenuNewName"
+                    type="text"
+                    class="yp-input yp-modal-host__inline-search"
+                    placeholder="Till exempel Vintermeny"
+                    autocomplete="off"
+                    data-admin-menu-new-name
+                >
+
+                <div class="admin-menu-import__new-menu-grid">
+                    <div>
+                        <label class="yp-modal-host__inline-search-label" for="adminMenuNewYear">År</label>
+                        <input id="adminMenuNewYear" type="number" min="2000" max="2100" class="yp-input yp-modal-host__inline-search" data-admin-menu-new-year>
+                    </div>
+
+                    <div>
+                        <label class="yp-modal-host__inline-search-label" for="adminMenuNewWeek">Vecka</label>
+                        <input id="adminMenuNewWeek" type="number" min="1" max="53" class="yp-input yp-modal-host__inline-search" data-admin-menu-new-week>
+                    </div>
+                </div>
+
+                <p class="yp-modal-host__inline-status" data-admin-menu-new-date-preview role="status" aria-live="polite">Välj år och vecka för att fortsätta.</p>
+
+                <div class="admin-menu-import__weekday-section">
+                    <p class="yp-modal-host__inline-search-label" data-admin-menu-new-day-summary>7 dagars meny</p>
+                    <div class="admin-menu-import__weekday-pills" data-admin-menu-new-weekday-pills>
+                        <label class="admin-menu-import__weekday-pill is-selected">
+                            <input type="checkbox" class="admin-menu-import__weekday-pill-input" data-admin-menu-new-day-toggle data-day="monday" checked aria-label="Mån">
+                            <span>Mån</span>
+                        </label>
+                        <label class="admin-menu-import__weekday-pill is-selected">
+                            <input type="checkbox" class="admin-menu-import__weekday-pill-input" data-admin-menu-new-day-toggle data-day="tuesday" checked aria-label="Tis">
+                            <span>Tis</span>
+                        </label>
+                        <label class="admin-menu-import__weekday-pill is-selected">
+                            <input type="checkbox" class="admin-menu-import__weekday-pill-input" data-admin-menu-new-day-toggle data-day="wednesday" checked aria-label="Ons">
+                            <span>Ons</span>
+                        </label>
+                        <label class="admin-menu-import__weekday-pill is-selected">
+                            <input type="checkbox" class="admin-menu-import__weekday-pill-input" data-admin-menu-new-day-toggle data-day="thursday" checked aria-label="Tor">
+                            <span>Tor</span>
+                        </label>
+                        <label class="admin-menu-import__weekday-pill is-selected">
+                            <input type="checkbox" class="admin-menu-import__weekday-pill-input" data-admin-menu-new-day-toggle data-day="friday" checked aria-label="Fre">
+                            <span>Fre</span>
+                        </label>
+                        <label class="admin-menu-import__weekday-pill is-selected">
+                            <input type="checkbox" class="admin-menu-import__weekday-pill-input" data-admin-menu-new-day-toggle data-day="saturday" checked aria-label="Lör">
+                            <span>Lör</span>
+                        </label>
+                        <label class="admin-menu-import__weekday-pill is-selected">
+                            <input type="checkbox" class="admin-menu-import__weekday-pill-input" data-admin-menu-new-day-toggle data-day="sunday" checked aria-label="Sön">
+                            <span>Sön</span>
+                        </label>
+                    </div>
+                </div>
+
+                <label class="yp-modal-host__inline-search-label" for="adminMenuNewRowCount">Antal menyrader per dag</label>
+                <input
+                    id="adminMenuNewRowCount"
+                    type="number"
+                    min="0"
+                    step="1"
+                    class="yp-input yp-modal-host__inline-search"
+                    value="0"
+                    data-admin-menu-new-row-count
+                >
+
+                <div class="admin-menu-import__row-labels" data-admin-menu-new-row-labels></div>
+
+                <p class="yp-modal-host__inline-status" data-admin-menu-new-status role="status" aria-live="polite">Välj år och vecka för att fortsätta.</p>
+
+                <footer class="yp-modal-host__inline-actions">
+                    <button type="button" class="yp-btn yp-btn-primary" data-admin-menu-new-create>Skapa meny</button>
+                    <button type="button" class="yp-btn yp-btn-secondary" data-admin-menu-new-close>Avbryt</button>
+                </footer>
+            </div>
+        </div>
+    </section>
 {% endblock %}
 
 {% block scripts %}
     {{ super() }}
-    <script src="{{ url_for('static', filename='js/admin_menu_import.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/modal_host.js', v='20261008f') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/admin_menu_import.js', v='20261008f') }}" defer></script>
 {% endblock %}

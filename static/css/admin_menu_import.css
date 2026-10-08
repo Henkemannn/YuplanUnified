@@ -3,15 +3,41 @@
   gap: 14px;
 }
 
+.admin-menu-import__card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.admin-menu-import__new-action {
+  min-width: 132px;
+  padding-inline: 18px;
+}
+
+.admin-menu-import__new-menu-panel {
+  width: min(920px, calc(100vw - 24px));
+  max-height: min(100vh, 840px);
+}
+
+.admin-menu-import__new-menu-panel [data-admin-menu-new-context] {
+  display: none;
+}
+
+.admin-menu-import__new-menu-panel [data-admin-menu-new-status]:not([data-state="error"]):not([data-state="warning"]) {
+  display: none;
+}
+
 .admin-menu-import__section {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .admin-menu-import__upload-card {
   display: grid;
-  gap: 8px;
-  margin-top: 2px;
+  gap: 6px;
+  margin-top: 0;
 }
 
 .admin-menu-import__upload-card .app-shell__card-title {
@@ -20,7 +46,7 @@
 
 .admin-menu-import__form {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .admin-menu-import__file-input {
@@ -54,12 +80,12 @@
 .admin-menu-import__submit-row {
   display: flex;
   align-items: center;
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .admin-menu-import__tips {
   margin-top: 0;
-  padding-top: 7px;
+  padding-top: 6px;
   border-top: 1px solid var(--border);
 }
 
@@ -124,6 +150,128 @@
   align-items: center;
 }
 
+.admin-menu-import__new-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.admin-menu-import__weekday-section {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-menu-import__weekday-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-menu-import__weekday-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 46px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.admin-menu-import__weekday-pill.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--text));
+  background: color-mix(in srgb, var(--accent) 72%, var(--text));
+  color: var(--surface);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--surface) 22%, transparent);
+}
+
+.admin-menu-import__weekday-pill-input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.admin-menu-import__weekday-pill:focus-within {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.admin-menu-import__weekday-pill:not(.is-selected) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.admin-menu-import__row-labels {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 6px;
+  max-height: 180px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.admin-menu-import__row-label-field {
+  display: grid;
+  gap: 3px;
+}
+
+.admin-menu-import__row-label-field .yp-input {
+  min-height: 30px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+.admin-menu-import__new-menu-panel .yp-modal-host__inline-picker {
+  gap: 4px;
+  padding: 8px 10px 6px;
+}
+
+.admin-menu-import__new-menu-panel .yp-modal-host__inline-header {
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-menu-import__new-menu-panel .yp-modal-host__inline-header h1 {
+  margin-bottom: 0;
+  font-size: 1.2rem;
+}
+
+.yp-modal-host__inline-subtitle {
+  margin: 1px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.admin-menu-import__new-menu-panel .yp-modal-host__inline-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 2px;
+}
+
+.admin-menu-import__new-menu-panel .yp-modal-host__inline-search {
+  min-height: 32px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.admin-menu-import__new-menu-panel .yp-modal-host__inline-status {
+  min-height: 0;
+  font-size: 0.84rem;
+  line-height: 1.25;
+}
+
 .admin-menu-import .yp-btn.yp-btn-secondary {
   display: inline-flex;
   align-items: center;
@@ -168,13 +316,22 @@
 }
 
 .admin-menu-import__list-section {
-  padding-top: 4px;
+  padding-top: 2px;
   border-top: 1px solid var(--border);
 }
 
 @media (max-width: 720px) {
   .admin-menu-import__upload-card {
     width: 100%;
+  }
+
+  .admin-menu-import__new-menu-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-menu-import__new-menu-panel {
+    width: min(980px, calc(100vw - 20px));
+    max-height: calc(100vh - 20px);
   }
 
   .admin-menu-import__week-item {

@@ -8,9 +8,10 @@ from core.commun_builder_projection import _get_builder_menu_context_flow
 from core.menu_service import MenuServiceDB
 from sqlalchemy import text
 from werkzeug.security import generate_password_hash
-from core.models import Tenant, User
+from core.models import MenuVariant, Tenant, User
 from core.impersonation import start_impersonation
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+import uuid
 
 admin_ui_bp = Blueprint("admin_ui", __name__)
 
@@ -21,6 +22,89 @@ def _next_menu_updated_at(previous_updated_at: datetime | None) -> datetime:
         return now
     minimum_next = previous_updated_at + timedelta(milliseconds=1)
     return now if now > minimum_next else minimum_next
+
+
+def _resolve_menu_import_site_context():
+    from core.db import get_site_tenant
+
+    site_id = request.args.get("site_id") or session.get("site_id")
+    if not site_id and current_app.config.get("TESTING"):
+        try:
+            from core.context import get_single_site_id_for_tenant
+
+            tid = session.get("tenant_id")
+            if tid:
+                site_id = get_single_site_id_for_tenant(int(tid))
+        except Exception:
+            site_id = None
+
+    if not site_id:
+        return None, None
+    site_tenant_id = get_site_tenant(str(site_id))
+    if site_tenant_id is None:
+        return str(site_id), None
+    return str(site_id), int(site_tenant_id)
+
+
+def _iso_week_date_range(year: int, week: int) -> dict[str, str]:
+    monday = date.fromisocalendar(int(year), int(week), 1)
+    sunday = date.fromisocalendar(int(year), int(week), 7)
+    month_names = {
+        1: "januari",
+        2: "februari",
+        3: "mars",
+        4: "april",
+        5: "maj",
+        6: "juni",
+        7: "juli",
+        8: "augusti",
+        9: "september",
+        10: "oktober",
+        11: "november",
+        12: "december",
+    }
+
+    def _sv_day(value: date) -> str:
+        return f"{value.day} {month_names[int(value.month)]}"
+
+    return {
+        "start": monday.isoformat(),
+        "end": sunday.isoformat(),
+        "label": f"Vecka {int(week)} · {_sv_day(monday)}–{_sv_day(sunday)} {int(year)}",
+        "start_label": _sv_day(monday),
+        "end_label": _sv_day(sunday),
+    }
+
+
+def _normalize_day_key(value: object) -> str:
+    normalized = str(value or "").strip().lower()
+    aliases = {
+        "mon": "monday",
+        "monday": "monday",
+        "tue": "tuesday",
+        "tuesday": "tuesday",
+        "wed": "wednesday",
+        "wednesday": "wednesday",
+        "thu": "thursday",
+        "thursday": "thursday",
+        "fri": "friday",
+        "friday": "friday",
+        "sat": "saturday",
+        "saturday": "saturday",
+        "sun": "sunday",
+        "sunday": "sunday",
+    }
+    return aliases.get(normalized, normalized)
+
+
+def _parse_selected_days(form_values: list[str] | None) -> list[str]:
+    allowed = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    values = {key for key in (_normalize_day_key(value) for value in (form_values or [])) if key in allowed}
+    return [key for key in allowed if key in values]
+
+
+def _fallback_row_label(index: int) -> str:
+    return f"Menyrad {int(index)}"
 
 @admin_ui_bp.route("/ui/systemadmin/dashboard", methods=["GET", "POST"])  # accept accidental POST
 @require_roles("superuser")
@@ -581,25 +665,24 @@ def admin_specialkost_delete(kosttyp_id: int) -> str:  # type: ignore[override]
 @require_roles("admin", "superuser")
 def admin_menu_import() -> str:  # type: ignore[override]
     """Display menu import page with file upload form and list of weeks with menu data."""
-    from core.db import get_site_tenant
+    import datetime as _dt
 
-    site_id = request.args.get("site_id") or session.get("site_id")
-    if not site_id and current_app.config.get("TESTING"):
-        try:
-            from core.context import get_single_site_id_for_tenant
-
-            tid = session.get("tenant_id")
-            if tid:
-                site_id = get_single_site_id_for_tenant(int(tid))
-        except Exception:
-            site_id = None
+    iso = _dt.date.today().isocalendar()
+    current_year = int(iso[0])
+    current_week = int(iso[1])
+    site_id, site_tenant_id = _resolve_menu_import_site_context()
     if not site_id:
         flash("Saknar site för menylistan.", "warning")
-        return render_template("admin_menu_import.html", vm={"weeks": []})
-    site_tenant_id = get_site_tenant(str(site_id))
+        return render_template(
+            "admin_menu_import.html",
+            vm={"weeks": [], "current_year": current_year, "current_week": current_week, "site_id": None},
+        )
     if site_tenant_id is None:
         flash("Kunde inte hitta tenant för vald site.", "warning")
-        return render_template("admin_menu_import.html", vm={"weeks": []})
+        return render_template(
+            "admin_menu_import.html",
+            vm={"weeks": [], "current_year": current_year, "current_week": current_week, "site_id": site_id},
+        )
 
     # Fetch menus for the active site, include draft + published.
     db = get_session()
@@ -629,11 +712,6 @@ def admin_menu_import() -> str:  # type: ignore[override]
     finally:
         db.close()
     
-    import datetime as _dt
-
-    iso = _dt.date.today().isocalendar()
-    current_year = int(iso[0])
-    current_week = int(iso[1])
     weeks_sorted = sorted(weeks, key=lambda w: (w["year"], w["week"]))
     active_weeks = [w for w in weeks_sorted if (w["year"], w["week"]) >= (current_year, current_week)]
     archive_weeks = [w for w in weeks_sorted if (w["year"], w["week"]) < (current_year, current_week)]
@@ -666,6 +744,192 @@ def admin_menu_import() -> str:  # type: ignore[override]
     if import_summary:
         vm["import_summary"] = import_summary
     return render_template("admin_menu_import.html", vm=vm)
+
+
+@admin_ui_bp.post("/ui/admin/menu-import/new")
+@require_roles("admin", "superuser")
+def admin_menu_import_new() -> str:  # type: ignore[override]
+    """Preview, create, replace, or open a new Kommun menu for a week."""
+    from core.db import get_session
+    from core.menu_service import MenuServiceDB
+    from core.commun_builder_linkage import CommunBuilderMenuLinkService
+    from core.commun_builder_projection import _get_builder_menu_context_flow
+    from core.models import Menu
+
+    site_id, site_tenant_id = _resolve_menu_import_site_context()
+    if not site_id:
+        payload = {"ok": False, "error": "site_missing", "message": "Saknar site för meny."}
+        return jsonify(payload), 400
+    if site_tenant_id is None:
+        payload = {"ok": False, "error": "site_tenant_missing", "message": "Kunde inte hitta tenant för vald site."}
+        return jsonify(payload), 400
+
+    action = str(request.form.get("action") or "preview").strip().lower()
+    if action not in {"preview", "create", "replace", "open-existing"}:
+        payload = {"ok": False, "error": "action_invalid", "message": "Ogiltig åtgärd."}
+        return jsonify(payload), 400
+
+    try:
+        year = int(request.form.get("year") or 0)
+        week = int(request.form.get("week") or 0)
+        week_range = _iso_week_date_range(year, week)
+    except Exception:
+        payload = {"ok": False, "error": "week_invalid", "message": "Ogiltigt år eller vecka."}
+        return jsonify(payload), 400
+
+    menu_name_input = str(request.form.get("menu_name") or "").strip()
+    row_count_raw = str(request.form.get("row_count") or "0").strip()
+    try:
+        row_count = int(row_count_raw)
+    except Exception:
+        return jsonify({"ok": False, "error": "row_count_invalid", "message": "Antal menyrader måste vara ett heltal."}), 400
+    if row_count < 0:
+        return jsonify({"ok": False, "error": "row_count_invalid", "message": "Antal menyrader kan inte vara negativt."}), 400
+
+    row_labels = [str(value or "").strip() for value in request.form.getlist("row_labels")]
+    selected_days = _parse_selected_days(request.form.getlist("selected_days"))
+    fallback_menu_name = f"Vecka {week} / {year}"
+    resolved_menu_name = menu_name_input or fallback_menu_name
+    selected_day_labels = {
+        "monday": "Mån",
+        "tuesday": "Tis",
+        "wednesday": "Ons",
+        "thursday": "Tor",
+        "friday": "Fre",
+        "saturday": "Lör",
+        "sunday": "Sön",
+    }
+
+    db = get_session()
+    try:
+        existing_menu = (
+            db.query(Menu)
+            .filter_by(tenant_id=int(site_tenant_id), site_id=site_id, year=year, week=week)
+            .first()
+        )
+        if existing_menu is None:
+            existing_menu = (
+                db.query(Menu)
+                .filter_by(tenant_id=int(site_tenant_id), site_id=None, year=year, week=week)
+                .first()
+            )
+
+        conflict = existing_menu is not None
+        open_url = url_for("admin_ui.admin_menu_import_week", year=year, week=week)
+        if action == "preview":
+            return jsonify(
+                {
+                    "ok": True,
+                    "status": "conflict" if conflict else "ready",
+                    "site_id": site_id,
+                    "year": year,
+                    "week": week,
+                    "week_range": week_range,
+                    "menu_name": resolved_menu_name,
+                    "row_count": row_count,
+                    "selected_days": selected_days,
+                    "selected_day_labels": [selected_day_labels.get(day, day) for day in selected_days],
+                    "message": f"Det finns redan en meny för vecka {week} / {year}. Välj en annan vecka." if conflict else None,
+                    "conflict": conflict,
+                    "open_url": open_url if conflict else None,
+                    "create_url": url_for("admin_ui.admin_menu_import_new"),
+                }
+            )
+
+        if action == "open-existing":
+            if not conflict:
+                return jsonify(
+                    {
+                        "ok": False,
+                        "error": "menu_missing",
+                        "message": "Ingen befintlig meny hittades att öppna.",
+                    }
+                ), 404
+            return redirect(open_url)
+
+        if action == "create" and not selected_days:
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": "selected_days_required",
+                    "message": "Välj minst en veckodag innan du skapar menyn.",
+                }
+            ), 400
+
+        if action == "create" and conflict:
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": "menu_conflict",
+                    "message": f"Det finns redan en meny för vecka {week} / {year}. Välj en annan vecka.",
+                    "open_url": open_url,
+                }
+            ), 409
+
+        if action in {"create", "replace"}:
+            menu_service = MenuServiceDB()
+            if conflict and existing_menu is not None:
+                menu = existing_menu
+            else:
+                menu = menu_service.create_or_get_menu(int(site_tenant_id), site_id, week, year)
+
+            builder_flow = _get_builder_menu_context_flow()
+            if builder_flow is None:
+                raise ValueError("builder_menu_flow_missing")
+            builder_menu_id = f"menu_{uuid.uuid4().hex[:8]}"
+            builder_flow.create_menu(
+                menu_id=builder_menu_id,
+                site_id=site_id,
+                week_key=f"{year}-W{week:02d}",
+                title=resolved_menu_name,
+                version=1,
+                status="draft",
+            )
+
+            builder_day_order = {day: index for index, day in enumerate(selected_days)}
+            for day_key in selected_days:
+                day_index = builder_day_order[day_key]
+                for row_index in range(row_count):
+                    label_value = row_labels[row_index] if row_index < len(row_labels) else ""
+                    display_label = label_value or _fallback_row_label(row_index + 1)
+                    builder_flow.create_empty_menu_row(
+                        menu_id=builder_menu_id,
+                        day=day_key,
+                        display_label=display_label,
+                        sort_order=(day_index * 1000) + ((row_index + 1) * 10),
+                        menu_detail_id=f"{builder_menu_id}-{day_key}-{row_index + 1}",
+                    )
+
+            link_service = CommunBuilderMenuLinkService()
+            link_service.create_or_replace_link(
+                tenant_id=int(site_tenant_id),
+                site_id=site_id,
+                year=year,
+                week=week,
+                builder_menu_id=builder_menu_id,
+                legacy_menu_id=int(menu.id),
+                source="manual",
+            )
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest" or request.accept_mimetypes.best == "application/json":
+                return jsonify(
+                    {
+                        "ok": True,
+                        "status": "created",
+                        "open_url": url_for("admin_ui.admin_menu_import_week", year=year, week=week, edit=1),
+                        "site_id": site_id,
+                        "year": year,
+                        "week": week,
+                        "week_range": week_range,
+                        "menu_name": resolved_menu_name,
+                        "row_count": row_count,
+                        "selected_days": selected_days,
+                    }
+                )
+            return redirect(url_for("admin_ui.admin_menu_import_week", year=year, week=week, edit=1))
+
+        return jsonify({"ok": False, "error": "unsupported_action", "message": "Okänd åtgärd."}), 400
+    finally:
+        db.close()
 
 
 @admin_ui_bp.post("/ui/admin/menu-import/upload")
@@ -870,6 +1134,8 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
     week_view = legacy_week_view
     builder_menu_id = None
     builder_menu_version = 0
+    builder_menu_title = None
+    builder_rows: list[dict[str, object]] = []
     builder_week_view = None
     try:
         link_service = CommunBuilderMenuLinkService()
@@ -888,8 +1154,25 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
         try:
             builder_flow = _get_builder_menu_context_flow()
             if builder_flow is not None:
+                builder_menu = next(
+                    (
+                        item
+                        for item in builder_flow.list_menus()
+                        if str(getattr(item, "menu_id", "") or "").strip() == str(builder_menu_id)
+                    ),
+                    None,
+                )
+                builder_menu_title = str(getattr(builder_menu, "title", "") or "").strip() or None
+                builder_rows = list(builder_flow.list_menu_rows(str(builder_menu_id)))
+        except Exception:
+            builder_menu_title = None
+            builder_rows = []
+    if builder_menu_id:
+        try:
+            builder_flow = _get_builder_menu_context_flow()
+            if builder_flow is not None:
                 builder_days: dict[str, dict[str, dict[str, dict[str, object]]]] = {}
-                for row in builder_flow.list_menu_rows(str(builder_menu_id)):
+                for row in builder_rows:
                     day_key = str(row.get("day") or "").strip().lower()
                     meal_slot = str(row.get("meal_slot") or "").strip().lower()
                     if meal_slot.startswith("lunch_"):
@@ -979,43 +1262,48 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
         "sondag": "Söndag",
     }
     ordered_days = ["Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag"]
-    slot_specs = [
-        {
-            "key": "lunch_alt1",
-            "label": "Lunch alt 1",
-            "field": ("Lunch", "alt1"),
-            "candidates": [("lunch", "alt1"), ("lunch", "main"), ("lunch", "standard")],
-        },
-        {
-            "key": "lunch_alt2",
-            "label": "Lunch alt 2",
-            "field": ("Lunch", "alt2"),
-            "candidates": [("lunch", "alt2")],
-        },
-        {
-            "key": "dessert",
-            "label": "Dessert",
-            "field": ("Lunch", "dessert"),
-            "candidates": [("lunch", "dessert"), ("dessert", "main")],
-        },
-        {
-            "key": "dinner",
-            "label": "Kvällsmat",
-            "field": ("Kväll", "kvall"),
-            "candidates": [
-                ("kväll", "kvall"),
-                ("kväll", "main"),
-                ("kvall", "kvall"),
-                ("kvall", "main"),
-                ("dinner", "main"),
-                ("dinner", "dinner"),
-                ("dinner", "alt1"),
-                ("dinner", "alt2"),
-                ("middag", "main"),
-                ("evening", "main"),
-            ],
-        },
-    ]
+    show_legacy_slots = builder_menu_id is None or any(
+        str(row.get("row_kind") or "").strip().lower() != "dynamic" for row in builder_rows
+    )
+    slot_specs = []
+    if show_legacy_slots:
+        slot_specs = [
+            {
+                "key": "lunch_alt1",
+                "label": "Lunch alt 1",
+                "field": ("Lunch", "alt1"),
+                "candidates": [("lunch", "alt1"), ("lunch", "main"), ("lunch", "standard")],
+            },
+            {
+                "key": "lunch_alt2",
+                "label": "Lunch alt 2",
+                "field": ("Lunch", "alt2"),
+                "candidates": [("lunch", "alt2")],
+            },
+            {
+                "key": "dessert",
+                "label": "Dessert",
+                "field": ("Lunch", "dessert"),
+                "candidates": [("lunch", "dessert"), ("dessert", "main")],
+            },
+            {
+                "key": "dinner",
+                "label": "Kvällsmat",
+                "field": ("Kväll", "kvall"),
+                "candidates": [
+                    ("kväll", "kvall"),
+                    ("kväll", "main"),
+                    ("kvall", "kvall"),
+                    ("kvall", "main"),
+                    ("dinner", "main"),
+                    ("dinner", "dinner"),
+                    ("dinner", "alt1"),
+                    ("dinner", "alt2"),
+                    ("middag", "main"),
+                    ("evening", "main"),
+                ],
+            },
+        ]
 
     raw_days = (week_view or {}).get("days", {})
     normalized_days: dict[str, dict[str, dict[str, dict[str, object]]]] = {}
@@ -1213,6 +1501,7 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
         "builder_menu_id": builder_menu_id,
         "builder_link_available": bool(builder_menu_id),
         "menu_status": menu_status,
+        "menu_name": builder_menu_title,
         "etag": etag,
         "days": (week_view or {}).get("days", {}),
         "day_rows": day_rows,

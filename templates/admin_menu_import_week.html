@@ -1,6 +1,11 @@
 {% extends "ui/unified_admin_base.html" %}
 {% block admin_title %}Meny - vecka {{ vm.week }}/{{ vm.year }}{% endblock %}
-{% block admin_subtitle %}<span class="menu-week__site-chip">{{ vm.site_name or current_site_name or '-' }}</span>{% endblock %}
+{% block admin_subtitle %}
+    <span class="menu-week__site-chip">{{ vm.site_name or current_site_name or '-' }}</span>
+    {% if vm.menu_name %}
+        <span class="menu-week__site-chip menu-week__menu-chip">{{ vm.menu_name }}</span>
+    {% endif %}
+{% endblock %}
 {% block admin_context_meta %}{% endblock %}
 {% block admin_week_meta %}
     <div class="menu-week-picker" data-testid="menu-week-picker">
