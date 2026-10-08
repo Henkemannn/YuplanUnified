@@ -53,21 +53,18 @@
 
 {% block scripts %}
     {{ super() }}
+    <script src="{{ url_for('static', filename='js/modal_host.js') }}" defer></script>
     <script src="{{ url_for('static', filename='ui/admin_menu_import_week_builder_host.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/builder_composition_search.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/builder_dish_create.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='ui/admin_menu_import_week_actions.js') }}" defer></script>
     <script src="{{ url_for('static', filename='ui/admin_menu_week_picker.js') }}" defer></script>
 {% endblock %}
 {% block admin_main %}
     {% set is_edit_mode = vm.edit_mode if vm.edit_mode is defined else false %}
     {% set slot_order = vm.slot_order if vm.slot_order is defined else ['lunch_alt1', 'lunch_alt2', 'dessert', 'dinner'] %}
 
-    {% if is_edit_mode %}
-        <form id="menu-edit-form" action="{{ url_for('admin_ui.admin_menu_import_week_save', year=vm.year, week=vm.week) }}" method="POST" class="admin-form-protect">
-            {{ csrf_token_input() | safe }}
-            <input type="hidden" name="_etag" value="{{ vm.etag }}">
-        </form>
-    {% endif %}
-
-    <section class="menu-week__grid menu-editor-grid">
+    <section class="menu-week__grid menu-editor-grid" data-builder-menu-id="{{ vm.builder_menu_id or '' }}" data-site-id="{{ vm.site_id or '' }}">
         <article class="app-shell__card menu-editor-card menu-week__status admin-status-banner">
             <div class="menu-editor-card__header">
                 <h2 class="app-shell__card-title">Status</h2>
@@ -82,17 +79,14 @@
                     {% endif %}
                 </div>
                 {% if is_edit_mode %}
-                    <p class="menu-week__help-text">Redigeringsläge aktivt. Spara ändringar och gå tillbaka till översikten för att publicera.</p>
+                    <p class="menu-week__help-text">Redigeringsläge aktivt. Använd same-page menyn och klicka Klar när du är färdig.</p>
                     <div class="menu-editor-actions menu-editor-actions--edit admin-actions-group">
-                        <button type="submit" form="menu-edit-form" class="yp-btn yp-btn-primary">Spara</button>
-                        <a href="{{ url_for('admin_ui.admin_menu_import_week', year=vm.year, week=vm.week) }}" class="yp-btn yp-btn-secondary">Avbryt</a>
+                        <a href="{{ url_for('admin_ui.admin_menu_import_week', year=vm.year, week=vm.week) }}" class="yp-btn yp-btn-primary">Klar</a>
                     </div>
                 {% else %}
                     <p class="menu-week__help-text">Granska menyn. Redigera vid behov och publicera när den är klar för menyval och köksproduktion.</p>
                     <div class="menu-editor-actions menu-editor-actions--status admin-actions-group">
-                        {% if vm.builder_menu_url %}
-                            <a href="{{ vm.builder_menu_url }}" class="yp-btn yp-btn-primary">Redigera matsedel</a>
-                        {% endif %}
+                        <a href="{{ url_for('admin_ui.admin_menu_import_week', year=vm.year, week=vm.week, edit=1) }}" class="yp-btn yp-btn-primary">Redigera meny</a>
                         {% if vm.menu_status == 'draft' %}
                             <form action="{{ url_for('admin_ui.admin_menu_import_week_publish', year=vm.year, week=vm.week) }}" method="POST" class="admin-form-protect menu-editor-inline-form">
                                 {{ csrf_token_input() | safe }}
@@ -108,7 +102,6 @@
                         {% endif %}
                     </div>
                     <div class="menu-editor-actions menu-editor-actions--page admin-actions-group">
-                        <a href="{{ url_for('admin_ui.admin_menu_import_week', year=vm.year, week=vm.week, edit=1) }}" class="yp-btn yp-btn-secondary">Redigera</a>
                         <a href="{{ url_for('admin_ui.admin_menu_import') }}" class="yp-btn yp-btn-secondary">Tillbaka</a>
                     </div>
                 {% endif %}
@@ -126,55 +119,128 @@
                     <section class="menu-editor-day-card">
                         <h3 class="menu-editor-day-title">{{ day_row.day_label }}</h3>
 
-                        {% if is_edit_mode %}
-                            <div class="menu-editor-edit-rows">
-                                {% for slot_key in slot_order %}
-                                    {% set slot = day_row.slots.get(slot_key, {}) %}
-                                    <div class="menu-editor-edit-row menu-day-row">
-                                        <label class="menu-editor-meal-type" for="dish-{{ day_row.day_label|replace('å','a')|replace('ä','a')|replace('ö','o')|replace('Å','A')|replace('Ä','A')|replace('Ö','O')|lower }}-{{ slot_key }}">{{ slot.get('label', '-') }}</label>
-                                        <input
-                                            id="dish-{{ day_row.day_label|replace('å','a')|replace('ä','a')|replace('ö','o')|replace('Å','A')|replace('Ä','A')|replace('Ö','O')|lower }}-{{ slot_key }}"
-                                            class="yp-input menu-editor-input"
-                                            type="text"
-                                            form="menu-edit-form"
-                                            name="{{ slot.get('field_name', '') }}"
-                                            value="{{ slot.get('dish_name', '') }}"
-                                            placeholder="Ange rätt"
-                                        >
-                                    </div>
-                                {% endfor %}
-                            </div>
-                        {% else %}
-                            <div class="menu-editor-meals">
-                                {% for slot_key in slot_order %}
-                                    {% set slot = day_row.slots.get(slot_key, {}) %}
-                                    <div class="menu-editor-meal-row menu-day-row">
-                                        <div class="menu-editor-meal-type">{{ slot.get('label', '-') }}</div>
+                        <div class="menu-editor-meals">
+                            {% for slot_key in slot_order %}
+                                {% set slot = day_row.slots.get(slot_key, {}) %}
+                                <div
+                                    class="menu-editor-meal-row menu-day-row"
+                                    data-week-slot-row
+                                    data-menu-detail-id="{{ slot.get('menu_detail_id') or '' }}"
+                                    data-day-key="{{ day_row.day_key or '' }}"
+                                    data-day-label="{{ day_row.day_label }}"
+                                    data-meal-slot="{{ slot.get('meal_slot') or slot_key }}"
+                                    data-meal-label="{{ slot.get('label', '-') }}"
+                                    data-slot-key="{{ slot_key }}"
+                                    data-dish-name="{{ slot.get('dish_name') or '' }}"
+                                    data-composition-id="{{ slot.get('composition_id') or '' }}"
+                                    data-unresolved-text="{{ slot.get('unresolved_text') or '' }}"
+                                >
+                                    <div class="menu-editor-meal-type">{{ slot.get('label', '-') }}</div>
+                                    <div class="menu-editor-meal-cell">
                                         {% if slot.get('composition_id') %}
                                             <button
                                                 type="button"
                                                 class="menu-editor-meal-dish menu-editor-readonly-field menu-editor-meal-dish--link"
                                                 data-admin-week-builder-open
                                                 data-builder-composition-id="{{ slot.get('composition_id') }}"
-                                                aria-label="Öppna {{ slot.get('dish_name') or 'rätt' }} i Builder"
+                                                aria-label="Öppna {{ slot.get('dish_name') or 'rätt' }} i redigeraren"
                                             >{{ slot.get('dish_name') or '—' }}</button>
+                                        {% elif slot.get('unresolved_text') or slot.get('dish_name') %}
+                                            <div class="menu-editor-meal-dish menu-editor-readonly-field">{{ slot.get('unresolved_text') or slot.get('dish_name') }}</div>
                                         {% else %}
                                             <div class="menu-editor-meal-dish menu-editor-readonly-field">{{ slot.get('dish_name') or '—' }}</div>
                                         {% endif %}
+
+                                        {% if is_edit_mode and slot.get('menu_detail_id') %}
+                                            <div class="menu-editor-slot-actions">
+                                                <button
+                                                    type="button"
+                                                    class="menu-editor-slot-trigger"
+                                                    data-week-slot-action-toggle
+                                                    aria-label="Åtgärder för {{ slot.get('dish_name') or slot.get('unresolved_text') or 'rätt' }}"
+                                                    aria-expanded="false"
+                                                >⋯</button>
+                                                <div class="menu-editor-slot-menu" hidden data-week-slot-action-menu>
+                                                    {% if slot.get('composition_id') %}
+                                                        <button type="button" data-week-slot-action="replace">Byt rätt</button>
+                                                        <button type="button" data-week-slot-action="open">Öppna rätt</button>
+                                                    {% else %}
+                                                        <button type="button" data-week-slot-action="replace">Byt rätt</button>
+                                                    {% endif %}
+                                                    <button type="button" data-week-slot-action="remove">Ta bort från menyn</button>
+                                                </div>
+                                            </div>
+                                        {% endif %}
                                     </div>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
+                                </div>
+                            {% endfor %}
+                        </div>
                     </section>
                 {% endfor %}
             </div>
         </article>
     </section>
 
-    <section class="menu-editor-builder-host" hidden aria-hidden="true" data-admin-week-builder-host>
-        <div class="menu-editor-builder-host__backdrop" data-admin-week-builder-host-close></div>
-        <div class="menu-editor-builder-host__panel" role="dialog" aria-modal="true" aria-label="Builder dish editor" tabindex="-1">
-            <iframe class="menu-editor-builder-host__frame" title="Builder dish editor" src="about:blank" data-admin-week-builder-host-frame></iframe>
+    <section class="yp-modal-host" hidden aria-hidden="true" data-modal-host-mode="child-owned-card" data-admin-week-builder-host>
+        <div class="yp-modal-host__backdrop" data-admin-week-builder-host-close></div>
+        <div class="yp-modal-host__panel yp-modal-host__panel--md" role="dialog" aria-modal="true" aria-label="Redigera rätt" tabindex="-1" data-admin-week-builder-host-panel>
+            <div class="yp-modal-host__inline-picker" hidden data-admin-week-builder-inline-picker>
+                <header class="yp-modal-host__inline-header">
+                    <div>
+                        <p class="workspace-modal-kicker">Menyimport</p>
+                        <h1 id="adminWeekBuilderInlineTitle">Rättbibliotek</h1>
+                    </div>
+                    <button type="button" class="yp-btn yp-btn-secondary" data-admin-week-builder-inline-close>Stäng</button>
+                </header>
+
+                <p class="yp-modal-host__inline-context" data-admin-week-builder-inline-context></p>
+
+                <label class="yp-modal-host__inline-search-label" for="adminWeekBuilderInlineSearch">Sök rätt</label>
+                <input
+                    id="adminWeekBuilderInlineSearch"
+                    type="search"
+                    class="yp-input yp-modal-host__inline-search"
+                    placeholder="Sök rätt…"
+                    autocomplete="off"
+                    data-admin-week-builder-inline-search
+                >
+                <p class="yp-modal-host__inline-status" data-admin-week-builder-inline-status role="status" aria-live="polite">Sök efter en rätt.</p>
+                <div class="yp-modal-host__inline-results" data-admin-week-builder-inline-results></div>
+
+                <footer class="yp-modal-host__inline-actions">
+                    <button type="button" class="yp-btn yp-btn-primary" data-admin-week-builder-inline-create>+ Skapa ny rätt</button>
+                    <button type="button" class="yp-btn yp-btn-secondary" data-admin-week-builder-inline-close>Avbryt</button>
+                </footer>
+            </div>
+            <iframe class="yp-modal-host__frame" title="Menyimportredigerare" src="about:blank" data-admin-week-builder-host-frame></iframe>
         </div>
     </section>
+
+    <div id="quickCreateModal" class="modal hidden" hidden aria-hidden="true">
+        <div class="modal-content modal-content-compact">
+            <div class="workspace-modal-header">
+                <div>
+                    <p class="workspace-modal-kicker">Skapa rätt</p>
+                    <h3>Skapa rätt</h3>
+                </div>
+                <button id="quickCreateModalClose" type="button">Avbryt</button>
+            </div>
+
+            <section class="workspace-quick-card">
+                <label>Rättnamn
+                    <input id="freeDishName" type="text" placeholder="Kottbullar med potatis">
+                </label>
+                <label>Kategori
+                    <select id="freeDishCategory">
+                        <option value="ovrigt" selected>Övrigt</option>
+                        <option value="fisk">Fisk</option>
+                        <option value="kott">Kött</option>
+                        <option value="dessert">Dessert</option>
+                    </select>
+                </label>
+                <button id="btnCreateDish" type="button">Skapa rätt</button>
+                <div id="createDishOut" class="workspace-feedback" aria-live="polite"></div>
+            </section>
+        </div>
+    </div>
 {% endblock %}

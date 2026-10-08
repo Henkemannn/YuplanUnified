@@ -181,6 +181,9 @@
       bind(state.config);
     }
     resetFields();
+    if (state.nameInput && state.config.initialName) {
+      state.nameInput.value = String(state.config.initialName);
+    }
     if (state.title && state.config.title) {
       state.title.textContent = String(state.config.title);
     }

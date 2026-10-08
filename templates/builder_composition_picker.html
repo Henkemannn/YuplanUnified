@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rättbibliotek</title>
+  <link rel="stylesheet" href="/static/css/builder.css?v=builder-modal-system-reset-4">
+  <link rel="stylesheet" href="/static/css/builder_modal.css?v=builder-b1-modal-css-v1">
+  <link rel="stylesheet" href="/static/css/builder_composition_picker.css?v=builder-composition-picker-v1">
+</head>
+<body class="builder-workspace-v1 builder-composition-picker">
+  <main class="builder-composition-picker__layout">
+    <section class="builder-composition-picker__panel" role="dialog" aria-modal="true" aria-labelledby="compositionPickerTitle">
+      <header class="builder-composition-picker__header">
+        <div>
+          <p class="workspace-modal-kicker">Menyimport</p>
+          <h1 id="compositionPickerTitle">Rättbibliotek</h1>
+        </div>
+        <button type="button" class="yp-btn yp-btn-secondary" data-composition-picker-close>Stäng</button>
+      </header>
+
+      <label class="builder-composition-picker__search-label" for="compositionPickerSearch">Sök rätt</label>
+      <input id="compositionPickerSearch" type="search" placeholder="Sök rätt…" autocomplete="off">
+      <p class="builder-composition-picker__status" data-composition-picker-status role="status" aria-live="polite">Sök efter en rätt.</p>
+      <div class="builder-composition-picker__results" data-composition-picker-results></div>
+
+      <footer class="builder-composition-picker__actions">
+        <button type="button" class="yp-btn yp-btn-primary" data-composition-picker-create>+ Skapa ny rätt</button>
+        <button type="button" class="yp-btn yp-btn-secondary" data-composition-picker-close>Avbryt</button>
+      </footer>
+    </section>
+  </main>
+
+  {% include "builder/_dish_create_modal.html" %}
+
+  <script src="/static/js/builder_composition_search.js"></script>
+  <script src="/static/js/builder_dish_create.js"></script>
+  <script src="/static/ui/builder_composition_picker.js?v=builder-composition-picker-v1"></script>
+</body>
+</html>

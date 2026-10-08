@@ -2745,7 +2745,6 @@ function renderLibrary(result) {
   const searchInput = document.getElementById("libraryComponentsSearch");
   const currentQuery = searchInput ? String(searchInput.value || "") : "";
   const dishesSearchInput = document.getElementById("libraryDishesSearch");
-  const dishesQuery = dishesSearchInput ? String(dishesSearchInput.value || "").trim().toLowerCase() : "";
   const dishesCategoryNav = document.getElementById("libraryDishesCategoryNav");
 
   if (componentsMeta && components.length === 0) {
@@ -2781,11 +2780,10 @@ function renderLibrary(result) {
     }
     return dishCategoryValue(item) === dishesScope;
   });
-  const visibleCompositions = dishesQuery
-    ? scopeFilteredCompositions.filter((item) =>
-      String(item.composition_name || item.composition_id || "").toLowerCase().includes(dishesQuery),
-    )
-    : scopeFilteredCompositions;
+  const visibleCompositions = BuilderCompositionSearchRuntime.filterCompositionsBySearch(
+    scopeFilteredCompositions,
+    dishesSearchInput ? dishesSearchInput.value || "" : ""
+  );
 
   const homeNeedsCategoryEl = document.getElementById("homeDishesNeedCategoryCount");
   if (homeNeedsCategoryEl) {

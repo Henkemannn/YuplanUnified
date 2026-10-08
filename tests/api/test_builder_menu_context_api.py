@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+import os
+import tempfile
+
 from core.app_factory import create_app
+from core.db import create_all
 
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 
 def _client():
-    app = create_app({"TESTING": True})
+    db_dir = tempfile.mkdtemp(prefix="builder_menu_context_api_")
+    db_path = os.path.join(db_dir, "test_app.db")
+    app = create_app({"TESTING": True, "database_url": f"sqlite:///{db_path}", "SECRET_KEY": "test", "FORCE_DB_REINIT": True})
+    with app.app_context():
+        create_all()
     return app.test_client()
 
 
@@ -787,6 +795,64 @@ def test_resolve_menu_detail_endpoint() -> None:
     assert detail.get("composition_ref_type") == "composition"
     assert detail.get("composition_id") == "plate_1"
     assert detail.get("unresolved_text") is None
+
+
+def test_update_menu_row_requires_and_uses_canonical_day_and_meal_slot() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_1", "composition_name": "Fish Plate"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_2", "composition_name": "Veg Plate"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_1", "site_id": "site_1", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+    created = client.post(
+        "/api/builder/menus/menu_1/rows",
+        json={
+            "day": "monday",
+            "meal_slot": "lunch_alt1",
+            "composition_id": "plate_1",
+            "menu_detail_id": "menu_1-row-1",
+        },
+        headers=HEADERS,
+    )
+    detail_id = ((created.get_json() or {}).get("menu_detail") or {}).get("menu_detail_id")
+
+    missing_day = client.patch(
+        f"/api/builder/menus/menu_1/rows/{detail_id}",
+        json={"meal_slot": "lunch_alt1", "composition_id": "plate_2"},
+        headers=HEADERS,
+    )
+    assert missing_day.status_code == 400
+
+    missing_meal_slot = client.patch(
+        f"/api/builder/menus/menu_1/rows/{detail_id}",
+        json={"day": "monday", "composition_id": "plate_2"},
+        headers=HEADERS,
+    )
+    assert missing_meal_slot.status_code == 400
+
+    updated = client.patch(
+        f"/api/builder/menus/menu_1/rows/{detail_id}",
+        json={"day": "monday", "meal_slot": "lunch_alt1", "composition_id": "plate_2"},
+        headers=HEADERS,
+    )
+
+    assert updated.status_code == 200
+    body = updated.get_json() or {}
+    detail = body.get("menu_detail") or {}
+    assert body.get("ok") is True
+    assert detail.get("day") == "monday"
+    assert detail.get("meal_slot") == "lunch_alt1"
+    assert detail.get("composition_id") == "plate_2"
 
 
 def test_create_composition_from_row_endpoint() -> None:

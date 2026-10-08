@@ -92,6 +92,17 @@ def test_builder_workspace_unrelated_query_params_do_not_enable_framing(client):
     assert "frame-ancestors 'none'" in r.headers.get("Content-Security-Policy", "")
 
 
+def test_builder_composition_picker_allows_same_origin_framing(client):
+    r = client.get(
+        "/builder-composition-picker",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert r.headers.get("X-Frame-Options") == "SAMEORIGIN"
+    csp = r.headers.get("Content-Security-Policy", "")
+    assert "frame-ancestors 'self'" in csp
+    assert "frame-ancestors 'none'" not in csp
+
+
 def test_csrf_block_modify_without_token(client):
     # Attempt posting without CSRF token should fail (403) if endpoint exists; use feature set route requiring admin role -> will 401 first
     # Instead craft a dummy path by reusing existing /auth/login which is exempt (login issues token). We'll simulate by calling a state changing endpoint after login without header.

@@ -15,6 +15,10 @@ body.builder-workspace-v1.builder-editor-host.builder-editor-host-failed {
   visibility: visible;
 }
 
+body.builder-workspace-v1.builder-editor-host .modal {
+  background: transparent;
+}
+
 body.builder-workspace-v1.builder-editor-host #builderEditorHostStatus {
   position: fixed;
   inset: 16px;

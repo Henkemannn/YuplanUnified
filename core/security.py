@@ -103,7 +103,9 @@ def _origin_from_request() -> str | None:
 
 
 def _is_builder_editor_host_request() -> bool:
-    return request.path == "/builder-editor-host"
+    # Allowlist exact routes that are permitted to be framed same-origin by the app.
+    # Keep the check narrow and explicit to avoid weakening default DENY policy.
+    return request.path in ("/builder-editor-host", "/builder-composition-picker")
 
 
 def _validate_cors(app: Flask, resp):  # pragma: no cover - exercised indirectly

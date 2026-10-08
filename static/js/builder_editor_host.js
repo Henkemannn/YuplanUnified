@@ -25,9 +25,6 @@
     componentId: '',
     hostKind: '',
     hostTargetId: '',
-    hostMode: 'idle',
-    createdCompositionId: '',
-    createdCompositionReadySent: false,
   };
 
   let componentLibraryRuntime = null;
@@ -45,7 +42,8 @@
     const componentId = normalizeId(url.searchParams.get('component_id'));
     const hostKind = compositionId ? 'composition' : (componentId ? 'component' : '');
     const hostTargetId = compositionId || componentId;
-    return { compositionId, componentId, hostKind, hostTargetId };
+    const unsupportedMode = url.searchParams.has('picker') || url.searchParams.has('create');
+    return { compositionId, componentId, hostKind, hostTargetId, unsupportedMode };
   }
 
   async function callApi(url, options = {}) {
@@ -324,33 +322,6 @@
     await Promise.all([loadAllCompositions(), getComponentLibraryRuntime().loadAllComponents()]);
   }
 
-  function openCreateCompositionModal() {
-    if (!globalThis.BuilderDishCreateModal || typeof globalThis.BuilderDishCreateModal.open !== 'function') {
-      throw new Error('Create Dish UI is not available.');
-    }
-    globalThis.BuilderDishCreateModal.open({
-      title: 'Skapa rätt',
-      createEndpoint: '/api/builder/compositions/private',
-      includeSeedComponents: false,
-      onSuccess: async (composition) => {
-        state.hostMode = 'create-composition-open';
-        state.createdCompositionId = String(composition && composition.composition_id || '').trim();
-        state.createdCompositionReadySent = false;
-        state.compositionId = state.createdCompositionId;
-        state.componentId = '';
-        state.hostKind = 'composition';
-        state.hostTargetId = state.compositionId;
-        state.controller.openComposition(composition, 'components');
-        setHostStatus(true);
-      },
-      onCancel: () => {
-        state.createdCompositionId = '';
-        state.createdCompositionReadySent = false;
-        notifyHostClose({ kind: 'create-composition', cancelled: true });
-      },
-    });
-  }
-
   function resolveComponentById(componentId) {
     return getComponentLibraryRuntime().resolveComponentById(componentId);
   }
@@ -459,51 +430,12 @@
     }
     const currentComposition = getCurrentComposition();
     const detailComposition = detail && detail.composition ? detail.composition : null;
-    const finalComposition = detailComposition || (!(detail && detail.cancelled) ? currentComposition || null : null);
-    const finalCompositionId = normalizeId(finalComposition && finalComposition.composition_id);
     const normalizedDetail = {
       source: 'builder-editor-host',
       host_target_id: state.hostTargetId,
-      ...(state.hostMode === 'create-composition-open'
-        ? {
-            composition: finalComposition || undefined,
-          }
-        : {
-            composition: detailComposition || currentComposition || undefined,
-          }),
+      composition: detailComposition || currentComposition || undefined,
       ...detail,
     };
-    if (
-      state.hostMode === 'create-composition-open'
-      && !state.createdCompositionReadySent
-      && state.createdCompositionId
-      && finalCompositionId
-      && finalCompositionId === state.createdCompositionId
-      && !normalizedDetail.cancelled
-    ) {
-      if (window.parent && window.parent !== window) {
-        window.parent.postMessage(
-          {
-            type: 'builder-host-created-composition-ready',
-            detail: {
-              source: 'builder-editor-host',
-              host_target_id: state.hostTargetId,
-              kind: 'composition',
-              composition: finalComposition || undefined,
-            },
-          },
-          window.location.origin,
-        );
-      }
-      state.createdCompositionReadySent = true;
-      state.createdCompositionId = '';
-      state.hostMode = 'idle';
-    }
-    if (normalizedDetail.cancelled) {
-      state.createdCompositionId = '';
-      state.createdCompositionReadySent = false;
-      state.hostMode = 'idle';
-    }
     const payload = {
       type: 'builder-host-close',
       detail: normalizedDetail,
@@ -557,26 +489,6 @@
       return;
     }
 
-    if (payload.type === 'builder-host-create-composition') {
-      state.hostMode = 'create-composition';
-      state.hostKind = 'create-composition';
-      state.hostTargetId = 'create-composition';
-      state.compositionId = '';
-      state.componentId = '';
-      state.createdCompositionId = '';
-      state.createdCompositionReadySent = false;
-      try {
-        openCreateCompositionModal();
-        setHostStatus(true);
-        notifyHostReady({ kind: 'create-composition' });
-      } catch (error) {
-        showJson('builderOut', { status: 0, data: { ok: false, error: String(error && error.message || error) } });
-        notifyHostClose({ kind: 'create-composition', error: String(error && error.message || error) });
-        setHostStatus(false, String(error && error.message || error));
-      }
-      return;
-    }
-
     if (payload.type !== 'builder-host-open') {
       return;
     }
@@ -592,13 +504,11 @@
       state.componentId = '';
       state.hostKind = 'composition';
       state.hostTargetId = targetId;
-      state.hostMode = 'composition';
     } else {
       state.componentId = targetId;
       state.compositionId = '';
       state.hostKind = 'component';
       state.hostTargetId = targetId;
-      state.hostMode = 'component';
     }
 
     await openRequestedTarget();
@@ -630,8 +540,6 @@
         state.compositionId = editableComposition.composition_id;
         await preloadLinkedComponents(editableComposition);
         state.controller.openComposition(editableComposition, 'overview');
-      } else if (state.hostKind === 'create-composition') {
-        openCreateCompositionModal();
       } else {
         const component = await loadComponentById(state.componentId);
         if (!component) {
@@ -650,6 +558,10 @@
 
   document.addEventListener('DOMContentLoaded', async () => {
     const target = readTarget();
+    if (target.unsupportedMode) {
+      setHostStatus(false, 'This host opens existing Builder dishes or components only.');
+      return;
+    }
     state.compositionId = target.compositionId;
     state.componentId = target.componentId;
     state.hostKind = target.hostKind;
@@ -692,12 +604,6 @@
         ...modalState,
       },
     });
-
-    if (globalThis.BuilderDishCreateModal && typeof globalThis.BuilderDishCreateModal.bind === 'function') {
-      globalThis.BuilderDishCreateModal.bind({
-        includeSeedComponents: false,
-      });
-    }
 
     notifyHostRuntimeReady();
 

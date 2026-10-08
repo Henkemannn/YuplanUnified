@@ -366,7 +366,7 @@ def test_week_view_shows_updated_dish(seeded_week_48, client_admin):
 
 
 def test_week_view_has_edit_button(seeded_week_48, client_admin):
-    """Test that week view has 'Redigera' button."""
+    """Test that week view has the new same-page edit entrypoint."""
     response = client_admin.get(
         "/ui/admin/menu-import/week/2025/48",
         headers=ADMIN_HEADERS
@@ -376,9 +376,10 @@ def test_week_view_has_edit_button(seeded_week_48, client_admin):
     html = response.data.decode('utf-8')
     
     # Check for edit button
-    assert "Redigera" in html
+    assert "Redigera meny" in html
     assert "/ui/admin/menu-import/week/2025/48?edit=1" in html
     assert "/ui/admin/menu-import/week/2025/48/edit" not in html
+    assert "/menu-builder-v1" not in html
 
 
 def test_week_view_read_only_default_has_no_inputs_and_swedish_labels(seeded_week_48, client_admin):
@@ -399,10 +400,13 @@ def test_week_view_read_only_default_has_no_inputs_and_swedish_labels(seeded_wee
     assert "menu-day-row" in html
     assert 'name="Måndag_Lunch_alt1"' not in html
     assert "menu-editor-input" not in html
+    assert "data-week-slot-action-toggle" not in html
+    assert "data-week-slot-action=\"match\"" not in html
+    assert "data-week-slot-action=\"create\"" not in html
 
 
-def test_week_view_edit_mode_shows_inputs_save_and_cancel(seeded_week_48, client_admin):
-    """Edit mode should render editable fields and save/cancel actions on same route."""
+def test_week_view_edit_mode_shows_same_page_shell(seeded_week_48, client_admin):
+    """Edit mode should stay on the same page and keep canonical row rendering."""
     response = client_admin.get(
         "/ui/admin/menu-import/week/2025/48?edit=1",
         headers=ADMIN_HEADERS,
@@ -411,19 +415,19 @@ def test_week_view_edit_mode_shows_inputs_save_and_cancel(seeded_week_48, client
     assert response.status_code == 200
     html = response.data.decode("utf-8")
 
-    assert 'name="Måndag_Lunch_alt1"' in html
-    assert 'name="Måndag_Lunch_alt2"' in html
-    assert 'name="Måndag_Lunch_dessert"' in html
-    assert 'name="Måndag_Kväll_kvall"' in html
-    assert ">Spara<" in html
-    assert "Avbryt" in html
-    assert "/ui/admin/menu-import/week/2025/48/save" in html
-    assert 'href="/ui/admin/menu-import/week/2025/48"' in html
+    assert "Klar" in html
+    assert "menu-day-row" in html
+    assert "menu-editor-meal-type" in html
+    assert 'name="Måndag_Lunch_alt1"' not in html
+    assert ">Spara<" not in html
+    assert "/ui/admin/menu-import/week/2025/48/save" not in html
     assert "/ui/admin/menu-import/week/2025/48/edit" not in html
+    assert "data-week-slot-action-toggle" not in html
+    assert "data-week-slot-open-unresolved" not in html
 
 
 def test_week_view_edit_mode_has_tight_day_row_grid_selectors(seeded_week_48, client_admin):
-    """Edit mode should render row hooks for tight label/input grid layout."""
+    """Edit mode should render the same row hooks without legacy inputs."""
     response = client_admin.get(
         "/ui/admin/menu-import/week/2025/48?edit=1",
         headers=ADMIN_HEADERS,
@@ -433,9 +437,9 @@ def test_week_view_edit_mode_has_tight_day_row_grid_selectors(seeded_week_48, cl
     html = response.data.decode("utf-8")
 
     assert "menu-day-row" in html
-    assert "menu-editor-edit-row" in html
     assert "menu-editor-meal-type" in html
-    assert "menu-editor-input" in html
+    assert "menu-editor-meals" in html
+    assert "menu-editor-input" not in html
 
 
 def test_post_save_from_edit_mode_redirects_to_read_only_with_success_banner(seeded_week_48, client_admin):
@@ -561,8 +565,8 @@ def test_week_view_renders_imported_dishes_for_2026_w11(seeded_imported_week_11,
     assert "Köttsoppa" in html
 
 
-def test_week_view_edit_mode_prefills_imported_values_for_2026_w11(seeded_imported_week_11, client_admin_imported):
-    """Edit mode should prefill inputs with existing imported values for same week route."""
+def test_week_view_edit_mode_shows_canonical_rows_for_2026_w11(seeded_imported_week_11, client_admin_imported):
+    """Edit mode should keep the canonical same-page shell and row click targets."""
     response = client_admin_imported.get(
         "/ui/admin/menu-import/week/2026/11?edit=1",
         headers=ADMIN_HEADERS,
@@ -571,11 +575,12 @@ def test_week_view_edit_mode_prefills_imported_values_for_2026_w11(seeded_import
     assert response.status_code == 200
     html = response.data.decode("utf-8")
 
-    assert 'name="Måndag_Lunch_alt1"' in html
-    assert 'value="Lasagne"' in html
-    assert 'name="Måndag_Kväll_kvall"' in html
-    assert 'value="Köttsoppa"' in html
+    assert "menu-day-row" in html
+    assert 'Lasagne' in html
+    assert 'Köttsoppa' in html
+    assert 'name="Måndag_Lunch_alt1"' not in html
     assert "/ui/admin/menu-import/week/2026/11/edit" not in html
+    assert "Klar" in html
 
 
 def test_week_picker_shows_cross_year_options_and_status_chips(seeded_week_nav_cross_year):

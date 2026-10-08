@@ -30,6 +30,9 @@ def test_builder_editor_host_renders_shared_editor_shell(client_admin) -> None:
     assert '<script src="/static/js/builder_editor_host.js?v=builder-editor-host-v1"></script>' in html
     assert html.find("builder_component_theme.js") < html.find("builder_calculation_utils.js") < html.find("builder_component_library_runtime.js") < html.find("builder_editor_host.js?v=builder-editor-host-v1")
     assert '<script src="/static/js/builder.js?v=builder-modal-system-reset-1"></script>' not in html
+    assert 'data-rattbibliotek-picker' not in html
+    assert 'builder_composition_search.js' not in html
+    assert 'builder_dish_create.js' not in html
     assert 'builder-platform-header' not in html
     assert 'builder-shell' not in html
     assert 'builder-sidebar' not in html
@@ -81,6 +84,12 @@ def test_builder_editor_host_respects_access_boundary(client_admin) -> None:
     )
 
     assert rv.status_code == 403
+
+
+def test_builder_editor_host_rejects_picker_and_create_modes(client_admin) -> None:
+    for query in ("picker=1", "create=1"):
+        rv = client_admin.get("/builder-editor-host?" + query, headers=_headers())
+        assert rv.status_code == 400
 
 
 def test_builder_editor_host_uses_targeted_scoped_reads() -> None:
@@ -156,7 +165,7 @@ def test_builder_editor_host_uses_targeted_scoped_reads() -> None:
     assert "const builderPaletteSearch = document.getElementById(\"builderPaletteSearch\");" not in controller_js
 
 
-def test_builder_editor_host_component_palette_and_create_ready_contract() -> None:
+def test_builder_editor_host_keeps_shared_component_library_runtime() -> None:
     host_js = Path("static/js/builder_editor_host.js").read_text(encoding="utf-8")
 
     assert "BuilderComponentLibraryRuntime.create({" in host_js
@@ -166,12 +175,11 @@ def test_builder_editor_host_component_palette_and_create_ready_contract() -> No
     assert "pill.addEventListener('click', async () => {" not in host_js
     assert "searchInputElement.addEventListener('input'" not in host_js
     assert "button.addEventListener('click', async () => {" not in host_js
-    assert "builder-host-created-composition-ready" in host_js
-    assert "const detailComposition = detail && detail.composition ? detail.composition : null;" in host_js
-    assert "const finalComposition = detailComposition || (!(detail && detail.cancelled) ? currentComposition || null : null);" in host_js
-    assert "const finalCompositionId = normalizeId(finalComposition && finalComposition.composition_id);" in host_js
-    assert "composition: finalComposition || undefined" in host_js
-    assert "!normalizedDetail.cancelled" in host_js
+    assert "builder-host-created-composition-ready" not in host_js
+    assert "openCreateCompositionModal" not in host_js
+    assert "BuilderDishCreateModal" not in host_js
+    assert "data-rattbibliotek-picker" not in host_js
+    assert "function renderPickerResults()" not in host_js
     assert "type: 'builder-host-close'" in host_js
     assert not list(Path("static/offshore2").glob("*component*.js"))
     runtime_js = Path("static/js/builder_component_library_runtime.js").read_text(encoding="utf-8")
@@ -182,17 +190,62 @@ def test_builder_editor_host_component_palette_and_create_ready_contract() -> No
     assert "No reusable components yet" in runtime_js
 
 
-def test_builder_editor_host_create_flow_uses_private_endpoint_and_explicit_success_signal() -> None:
+def test_builder_editor_host_only_resolves_existing_targets() -> None:
     host_js = Path("static/js/builder_editor_host.js").read_text(encoding="utf-8")
-    create_js = Path("static/js/builder_dish_create.js").read_text(encoding="utf-8")
+    assert "const hostKind = compositionId ? 'composition' : (componentId ? 'component' : '');" in host_js
+    assert "url.searchParams.has('picker') || url.searchParams.has('create')" in host_js
+    assert "This host opens existing Builder dishes or components only." in host_js
+    assert "resolveCompositionEditTarget(sourceCompositionId)" in host_js
+    assert "openComponentDetailEditor(component.component_id, 'overview')" in host_js
+    assert "openPickerSurface" not in host_js
+    assert "searchParams.get('picker')" not in host_js
 
-    assert "createdCompositionId" in host_js
-    assert "createdCompositionReadySent" in host_js
-    assert "builder-host-created-composition-ready" in host_js
-    assert "includeSeedComponents: false" in host_js
-    assert "createEndpoint: '/api/builder/compositions/private'" in host_js or 'createEndpoint: "/api/builder/compositions/private"' in host_js
-    assert "notifyHostClose({ kind: 'create-composition', cancelled: true });" in host_js
-    assert "state.hostMode = 'idle';" in host_js
-    assert "seed_components: false" not in create_js
-    assert "includeSeedComponents" in create_js
-    assert "offshore" not in create_js.lower()
+
+def test_builder_composition_picker_is_a_separate_selector_host(client_admin) -> None:
+    rv = client_admin.get("/builder-composition-picker?initial_name=Kottbullar", headers=_headers())
+
+    assert rv.status_code == 200
+    html = rv.data.decode("utf-8")
+    assert 'class="builder-workspace-v1 builder-composition-picker"' in html
+    assert 'id="compositionPickerSearch"' in html
+    assert 'data-composition-picker-results' in html
+    assert 'data-composition-picker-create' in html
+    assert 'data-composition-picker-close' in html
+    assert 'Rättbibliotek' in html
+    assert 'Skapa ny rätt' in html
+    assert 'Sök rätt…' in html
+    assert '<script src="/static/js/builder_composition_search.js"></script>' in html
+    assert '<script src="/static/js/builder_dish_create.js"></script>' in html
+    assert 'builder_editor_host.js' not in html
+    assert 'resolveModal' not in html
+    assert 'componentDetailEditorModal' not in html
+
+    picker_js = Path("static/ui/builder_composition_picker.js").read_text(encoding="utf-8")
+    assert "'/api/builder/compositions'" in picker_js
+    assert "BuilderCompositionSearchRuntime.filterCompositionsBySearch" in picker_js
+    assert "createEndpoint: '/api/builder/compositions/private'" in picker_js
+    assert "BuilderDishCreateModal.open" in picker_js
+    assert "sendToParent('menu-picker-selected', { composition_id: id });" in picker_js
+    assert "composition: " not in picker_js
+    assert "if (editAfterCreate && id)" in picker_js
+    assert "window.location.replace('/builder-editor-host?composition_id='" in picker_js
+
+
+def test_builder_composition_picker_respects_access_boundary(client_admin) -> None:
+    rv = client_admin.get("/builder-composition-picker", headers=_headers(role="viewer"))
+
+    assert rv.status_code == 403
+
+
+def test_builder_workspace_uses_shared_composition_search_runtime() -> None:
+    builder_js = Path("static/js/builder.js").read_text(encoding="utf-8")
+    search_js = Path("static/js/builder_composition_search.js").read_text(encoding="utf-8")
+
+    assert "BuilderCompositionSearchRuntime.filterCompositionsBySearch(" in builder_js
+    assert "BuilderCompositionSearchRuntime.matchesCompositionSearch" not in builder_js
+    assert "matchesCompositionSearch(composition, searchQuery)" in search_js
+    assert "library_group" not in search_js
+
+    host_js = Path("static/js/builder_editor_host.js").read_text(encoding="utf-8")
+    assert "data-rattbibliotek-picker" not in host_js
+    assert "function renderPickerResults()" not in host_js

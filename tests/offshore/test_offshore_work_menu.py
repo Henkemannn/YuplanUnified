@@ -340,10 +340,12 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "function openModalFromTrack(trackButton, mode = 'default')" in js_source
     assert "modal.dataset.workMenuMode = mode;" in js_source
     assert "function openBuilderHostForCreate(trackButton)" in js_source
-    assert "builder-host-create-composition" in js_source
-    assert "builder-host-created-composition-ready" in js_source
-    assert "pendingBuilderHostCreate = null;" in js_source
-    assert "if (payload.type === 'builder-host-created-composition-ready') {" in js_source
+    assert "builderHostFrame.src = '/builder-composition-picker?' + query.toString();" in js_source
+    assert "edit_after_create: '1'" in js_source
+    assert "if (payload.type === 'menu-picker-selected') {" in js_source
+    assert "builder-host-create-composition" not in js_source
+    assert "builder-host-created-composition-ready" not in js_source
+    assert "createdBuilderCompositionId = compositionId;" in js_source
     assert "if (lastBuilderHostKind === 'create-composition') {" in js_source
     assert "setPickerViewMode('confirm');" in js_source
     assert "function ensureBuilderFieldOption(option) {" in js_source
@@ -380,7 +382,7 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "window.addEventListener('message'" in js_source
     assert "lastBuilderHostKind" in js_source
     assert "if (lastBuilderHostKind === 'create-composition') {" in js_source
-    assert "String(detail.host_target_id || '') !== 'create-composition'" in js_source
+    assert "String(detail.host_target_id || '') !== createdBuilderCompositionId" in js_source
     assert "String(detail.host_target_id || '') !== String(lastBuilderBridge.composition_id || '')" in js_source
     assert "String(detail.kind || '') !== lastBuilderHostKind" in js_source
     assert "builder-host-ready" in js_source

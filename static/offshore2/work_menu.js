@@ -157,7 +157,7 @@
     let lastBuilderHostScrollY = window.scrollY || 0;
     let builderHostRuntimeReady = false;
     let pendingBuilderHostOpen = null;
-    let pendingBuilderHostCreate = null;
+    let createdBuilderCompositionId = '';
     let pickerActiveTrack = null;
     let pickerSelectedOption = '';
     let pickerActiveCategory = 'all';
@@ -632,7 +632,7 @@
       builderHost.classList.remove('offshore-work-menu-builder-host--ready');
       document.body.classList.remove('offshore-work-menu-builder-host-open');
       pendingBuilderHostOpen = null;
-      pendingBuilderHostCreate = null;
+      createdBuilderCompositionId = '';
       window.scrollTo(lastBuilderHostScrollX, lastBuilderHostScrollY);
       if (lastBuilderHostActiveElement && typeof lastBuilderHostActiveElement.focus === 'function') {
         lastBuilderHostActiveElement.focus();
@@ -665,21 +665,6 @@
             source: 'offshore-work-menu',
             kind: hostKind,
             host_target_id: bridge.composition_id,
-          },
-        },
-        window.location.origin,
-      );
-    }
-
-    function postBuilderHostCreateComposition() {
-      if (!builderHostFrame || !builderHostFrame.contentWindow || !lastBuilderBridge) {
-        return;
-      }
-      builderHostFrame.contentWindow.postMessage(
-        {
-          type: 'builder-host-create-composition',
-          detail: {
-            source: 'offshore-work-menu',
           },
         },
         window.location.origin,
@@ -757,6 +742,7 @@
       lastBuilderHostActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       lastBuilderBridge = bridge;
       lastBuilderHostKind = 'create-composition';
+      createdBuilderCompositionId = '';
       lastBuilderHostScrollX = window.scrollX || 0;
       lastBuilderHostScrollY = window.scrollY || 0;
       if (builderHostTitle) {
@@ -767,12 +753,17 @@
       builderHost.classList.add('offshore-work-menu-builder-host--open');
       builderHost.classList.remove('offshore-work-menu-builder-host--ready');
       document.body.classList.add('offshore-work-menu-builder-host-open');
-      pendingBuilderHostCreate = { bridge };
-      if (builderHostRuntimeReady) {
-        postBuilderHostCreateComposition();
-      } else {
-        postBuilderHostPing();
+      builderHostRuntimeReady = false;
+      pendingBuilderHostOpen = null;
+      const initialName = String(trackCard.dataset.freeText || '').trim();
+      const query = new URLSearchParams({
+        create: '1',
+        edit_after_create: '1',
+      });
+      if (initialName) {
+        query.set('initial_name', initialName);
       }
+      builderHostFrame.src = '/builder-composition-picker?' + query.toString();
       return true;
     }
 
@@ -1176,23 +1167,21 @@
         builderHostRuntimeReady = true;
         if (pendingBuilderHostOpen) {
           postBuilderHostOpen(pendingBuilderHostOpen.bridge, pendingBuilderHostOpen.hostKind);
-        } else if (pendingBuilderHostCreate) {
-          postBuilderHostCreateComposition();
         }
         return;
       }
-      if (payload.type === 'builder-host-created-composition-ready') {
+      if (payload.type === 'menu-picker-selected') {
         if (lastBuilderHostKind !== 'create-composition') {
           return;
         }
-        const created = detail && detail.composition;
-        if (!created || !created.composition_id) {
+        const compositionId = String(detail && detail.composition_id || '').trim();
+        if (!compositionId) {
           return;
         }
         const option = {
-          value: created.composition_id,
-          label: created.composition_name || created.composition_id,
-          library_group: created.library_group || 'ovrigt',
+          value: compositionId,
+          label: compositionId,
+          library_group: 'ovrigt',
         };
         const existingIndex = compositionOptions.findIndex((entry) => String(entry.value) === String(option.value));
         if (existingIndex >= 0) {
@@ -1206,7 +1195,12 @@
         renderPickerResults();
         updatePickerConfirm();
         setPickerViewMode('confirm');
-        pendingBuilderHostCreate = null;
+        createdBuilderCompositionId = compositionId;
+        void refreshBuilderCompositionPresentation(compositionId, lastBuilderBridge);
+        return;
+      }
+      if (payload.type === 'menu-picker-close' && lastBuilderHostKind === 'create-composition') {
+        closeBuilderHost();
         return;
       }
       if (!builderHost || builderHost.hidden) {
@@ -1217,10 +1211,10 @@
       }
       if (payload.type === 'builder-host-ready') {
         if (lastBuilderHostKind === 'create-composition') {
-          if (String(detail.host_target_id || '') !== 'create-composition') {
+          if (String(detail.host_target_id || '') !== createdBuilderCompositionId) {
             return;
           }
-          if (String(detail.kind || '') !== 'create-composition') {
+          if (String(detail.kind || '') !== 'composition') {
             return;
           }
         } else {
@@ -1244,17 +1238,20 @@
       if (payload.type !== 'builder-host-close') {
         return;
       }
-      if (lastBuilderHostKind !== 'create-composition' && String(detail.host_target_id || '') !== String(lastBuilderBridge.composition_id || '')) {
-        return;
-      }
-      if (lastBuilderHostKind !== 'create-composition' && String(detail.kind || '') !== lastBuilderHostKind) {
-        return;
+      if (lastBuilderHostKind === 'create-composition') {
+        if (String(detail.host_target_id || '') !== createdBuilderCompositionId || String(detail.kind || '') !== 'composition') {
+          return;
+        }
+      } else {
+        if (String(detail.host_target_id || '') !== String(lastBuilderBridge.composition_id || '')) {
+          return;
+        }
+        if (String(detail.kind || '') !== lastBuilderHostKind) {
+          return;
+        }
       }
       const shouldAutoApplyCreateComposition = lastBuilderHostKind === 'create-composition' && Boolean(pickerSelectedOption) && Boolean(saveForm);
       const shouldRefreshExistingComposition = lastBuilderHostKind === 'composition' && Boolean(lastBuilderBridge && lastBuilderBridge.composition_id);
-      if (lastBuilderHostKind === 'create-composition') {
-        pendingBuilderHostCreate = null;
-      }
       closeBuilderHost();
       if (shouldAutoApplyCreateComposition && saveForm && !pickerSubmitting) {
         pickerSubmitting = true;

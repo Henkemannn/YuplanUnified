@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 import sqlite3
 from pathlib import Path
 
@@ -274,26 +275,106 @@ def test_admin_menu_import_upload_creates_builder_link_publication_and_portal_pa
         ).fetchone()[0]
     finally:
         db.close()
+    assert int(publication_count_before) == 0
 
     week_view = client_admin.get(f"/ui/admin/menu-import/week/{YEAR}/{WEEK}", headers=ADMIN_HEADERS)
     html = week_view.data.decode("utf-8")
-    assert "Redigera matsedel" in html
-    assert f"/menu-builder-v1?menu_id={builder_menu_id}" in html
-    assert f"return_url=/ui/admin/menu-import/week/{YEAR}/{WEEK}" in html
-    assert html.count("Redigera matsedel") == 1
+    assert "Redigera meny" in html
+    assert "Redigera matsedel" not in html
+    assert "/menu-builder-v1?menu_id=" not in html
+    assert "?edit=1" in html
     assert 'data-admin-week-builder-host' in html
     assert 'data-admin-week-builder-host-frame' in html
+    assert 'yp-modal-host' in html
+    assert 'data-modal-host-mode="child-owned-card"' in html
     assert 'data-admin-week-builder-open' in html
     assert 'data-builder-composition-id="comp_monday_alt1"' in html
+    assert 'data-menu-detail-id="' in html
+    assert 'data-day-key="monday"' in html
+    assert 'data-meal-slot="lunch_alt1"' in html
     assert html.count('data-admin-week-builder-open') == 4
-    assert 'Tillbaka till matsedeln' not in html
     assert '/builder-editor-host?composition_id=' not in html
+    assert 'id="resolveModal"' not in html
+    assert 'id="componentDetailEditorModal"' not in html
+    assert '/static/css/builder.css' not in html
+    assert '/static/css/builder_modal.css' not in html
+    assert '/static/js/builder.js' not in html
+    assert '/static/js/builder_dish_editor.js' not in html
+    assert 'data-rattbibliotek-picker' not in html
+    assert 'rattbibliotekPickerSearch' not in html
+    assert 'Tisdag okänd rätt alt1' in html
+    assert 'Ej kopplad' not in html
+    assert '>Redigera<' not in html
+    assert 'js/modal_host.js' in html
+    assert 'admin_menu_import_week_builder_host.js' in html
+    assert 'admin_menu_import_week_actions.js' in html
+
+    edit_view = client_admin.get(f"/ui/admin/menu-import/week/{YEAR}/{WEEK}?edit=1", headers=ADMIN_HEADERS)
+    edit_html = edit_view.data.decode("utf-8")
+    assert edit_view.status_code == 200
+    assert 'data-week-slot-action-toggle' in edit_html
+    assert 'data-week-slot-action-menu' in edit_html
+    assert re.search(r'hidden[^>]*data-week-slot-action-menu', edit_html)
+    assert 'data-week-slot-action="replace"' in edit_html
+    assert 'data-week-slot-action="open"' in edit_html
+    assert 'data-week-slot-action="remove"' in edit_html
+    assert 'data-menu-detail-id="' in edit_html
+    assert 'Byt rätt' in edit_html
+    assert 'Öppna rätt' in edit_html
+    assert 'data-admin-week-builder-inline-picker' in edit_html
+    assert 'data-admin-week-builder-inline-search' in edit_html
+    assert 'data-admin-week-builder-inline-results' in edit_html
+    assert 'data-admin-week-builder-inline-create' in edit_html
+    assert 'id="quickCreateModal"' in edit_html
+    assert '+ Skapa ny rätt' in edit_html
+    assert 'Matcha rätt' not in edit_html
+    assert 'Välj rätt från biblioteket' not in edit_html
+    assert 'Ej kopplad' not in edit_html
+    assert 'data-week-slot-open-unresolved' not in edit_html
+    assert 'data-week-slot-unresolved-modal' not in edit_html
+    assert 'data-week-slot-unresolved-create' not in edit_html
+    assert 'data-week-slot-match-create' not in edit_html
+
+    assert 'data-rattbibliotek-picker' not in edit_html
+    assert 'rattbibliotekPickerSearch' not in edit_html
+    assert 'id="resolveModal"' not in edit_html
+    assert 'id="componentDetailEditorModal"' not in edit_html
+    assert '/static/js/builder.js' not in edit_html
+    assert '/static/js/builder_modal_controller.js' not in edit_html
+    assert 'js/builder_composition_search.js' in edit_html
+    assert 'js/builder_dish_create.js' in edit_html
+    assert 'js/modal_host.js' in edit_html
+    assert 'admin_menu_import_week_builder_host.js' in edit_html
 
     controller_js = Path('static/ui/admin_menu_import_week_builder_host.js').read_text(encoding='utf-8')
+    actions_js = Path('static/ui/admin_menu_import_week_actions.js').read_text(encoding='utf-8')
     assert "builder-host-close" in controller_js
-    assert "closeHost();" in controller_js
+    assert "YuplanModalHost.create" in controller_js
+    assert "host.close();" in controller_js
     assert "window.location.replace" not in controller_js
     assert "window.location.assign" not in controller_js
+    assert "'/builder-editor-host?composition_id='" in controller_js
+    assert "BuilderCompositionSearchRuntime.filterCompositionsBySearch" in actions_js
+    assert "BuilderDishCreateModal.open" in actions_js
+    assert "closeMenus()" in actions_js
+    assert "closeAllOverlays()" in actions_js
+    assert "document.addEventListener('keydown'" in actions_js
+    assert "document.addEventListener('click'" in actions_js
+    assert "state.activeMenu && state.activeMenu !== menu" in actions_js
+    assert "openInlinePicker(context);" in actions_js
+    assert "function openExistingDish(compositionId, triggerElement)" in actions_js
+    assert "globalThis.AdminWeekBuilderHost.openComposition(resolvedCompositionId, triggerElement);" in actions_js
+    assert "composition_id: targetCompositionId" in actions_js
+    assert "return openExistingDish(context.compositionId);" in actions_js
+    assert "openHostForComposition(" not in actions_js
+    assert "builder-host-create-composition" not in actions_js
+    assert "dayKey: normalize(row.dataset.dayKey)" in actions_js
+    assert "mealSlot: normalize(row.dataset.mealSlot)" in actions_js
+    assert "day: targetContext.dayKey" in actions_js
+    assert "meal_slot: targetContext.mealSlot || targetContext.slotKey" in actions_js
+    assert "applyPickedComposition(state.activePickerContext, id);" in actions_js
+    assert "function editResolvedComposition()" in actions_js
+    assert "state.activeRow = row;" in actions_js
 
     builder_menu_count_after = len(app_session.extensions["builder_menu_context_flow"].list_menus())
     db = get_session()
@@ -362,7 +443,6 @@ def test_admin_menu_import_upload_creates_builder_link_publication_and_portal_pa
     assert weekview_ui.status_code == 200
     weekview_html = weekview_ui.data.decode("utf-8")
     assert "Tomatsoppa med ostsmörgås" in weekview_html
-    assert "Kvällsmat" in weekview_html
     assert "Middag" not in weekview_html
 
     overview = client_admin.get(f"/ui/weekview_overview?site_id={SITE_ID}&year={YEAR}&week={WEEK}", headers=ADMIN_HEADERS)

@@ -382,7 +382,17 @@ def builder_workspace_v1_ui():
 @ui_bp.get("/builder-editor-host")
 @require_roles("cook", "editor", "admin", "superuser")
 def builder_editor_host_ui():
+    from flask import abort, request
+
+    if request.args.get("picker") or request.args.get("create"):
+        abort(400)
     return render_template("builder_editor_host.html")
+
+
+@ui_bp.get("/builder-composition-picker")
+@require_roles("cook", "editor", "admin", "superuser")
+def builder_composition_picker_ui():
+    return render_template("builder_composition_picker.html")
 
 
 @ui_bp.get("/menu-builder-v1")
@@ -9469,4 +9479,3 @@ def admin_residents_week_post(year: int, week: int):
         except Exception:
             pass
     return redirect(url_for("ui.admin_residents_week", year=year, week=week))
-

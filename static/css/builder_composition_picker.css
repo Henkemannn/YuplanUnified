@@ -1,0 +1,126 @@
+html,
+body.builder-workspace-v1.builder-composition-picker {
+  min-height: 100%;
+  margin: 0;
+  background: transparent;
+}
+
+body.builder-workspace-v1.builder-composition-picker {
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.builder-composition-picker__layout {
+  display: grid;
+  min-height: calc(100vh - 40px);
+  place-items: center;
+}
+
+.builder-composition-picker__panel {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid rgba(210, 224, 237, 0.92);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 28px 70px rgba(22, 37, 52, 0.2);
+}
+
+.builder-composition-picker__header,
+.builder-composition-picker__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.builder-composition-picker__header {
+  margin-bottom: 20px;
+}
+
+.builder-composition-picker__header h1 {
+  margin: 0;
+  color: #193245;
+  font-size: 24px;
+}
+
+.builder-composition-picker__search-label {
+  display: block;
+  margin-bottom: 6px;
+  color: #314b60;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.builder-composition-picker__panel input[type="search"] {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.builder-composition-picker__status {
+  min-height: 20px;
+  margin: 10px 0;
+  color: #53697c;
+  font-size: 13px;
+}
+
+.builder-composition-picker__status[data-state="error"] {
+  color: #9d2727;
+}
+
+.builder-composition-picker__results {
+  display: grid;
+  gap: 8px;
+  max-height: min(48vh, 420px);
+  margin-bottom: 18px;
+  overflow: auto;
+}
+
+.builder-composition-picker__result,
+.builder-composition-picker__empty {
+  padding: 12px 14px;
+  border: 1px solid #d4dee8;
+  border-radius: 12px;
+  background: #fff;
+  color: #193245;
+}
+
+.builder-composition-picker__result {
+  width: 100%;
+  text-align: left;
+  font-weight: 700;
+}
+
+.builder-composition-picker__result:hover,
+.builder-composition-picker__result:focus-visible {
+  border-color: #8bb8d8;
+  background: #f3f8fc;
+}
+
+.builder-composition-picker__empty {
+  border-style: dashed;
+  color: #53697c;
+  font-size: 13px;
+}
+
+.builder-composition-picker__actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 560px) {
+  body.builder-workspace-v1.builder-composition-picker {
+    padding: 10px;
+  }
+
+  .builder-composition-picker__layout {
+    min-height: calc(100vh - 20px);
+  }
+
+  .builder-composition-picker__panel {
+    max-height: calc(100vh - 20px);
+    padding: 16px;
+    border-radius: 18px;
+  }
+}
