@@ -368,6 +368,11 @@ def test_admin_menu_import_upload_creates_builder_link_publication_and_portal_pa
     assert "function openExistingDish(compositionId, triggerElement)" in actions_js
     assert "globalThis.AdminWeekBuilderHost.openComposition(resolvedCompositionId, triggerElement);" in actions_js
     assert "composition_id: targetCompositionId" in actions_js
+    assert "async function clearRowComposition()" in actions_js
+    assert "context.rowKind === 'dynamic'" in actions_js
+    assert "composition_ref_type: 'empty'" in actions_js
+    assert "await clearRowComposition();" in actions_js
+    assert "await deleteRow();" in actions_js
     assert "return openExistingDish(context.compositionId);" in actions_js
     assert "openHostForComposition(" not in actions_js
     assert "builder-host-create-composition" not in actions_js

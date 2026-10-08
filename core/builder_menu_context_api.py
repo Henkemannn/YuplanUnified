@@ -347,7 +347,7 @@ def add_composition_menu_row(menu_id: str):
                 day=_require_str(payload, "day"),
                 display_label=display_label,
                 note=_optional_str(payload, "note"),
-                sort_order=_maybe_int(payload.get("sort_order"), field="sort_order") or 0,
+                sort_order=_maybe_int(payload.get("sort_order"), field="sort_order"),
             )
         else:
             detail = flow.add_composition_menu_row(

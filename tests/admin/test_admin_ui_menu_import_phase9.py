@@ -1,6 +1,7 @@
 """Admin UI menu import Phase 9 tests - Menu editing functionality."""
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -440,6 +441,95 @@ def test_week_view_edit_mode_has_tight_day_row_grid_selectors(seeded_week_48, cl
     assert "menu-editor-meal-type" in html
     assert "menu-editor-meals" in html
     assert "menu-editor-input" not in html
+
+
+def test_week_view_edit_mode_renders_dynamic_menu_rows_and_create_row_affordance(
+    seeded_week_48,
+    client_admin,
+    monkeypatch,
+):
+    """Builder-linked edit mode should render dynamic rows and the day-level create affordance."""
+    builder_menu_id = "builder-100"
+    client_admin.post(
+        "/api/builder/compositions",
+        json={"composition_id": "comp_monday_alt1", "composition_name": "Köttbullar med potatis"},
+        headers=ADMIN_HEADERS,
+    )
+    client_admin.post(
+        "/api/builder/compositions",
+        json={"composition_id": "comp_monday_alt2", "composition_name": "Fiskgratäng"},
+        headers=ADMIN_HEADERS,
+    )
+    client_admin.post(
+        "/api/builder/compositions",
+        json={"composition_id": "comp_monday_dessert", "composition_name": "Glass"},
+        headers=ADMIN_HEADERS,
+    )
+    client_admin.post(
+        "/api/builder/compositions",
+        json={"composition_id": "comp_monday_kvall", "composition_name": "Smörgåsar"},
+        headers=ADMIN_HEADERS,
+    )
+    client_admin.post(
+        "/api/builder/menus",
+        json={"menu_id": builder_menu_id, "site_id": "site-import-9", "week_key": "2025-W48"},
+        headers=ADMIN_HEADERS,
+    )
+    client_admin.post(
+        f"/api/builder/menus/{builder_menu_id}/rows",
+        json={"day": "monday", "meal_slot": "lunch_alt1", "composition_id": "comp_monday_alt1", "sort_order": 10},
+        headers=ADMIN_HEADERS,
+    )
+    client_admin.post(
+        f"/api/builder/menus/{builder_menu_id}/rows",
+        json={"day": "monday", "meal_slot": "lunch_alt2", "composition_id": "comp_monday_alt2", "sort_order": 20},
+        headers=ADMIN_HEADERS,
+    )
+    client_admin.post(
+        f"/api/builder/menus/{builder_menu_id}/rows",
+        json={"day": "monday", "meal_slot": "lunch_dessert", "composition_id": "comp_monday_dessert", "sort_order": 30},
+        headers=ADMIN_HEADERS,
+    )
+    client_admin.post(
+        f"/api/builder/menus/{builder_menu_id}/rows",
+        json={"day": "monday", "meal_slot": "dinner_main", "composition_id": "comp_monday_kvall", "sort_order": 40},
+        headers=ADMIN_HEADERS,
+    )
+    client_admin.post(
+        f"/api/builder/menus/{builder_menu_id}/rows",
+        json={"day": "monday", "display_label": "Lunch extra", "composition_ref_type": "empty"},
+        headers=ADMIN_HEADERS,
+    )
+
+    monkeypatch.setattr(
+        "core.commun_builder_linkage.CommunBuilderMenuLinkService.get_link_for_week",
+        lambda self, **kwargs: SimpleNamespace(builder_menu_id=builder_menu_id, builder_menu_version=1),
+    )
+
+    response = client_admin.get("/ui/admin/menu-import/week/2025/48?edit=1", headers=ADMIN_HEADERS)
+
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    assert "Köttbullar med potatis" in html
+    assert "Fiskgratäng" in html
+    assert "Glass" in html
+    assert "Smörgåsar" in html
+    assert "Lunch extra" in html
+    assert "+ Lägg till menyrad" in html
+    assert html.count('data-week-menu-row-create-toggle') == 7
+    assert '<div class="menu-editor-meal-type">+</div>' not in html
+    assert 'data-meal-label="Lunch extra"' in html
+    assert 'data-dish-name="Lunch extra"' not in html
+    assert 'data-row-kind="dynamic"' in html
+    assert 'data-week-slot-action="add">Lägg till rätt</button>' in html
+    assert 'data-week-slot-action="delete-row">Ta bort menyrad</button>' in html
+    assert 'data-admin-week-builder-create-row' in html
+    assert 'data-admin-week-builder-create-row-input' in html
+    actions_js = Path('static/ui/admin_menu_import_week_actions.js').read_text(encoding='utf-8')
+    assert "inlineSearch.value = state.activePickerAction === 'add'" in actions_js
+    assert "normalize(initialName || pickerContext.unresolvedText || pickerContext.dishName)" in actions_js
+    assert html.count('data-admin-week-builder-open') == 4
 
 
 def test_post_save_from_edit_mode_redirects_to_read_only_with_success_banner(seeded_week_48, client_admin):

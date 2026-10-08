@@ -177,20 +177,23 @@ class BuilderMenuContextFlow:
         day: str,
         display_label: str,
         note: str | None = None,
-        sort_order: int = 0,
+        sort_order: int | None = None,
         menu_detail_id: str | None = None,
     ) -> MenuDetail:
         detail_id = str(menu_detail_id or "").strip()
+        existing = self._menu_service.list_menu_details(menu_id)
         if not detail_id:
-            existing = self._menu_service.list_menu_details(menu_id)
             detail_id = f"{menu_id}-row-{len(existing) + 1}"
+        resolved_sort_order = int(sort_order) if sort_order is not None else (
+            (max((int(detail.sort_order) for detail in existing), default=0)) + 10
+        )
         return self._menu_service.create_empty_menu_detail(
             menu_detail_id=detail_id,
             menu_id=menu_id,
             day=day,
             display_label=display_label,
             note=note,
-            sort_order=sort_order,
+            sort_order=resolved_sort_order,
         )
 
     def update_composition_menu_row(
@@ -257,6 +260,7 @@ class BuilderMenuContextFlow:
                     "display_label": detail.display_label,
                     "row_kind": detail.row_kind,
                     "composition_ref_type": detail.composition_ref_type,
+                    "is_empty": detail.composition_ref_type == "empty",
                     "composition_id": detail.composition_id,
                     "composition_name": composition_name,
                     "unresolved_text": detail.unresolved_text,

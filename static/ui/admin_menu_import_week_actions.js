@@ -16,6 +16,13 @@
     const inlineResults = document.querySelector('[data-admin-week-builder-inline-results]');
     const inlineCreate = document.querySelector('[data-admin-week-builder-inline-create]');
     const inlineCloseButtons = Array.from(document.querySelectorAll('[data-admin-week-builder-inline-close]'));
+    const createRowDialog = document.querySelector('[data-admin-week-builder-create-row]');
+    const createRowContext = document.querySelector('[data-admin-week-builder-create-row-context]');
+    const createRowInput = document.querySelector('[data-admin-week-builder-create-row-input]');
+    const createRowStatus = document.querySelector('[data-admin-week-builder-create-row-status]');
+    const createRowSubmit = document.querySelector('[data-admin-week-builder-create-row-submit]');
+    const createRowCloseButtons = Array.from(document.querySelectorAll('[data-admin-week-builder-create-row-close]'));
+    const createRowButtons = Array.from(document.querySelectorAll('[data-week-menu-row-create-toggle]'));
     const builderMenuId = normalize(root && root.dataset.builderMenuId);
     const slotRows = Array.from(document.querySelectorAll('[data-week-slot-row]'));
 
@@ -44,6 +51,8 @@
       compositions: null,
       compositionsPromise: null,
       pickerVisible: false,
+      createRowVisible: false,
+      createRowContext: null,
     };
 
     function showElement(element) {
@@ -80,6 +89,9 @@
       if (state.pickerVisible) {
         closeInlinePicker();
       }
+      if (state.createRowVisible) {
+        closeCreateRowDialog();
+      }
     }
 
     function rowContext(row) {
@@ -97,6 +109,8 @@
         dishName: normalize(row.dataset.dishName),
         compositionId: normalize(row.dataset.compositionId),
         unresolvedText: normalize(row.dataset.unresolvedText),
+        rowKind: normalize(row.dataset.rowKind),
+        isEmpty: normalize(row.dataset.isEmpty) === '1',
       };
     }
 
@@ -120,6 +134,14 @@
     function setStatus(message, isError) {
       inlineStatus.textContent = String(message || '');
       inlineStatus.dataset.state = isError ? 'error' : 'idle';
+    }
+
+    function setCreateRowStatus(message, isError) {
+      if (!createRowStatus) {
+        return;
+      }
+      createRowStatus.textContent = String(message || '');
+      createRowStatus.dataset.state = isError ? 'error' : 'idle';
     }
 
     function isCreateModalOpen() {
@@ -223,13 +245,16 @@
       }
 
       closeMenus();
+      closeCreateRowDialog();
       state.activePickerContext = pickerContext;
       state.activePickerAction = actionMode === 'add' ? 'add' : 'replace';
       state.activeRow = pickerContext.row;
       state.pickerVisible = true;
 
       setInlineContext(pickerContext, state.activePickerAction);
-      inlineSearch.value = normalize(initialName || pickerContext.unresolvedText || pickerContext.dishName);
+      inlineSearch.value = state.activePickerAction === 'add'
+        ? ''
+        : normalize(initialName || pickerContext.unresolvedText || pickerContext.dishName);
       showElement(inlinePicker);
       inlineHost.open({
         mode: 'shell-owned-card',
@@ -258,6 +283,84 @@
       state.activePickerContext = null;
       hideElement(inlinePicker);
       inlineHost.close();
+    }
+
+    function openCreateRowDialog(context) {
+      const targetContext = context || state.createRowContext;
+      if (!targetContext || !createRowDialog || !createRowInput) {
+        return;
+      }
+
+      closeMenus();
+      closeInlinePicker();
+      state.createRowContext = targetContext;
+      state.createRowVisible = true;
+
+      if (createRowContext) {
+        createRowContext.textContent = targetContext.dayLabel
+          ? 'Skapar menyrad för ' + targetContext.dayLabel + '.'
+          : 'Skapar ny menyrad.';
+      }
+      setCreateRowStatus('Ange namn för menyraden.');
+      createRowInput.value = '';
+      showElement(createRowDialog);
+      inlineHost.open({
+        mode: 'shell-owned-card',
+        trigger: targetContext.trigger || targetContext.row || createRowDialog,
+      });
+      requestAnimationFrame(() => {
+        if (typeof createRowInput.focus === 'function') {
+          createRowInput.focus();
+        }
+      });
+    }
+
+    function closeCreateRowDialog() {
+      if (!state.createRowVisible && createRowDialog && createRowDialog.hidden) {
+        return;
+      }
+      state.createRowVisible = false;
+      state.createRowContext = null;
+      setCreateRowStatus('');
+      if (createRowContext) {
+        createRowContext.textContent = '';
+      }
+      if (createRowInput) {
+        createRowInput.value = '';
+      }
+      if (createRowDialog) {
+        hideElement(createRowDialog);
+      }
+      if (!state.pickerVisible) {
+        inlineHost.close();
+      }
+    }
+
+    async function submitCreateRow() {
+      const targetContext = state.createRowContext;
+      const displayLabel = normalize(createRowInput && createRowInput.value);
+      if (!targetContext) {
+        return;
+      }
+      if (!displayLabel) {
+        setCreateRowStatus('Ange ett namn för menyraden.', true);
+        return;
+      }
+      const result = await callJson('/api/builder/menus/' + encodeURIComponent(builderMenuId) + '/rows', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          day: targetContext.dayKey,
+          display_label: displayLabel,
+          composition_ref_type: 'empty',
+        },
+      });
+      if (!(result.status < 400 && result.data && result.data.ok)) {
+        setCreateRowStatus(String((result.data && result.data.message) || 'Kunde inte skapa menyraden.'), true);
+        return;
+      }
+      closeCreateRowDialog();
+      window.location.reload();
     }
 
     async function applyPickedComposition(context, compositionId) {
@@ -321,6 +424,44 @@
       });
       if (!(result.status < 400 && result.data && result.data.ok)) {
         window.alert(String((result.data && result.data.message) || 'Kunde inte ta bort från menyn.'));
+        return;
+      }
+      window.location.reload();
+    }
+
+    async function clearRowComposition() {
+      const context = rowContext(state.activeRow);
+      if (!context || !context.menuDetailId) {
+        return;
+      }
+      const result = await callJson('/api/builder/menus/' + encodeURIComponent(builderMenuId) + '/rows/' + encodeURIComponent(context.menuDetailId), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          composition_ref_type: 'empty',
+        },
+      });
+      if (!(result.status < 400 && result.data && result.data.ok)) {
+        window.alert(String((result.data && result.data.message) || 'Kunde inte ta bort från menyn.'));
+        return;
+      }
+      window.location.reload();
+    }
+
+    async function deleteStructuralRow() {
+      const context = rowContext(state.activeRow);
+      if (!context || !context.menuDetailId) {
+        return;
+      }
+      const ok = window.confirm('Ta bort menyraden?');
+      if (!ok) {
+        return;
+      }
+      const result = await callJson('/api/builder/menus/' + encodeURIComponent(builderMenuId) + '/rows/' + encodeURIComponent(context.menuDetailId), {
+        method: 'DELETE',
+      });
+      if (!(result.status < 400 && result.data && result.data.ok)) {
+        window.alert(String((result.data && result.data.message) || 'Kunde inte ta bort menyraden.'));
         return;
       }
       window.location.reload();
@@ -408,7 +549,15 @@
                 return;
               }
               if (action === 'remove') {
-                await deleteRow();
+                if (context && context.rowKind === 'dynamic') {
+                  await clearRowComposition();
+                } else {
+                  await deleteRow();
+                }
+                return;
+              }
+              if (action === 'delete-row') {
+                await deleteStructuralRow();
               }
             });
           });
@@ -434,6 +583,42 @@
       });
     }
 
+    createRowButtons.forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+        openCreateRowDialog({
+          dayKey: normalize(target && target.dataset.dayKey),
+          dayLabel: normalize(target && target.dataset.dayLabel),
+          trigger: target,
+        });
+      });
+    });
+
+    createRowCloseButtons.forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        closeCreateRowDialog();
+      });
+    });
+
+    if (createRowSubmit) {
+      createRowSubmit.addEventListener('click', (event) => {
+        event.preventDefault();
+        void submitCreateRow();
+      });
+    }
+
+    if (createRowInput) {
+      createRowInput.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') {
+          return;
+        }
+        event.preventDefault();
+        void submitCreateRow();
+      });
+    }
+
     document.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape' || !isCreateModalOpen()) {
         return;
@@ -447,6 +632,10 @@
 
     document.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape') {
+        return;
+      }
+      if (state.createRowVisible) {
+        closeCreateRowDialog();
         return;
       }
       if (state.pickerVisible) {

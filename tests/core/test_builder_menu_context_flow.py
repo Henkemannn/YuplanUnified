@@ -143,14 +143,35 @@ def test_create_empty_menu_row_generates_opaque_slot_key() -> None:
         menu_id="menu_1",
         day="monday",
         display_label="XYZ",
-        sort_order=10,
     )
 
     assert detail.composition_ref_type == "empty"
     assert detail.display_label == "XYZ"
     assert detail.row_kind == "dynamic"
+    assert detail.sort_order == 10
     assert detail.meal_slot.startswith("slot_")
     assert "XYZ" not in detail.meal_slot
+
+
+def test_create_empty_menu_row_picks_next_sort_order() -> None:
+    builder_flow, flow = _build_flows()
+    builder_flow.create_composition(composition_id="plate_1", composition_name="Fish Plate")
+    flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16", title="Week menu")
+    flow.add_composition_menu_row(
+        menu_id="menu_1",
+        day="monday",
+        meal_slot="lunch",
+        composition_id="plate_1",
+        sort_order=30,
+    )
+
+    detail = flow.create_empty_menu_row(
+        menu_id="menu_1",
+        day="monday",
+        display_label="Lunch extra",
+    )
+
+    assert detail.sort_order == 40
 
 
 def test_list_menu_rows_includes_linked_composition_name() -> None:

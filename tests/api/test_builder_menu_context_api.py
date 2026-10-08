@@ -229,6 +229,45 @@ def test_delete_menu_row_endpoint_removes_row() -> None:
     assert rows == []
 
 
+def test_create_empty_menu_row_endpoint_creates_dynamic_row_with_next_sort_order() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_1", "composition_name": "Fish Plate"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_1", "site_id": "site_1", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/menus/menu_1/rows",
+        json={"day": "monday", "meal_slot": "lunch", "composition_id": "plate_1", "sort_order": 30},
+        headers=HEADERS,
+    )
+
+    created = client.post(
+        "/api/builder/menus/menu_1/rows",
+        json={"day": "monday", "display_label": "Lunch extra", "composition_ref_type": "empty"},
+        headers=HEADERS,
+    )
+
+    assert created.status_code == 201
+    body = created.get_json() or {}
+    detail = body.get("menu_detail") or {}
+    assert detail.get("composition_ref_type") == "empty"
+    assert detail.get("row_kind") == "dynamic"
+    assert detail.get("display_label") == "Lunch extra"
+    assert detail.get("sort_order") == 40
+
+    listed = client.get("/api/builder/menus/menu_1/rows", headers=HEADERS)
+    rows = (listed.get_json() or {}).get("rows") or []
+    assert len(rows) == 2
+    assert rows[1].get("is_empty") is True
+    assert rows[1].get("row_kind") == "dynamic"
+
+
 def test_list_menu_rows_endpoint_orders_by_sort_order() -> None:
     client = _client()
     client.post(

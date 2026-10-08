@@ -134,6 +134,8 @@
                                     data-dish-name="{{ slot.get('dish_name') or '' }}"
                                     data-composition-id="{{ slot.get('composition_id') or '' }}"
                                     data-unresolved-text="{{ slot.get('unresolved_text') or '' }}"
+                                    data-row-kind="{{ slot.get('row_kind') or 'legacy' }}"
+                                    data-is-empty="{{ 1 if slot.get('is_empty') else 0 }}"
                                 >
                                     <div class="menu-editor-meal-type">{{ slot.get('label', '-') }}</div>
                                     <div class="menu-editor-meal-cell">
@@ -176,6 +178,78 @@
                                     </div>
                                 </div>
                             {% endfor %}
+
+                            {% for row in day_row.dynamic_rows or [] %}
+                                <div
+                                    class="menu-editor-meal-row menu-day-row menu-editor-meal-row--dynamic"
+                                    data-week-slot-row
+                                    data-menu-detail-id="{{ row.get('menu_detail_id') or '' }}"
+                                    data-day-key="{{ day_row.day_key or '' }}"
+                                    data-day-label="{{ day_row.day_label }}"
+                                    data-meal-slot="{{ row.get('meal_slot') or '' }}"
+                                    data-meal-label="{{ row.get('display_label') or '' }}"
+                                    data-slot-key="{{ row.get('meal_slot') or '' }}"
+                                    data-dish-name="{{ row.get('dish_name') or '' }}"
+                                    data-composition-id="{{ row.get('composition_id') or '' }}"
+                                    data-unresolved-text="{{ row.get('unresolved_text') or '' }}"
+                                    data-row-kind="{{ row.get('row_kind') or 'dynamic' }}"
+                                    data-is-empty="{{ 1 if row.get('is_empty') else 0 }}"
+                                >
+                                    <div class="menu-editor-meal-type">{{ row.get('display_label') or '—' }}</div>
+                                    <div class="menu-editor-meal-cell">
+                                        {% if row.get('composition_id') %}
+                                            <button
+                                                type="button"
+                                                class="menu-editor-meal-dish menu-editor-readonly-field menu-editor-meal-dish--link"
+                                                data-admin-week-builder-open
+                                                data-builder-composition-id="{{ row.get('composition_id') }}"
+                                                aria-label="Öppna {{ row.get('dish_name') or 'rätt' }} i redigeraren"
+                                            >{{ row.get('dish_name') or '—' }}</button>
+                                        {% elif row.get('unresolved_text') %}
+                                            <div class="menu-editor-meal-dish menu-editor-readonly-field">{{ row.get('unresolved_text') }}</div>
+                                        {% else %}
+                                            <div class="menu-editor-meal-dish menu-editor-readonly-field">—</div>
+                                        {% endif %}
+
+                                        {% if is_edit_mode %}
+                                            <div class="menu-editor-slot-actions">
+                                                <button
+                                                    type="button"
+                                                    class="menu-editor-slot-trigger"
+                                                    data-week-slot-action-toggle
+                                                    aria-label="Åtgärder för {{ row.get('dish_name') or row.get('unresolved_text') or row.get('display_label') or 'rätt' }}"
+                                                    aria-expanded="false"
+                                                >⋯</button>
+                                                <div class="menu-editor-slot-menu" hidden data-week-slot-action-menu>
+                                                    {% if row.get('composition_id') %}
+                                                        <button type="button" data-week-slot-action="replace">Byt rätt</button>
+                                                        <button type="button" data-week-slot-action="open">Öppna rätt</button>
+                                                        <button type="button" data-week-slot-action="remove">Ta bort från menyn</button>
+                                                    {% else %}
+                                                        <button type="button" data-week-slot-action="add">Lägg till rätt</button>
+                                                    {% endif %}
+                                                    <button type="button" data-week-slot-action="delete-row">Ta bort menyrad</button>
+                                                </div>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+
+                            {% if is_edit_mode %}
+                                <div class="menu-editor-meal-row menu-day-row menu-editor-meal-row--create">
+                                    <div class="menu-editor-meal-type" aria-hidden="true"></div>
+                                    <div class="menu-editor-meal-cell">
+                                        <button
+                                            type="button"
+                                            class="menu-editor-meal-dish menu-editor-meal-dish--link"
+                                            data-week-menu-row-create-toggle
+                                            data-day-key="{{ day_row.day_key or '' }}"
+                                            data-day-label="{{ day_row.day_label }}"
+                                        >+ Lägg till menyrad</button>
+                                    </div>
+                                </div>
+                            {% endif %}
                         </div>
                     </section>
                 {% endfor %}
@@ -212,6 +286,33 @@
                 <footer class="yp-modal-host__inline-actions">
                     <button type="button" class="yp-btn yp-btn-primary" data-admin-week-builder-inline-create>+ Skapa ny rätt</button>
                     <button type="button" class="yp-btn yp-btn-secondary" data-admin-week-builder-inline-close>Avbryt</button>
+                </footer>
+            </div>
+            <div class="yp-modal-host__inline-picker" hidden data-admin-week-builder-create-row>
+                <header class="yp-modal-host__inline-header">
+                    <div>
+                        <p class="workspace-modal-kicker">Menyimport</p>
+                        <h1 id="adminWeekBuilderCreateRowTitle">Ny menyrad</h1>
+                    </div>
+                    <button type="button" class="yp-btn yp-btn-secondary" data-admin-week-builder-create-row-close>Stäng</button>
+                </header>
+
+                <p class="yp-modal-host__inline-context" data-admin-week-builder-create-row-context></p>
+
+                <label class="yp-modal-host__inline-search-label" for="adminWeekBuilderCreateRowLabel">Namn på menyraden</label>
+                <input
+                    id="adminWeekBuilderCreateRowLabel"
+                    type="text"
+                    class="yp-input yp-modal-host__inline-search"
+                    placeholder="Till exempel Lunch extra"
+                    autocomplete="off"
+                    data-admin-week-builder-create-row-input
+                >
+                <p class="yp-modal-host__inline-status" data-admin-week-builder-create-row-status role="status" aria-live="polite">Ange namn för menyraden.</p>
+
+                <footer class="yp-modal-host__inline-actions">
+                    <button type="button" class="yp-btn yp-btn-primary" data-admin-week-builder-create-row-submit>Skapa menyrad</button>
+                    <button type="button" class="yp-btn yp-btn-secondary" data-admin-week-builder-create-row-close>Avbryt</button>
                 </footer>
             </div>
             <iframe class="yp-modal-host__frame" title="Menyimportredigerare" src="about:blank" data-admin-week-builder-host-frame></iframe>

@@ -1053,6 +1053,7 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
 
     builder_row_composition_by_slot: dict[tuple[str, str], str] = {}
     builder_row_detail_by_slot: dict[tuple[str, str], str] = {}
+    builder_dynamic_rows_by_day: dict[str, list[dict[str, object]]] = {}
     if builder_menu_id:
         try:
             builder_flow = _get_builder_menu_context_flow()
@@ -1060,15 +1061,40 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
                 for row in builder_flow.list_menu_rows(str(builder_menu_id)):
                     row_day = str(row.get("day") or "").strip().lower()
                     row_meal_slot = str(row.get("meal_slot") or "").strip().lower()
+                    row_kind = str(row.get("row_kind") or "").strip().lower()
                     row_composition_id = str(row.get("composition_id") or "").strip()
                     row_menu_detail_id = str(row.get("menu_detail_id") or "").strip()
                     if row_day and row_meal_slot and row_composition_id:
                         builder_row_composition_by_slot[(row_day, row_meal_slot)] = row_composition_id
                     if row_day and row_meal_slot and row_menu_detail_id:
                         builder_row_detail_by_slot[(row_day, row_meal_slot)] = row_menu_detail_id
+                    if row_day and row_kind == "dynamic":
+                        builder_dynamic_rows_by_day.setdefault(row_day, []).append(
+                            {
+                                "menu_detail_id": row_menu_detail_id,
+                                "menu_id": str(row.get("menu_id") or "").strip(),
+                                "day": row_day,
+                                "meal_slot": row_meal_slot,
+                                "display_label": str(row.get("display_label") or row_meal_slot or "").strip(),
+                                "row_kind": row_kind or "dynamic",
+                                "composition_ref_type": str(row.get("composition_ref_type") or "").strip().lower(),
+                                "composition_id": row_composition_id or None,
+                                "composition_name": str(row.get("composition_name") or "").strip() or None,
+                                "unresolved_text": str(row.get("unresolved_text") or "").strip() or None,
+                                "note": str(row.get("note") or "").strip() or None,
+                                "sort_order": int(row.get("sort_order") or 0),
+                                "is_empty": bool(row.get("is_empty")),
+                                "dish_name": str(
+                                    row.get("composition_name")
+                                    or row.get("unresolved_text")
+                                    or ""
+                                ).strip(),
+                            }
+                        )
         except Exception:
             builder_row_composition_by_slot = {}
             builder_row_detail_by_slot = {}
+            builder_dynamic_rows_by_day = {}
 
     day_rows: list[dict[str, object]] = []
     slot_order: list[str] = [spec["key"] for spec in slot_specs]
@@ -1111,8 +1137,24 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
                 "menu_detail_id": menu_detail_id,
                 "is_unresolved": bool(slot_info.get("is_unresolved") or (not composition_id and bool(str(slot_info.get("unresolved_text") or "").strip()))),
                 "unresolved_text": str(slot_info.get("unresolved_text") or "").strip(),
+                "row_kind": "legacy",
+                "is_empty": not composition_id and not bool(str(slot_info.get("unresolved_text") or "").strip()),
             }
-        day_rows.append({"day_label": day_label, "day_key": day_key, "slots": slots})
+        dynamic_rows = sorted(
+            builder_dynamic_rows_by_day.get(day_key, []),
+            key=lambda row: (
+                int(row.get("sort_order") or 0),
+                str(row.get("menu_detail_id") or ""),
+            ),
+        )
+        day_rows.append(
+            {
+                "day_label": day_label,
+                "day_key": day_key,
+                "slots": slots,
+                "dynamic_rows": dynamic_rows,
+            }
+        )
 
     imported_weeks: list[tuple[int, int]] = []
     week_status_map: dict[tuple[int, int], str] = {}
@@ -2339,4 +2381,3 @@ def systemadmin_switch_site(site_id: str):
         return redirect(url_for("admin_ui.systemadmin_customers"))
     # Go to unified admin dashboard (modern Kundadmin)
     return redirect(url_for("ui.admin_dashboard"))
-
