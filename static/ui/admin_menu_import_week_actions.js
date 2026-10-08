@@ -40,6 +40,7 @@
       activeRow: null,
       activeMenu: null,
       activePickerContext: null,
+      activePickerAction: 'replace',
       compositions: null,
       compositionsPromise: null,
       pickerVisible: false,
@@ -99,7 +100,7 @@
       };
     }
 
-    function setInlineContext(context) {
+    function setInlineContext(context, actionMode) {
       if (!inlineContext) {
         return;
       }
@@ -110,9 +111,10 @@
       const locationParts = [context.dayLabel, context.mealLabel].filter(Boolean);
       const locationLabel = locationParts.length ? locationParts.join(' · ') : 'Vald plats';
       const dishLabel = normalize(context.unresolvedText || context.dishName);
+      const actionLabel = actionMode === 'add' ? 'Lägger till' : 'Byter';
       inlineContext.textContent = dishLabel
-        ? 'Byter: ' + locationLabel + ' · ' + dishLabel
-        : 'Byter: ' + locationLabel;
+        ? actionLabel + ': ' + locationLabel + ' · ' + dishLabel
+        : actionLabel + ': ' + locationLabel;
     }
 
     function setStatus(message, isError) {
@@ -214,18 +216,19 @@
       globalThis.AdminWeekBuilderHost.openComposition(resolvedCompositionId, triggerElement);
     }
 
-    function openInlinePicker(context, initialName) {
+    function openInlinePicker(context, initialName, actionMode) {
       const pickerContext = context || rowContext(state.activeRow);
-      if (!pickerContext || !pickerContext.menuDetailId) {
+      if (!pickerContext) {
         return;
       }
 
       closeMenus();
       state.activePickerContext = pickerContext;
+      state.activePickerAction = actionMode === 'add' ? 'add' : 'replace';
       state.activeRow = pickerContext.row;
       state.pickerVisible = true;
 
-      setInlineContext(pickerContext);
+      setInlineContext(pickerContext, state.activePickerAction);
       inlineSearch.value = normalize(initialName || pickerContext.unresolvedText || pickerContext.dishName);
       showElement(inlinePicker);
       inlineHost.open({
@@ -260,18 +263,30 @@
     async function applyPickedComposition(context, compositionId) {
       const targetContext = context || rowContext(state.activePickerContext || state.activeRow);
       const targetCompositionId = normalize(compositionId);
-      if (!targetContext || !targetContext.menuDetailId || !targetCompositionId) {
+      if (!targetContext || !targetCompositionId) {
         return;
       }
-      const result = await callJson('/api/builder/menus/' + encodeURIComponent(builderMenuId) + '/rows/' + encodeURIComponent(targetContext.menuDetailId), {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: {
-          day: targetContext.dayKey,
-          meal_slot: targetContext.mealSlot || targetContext.slotKey,
-          composition_id: targetCompositionId,
-        },
-      });
+      const targetMealSlot = targetContext.mealSlot || targetContext.slotKey;
+      const hasExistingDetail = Boolean(targetContext.menuDetailId);
+      const result = hasExistingDetail
+        ? await callJson('/api/builder/menus/' + encodeURIComponent(builderMenuId) + '/rows/' + encodeURIComponent(targetContext.menuDetailId), {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: {
+              day: targetContext.dayKey,
+              meal_slot: targetMealSlot,
+              composition_id: targetCompositionId,
+            },
+          })
+        : await callJson('/api/builder/menus/' + encodeURIComponent(builderMenuId) + '/rows', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: {
+              day: targetContext.dayKey,
+              meal_slot: targetMealSlot,
+              composition_id: targetCompositionId,
+            },
+          });
       if (!(result.status < 400 && result.data && result.data.ok)) {
         window.alert(String((result.data && result.data.message) || 'Kunde inte välja rätt från biblioteket.'));
         return;
@@ -380,6 +395,10 @@
               const context = rowContext(row);
               if (action === 'replace') {
                 openInlinePicker(context);
+                return;
+              }
+              if (action === 'add') {
+                openInlinePicker(context, '', 'add');
                 return;
               }
               if (action === 'open') {

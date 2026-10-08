@@ -151,13 +151,13 @@
                                             <div class="menu-editor-meal-dish menu-editor-readonly-field">{{ slot.get('dish_name') or '—' }}</div>
                                         {% endif %}
 
-                                        {% if is_edit_mode and slot.get('menu_detail_id') %}
+                                        {% if is_edit_mode %}
                                             <div class="menu-editor-slot-actions">
                                                 <button
                                                     type="button"
                                                     class="menu-editor-slot-trigger"
                                                     data-week-slot-action-toggle
-                                                    aria-label="Åtgärder för {{ slot.get('dish_name') or slot.get('unresolved_text') or 'rätt' }}"
+                                                    aria-label="Åtgärder för {{ slot.get('dish_name') or slot.get('unresolved_text') or slot.get('label') or 'rätt' }}"
                                                     aria-expanded="false"
                                                 >⋯</button>
                                                 <div class="menu-editor-slot-menu" hidden data-week-slot-action-menu>
@@ -165,9 +165,11 @@
                                                         <button type="button" data-week-slot-action="replace">Byt rätt</button>
                                                         <button type="button" data-week-slot-action="open">Öppna rätt</button>
                                                     {% else %}
-                                                        <button type="button" data-week-slot-action="replace">Byt rätt</button>
+                                                        <button type="button" data-week-slot-action="add">Lägg till rätt</button>
                                                     {% endif %}
-                                                    <button type="button" data-week-slot-action="remove">Ta bort från menyn</button>
+                                                    {% if slot.get('composition_id') %}
+                                                        <button type="button" data-week-slot-action="remove">Ta bort från menyn</button>
+                                                    {% endif %}
                                                 </div>
                                             </div>
                                         {% endif %}

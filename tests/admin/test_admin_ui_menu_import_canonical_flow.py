@@ -315,9 +315,11 @@ def test_admin_menu_import_upload_creates_builder_link_publication_and_portal_pa
     assert 'data-week-slot-action-toggle' in edit_html
     assert 'data-week-slot-action-menu' in edit_html
     assert re.search(r'hidden[^>]*data-week-slot-action-menu', edit_html)
+    assert 'data-week-slot-action="add"' in edit_html
     assert 'data-week-slot-action="replace"' in edit_html
     assert 'data-week-slot-action="open"' in edit_html
     assert 'data-week-slot-action="remove"' in edit_html
+    assert 'Lägg till rätt' in edit_html
     assert 'data-menu-detail-id="' in edit_html
     assert 'Byt rätt' in edit_html
     assert 'Öppna rätt' in edit_html
@@ -330,6 +332,7 @@ def test_admin_menu_import_upload_creates_builder_link_publication_and_portal_pa
     assert 'Matcha rätt' not in edit_html
     assert 'Välj rätt från biblioteket' not in edit_html
     assert 'Ej kopplad' not in edit_html
+    assert 'data-week-slot-action="add">Lägg till rätt</button>' in edit_html
     assert 'data-week-slot-open-unresolved' not in edit_html
     assert 'data-week-slot-unresolved-modal' not in edit_html
     assert 'data-week-slot-unresolved-create' not in edit_html
@@ -371,7 +374,8 @@ def test_admin_menu_import_upload_creates_builder_link_publication_and_portal_pa
     assert "dayKey: normalize(row.dataset.dayKey)" in actions_js
     assert "mealSlot: normalize(row.dataset.mealSlot)" in actions_js
     assert "day: targetContext.dayKey" in actions_js
-    assert "meal_slot: targetContext.mealSlot || targetContext.slotKey" in actions_js
+    assert "meal_slot: targetMealSlot" in actions_js
+    assert "method: 'POST'" in actions_js
     assert "applyPickedComposition(state.activePickerContext, id);" in actions_js
     assert "function editResolvedComposition()" in actions_js
     assert "state.activeRow = row;" in actions_js
