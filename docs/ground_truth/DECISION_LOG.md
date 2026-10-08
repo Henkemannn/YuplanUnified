@@ -83,3 +83,17 @@ Last reviewed: 2026-10-07
 - A verified local safety snapshot was created before further recovery work: `YuplanUnified_PRE_RECOVERY_2026-10-07_201644.tar.gz`. A failed restore pass was subsequently undone byte-for-byte for the three files it changed.
 - Copilot authority is narrowed during MVP closure: implementation orders must list allowed production files; a required change outside that list is a STOP condition. Audit orders are read-only by default. Adjacent module migrations/refactors are not allowed without explicit approval.
 - Current Menyimport work after `a0c84db` remains uncommitted until the real-browser action matrix and Rättbibliotek are accepted and the diff is understood.
+
+## 2026-10-08
+- Menyimport entered a stabilization phase after real-browser evidence showed shell/presentation regressions even though the core action chain remained largely functional.
+- Real Firefox truth is authoritative for UI acceptance. Direct Dish click, `Öppna rätt`, and `Byt rätt` are treated separately from shell/presentation correctness.
+- A corrupted Menyimport host CSS seam was proven in `static/css/menu_editor.css` (duplicated selector opening, stray/truncated fragment, broken brace alignment, conflicting full-viewport override) and repaired locally in a narrow single-file change. The repair remains uncommitted.
+- The narrow same-origin framing allowlist for exactly `/builder-editor-host` and `/builder-composition-picker` is a KEEP candidate; default framing policy remains DENY for unrelated routes.
+- Offshore's working modal behavior is a reference, not code to copy. Feature-local duplication of generic modal mechanics is rejected.
+- Existing shared modal infrastructure is confirmed in `templates/ui/_menu_modal.html`, `static/css/app_shell.css`, and `static/js/menu_modal.js`.
+- Architecture rule locked: **REUSE-BEFORE-BUILD**. Before adding generic UI behavior, search for a shared primitive; reuse it if present; if equivalent behavior exists only feature-locally, extract/generalize it before creating a second copy; creating a feature-local duplicate requires explicit architecture approval.
+- REUSE-BEFORE-BUILD applies at minimum to modal/overlay shell, picker/selector, search, toast/notification, drawer, tabs, loading/empty states, and confirmation dialogs.
+- Canonical shared modal API direction is `YuplanModalHost`, built additively on the existing shared modal infrastructure rather than as a parallel modal runtime.
+- First shared-modal gate is safety-locked: existing `showModal()` / `hideModal()` behavior and existing consumers must remain functionally unchanged; Menyimport is the only pilot consumer; Offshore, Weekview, Builder and picker internals remain untouched.
+- Shared modal must support two ownership modes: shell-owned-card for simple dialogs, and child-owned-card for embedded surfaces such as shared Dish editor and Rättbibliotek that already render their own card.
+- No current Menyimport/shared-modal work is to be committed until real Firefox acceptance, focused tests, diff hygiene, and single-surface modal behavior are all green.
