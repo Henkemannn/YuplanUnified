@@ -2244,6 +2244,7 @@ def systemadmin_site_admin_create(tenant_id: int, site_id: str):
             full_name=admin_full_name or None,
             unit_id=None,
             is_active=True,
+            must_change_password=True,
         )
         db.add(user)
         db.flush()
@@ -2317,7 +2318,7 @@ def systemadmin_site_admin_reset_password(tenant_id: int, site_id: str, user_id:
         db.execute(
             text(
                 "UPDATE users "
-                "SET password_hash=:ph, auth_version=COALESCE(auth_version, 1) + 1, refresh_token_jti=NULL, is_active=1 "
+                "SET password_hash=:ph, auth_version=COALESCE(auth_version, 1) + 1, refresh_token_jti=NULL, is_active=1, must_change_password=1 "
                 "WHERE id=:uid"
             ),
             {"ph": generate_password_hash(new_password), "uid": int(user_id)},
@@ -2406,6 +2407,7 @@ def systemadmin_customer_sites_create(tenant_id: int):
             password_hash=pw_hash,
             role="admin",
             unit_id=None,
+            must_change_password=True,
         )
         db.add(user)
         db.flush()
@@ -2569,6 +2571,7 @@ def systemadmin_customer_create():
             password_hash=pw_hash,
             role="admin",
             unit_id=None,
+            must_change_password=True,
         )
         db.add(user)
         db.flush()

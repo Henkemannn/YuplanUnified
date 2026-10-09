@@ -58,6 +58,24 @@ def _redirect_kitchen_from_admin_ui():
     return None
 
 
+@ui_bp.before_app_request
+def _force_password_change_flow():
+    """Keep forced-change users in the password-change/logout flow."""
+    try:
+        if not session.get("must_change_password"):
+            return None
+        path = request.path or ""
+        if not path.startswith("/ui/"):
+            return None
+        if path.startswith("/ui/static/"):
+            return None
+        if path.startswith("/ui/account") or path == "/ui/logout":
+            return None
+        return redirect(url_for("ui.account_page"))
+    except Exception:
+        return None
+
+
 def _track_ui_activity_event(event_type: str, site_id: str | None = None) -> None:
     try:
         user_id = session.get("user_id")
@@ -1283,7 +1301,7 @@ def cook_week_overview_unified(year: int, week: int):
 SAFE_UI_ROLES = ("superuser", "admin", "cook", "unit_portal")
 ADMIN_ROLES = ("admin", "superuser")
 COOK_ALLOWED_ROLES = ("cook", "admin", "superuser", "unit_portal")
-ACCOUNT_ALLOWED_ROLES = ("admin", "superuser", "kitchen")
+ACCOUNT_ALLOWED_ROLES = ("admin", "superuser", "kitchen", "cook", "unit_portal")
 
 
 @ui_bp.post("/api/production-lists")
@@ -1410,6 +1428,7 @@ def account_page():
     user_email = str((session.get("user_email") or session.get("username") or "").strip())
     user_role = role
     user_site_id = active_site_id
+    must_change_password = bool(session.get("must_change_password"))
 
     db = get_session()
     try:
@@ -1420,7 +1439,7 @@ def account_page():
             if has_site_id:
                 row = db.execute(
                     text(
-                        "SELECT full_name, email, role, tenant_id, site_id "
+                        "SELECT full_name, email, role, tenant_id, site_id, must_change_password "
                         "FROM users WHERE id=:uid LIMIT 1"
                     ),
                     {"uid": int(user_id)},
@@ -1428,7 +1447,7 @@ def account_page():
             else:
                 row = db.execute(
                     text(
-                        "SELECT full_name, email, role, tenant_id "
+                        "SELECT full_name, email, role, tenant_id, must_change_password "
                         "FROM users WHERE id=:uid LIMIT 1"
                     ),
                     {"uid": int(user_id)},
@@ -1442,6 +1461,7 @@ def account_page():
                 tenant_id = int(row[3])
             if has_site_id:
                 user_site_id = str((row[4] or "").strip()) or user_site_id
+            must_change_password = bool(row[5]) if has_site_id else bool(row[4])
 
         if role == "kitchen" and not user_site_id and user_id is not None and tenant_id is not None:
             try:
@@ -1474,6 +1494,7 @@ def account_page():
         "current_week": current_week,
         "user_role": user_role,
         "nav_context": "kitchen" if role == "kitchen" else "admin",
+        "must_change_password": must_change_password,
         "account": {
             "full_name": user_name,
             "email": user_email,
@@ -1535,7 +1556,7 @@ def account_change_password():
         db.execute(
             text(
                 "UPDATE users "
-                "SET password_hash=:ph, auth_version=COALESCE(auth_version, 1) + 1, refresh_token_jti=NULL "
+                "SET password_hash=:ph, auth_version=COALESCE(auth_version, 1) + 1, refresh_token_jti=NULL, must_change_password=0 "
                 "WHERE id=:uid"
             ),
             {"ph": generate_password_hash(new_password), "uid": int(user_id)},
@@ -1730,6 +1751,8 @@ def _default_dashboard_for_user(user) -> str:
 def landing_root():
     # If the user is logged in → redirect to their default dashboard
     if session.get("user_id"):
+        if session.get("must_change_password"):
+            return redirect(url_for("ui.account_page"))
         # Respect ff.dashboard.enabled feature gate (redirect to /dashboard when on)
         try:
             from flask import g, current_app
@@ -1760,6 +1783,20 @@ def landing_root():
                 session["role"] = payload.get("role")
                 session["tenant_id"] = payload.get("tenant_id")
                 session["auth_version"] = auth_version
+                try:
+                    db = get_session()
+                    try:
+                        row = db.execute(
+                            text("SELECT must_change_password FROM users WHERE id=:uid LIMIT 1"),
+                            {"uid": int(session.get("user_id"))},
+                        ).fetchone()
+                        session["must_change_password"] = bool(row[0]) if row else False
+                    finally:
+                        db.close()
+                except Exception:
+                    session["must_change_password"] = False
+                if session.get("must_change_password"):
+                    return redirect(url_for("ui.account_page"))
             # After inferring identity, re-apply feature flag redirect if enabled
             try:
                 from flask import g, current_app

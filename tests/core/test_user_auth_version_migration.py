@@ -17,7 +17,7 @@ def _alembic_cfg(db_url: str) -> Config:
     return cfg
 
 
-def test_0045_upgrade_backfills_auth_version_and_preserves_roundtrip(tmp_path: Path, monkeypatch) -> None:
+def test_0046_upgrade_backfills_auth_version_and_must_change_password_and_preserves_roundtrip(tmp_path: Path, monkeypatch) -> None:
     db_path = tmp_path / "user_auth_version_migration.db"
     db_url = f"sqlite:///{db_path.as_posix()}"
     monkeypatch.setenv("DATABASE_URL", db_url)
@@ -41,12 +41,14 @@ def test_0045_upgrade_backfills_auth_version_and_preserves_roundtrip(tmp_path: P
         inspector = inspect(engine)
         columns = {column["name"] for column in inspector.get_columns("users")}
         assert "auth_version" in columns
+        assert "must_change_password" in columns
 
         Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
         sess = Session()
         try:
             user = sess.query(User).filter(User.email == "legacy.user@example.com").one()
             assert int(user.auth_version) == 1
+            assert user.must_change_password is False
 
             tenant = sess.query(Tenant).first()
             assert tenant is not None
@@ -61,6 +63,7 @@ def test_0045_upgrade_backfills_auth_version_and_preserves_roundtrip(tmp_path: P
             sess.commit()
             sess.refresh(fresh)
             assert int(fresh.auth_version) == 1
+            assert fresh.must_change_password is False
         finally:
             sess.close()
 
@@ -68,17 +71,20 @@ def test_0045_upgrade_backfills_auth_version_and_preserves_roundtrip(tmp_path: P
         inspector = inspect(engine)
         columns = {column["name"] for column in inspector.get_columns("users")}
         assert "auth_version" not in columns
+        assert "must_change_password" not in columns
 
         command.upgrade(_alembic_cfg(db_url), "head")
         inspector = inspect(engine)
         columns = {column["name"] for column in inspector.get_columns("users")}
         assert "auth_version" in columns
+        assert "must_change_password" in columns
 
         with engine.connect() as conn:
             row = conn.execute(
-                text("SELECT auth_version FROM users WHERE email='legacy.user@example.com'")
+                text("SELECT auth_version, must_change_password FROM users WHERE email='legacy.user@example.com'")
             ).fetchone()
             assert row is not None
             assert int(row[0]) == 1
+            assert int(row[1]) == 0
     finally:
         engine.dispose()

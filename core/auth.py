@@ -148,6 +148,18 @@ def require_roles(*roles: str):
                 session["role"] = _normalize_role(active_user.role)
                 session["tenant_id"] = active_user.tenant_id
                 session["auth_version"] = active_auth_version
+                if _user_must_change_password(active_user):
+                    path = request.path or ""
+                    if path.startswith("/static/") or path.startswith("/ui/static/"):
+                        pass
+                    elif path.startswith("/ui/account") or path == "/ui/logout":
+                        pass
+                    elif path.startswith("/ui/") and (request.method or "").upper() == "GET":
+                        from flask import redirect, url_for
+
+                        return redirect(url_for("ui.account_page"))
+                    else:
+                        return _json_error("auth required", 401)
             user_role = session.get("role")
             if roles and user_role not in roles:
                 # Debug aid for test harness: log mismatch context when TESTING to diagnose unexpected 403s
@@ -236,9 +248,18 @@ def _user_auth_version(user: User | None) -> int | None:
         return None
 
 
+def _user_must_change_password(user: User | None) -> bool:
+    if user is None:
+        return False
+    try:
+        return bool(getattr(user, "must_change_password", False))
+    except Exception:
+        return False
+
+
 def _clear_authenticated_session() -> None:
     try:
-        for key in ("user_id", "role", "tenant_id", "site_id", "site_lock", "site_context_version", "auth_version"):
+        for key in ("user_id", "role", "tenant_id", "site_id", "site_lock", "site_context_version", "auth_version", "must_change_password"):
             session.pop(key, None)
     except Exception:
         pass
@@ -355,6 +376,7 @@ def login():
         session["role"] = _normalize_role(user.role)
         session["tenant_id"] = user.tenant_id
         session["auth_version"] = current_auth_version
+        session["must_change_password"] = _user_must_change_password(user)
         pre_login_site = str(session.get("site_id") or "").strip() or None
         # Reset active site context on each successful login to avoid leaking
         # a previous user's site binding in the same browser session.
@@ -479,12 +501,14 @@ def login():
             from flask import redirect, url_for
             target = None
             try:
+                if _user_must_change_password(user):
+                    target = url_for("ui.account_page")
                 r = (session.get("role") or "").lower()
-                if r == "superuser":
+                if target is None and r == "superuser":
                     target = url_for("admin_ui.systemadmin_dashboard")
-                elif r in ("kitchen", "cook"):
+                elif target is None and r in ("kitchen", "cook"):
                     target = url_for("ui.kitchen_dashboard")
-                elif r == "admin":
+                elif target is None and r == "admin":
                     # If admin lacks an active site, return 403 HTML (no selector)
                     if not (session.get("site_id") or "").strip():
                         html = """<!doctype html><html lang='sv'><head><meta charset='utf-8'>
@@ -499,11 +523,11 @@ def login():
                         return resp
                     else:
                         target = url_for("ui.admin_dashboard")
-                elif r == "unit_portal":
+                elif target is None and r == "unit_portal":
                     target = url_for("portal_dept_ui.portal_department_week_ui")
-                elif r in ("staff", "department"):
+                elif target is None and r in ("staff", "department"):
                     target = url_for("ui.portal_week")
-                else:
+                elif target is None:
                     target = url_for("ui.admin_dashboard")
             except Exception:
                 target = "/"
@@ -532,6 +556,7 @@ def login():
                         "expires_in": DEFAULT_ACCESS_TTL,
                         "csrf_token": csrf_token,
                         "role": user.role,
+                        "must_change_password": _user_must_change_password(user),
                     }
                 )
             )
@@ -622,6 +647,8 @@ def refresh():
         user = db.query(User).filter(User.id == payload.get("sub")).first()
         if not _user_is_auth_eligible(user):
             return _json_error("invalid token", 401)
+        if _user_must_change_password(user):
+            return _json_error("invalid token", 401)
         if user.refresh_token_jti != payload.get("jti"):
             return _json_error("invalid token", 401)
         # rotate
@@ -690,6 +717,9 @@ def me():
         db.close()
     active_auth_version = _user_auth_version(active_user)
     if not active_user or active_auth_version is None or auth_version is None or int(auth_version) != active_auth_version:
+        _clear_authenticated_session()
+        return _json_error("auth required", 401)
+    if _user_must_change_password(active_user):
         _clear_authenticated_session()
         return _json_error("auth required", 401)
     session["user_id"] = active_user.id

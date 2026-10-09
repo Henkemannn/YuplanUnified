@@ -29,7 +29,7 @@ class AdminUserRepo:
             # Query aligned columns from unified schema
             rows = db.execute(
                 text(
-                    "SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.department_id, d.name, s.name "
+                    "SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.department_id, d.name, s.name, u.must_change_password "
                     "FROM users u "
                     "LEFT JOIN departments d ON d.id = u.department_id "
                     "LEFT JOIN sites s ON s.id = d.site_id "
@@ -51,6 +51,7 @@ class AdminUserRepo:
                     "department_id": row[6],
                     "department_name": row[7],
                     "site_name": row[8],
+                    "must_change_password": bool(row[9]) if row[9] is not None else False,
                 })
             return users
         finally:
@@ -62,7 +63,7 @@ class AdminUserRepo:
         try:
             row = db.execute(
                 text(
-                    "SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.tenant_id, u.department_id, d.name, s.name "
+                    "SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.tenant_id, u.department_id, d.name, s.name, u.must_change_password "
                     "FROM users u "
                     "LEFT JOIN departments d ON d.id = u.department_id "
                     "LEFT JOIN sites s ON s.id = d.site_id "
@@ -86,6 +87,7 @@ class AdminUserRepo:
                 "department_id": row[7],
                 "department_name": row[8],
                 "site_name": row[9],
+                "must_change_password": bool(row[10]) if len(row) > 10 and row[10] is not None else False,
             }
         finally:
             db.close()
@@ -114,12 +116,13 @@ class AdminUserRepo:
             user = User(
                 tenant_id=tenant_id,
                 username=username,
-            email=normalized_email,
+                email=normalized_email,
                 password_hash=password_hash,
                 full_name=full_name,
                 role=role,
                 is_active=is_active,
                 department_id=department_id,
+                must_change_password=True,
             )
             db.add(user)
             db.commit()
@@ -217,7 +220,7 @@ class AdminUserRepo:
             db.execute(
                 text(
                     "UPDATE users "
-                    "SET password_hash = :ph, auth_version = COALESCE(auth_version, 1) + 1, refresh_token_jti = NULL "
+                    "SET password_hash = :ph, auth_version = COALESCE(auth_version, 1) + 1, refresh_token_jti = NULL, must_change_password = 1 "
                     "WHERE id = :uid"
                 ),
                 {"ph": password_hash, "uid": user_id},

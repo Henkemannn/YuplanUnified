@@ -19,7 +19,7 @@ from typing import ParamSpec, TypeVar, cast
 
 from .app_sessions import SessionData, get_session
 from flask import request, current_app, session
-from .auth import _clear_authenticated_session, _load_active_user_by_id, _user_auth_version
+from .auth import _clear_authenticated_session, _load_active_user_by_id, _user_auth_version, _user_must_change_password
 from .db import get_session as get_db_session
 from .jwt_utils import decode as jwt_decode, JWTError
 from .roles import CanonicalRole, RoleLike, to_canonical
@@ -51,6 +51,12 @@ class AuthzError(Exception):
 
 def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]]:
     canonical_allowed = [to_canonical(r) for r in roles]
+    password_change_exempt_endpoints = {
+        "ui.account_page",
+        "ui.account_change_password",
+        "ui.ui_logout",
+        "auth.logout",
+    }
 
     def decorator(fn: Callable[P, R]) -> Callable[P, R]:
         @wraps(fn)
@@ -126,10 +132,20 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
                     from .app_sessions import SessionError  # local import to avoid cycle
 
                     raise SessionError("authentication required")
+                if _user_must_change_password(active_user) and request.endpoint not in password_change_exempt_endpoints:
+                    if request.endpoint and request.endpoint.startswith("ui.") and (request.method or "").upper() == "GET":
+                        from flask import redirect, url_for
+
+                        return redirect(url_for("ui.account_page"))
+                    _clear_authenticated_session()
+                    from .app_sessions import SessionError  # local import to avoid cycle
+
+                    raise SessionError("authentication required")
                 session["user_id"] = active_user.id
                 session["role"] = active_user.role
                 session["tenant_id"] = active_user.tenant_id
                 session["auth_version"] = active_auth_version
+                session["must_change_password"] = _user_must_change_password(active_user)
                 role_value = to_canonical(cast(RoleLike, active_user.role))
             if role_value not in canonical_allowed:
                 # Raise with first required canonical role for enriched handler output

@@ -74,6 +74,7 @@ def test_login_rejects_inactive_or_deleted_user(monkeypatch, request_kind, accou
         db = get_session()
         email = f"{account_state}.{request_kind}.{uuid.uuid4().hex[:8]}@example.com"
         user = _seed_user(db, email, "Passw0rd!", role="superuser")
+        user.must_change_password = True
         if account_state == "inactive":
             user.is_active = False
         else:
@@ -114,7 +115,7 @@ def test_login_rejects_inactive_or_deleted_user(monkeypatch, request_kind, accou
 )
 def test_auth_login_html_redirects_by_role(monkeypatch, role, expected_target):
     monkeypatch.setenv("APP_ENV", "dev")
-    app = create_app({"TESTING": True})
+    app = _make_isolated_app()
     with app.app_context():
         db = get_session()
         try:
@@ -157,6 +158,47 @@ def test_auth_login_html_redirects_by_role(monkeypatch, role, expected_target):
 
     assert rf.status_code in (301, 302)
     assert expected_target in (rf.headers.get("Location") or "")
+
+
+def test_auth_login_forces_must_change_password_users_to_account_page(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "dev")
+    app = _make_isolated_app()
+    with app.app_context():
+        db = get_session()
+        try:
+            tenant = db.query(Tenant).first()
+            if not tenant:
+                tenant = Tenant(name="Primary")
+                db.add(tenant)
+                db.flush()
+            site = Site(id=f"site-{uuid.uuid4().hex[:8]}", name="Primary Site", tenant_id=tenant.id)
+            db.add(site)
+            db.flush()
+            email = f"must-change.{uuid.uuid4().hex[:8]}@example.com"
+            user = _seed_user(db, email, "Passw0rd!", role="admin")
+            user.must_change_password = True
+            db.commit()
+            c = app.test_client()
+            json_resp = c.post(
+                "/auth/login",
+                json={"email": email, "password": "Passw0rd!"},
+                headers={"Accept": "application/json"},
+            )
+            assert json_resp.status_code == 200
+            body = json_resp.get_json() or {}
+            assert body["must_change_password"] is True
+
+            html_resp = c.post(
+                "/auth/login",
+                data={"email": email, "password": "Passw0rd!"},
+                headers={"Accept": "text/html"},
+                follow_redirects=False,
+            )
+        finally:
+            db.close()
+
+    assert html_resp.status_code in (301, 302)
+    assert "/ui/account" in (html_resp.headers.get("Location") or "")
 
 
 def test_auth_login_role_constants_remain_unchanged() -> None:
