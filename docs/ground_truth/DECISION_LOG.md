@@ -107,3 +107,10 @@ Last reviewed: 2026-10-07
 - Credential-revocation architecture is approved but remains pending implementation/checkpoint: keep `refresh_token_jti` for refresh revocation and add one platform-level `auth_version` generation for browser-session/access-token invalidation on credential reset/change.
 - First-login enforcement remains a separate product decision after credential revocation; `must_change_password` is not Current Truth. Enterprise IAM features such as MFA, SSO, invite-email, multi-role users, and session-management dashboards remain parked beyond the first pilot.
 - Clean-customer acceptance is locked as an A-Z operator proof: Admin creates Department and Kitchen users, Department user logs into only its own Portal and submits menu choice, Kitchen user sees the propagated downstream state, and account reset/deactivation follows the shared auth lifecycle.
+
+
+## 2026-10-09 — documentation governance and future build order
+- Documentation governance was consolidated around a full `docs/DOCUMENTATION_INDEX.md`: Ground Truth is canonical, active module docs are supporting references, handoffs/audits are point-in-time evidence, and legacy/release/checklist material should move to archive only after link/supersession review.
+- Historical documentation is retained rather than deleted. `docs/archive/` is the intended home for superseded legacy, audit, handoff, release and experiment material.
+- `PRODUCT_BUILD_ORDER.md` is locked as the canonical cross-product sequencing view. Current macro order: Kommun pilot closure -> real paying-user proof -> Offshore 1.0 -> Recipe/Production Needs -> Ingredient/Purchasing/Cost -> Hotel/Bankett/EventCase -> shared platform services as proven by vertical demand -> AI expansion -> Yuplan Home Future Lab.
+- Small parity/polish items must not derail the active operator journey. Future platform abstractions require a real consumer and must follow REUSE-BEFORE-BUILD.

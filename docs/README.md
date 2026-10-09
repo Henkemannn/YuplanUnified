@@ -1,14 +1,24 @@
-# Docs Index
+# Yuplan Documentation
 
-This folder collects the planning and analysis docs for Unified.
+Start here.
 
-- Weekview (legacy analysis): `docs/weekview_legacy_analysis.md`
-- Weekview (Unified proposal): `docs/weekview_unified_proposal.md`
-- Legacy functional overview (Kommun + Offshore): `docs/legacy_functional_overview.md`
+## Canonical current direction
+Read `docs/ground_truth/README.md` first.
 
-Legacy source roots referenced by these docs:
-- Kommun (Yuplan3.5): `legacy/Yuplan3.5`
-- Offshore (Rigplan1.0): `legacy/Rigplan1.0`
-- Older kommun adapter and assets: `legacy/kommun`
+Ground Truth overrides older handoffs, audits, legacy specs and chat-derived implementation history when they conflict.
 
-Use this index as a starting point to navigate details during implementation and reviews.
+## Documentation map
+See `docs/DOCUMENTATION_INDEX.md` for:
+- every Markdown document under `docs/`;
+- path and purpose;
+- current classification;
+- archive candidates.
+
+## Product build order
+See `docs/ground_truth/PRODUCT_BUILD_ORDER.md` for the canonical current build sequence and future plans.
+
+## Historical material
+Historical evidence is retained, not deleted. Archive policy lives in `docs/archive/README.md`.
+
+## Rule
+Avoid creating another roadmap/spec for a question already owned by Ground Truth. Update the owning canonical document and Decision Log instead.

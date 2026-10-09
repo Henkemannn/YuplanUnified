@@ -23,6 +23,7 @@ Keep the files concise enough that a new project-lead conversation can read the 
 ## Files
 
 - [YUPLAN_1_0_FINISHLINE.md](YUPLAN_1_0_FINISHLINE.md)
+- [PRODUCT_BUILD_ORDER.md](PRODUCT_BUILD_ORDER.md)
 - [KOMMUN_1_0_MVP_LOCK.md](KOMMUN_1_0_MVP_LOCK.md)
 - [PLATFORM_ARCHITECTURE_LOCK.md](PLATFORM_ARCHITECTURE_LOCK.md)
 - [BUILDER_MENU_LOCK.md](BUILDER_MENU_LOCK.md)
