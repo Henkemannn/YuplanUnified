@@ -62,6 +62,7 @@ def test_jwt_claim_failures(claim, mutate, secrets):
         "sub": 1,
         "role": "admin",
         "tenant_id": 1,
+        "auth_version": 1,
         "jti": "x",
         "type": "access",
         "iss": "yuplan",

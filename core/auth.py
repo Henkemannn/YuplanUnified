@@ -115,9 +115,13 @@ def require_roles(*roles: str):
                         leeway=cfg.get("JWT_LEEWAY_SECONDS", 60),
                         max_age=cfg.get("JWT_MAX_AGE_SECONDS"),
                     )
+                    auth_version = payload.get("auth_version")
+                    if not isinstance(auth_version, int):
+                        return _json_error("auth required", 401)
                     session["user_id"] = payload.get("sub")
                     session["role"] = _normalize_role(payload.get("role"))
                     session["tenant_id"] = payload.get("tenant_id")
+                    session["auth_version"] = auth_version
                 except JWTError as e:
                     if current_app.config.get("TESTING"):
                         current_app.logger.debug({"jwt_reject": str(e)})
@@ -133,16 +137,17 @@ def require_roles(*roles: str):
                     active_user = _load_active_user_by_id(db, session.get("user_id"))
                 finally:
                     db.close()
-                if not active_user:
-                    try:
-                        for key in ("user_id", "role", "tenant_id", "site_id", "site_lock", "site_context_version"):
-                            session.pop(key, None)
-                    except Exception:
-                        pass
+                active_auth_version = _user_auth_version(active_user)
+                if not active_user or active_auth_version is None or session.get("auth_version") is None:
+                    _clear_authenticated_session()
+                    return _json_error("auth required", 401)
+                if int(session.get("auth_version")) != active_auth_version:
+                    _clear_authenticated_session()
                     return _json_error("auth required", 401)
                 session["user_id"] = active_user.id
                 session["role"] = _normalize_role(active_user.role)
                 session["tenant_id"] = active_user.tenant_id
+                session["auth_version"] = active_auth_version
             user_role = session.get("role")
             if roles and user_role not in roles:
                 # Debug aid for test harness: log mismatch context when TESTING to diagnose unexpected 403s
@@ -219,6 +224,26 @@ def _load_active_user_by_id(db, user_id) -> User | None:
     return user
 
 
+def _user_auth_version(user: User | None) -> int | None:
+    if user is None:
+        return None
+    try:
+        value = getattr(user, "auth_version", None)
+        if value is None:
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _clear_authenticated_session() -> None:
+    try:
+        for key in ("user_id", "role", "tenant_id", "site_id", "site_lock", "site_context_version", "auth_version"):
+            session.pop(key, None)
+    except Exception:
+        pass
+
+
 # --- Routes ---
 @bp.post("/login")
 def login():
@@ -236,6 +261,7 @@ def login():
         session["user_id"] = 99999  # demo user id placeholder
         session["role"] = role
         session["tenant_id"] = 51  # arbitrary demo tenant
+        session["auth_version"] = 1
         resp = make_response(jsonify({"ok": True, "demo": True, "role": role}))
         # Lightweight signed-ish cookie (not cryptographically strong; staging only)
         resp.set_cookie("yp_demo", role, httponly=True, samesite="Lax")
@@ -309,10 +335,12 @@ def login():
         if not primary:
             return _json_error("server auth config missing", 500)
         signing_secret = select_signing_secret(primary, secrets_list)
+        current_auth_version = _user_auth_version(user) or 1
         access, refresh, refresh_jti = issue_token_pair(
             user_id=user.id,
             role=user.role,
             tenant_id=user.tenant_id,
+            auth_version=current_auth_version,
             secret=signing_secret,
             access_ttl=current_app.config.get("JWT_ACCESS_TTL", DEFAULT_ACCESS_TTL),
             refresh_ttl=current_app.config.get("JWT_REFRESH_TTL", DEFAULT_REFRESH_TTL),
@@ -326,6 +354,7 @@ def login():
         session["user_id"] = user.id
         session["role"] = _normalize_role(user.role)
         session["tenant_id"] = user.tenant_id
+        session["auth_version"] = current_auth_version
         pre_login_site = str(session.get("site_id") or "").strip() or None
         # Reset active site context on each successful login to avoid leaking
         # a previous user's site binding in the same browser session.
@@ -547,23 +576,22 @@ def logout():
     if auth.lower().startswith("bearer "):
         token = auth.split(None, 1)[1].strip()
     body = request.get_json(silent=True) or {}
-    token = token or body.get("refresh_token") or body.get("token")
-    if not token:
-        return _json_error("missing token", 400)
-    try:
-        payload = jwt_decode(token, secret=primary, secrets_list=secrets_list)
-    except JWTError:
-        return _json_error("invalid token", 401)
-    if payload.get("type") != "refresh":
-        return _json_error("wrong token type", 400)
-    db = get_session()
-    try:
-        user = db.query(User).filter(User.id == payload.get("sub")).first()
-        if _user_is_auth_eligible(user) and user and user.refresh_token_jti == payload.get("jti"):
-            user.refresh_token_jti = None
-            db.commit()
-    finally:
-        db.close()
+    token = token or body.get("refresh_token") or body.get("token") or request.form.get("refresh_token") or request.form.get("token")
+    session.clear()
+    if token:
+        try:
+            payload = jwt_decode(token, secret=primary, secrets_list=secrets_list)
+        except JWTError:
+            payload = None
+        if payload and payload.get("type") == "refresh":
+            db = get_session()
+            try:
+                user = db.query(User).filter(User.id == payload.get("sub")).first()
+                if _user_is_auth_eligible(user) and user and user.refresh_token_jti == payload.get("jti"):
+                    user.refresh_token_jti = None
+                    db.commit()
+            finally:
+                db.close()
     return jsonify({"ok": True})
 
 
@@ -598,10 +626,12 @@ def refresh():
             return _json_error("invalid token", 401)
         # rotate
         signing_secret = select_signing_secret(primary, secrets_list)
+        current_auth_version = _user_auth_version(user) or 1
         access, new_refresh, new_jti = issue_token_pair(
             user_id=user.id,
             role=user.role,
             tenant_id=user.tenant_id,
+            auth_version=current_auth_version,
             secret=signing_secret,
             access_ttl=current_app.config.get("JWT_ACCESS_TTL", DEFAULT_ACCESS_TTL),
             refresh_ttl=current_app.config.get("JWT_REFRESH_TTL", DEFAULT_REFRESH_TTL),
@@ -633,6 +663,7 @@ def me():
     user_id = None
     role = None
     tenant_id = None
+    auth_version = None
     if auth.lower().startswith("bearer "):
         token = auth.split(None, 1)[1].strip()
         try:
@@ -640,12 +671,16 @@ def me():
             user_id = payload.get("sub")
             role = payload.get("role")
             tenant_id = payload.get("tenant_id")
+            auth_version = payload.get("auth_version")
+            if not isinstance(auth_version, int):
+                return _json_error("auth required", 401)
         except JWTError:
             return _json_error("auth required", 401)
     else:
         user_id = session.get("user_id")
         role = session.get("role")
         tenant_id = session.get("tenant_id")
+        auth_version = session.get("auth_version")
     if not user_id:
         return _json_error("auth required", 401)
     db = get_session()
@@ -653,16 +688,14 @@ def me():
         active_user = _load_active_user_by_id(db, user_id)
     finally:
         db.close()
-    if not active_user:
-        try:
-            for key in ("user_id", "role", "tenant_id", "site_id", "site_lock", "site_context_version"):
-                session.pop(key, None)
-        except Exception:
-            pass
+    active_auth_version = _user_auth_version(active_user)
+    if not active_user or active_auth_version is None or auth_version is None or int(auth_version) != active_auth_version:
+        _clear_authenticated_session()
         return _json_error("auth required", 401)
     session["user_id"] = active_user.id
     session["role"] = _normalize_role(active_user.role)
     session["tenant_id"] = active_user.tenant_id
+    session["auth_version"] = active_auth_version
     return jsonify(
         {
             "ok": True,
@@ -932,6 +965,8 @@ def ensure_dev_superuser_henrik():
                 _dev_user_log("update_user_password")
                 try:
                     user.password_hash = _gph(password)
+                    user.auth_version = int(getattr(user, "auth_version", 1) or 1) + 1
+                    user.refresh_token_jti = None
                 except Exception:
                     pass
         db.commit()

@@ -1,12 +1,14 @@
 import os
 import uuid
 from datetime import datetime, timezone
+import tempfile
 
 import pytest
 from sqlalchemy import text
 from core.app_factory import create_app
 from core.db import get_session
 from core.models import Site, User, Tenant
+from core.jwt_utils import decode as jwt_decode
 from core.ui_blueprint import ADMIN_ROLES, KITCHEN_UI_ROLES
 from werkzeug.security import generate_password_hash
 
@@ -28,10 +30,22 @@ def _seed_user(db, email: str, password: str, role: str = "superuser"):
     return u
 
 
+def _make_isolated_app():
+    db_fd, db_path = tempfile.mkstemp(prefix="login_form_", suffix=".db")
+    os.close(db_fd)
+    url = f"sqlite:///{db_path}"
+    app = create_app({"TESTING": True, "database_url": url, "FORCE_DB_REINIT": True})
+    with app.app_context():
+        from core.db import create_all
+
+        create_all()
+    return app
+
+
 def test_login_json_and_form_redirect(monkeypatch):
     # Ensure predictable env
     monkeypatch.setenv("APP_ENV", "dev")
-    app = create_app({"TESTING": True})
+    app = _make_isolated_app()
     with app.app_context():
         db = get_session()
         email = f"test_{uuid.uuid4().hex[:8]}@example.com"
@@ -40,6 +54,10 @@ def test_login_json_and_form_redirect(monkeypatch):
         # JSON login -> 200
         rj = c.post("/auth/login", json={"email": email, "password": "Passw0rd!"}, headers={"Accept": "application/json"})
         assert rj.status_code == 200
+        payload = jwt_decode(rj.get_json()["access_token"], secret=app.config["JWT_SECRET"])
+        assert payload["auth_version"] == 1
+        with c.session_transaction() as sess:
+            assert sess.get("auth_version") == 1
         # Form login -> 302 redirect to systemadmin dashboard
         rf = c.post("/auth/login", data={"email": email, "password": "Passw0rd!"}, headers={"Accept": "text/html"}, follow_redirects=False)
         assert rf.status_code in (301, 302)
@@ -51,7 +69,7 @@ def test_login_json_and_form_redirect(monkeypatch):
 @pytest.mark.parametrize("request_kind", ("json", "html"))
 def test_login_rejects_inactive_or_deleted_user(monkeypatch, request_kind, account_state):
     monkeypatch.setenv("APP_ENV", "dev")
-    app = create_app({"TESTING": True})
+    app = _make_isolated_app()
     with app.app_context():
         db = get_session()
         email = f"{account_state}.{request_kind}.{uuid.uuid4().hex[:8]}@example.com"

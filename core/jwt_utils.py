@@ -103,6 +103,7 @@ class AccessTokenPayload(TypedDict):
     sub: int
     role: str
     tenant_id: int
+    auth_version: int
     jti: str
     iat: int
     exp: int
@@ -114,6 +115,7 @@ class RefreshTokenPayload(TypedDict):
     sub: int
     role: str
     tenant_id: int
+    auth_version: int
     jti: str
     iat: int
     exp: int
@@ -241,6 +243,7 @@ def decode(
     exp = _req("exp", int)
     iss_val = _req("iss", str)
     nbf_val = raw.get("nbf")
+    auth_version_val = raw.get("auth_version")
     if nbf_val is not None and not isinstance(nbf_val, int):
         _inc_jwt_rejected("nbf")
         raise JWTError("nbf")
@@ -284,20 +287,26 @@ def decode(
         _inc_jwt_rejected("revoked")
         raise JWTError("revoked")
     if token_type == "access":
+        auth_version = _req("auth_version", int)
         return AccessTokenPayload(
             sub=sub,
             role=role,
             tenant_id=tenant_id,
+            auth_version=auth_version,
             jti=jti,
             iat=iat,
             exp=exp,
             iss=iss_val,
             type="access",
         )
+    if auth_version_val is not None and not isinstance(auth_version_val, int):
+        _inc_jwt_rejected("auth_version")
+        raise JWTError("auth_version")
     return RefreshTokenPayload(
         sub=sub,
         role=role,
         tenant_id=tenant_id,
+        auth_version=int(auth_version_val) if isinstance(auth_version_val, int) else 1,
         jti=jti,
         iat=iat,
         exp=exp,
@@ -312,6 +321,7 @@ def issue_token_pair(
     role: str,
     tenant_id: int,
     secret: str,
+    auth_version: int = 1,
     access_ttl: int = DEFAULT_ACCESS_TTL,
     refresh_ttl: int = DEFAULT_REFRESH_TTL,
     kid: str | None = None,
@@ -323,6 +333,7 @@ def issue_token_pair(
         "sub": user_id,
         "role": role,
         "tenant_id": tenant_id,
+        "auth_version": auth_version,
         "jti": generate_jti(),
         "type": "access",
         "iss": "yuplan",
@@ -334,6 +345,7 @@ def issue_token_pair(
         "sub": user_id,
         "role": role,
         "tenant_id": tenant_id,
+        "auth_version": auth_version,
         "jti": jti,
         "type": "refresh",
         "iss": "yuplan",

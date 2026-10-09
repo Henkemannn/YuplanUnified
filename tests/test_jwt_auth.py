@@ -24,7 +24,7 @@ def mutate_token_signature(token: str) -> str:
 
 def test_issue_and_decode_access_and_refresh():
     access, refresh, refresh_jti = issue_token_pair(
-        user_id=1, role="admin", tenant_id=7, secret=SECRET
+        user_id=1, role="admin", tenant_id=7, auth_version=7, secret=SECRET
     )
     a_payload = decode(access, secret=SECRET)
     r_payload = decode(refresh, secret=SECRET)
@@ -32,13 +32,17 @@ def test_issue_and_decode_access_and_refresh():
     assert r_payload["type"] == "refresh"
     assert a_payload["sub"] == 1
     assert r_payload["sub"] == 1
+    assert a_payload["auth_version"] == 7
+    assert r_payload["auth_version"] == 7
     assert r_payload["jti"] == refresh_jti
     assert a_payload["jti"] != r_payload["jti"], "access token must have distinct jti"
 
 
 def test_decode_missing_claim():
     token = encode(
-        {"role": "user", "tenant_id": 1, "jti": "abc", "type": "access"}, secret=SECRET, ttl=60
+        {"role": "user", "tenant_id": 1, "auth_version": 1, "jti": "abc", "type": "access"},
+        secret=SECRET,
+        ttl=60,
     )
     with pytest.raises(JWTError) as exc:
         decode(token, secret=SECRET)
@@ -47,7 +51,7 @@ def test_decode_missing_claim():
 
 def test_decode_unknown_type():
     token = encode(
-        {"role": "user", "tenant_id": 1, "jti": "abc", "sub": 5, "type": "other"},
+        {"role": "user", "tenant_id": 1, "auth_version": 1, "jti": "abc", "sub": 5, "type": "other"},
         secret=SECRET,
         ttl=60,
     )
@@ -58,7 +62,7 @@ def test_decode_unknown_type():
 
 def test_decode_bad_signature():
     token = encode(
-        {"sub": 2, "role": "user", "tenant_id": 1, "jti": "abc", "type": "access"},
+        {"sub": 2, "role": "user", "tenant_id": 1, "auth_version": 1, "jti": "abc", "type": "access"},
         secret=SECRET,
         ttl=60,
     )
@@ -76,6 +80,7 @@ def test_decode_expired_token():
             "sub": 3,
             "role": "user",
             "tenant_id": 1,
+            "auth_version": 1,
             "jti": "abc",
             "type": "access",
             "exp": expired_exp,
@@ -96,6 +101,7 @@ def test_decode_expired_within_skew_ok():
             "sub": 4,
             "role": "user",
             "tenant_id": 1,
+            "auth_version": 1,
             "jti": "abc",
             "type": "access",
             "exp": exp_within_skew,
@@ -115,6 +121,7 @@ def test_decode_not_yet_valid_nbf():
             "sub": 5,
             "role": "user",
             "tenant_id": 1,
+            "auth_version": 1,
             "jti": "abc",
             "type": "access",
             "nbf": future_nbf,
@@ -129,7 +136,7 @@ def test_decode_not_yet_valid_nbf():
 
 def test_default_issuer_injected():
     token = encode(
-        {"sub": 9, "role": "user", "tenant_id": 2, "jti": "abc", "type": "access"},
+        {"sub": 9, "role": "user", "tenant_id": 2, "auth_version": 1, "jti": "abc", "type": "access"},
         secret=SECRET,
         ttl=60,
     )

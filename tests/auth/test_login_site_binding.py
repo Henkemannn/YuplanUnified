@@ -5,6 +5,7 @@ import pytest
 from core.app_factory import create_app
 from core.db import get_session, create_all
 from core.models import User, Tenant, Site, Department
+from core.jwt_utils import decode as jwt_decode
 from werkzeug.security import generate_password_hash
 from sqlalchemy import text
 
@@ -331,6 +332,8 @@ def test_refresh_rejects_inactive_or_deleted_user(monkeypatch, account_state):
         )
         assert login_response.status_code == 200, login_response.get_json()
         refresh_token = login_response.get_json()["refresh_token"]
+        refresh_payload = jwt_decode(refresh_token, secret=app.config["JWT_SECRET"])
+        assert refresh_payload["auth_version"] == 1
         if account_state == "inactive":
             _set_account_state(db, email=email, is_active=False)
         else:

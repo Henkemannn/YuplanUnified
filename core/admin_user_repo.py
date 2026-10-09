@@ -215,8 +215,12 @@ class AdminUserRepo:
         db = get_session()
         try:
             db.execute(
-                text("UPDATE users SET password_hash = :ph WHERE id = :uid"),
-                {"ph": password_hash, "uid": user_id}
+                text(
+                    "UPDATE users "
+                    "SET password_hash = :ph, auth_version = COALESCE(auth_version, 1) + 1, refresh_token_jti = NULL "
+                    "WHERE id = :uid"
+                ),
+                {"ph": password_hash, "uid": user_id},
             )
             db.commit()
             return temp_password

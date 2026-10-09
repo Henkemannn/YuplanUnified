@@ -19,7 +19,7 @@ from typing import ParamSpec, TypeVar, cast
 
 from .app_sessions import SessionData, get_session
 from flask import request, current_app, session
-from .auth import _load_active_user_by_id
+from .auth import _clear_authenticated_session, _load_active_user_by_id, _user_auth_version
 from .db import get_session as get_db_session
 from .jwt_utils import decode as jwt_decode, JWTError
 from .roles import CanonicalRole, RoleLike, to_canonical
@@ -86,10 +86,14 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
                         leeway=current_app.config.get("JWT_LEEWAY_SECONDS", 60),
                         max_age=current_app.config.get("JWT_MAX_AGE_SECONDS"),
                     )
+                    auth_version = payload.get("auth_version")
+                    if not isinstance(auth_version, int):
+                        raise SessionError("authentication required")
                     # Populate session-like dict for downstream checks
                     session["user_id"] = payload.get("sub")
                     session["role"] = payload.get("role")
                     session["tenant_id"] = payload.get("tenant_id")
+                    session["auth_version"] = auth_version
                     # Re-fetch to reflect new values
                     sess = get_session()
             except JWTError:
@@ -111,19 +115,21 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
                     active_user = _load_active_user_by_id(db, sess["user_id"])
                 finally:
                     db.close()
-                if active_user is None:
-                    try:
-                        session.pop("user_id", None)
-                        session.pop("role", None)
-                        session.pop("tenant_id", None)
-                    except Exception:
-                        pass
+                active_auth_version = _user_auth_version(active_user)
+                if active_user is None or active_auth_version is None or session.get("auth_version") is None:
+                    _clear_authenticated_session()
+                    from .app_sessions import SessionError  # local import to avoid cycle
+
+                    raise SessionError("authentication required")
+                if int(session.get("auth_version")) != active_auth_version:
+                    _clear_authenticated_session()
                     from .app_sessions import SessionError  # local import to avoid cycle
 
                     raise SessionError("authentication required")
                 session["user_id"] = active_user.id
                 session["role"] = active_user.role
                 session["tenant_id"] = active_user.tenant_id
+                session["auth_version"] = active_auth_version
                 role_value = to_canonical(cast(RoleLike, active_user.role))
             if role_value not in canonical_allowed:
                 # Raise with first required canonical role for enriched handler output

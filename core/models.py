@@ -16,6 +16,7 @@ from sqlalchemy import (
     Text,
     String,
     UniqueConstraint,
+    text,
     true,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -41,6 +42,7 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(100), unique=True, nullable=True)
     email: Mapped[str] = mapped_column(String(200), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
+    auth_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
     role: Mapped[str] = mapped_column(String(50))  # admin, unit_portal, cook, superuser
     full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

@@ -2315,7 +2315,11 @@ def systemadmin_site_admin_reset_password(tenant_id: int, site_id: str, user_id:
             return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
 
         db.execute(
-            text("UPDATE users SET password_hash=:ph, is_active=1 WHERE id=:uid"),
+            text(
+                "UPDATE users "
+                "SET password_hash=:ph, auth_version=COALESCE(auth_version, 1) + 1, refresh_token_jti=NULL, is_active=1 "
+                "WHERE id=:uid"
+            ),
             {"ph": generate_password_hash(new_password), "uid": int(user_id)},
         )
         db.commit()

@@ -1029,10 +1029,13 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                         leeway=app.config.get("JWT_LEEWAY_SECONDS", 60),
                         max_age=app.config.get("JWT_MAX_AGE_SECONDS"),
                     )
-                    _sess["user_id"] = payload.get("sub")
-                    _sess["role"] = payload.get("role")
-                    _sess["tenant_id"] = payload.get("tenant_id")
-                    g.tenant_id = payload.get("tenant_id")
+                    auth_version = payload.get("auth_version")
+                    if isinstance(auth_version, int):
+                        _sess["user_id"] = payload.get("sub")
+                        _sess["role"] = payload.get("role")
+                        _sess["tenant_id"] = payload.get("tenant_id")
+                        _sess["auth_version"] = auth_version
+                        g.tenant_id = payload.get("tenant_id")
                 except _JWTError:
                     pass
         except Exception:

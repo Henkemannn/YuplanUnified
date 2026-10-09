@@ -1533,7 +1533,11 @@ def account_change_password():
             return redirect(url_for("ui.account_page"))
 
         db.execute(
-            text("UPDATE users SET password_hash=:ph WHERE id=:uid"),
+            text(
+                "UPDATE users "
+                "SET password_hash=:ph, auth_version=COALESCE(auth_version, 1) + 1, refresh_token_jti=NULL "
+                "WHERE id=:uid"
+            ),
             {"ph": generate_password_hash(new_password), "uid": int(user_id)},
         )
         db.commit()
@@ -1547,8 +1551,9 @@ def account_change_password():
     finally:
         db.close()
 
-    flash("Lösenord uppdaterat.", "success")
-    return redirect(url_for("ui.account_page"))
+    session.clear()
+    flash("Lösenord uppdaterat. Logga in igen.", "success")
+    return redirect(url_for("home.ui_login"))
 
 
 @ui_bp.post("/ui/logout")
@@ -1557,6 +1562,12 @@ def ui_logout():
     """Session-based logout for app-shell UI."""
     try:
         session.clear()
+    except Exception:
+        pass
+    try:
+        from .auth import logout as _api_logout
+
+        _api_logout()
     except Exception:
         pass
     return redirect(url_for("home.ui_login"))
@@ -1743,9 +1754,12 @@ def landing_root():
             primary = current_app.config.get("JWT_SECRET", None)
             secrets_list = current_app.config.get("JWT_SECRETS") or []
             payload = jwt_decode(token, secret=primary, secrets_list=secrets_list)
-            session["user_id"] = payload.get("sub")
-            session["role"] = payload.get("role")
-            session["tenant_id"] = payload.get("tenant_id")
+            auth_version = payload.get("auth_version")
+            if isinstance(auth_version, int):
+                session["user_id"] = payload.get("sub")
+                session["role"] = payload.get("role")
+                session["tenant_id"] = payload.get("tenant_id")
+                session["auth_version"] = auth_version
             # After inferring identity, re-apply feature flag redirect if enabled
             try:
                 from flask import g, current_app
