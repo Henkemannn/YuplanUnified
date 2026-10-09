@@ -1,5 +1,7 @@
 import os
 import uuid
+from datetime import datetime, timezone
+
 import pytest
 from sqlalchemy import text
 from core.app_factory import create_app
@@ -43,6 +45,44 @@ def test_login_json_and_form_redirect(monkeypatch):
         assert rf.status_code in (301, 302)
         loc = rf.headers.get("Location") or ""
         assert "/ui/systemadmin/dashboard" in loc
+
+
+@pytest.mark.parametrize("account_state", ("inactive", "deleted"))
+@pytest.mark.parametrize("request_kind", ("json", "html"))
+def test_login_rejects_inactive_or_deleted_user(monkeypatch, request_kind, account_state):
+    monkeypatch.setenv("APP_ENV", "dev")
+    app = create_app({"TESTING": True})
+    with app.app_context():
+        db = get_session()
+        email = f"{account_state}.{request_kind}.{uuid.uuid4().hex[:8]}@example.com"
+        user = _seed_user(db, email, "Passw0rd!", role="superuser")
+        if account_state == "inactive":
+            user.is_active = False
+        else:
+            user.deleted_at = datetime.now(timezone.utc)
+        db.commit()
+        c = app.test_client()
+        if request_kind == "json":
+            r = c.post(
+                "/auth/login",
+                json={"email": email, "password": "Passw0rd!"},
+                headers={"Accept": "application/json"},
+            )
+        else:
+            r = c.post(
+                "/auth/login",
+                data={"email": email, "password": "Passw0rd!"},
+                headers={"Accept": "text/html"},
+                follow_redirects=False,
+            )
+
+        assert r.status_code == 401
+        body = r.get_json() or {}
+        assert body.get("error") == "invalid credentials"
+        assert body.get("message") == "invalid credentials"
+        with c.session_transaction() as sess:
+            assert sess.get("user_id") is None
+            assert sess.get("role") is None
 
 
 @pytest.mark.parametrize(

@@ -1,4 +1,7 @@
+from datetime import datetime, timezone
+
 import pytest
+from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 
 from core.app_factory import create_app
@@ -245,3 +248,44 @@ def test_error_shapes(client):
     assert rl.status_code == 429
     jr = rl.get_json()
     assert jr.get("status") == 429 and jr.get("type", " ").endswith("/rate_limited")
+
+
+@pytest.mark.parametrize("account_state", ("inactive", "deleted"))
+def test_deactivated_or_deleted_session_cannot_access_protected_routes(client, account_state):
+    sess = get_session()
+    try:
+        tenant = sess.query(Tenant).first()
+        email = f"stateful-{account_state}-{datetime.utcnow().timestamp():.0f}@example.com"
+        user = User(
+            tenant_id=tenant.id,
+            email=email,
+            password_hash=generate_password_hash("pw"),
+            role="admin",
+        )
+        sess.add(user)
+        sess.commit()
+
+        login(client, email)
+
+        if account_state == "inactive":
+            sess.execute(text("UPDATE users SET is_active = 0 WHERE email = :email"), {"email": email})
+        else:
+            sess.execute(
+                text("UPDATE users SET deleted_at = :deleted_at WHERE email = :email"),
+                {"email": email, "deleted_at": datetime.now(timezone.utc)},
+            )
+        sess.commit()
+        sess.expire_all()
+    finally:
+        sess.close()
+
+    features = client.get("/features", headers={"X-Tenant-Id": "1"})
+    assert features.status_code == 401
+    features_body = features.get_json() or {}
+    assert features_body.get("status") == 401
+    assert features_body.get("type", " ").endswith("/unauthorized")
+
+    me = client.get("/auth/me")
+    assert me.status_code == 401
+    me_body = me.get_json() or {}
+    assert me_body.get("error") == "authentication required"

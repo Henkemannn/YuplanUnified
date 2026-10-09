@@ -124,6 +124,25 @@ def require_roles(*roles: str):
                     return _json_error("auth required", 401)
             if not session.get("user_id"):
                 return _json_error("auth required", 401)
+            synthetic_test_identity = bool(current_app.config.get("TESTING")) and bool(
+                request.headers.get("X-User-Role")
+            )
+            if not synthetic_test_identity:
+                db = get_session()
+                try:
+                    active_user = _load_active_user_by_id(db, session.get("user_id"))
+                finally:
+                    db.close()
+                if not active_user:
+                    try:
+                        for key in ("user_id", "role", "tenant_id", "site_id", "site_lock", "site_context_version"):
+                            session.pop(key, None)
+                    except Exception:
+                        pass
+                    return _json_error("auth required", 401)
+                session["user_id"] = active_user.id
+                session["role"] = _normalize_role(active_user.role)
+                session["tenant_id"] = active_user.tenant_id
             user_role = session.get("role")
             if roles and user_role not in roles:
                 # Debug aid for test harness: log mismatch context when TESTING to diagnose unexpected 403s
@@ -183,6 +202,21 @@ def _lookup_user_by_email(db, email: str) -> User | None:
     if len(candidates) != 1:
         return None
     return candidates[0]
+
+
+def _user_is_auth_eligible(user: User | None) -> bool:
+    return bool(user is not None and user.is_active and user.deleted_at is None)
+
+
+def _load_active_user_by_id(db, user_id) -> User | None:
+    try:
+        user_id_int = int(user_id)
+    except (TypeError, ValueError):
+        return None
+    user = db.query(User).filter(User.id == user_id_int).first()
+    if not _user_is_auth_eligible(user):
+        return None
+    return user
 
 
 # --- Routes ---
@@ -256,7 +290,7 @@ def login():
         user = _lookup_user_by_email(db, email)
         user_found = bool(user)
         password_ok = bool(user and check_password_hash(user.password_hash, password))
-        if (not user_found) or (not password_ok):
+        if (not user_found) or (not password_ok) or (not _user_is_auth_eligible(user)):
             rec["failures"] += 1
             if rec["failures"] >= max_failures:
                 rec["lock_until"] = now + lock_sec
@@ -525,7 +559,7 @@ def logout():
     db = get_session()
     try:
         user = db.query(User).filter(User.id == payload.get("sub")).first()
-        if user and user.refresh_token_jti == payload.get("jti"):
+        if _user_is_auth_eligible(user) and user and user.refresh_token_jti == payload.get("jti"):
             user.refresh_token_jti = None
             db.commit()
     finally:
@@ -558,7 +592,7 @@ def refresh():
     db = get_session()
     try:
         user = db.query(User).filter(User.id == payload.get("sub")).first()
-        if not user:
+        if not _user_is_auth_eligible(user):
             return _json_error("invalid token", 401)
         if user.refresh_token_jti != payload.get("jti"):
             return _json_error("invalid token", 401)
@@ -614,12 +648,27 @@ def me():
         tenant_id = session.get("tenant_id")
     if not user_id:
         return _json_error("auth required", 401)
+    db = get_session()
+    try:
+        active_user = _load_active_user_by_id(db, user_id)
+    finally:
+        db.close()
+    if not active_user:
+        try:
+            for key in ("user_id", "role", "tenant_id", "site_id", "site_lock", "site_context_version"):
+                session.pop(key, None)
+        except Exception:
+            pass
+        return _json_error("auth required", 401)
+    session["user_id"] = active_user.id
+    session["role"] = _normalize_role(active_user.role)
+    session["tenant_id"] = active_user.tenant_id
     return jsonify(
         {
             "ok": True,
-            "user_id": user_id,
-            "role": role,
-            "tenant_id": tenant_id,
+            "user_id": active_user.id,
+            "role": session.get("role") or role,
+            "tenant_id": session.get("tenant_id") or tenant_id,
         }
     )
 

@@ -1,4 +1,6 @@
 import uuid
+from datetime import datetime, timezone
+
 import pytest
 from core.app_factory import create_app
 from core.db import get_session, create_all
@@ -56,6 +58,16 @@ def _seed_user_with_email(db, *, email: str, role: str = "superuser", password: 
     db.add(user)
     db.commit()
     return user.id
+
+
+def _set_account_state(db, *, email: str, is_active: bool | None = None, deleted: bool = False) -> None:
+    user = db.query(User).filter(User.email == email.lower()).first()
+    assert user is not None
+    if is_active is not None:
+        user.is_active = is_active
+    if deleted:
+        user.deleted_at = datetime.now(timezone.utc)
+    db.commit()
 
 
 def _seed_html_login_user(db, *, role: str, password: str = "Passw0rd!") -> tuple[str, str, str | None]:
@@ -302,6 +314,37 @@ def test_login_html_lands_roles_on_expected_target(monkeypatch, role, expected_t
             assert expected_target in (resp.headers.get("Location") or "")
         finally:
             db.close()
+
+
+@pytest.mark.parametrize("account_state", ("inactive", "deleted"))
+def test_refresh_rejects_inactive_or_deleted_user(monkeypatch, account_state):
+    monkeypatch.setenv("APP_ENV", "dev")
+    app = _make_isolated_app()
+    with app.app_context():
+        db = get_session()
+        email, site_id, _ = _seed_html_login_user(db, role="admin")
+        c = app.test_client()
+        login_response = c.post(
+            "/auth/login",
+            json={"email": email, "password": "Passw0rd!"},
+            headers={"Accept": "application/json"},
+        )
+        assert login_response.status_code == 200, login_response.get_json()
+        refresh_token = login_response.get_json()["refresh_token"]
+        if account_state == "inactive":
+            _set_account_state(db, email=email, is_active=False)
+        else:
+            _set_account_state(db, email=email, deleted=True)
+
+        refresh_response = c.post(
+            "/auth/refresh",
+            json={"refresh_token": refresh_token},
+            headers={"Accept": "application/json"},
+        )
+        assert refresh_response.status_code == 401
+        body = refresh_response.get_json() or {}
+        assert body.get("error") == "invalid token"
+        assert body.get("message") == "invalid token"
 
 
 def test_login_unit_portal_follow_redirect_reaches_department_portal(monkeypatch):

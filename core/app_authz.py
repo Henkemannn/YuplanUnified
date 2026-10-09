@@ -19,6 +19,8 @@ from typing import ParamSpec, TypeVar, cast
 
 from .app_sessions import SessionData, get_session
 from flask import request, current_app, session
+from .auth import _load_active_user_by_id
+from .db import get_session as get_db_session
 from .jwt_utils import decode as jwt_decode, JWTError
 from .roles import CanonicalRole, RoleLike, to_canonical
 
@@ -98,7 +100,31 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
                 from .app_sessions import SessionError  # local import to avoid cycle
 
                 raise SessionError("authentication required")
-            role_value = to_canonical(cast(RoleLike, sess["role"]))
+            synthetic_test_identity = bool(current_app.config.get("TESTING")) and bool(
+                request.headers.get("X-User-Role")
+            )
+            if synthetic_test_identity:
+                role_value = to_canonical(cast(RoleLike, sess["role"]))
+            else:
+                db = get_db_session()
+                try:
+                    active_user = _load_active_user_by_id(db, sess["user_id"])
+                finally:
+                    db.close()
+                if active_user is None:
+                    try:
+                        session.pop("user_id", None)
+                        session.pop("role", None)
+                        session.pop("tenant_id", None)
+                    except Exception:
+                        pass
+                    from .app_sessions import SessionError  # local import to avoid cycle
+
+                    raise SessionError("authentication required")
+                session["user_id"] = active_user.id
+                session["role"] = active_user.role
+                session["tenant_id"] = active_user.tenant_id
+                role_value = to_canonical(cast(RoleLike, active_user.role))
             if role_value not in canonical_allowed:
                 # Raise with first required canonical role for enriched handler output
                 req = canonical_allowed[0] if canonical_allowed else None
