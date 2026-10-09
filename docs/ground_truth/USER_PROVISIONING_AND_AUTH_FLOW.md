@@ -174,16 +174,25 @@ Current Truth: this credential-revocation contract is implemented and checkpoint
 ## Initial credential and first-login policy
 Current creation flows accept an initial credential and store only its hash. A self-service change route exists.
 
-Not locked/implemented yet:
-- enforced first-login change;
-- must_change_password state;
+Current Truth — CLOSED at checkpoint:
+`9873ca3cbec762d752660c84b3f11e87a3e193ed`
+`fix(auth): require password change for temporary credentials`
+
+Implemented:
+- `must_change_password` boolean state;
+- migrated existing users default/backfill `false`;
+- admin-issued initial credentials set it `true`;
+- admin/systemadmin password reset sets it `true`;
+- forced-change users are restricted to the existing account/password flow and logout until they choose a new password;
+- successful self-service password change clears the flag, increments `auth_version`, clears refresh JTI, clears the browser session, and requires login again;
+- inactive/deleted account-state checks remain prior authority.
+
+Still not implemented:
 - complete forgot-credential token/email recovery.
 
-Next product gate after revocation: decide whether pilot users must change the initial credential on first login.
-
-If added later:
-- must_change_password = required user action/state.
-- auth_version = revocation generation.
+Locked separation:
+- `must_change_password` = required user action/state.
+- `auth_version` = revocation generation.
 Do not overload one field to do both jobs.
 
 ## Account lifecycle
@@ -224,8 +233,8 @@ Lifecycle:
 ## Implementation sequence
 1. Account-state guard — CLOSED at 5b301e8.
 2. Credential revocation/auth_version — CLOSED at `129d2b8`.
-3. First-login policy — ACTIVE PRODUCT GATE.
-4. Unified Admin -> Användare UX — consolidate existing generic and Kitchen provisioning.
+3. First-login policy — CLOSED at `9873ca3`.
+4. Unified Admin -> Användare UX — ACTIVE PRODUCT GATE; consolidate existing generic and Kitchen provisioning.
 5. Clean-customer A-Z Firefox acceptance.
 6. Pilot freeze.
 
