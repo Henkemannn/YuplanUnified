@@ -5,7 +5,7 @@
 **Status:** Future Lab — idé dokumenterad, ingen implementation beställd  
 **Datum:** 2026-10-09  
 **Område:** Yuplan Platform / Yuplan Work / Yuplan Home  
-**Prioritet:** Efter Yuplan 1.0 och efter stabil Ingredient Library / receptnormalisering  
+**Prioritet:** Hög arkitekturprioritet direkt efter pågående systemgenomgång; full Nutrition-funktion byggs stegvis  
 **Implementation:** Beslutas separat inom Yuplan Unified
 
 ---
@@ -45,42 +45,66 @@ Nutrition Engine   -> Vad innehåller måltiden näringsmässigt?
 
 # 2. Unified-beslut om placering i roadmap
 
-Nutrition ska **inte** läggas in före Yuplan 1.0.
+Nutrition ska behandlas som ett **tidigt arkitekturspår**, inte som en sen feature.
 
-Rekommenderad ordning:
+Skälet är att Nutrition påverkar hur Yuplan bör tänka kring:
+- canonical Ingredient identity
+- recipe quantities
+- units
+- portions / yield
+- provenance
+- source/version metadata
+- publicerade snapshots
 
-1. **Yuplan 1.0**
-   - Kommun pilotklar
-   - Offshore pilotklar
-   - nuvarande Builder / Planera seam stabil
+Om dessa grundbitar byggs utan Nutrition-awareness finns risk att Ingredient/Recipe-modellen senare måste rivas upp eller migreras i onödan.
 
-2. **Builder 1.1 / Ingredient Foundation**
+## Rekommenderad ordning
+
+1. **Pågående systemgenomgång färdigställs**
+   - avsluta nuvarande funktionella genomgång
+   - stabilisera aktiv Menyimport/Builder-seam
+   - få kontroll på faktisk nuvarande Ingredient/Recipe-modell
+
+2. **Nutrition Readiness Gate — tidigt**
+   - READ-ONLY technical census först
+   - kartlägg Ingredient/Recipe/Component quantity/unit/portion/yield-modellen
+   - definiera canonical Ingredient-riktning
+   - definiera nutrition source/provenance extension points
+   - identifiera vilka små schema-/modellbeslut som bör tas NU för att undvika framtida ombyggnad
+   - ingen bred Nutrition-UI krävs i detta steg
+
+3. **Food Knowledge Foundation / Ingredient Foundation**
    - canonical Ingredient Library
    - stabil ingrediensidentitet
    - stabila receptmängder
    - normaliserade måttenheter
    - återanvändbara ingredienser mellan recept
    - tydlig portionsdefinition / yield-grund
+   - Nutrition-ready metadata/seams byggs in där det är billigt och naturligt
 
-3. **Nutrition P0**
+4. **Nutrition P0**
    - extern nutrition mapping per ingredient
    - energi + grundläggande makronutrienter
    - receptsumma
    - per portion
    - tydlig hantering av saknade/osäkra värden
 
-4. **Nutrition P1**
+5. **Nutrition P1**
    - Component -> Dish -> komplett måltid
    - meny / publicerad nutritionprofil
    - portionsanpassning
 
-5. **Nutrition P2+**
+6. **Nutrition P2+**
    - avancerad tillagningsjustering
    - nutritionmål / veckomenyanalys
    - professionell kostplanering
    - eventuell individnivå först efter separat säkerhets/regulatorisk bedömning
 
 ## Viktig slutsats
+
+**Nutrition-readiness ska in tidigt. Full Nutrition P0 behöver inte göra det.**
+
+Det betyder att Yuplan bör ta de arkitektur- och datamodellsbeslut som gör Nutrition naturlig att lägga ovanpå, direkt efter systemgenomgången, men utan att låta Nutrition bli en ny stor feature-gate som blockerar pilot.
 
 Nutrition P0 är inte ett monsterprojekt **när Ingredient Library och receptdata är stabila**.
 
@@ -469,22 +493,25 @@ Nutrition är därför strategiskt starkast som **ytterligare ett beräkningslag
 
 # 15. Beslut 2026-10-09
 
-**SAVE / FUTURE LAB.**
+**SAVE / FUTURE LAB — HIGH EARLY-ARCHITECTURE PRIORITY.**
 
-Ingen kod ändras i nuvarande Yuplan 1.0-arbete på grund av Nutrition-idén.
+Ingen bred Nutrition-feature ska byggas mitt i den pågående systemgenomgången.
 
 Beslut:
 
 1. Bevara Nutrition som separat strategiskt Future Lab-spår.
-2. Bygg inte Nutrition före Yuplan 1.0 pilotclosure.
-3. När Ingredient Library designas ska Nutrition-future-proofing ingå.
-4. P0 är första möjliga implementation efter stabil Ingredient + Recipe quantity/unit foundation.
-5. Kommun och Home är de starkaste tidiga användningsfallen.
-6. P0 ska vara deterministisk och begränsad.
-7. P2/P3/P4 byggs bara efter verkligt användar-/kundbehov.
-8. Ingen AI-genererad nutrition truth.
-9. Ingen separat nutrition-receptmodell.
-10. Ingen implementation order från detta dokument.
+2. **Direkt efter pågående systemgenomgång ska en Nutrition Readiness Gate göras.**
+3. Den gaten börjar med en READ-ONLY technical census av Ingredient/Recipe/Component-modellen.
+4. Syftet är att identifiera små tidiga modell-/schema-beslut som minskar risken för framtida ombyggnad.
+5. Nutrition-awareness ska byggas in i Ingredient/Recipe foundation tidigt där kostnaden är låg.
+6. Full Nutrition P0 byggs först när Ingredient identity + quantity/unit + portion/yield foundation är tillräckligt stabil.
+7. Kommun och Home är de starkaste tidiga användningsfallen.
+8. P0 ska vara deterministisk och begränsad.
+9. P2/P3/P4 byggs bara efter verkligt användar-/kundbehov.
+10. Ingen AI-genererad nutrition truth.
+11. Ingen separat nutrition-receptmodell.
+12. Nutrition får inte breda ut sig till ett nytt parallellt system.
+13. Den tidiga Nutrition Readiness Gate får inte bli ett stort feature-projekt eller blockera pågående pilotclosure.
 
 ---
 
@@ -510,4 +537,4 @@ När Nutrition blir aktivt bör Unified först kartlägga:
 
 # 17. One-line roadmap
 
-**Yuplan 1.0 -> Ingredient Library + Recipe normalization -> Nutrition P0 -> complete-meal P1 -> advanced nutrition only when real customer value justifies it.**
+**Current system review -> Nutrition Readiness Gate -> Ingredient/Recipe foundation built nutrition-ready -> Nutrition P0 -> complete-meal P1 -> advanced nutrition only when real customer value justifies it.**
