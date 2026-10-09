@@ -58,7 +58,7 @@ def _build_form_data(
     return MultiDict(payload)
 
 
-def _seed_existing_menu(site_id: str, year: int, week: int, *, with_variant: bool = False) -> None:
+def _seed_existing_menu(site_id: str, year: int, week: int, *, with_variant: bool = False) -> int:
     from core.db import get_session
 
     db = get_session()
@@ -84,6 +84,7 @@ def _seed_existing_menu(site_id: str, year: int, week: int, *, with_variant: boo
                 {"mid": menu_id, "day": "monday", "meal": "lunch", "variant_type": "main", "dish_id": dish_id},
             )
         db.commit()
+        return int(menu_id)
     finally:
         db.close()
 
@@ -162,7 +163,7 @@ def test_new_menu_preview_create_and_zero_row_editor(app_session):
 
 def test_new_menu_preview_conflict_and_replace_preserves_existing_rows(app_session):
     client = _seed_site_and_session(app_session, "site-new-menu-conflict")
-    _seed_existing_menu("site-new-menu-conflict", 2026, 11, with_variant=True)
+    menu_id = _seed_existing_menu("site-new-menu-conflict", 2026, 11, with_variant=True)
 
     preview = client.post(
         "/ui/admin/menu-import/new",
@@ -204,7 +205,10 @@ def test_new_menu_preview_conflict_and_replace_preserves_existing_rows(app_sessi
 
     db = get_session()
     try:
-        row_count = db.execute(text("SELECT COUNT(*) FROM menu_variants")).fetchone()[0]
+        row_count = db.execute(
+            text("SELECT COUNT(*) FROM menu_variants WHERE menu_id=:menu_id"),
+            {"menu_id": menu_id},
+        ).fetchone()[0]
         assert int(row_count) == 1
     finally:
         db.close()

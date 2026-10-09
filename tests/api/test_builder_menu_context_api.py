@@ -202,6 +202,64 @@ def test_edit_menu_row_endpoint_switches_composition_and_updates_fields() -> Non
     assert detail.get("sort_order") == 1
 
 
+def test_update_menu_row_endpoint_selection_group_tristate() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_1", "composition_name": "Fish Plate"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_2", "composition_name": "Veg Plate"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_1", "site_id": "site_1", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+    created = client.post(
+        "/api/builder/menus/menu_1/rows",
+        json={
+            "day": "monday",
+            "meal_slot": "lunch",
+            "composition_id": "plate_1",
+            "selection_group_id": "grp_x",
+        },
+        headers=HEADERS,
+    )
+    detail_id = ((created.get_json() or {}).get("menu_detail") or {}).get("menu_detail_id")
+
+    preserved = client.patch(
+        f"/api/builder/menus/menu_1/rows/{detail_id}",
+        json={"day": "monday", "meal_slot": "lunch", "composition_id": "plate_1"},
+        headers=HEADERS,
+    )
+    preserved_detail = (preserved.get_json() or {}).get("menu_detail") or {}
+    assert preserved.status_code == 200
+    assert preserved_detail.get("selection_group_id") == "grp_x"
+
+    cleared = client.patch(
+        f"/api/builder/menus/menu_1/rows/{detail_id}",
+        json={"day": "monday", "meal_slot": "lunch", "composition_id": "plate_1", "selection_group_id": None},
+        headers=HEADERS,
+    )
+    cleared_detail = (cleared.get_json() or {}).get("menu_detail") or {}
+    assert cleared.status_code == 200
+    assert cleared_detail.get("selection_group_id") is None
+
+    reassigned = client.patch(
+        f"/api/builder/menus/menu_1/rows/{detail_id}",
+        json={"day": "monday", "meal_slot": "lunch", "composition_id": "plate_2", "selection_group_id": "grp_y"},
+        headers=HEADERS,
+    )
+    reassigned_detail = (reassigned.get_json() or {}).get("menu_detail") or {}
+    assert reassigned.status_code == 200
+    assert reassigned_detail.get("composition_id") == "plate_2"
+    assert reassigned_detail.get("selection_group_id") == "grp_y"
+
+
 def test_delete_menu_row_endpoint_removes_row() -> None:
     client = _client()
     client.post(

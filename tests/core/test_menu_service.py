@@ -44,6 +44,82 @@ def test_add_composition_based_menu_detail() -> None:
     assert detail.unresolved_text is None
 
 
+def test_create_menu_detail_selection_group_variants() -> None:
+    composition_repo = InMemoryCompositionRepository()
+    composition_repo.add(Composition(composition_id="comp_1", composition_name="Plate"))
+
+    service = MenuService(composition_repository=composition_repo)
+    service.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
+
+    omitted = service.create_empty_menu_detail(
+        menu_detail_id="d1",
+        menu_id="menu_1",
+        day="monday",
+        display_label="Barnens val",
+    )
+    explicit_null = service.add_menu_detail(
+        menu_detail_id="d2",
+        menu_id="menu_1",
+        day="tuesday",
+        meal_slot="lunch",
+        composition_ref_type="composition",
+        composition_id="comp_1",
+        selection_group_id=None,
+    )
+    string_group = service.create_empty_menu_detail(
+        menu_detail_id="d3",
+        menu_id="menu_1",
+        day="wednesday",
+        display_label="Väljare",
+        selection_group_id="grp_x",
+    )
+
+    assert omitted.selection_group_id is None
+    assert explicit_null.selection_group_id is None
+    assert string_group.selection_group_id == "grp_x"
+
+
+def test_update_menu_detail_selection_group_tristate_and_preservation() -> None:
+    composition_repo = InMemoryCompositionRepository()
+    composition_repo.add(Composition(composition_id="comp_1", composition_name="Plate"))
+    composition_repo.add(Composition(composition_id="comp_2", composition_name="Soup"))
+
+    service = MenuService(composition_repository=composition_repo)
+    service.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
+    detail = service.create_empty_menu_detail(
+        menu_detail_id="d1",
+        menu_id="menu_1",
+        day="monday",
+        display_label="Barnens val",
+        selection_group_id="grp_x",
+    )
+
+    preserved_by_omission = service.update_menu_detail(
+        menu_detail_id=detail.menu_detail_id,
+        display_label="Barnens bättre val",
+    )
+    cleared = service.update_menu_detail(
+        menu_detail_id=detail.menu_detail_id,
+        selection_group_id=None,
+    )
+    reassigned = service.update_menu_detail(
+        menu_detail_id=detail.menu_detail_id,
+        selection_group_id="grp_y",
+    )
+    assigned = service.assign_menu_detail_composition(
+        detail.menu_detail_id,
+        composition_id="comp_1",
+    )
+    cleared_row = service.clear_menu_detail(detail.menu_detail_id)
+
+    assert preserved_by_omission.selection_group_id == "grp_x"
+    assert preserved_by_omission.display_label == "Barnens bättre val"
+    assert cleared.selection_group_id is None
+    assert reassigned.selection_group_id == "grp_y"
+    assert assigned.selection_group_id == "grp_y"
+    assert cleared_row.selection_group_id == "grp_y"
+
+
 def test_add_unresolved_menu_detail() -> None:
     service = MenuService()
     service.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")

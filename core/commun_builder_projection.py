@@ -33,6 +33,7 @@ class CommunMenuProjectionRow:
     builder_menu_id: str
     builder_menu_version: int
     builder_menu_row_id: str
+    selection_group_id: str | None
     composition_id: str | None
     resolved: bool
     text: str
@@ -100,6 +101,7 @@ def _snapshot_from_projection(projection: CommunMenuWeekProjection) -> dict[str,
                 "variant_type": row.variant_type,
                 "sort_order": int(row.sort_order),
                 "builder_menu_row_id": row.builder_menu_row_id,
+                "selection_group_id": row.selection_group_id,
                 "composition_id": row.composition_id,
                 "resolved": bool(row.resolved),
                 "text": row.text,
@@ -130,6 +132,7 @@ def _projection_from_snapshot(snapshot: dict[str, Any]) -> CommunBuilderProjecti
                     builder_menu_id=str(snapshot.get("builder_menu_id") or ""),
                     builder_menu_version=int(snapshot.get("builder_menu_version") or 0),
                     builder_menu_row_id=str(row.get("builder_menu_row_id") or ""),
+                    selection_group_id=str(row.get("selection_group_id") or "").strip() or None,
                     composition_id=str(row.get("composition_id") or "").strip() or None,
                     resolved=resolved,
                     text=str(row.get("text") or "").strip(),
@@ -513,6 +516,7 @@ class CommunBuilderMenuProjectionReader:
                     builder_menu_id=builder_menu_id,
                     builder_menu_version=int(builder_menu_version),
                     builder_menu_row_id=str(row.get("menu_detail_id") or ""),
+                    selection_group_id=str(row.get("selection_group_id") or "").strip() or None,
                     composition_id=composition_id,
                     resolved=resolved,
                     text=text_value,

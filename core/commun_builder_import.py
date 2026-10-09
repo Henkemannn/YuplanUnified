@@ -254,6 +254,9 @@ def _restore_snapshots(
                     unresolved_text=detail.unresolved_text,
                     note=detail.note,
                     sort_order=detail.sort_order,
+                    display_label=detail.display_label,
+                    row_kind=detail.row_kind,
+                    selection_group_id=detail.selection_group_id,
                 )
         if snapshot.link is None:
             try:
@@ -392,6 +395,7 @@ def _to_menu_detail(detail: dict[str, Any]) -> MenuDetail:
         sort_order=int(detail.get("sort_order") or 0),
         display_label=detail.get("display_label"),
         row_kind=str(detail.get("row_kind") or "legacy"),
+        selection_group_id=detail.get("selection_group_id"),
     )
 
 

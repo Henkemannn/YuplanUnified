@@ -187,6 +187,46 @@ class CommunBuilderPublicationPin(Base):
     )
 
 
+class CommunBuilderPublicationRevision(Base):
+    __tablename__ = "commun_builder_publication_revisions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    legacy_menu_id: Mapped[int | None] = mapped_column(
+        ForeignKey("menus.id", ondelete="SET NULL"), nullable=True
+    )
+    builder_menu_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    builder_menu_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    source: Mapped[str] = mapped_column(String(24), nullable=False)
+    projection_snapshot_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "site_id",
+            "year",
+            "week",
+            "builder_menu_id",
+            "builder_menu_version",
+            name="uq_commun_builder_publication_revisions_business_key",
+        ),
+        CheckConstraint("year > 0", name="ck_commun_builder_publication_revisions_year_positive"),
+        CheckConstraint("week BETWEEN 1 AND 53", name="ck_commun_builder_publication_revisions_week_range"),
+        CheckConstraint("length(trim(builder_menu_id)) > 0", name="ck_commun_builder_publication_revisions_builder_menu_id_not_empty"),
+        CheckConstraint("builder_menu_version > 0", name="ck_commun_builder_publication_revisions_builder_menu_version_positive"),
+        CheckConstraint("lower(source) IN ('manual', 'import', 'migration', 'pilot')", name="ck_commun_builder_publication_revisions_source_allowed"),
+    )
+
+
 class DepartmentMenuChoice(Base):
     __tablename__ = "department_menu_choices"
 
@@ -260,6 +300,53 @@ class DepartmentPortalWeekSubmission(Base):
         CheckConstraint("length(trim(builder_menu_id)) > 0", name="ck_department_portal_week_submissions_builder_menu_id_not_empty"),
         CheckConstraint("builder_menu_version > 0", name="ck_department_portal_week_submissions_builder_menu_version_positive"),
         CheckConstraint("length(trim(choice_signature)) > 0", name="ck_department_portal_week_submissions_choice_signature_not_empty"),
+    )
+
+
+class DepartmentMenuRowDemand(Base):
+    __tablename__ = "department_menu_row_demands"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    department_id: Mapped[str] = mapped_column(ForeignKey("departments.id"), nullable=False)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    weekday: Mapped[int] = mapped_column(Integer, nullable=False)
+    builder_menu_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    builder_menu_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    builder_menu_row_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    selection_group_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "site_id",
+            "department_id",
+            "year",
+            "week",
+            "weekday",
+            "builder_menu_id",
+            "builder_menu_version",
+            "builder_menu_row_id",
+            name="uq_department_menu_row_demands_business_key",
+        ),
+        CheckConstraint("year > 0", name="ck_department_menu_row_demands_year_positive"),
+        CheckConstraint("week BETWEEN 1 AND 53", name="ck_department_menu_row_demands_week_range"),
+        CheckConstraint("weekday BETWEEN 1 AND 7", name="ck_department_menu_row_demands_weekday_range"),
+        CheckConstraint("length(trim(builder_menu_id)) > 0", name="ck_department_menu_row_demands_builder_menu_id_not_empty"),
+        CheckConstraint("builder_menu_version > 0", name="ck_department_menu_row_demands_builder_menu_version_positive"),
+        CheckConstraint("length(trim(builder_menu_row_id)) > 0", name="ck_department_menu_row_demands_builder_menu_row_id_not_empty"),
+        CheckConstraint("quantity >= 0", name="ck_department_menu_row_demands_quantity_non_negative"),
+        Index("ix_department_menu_row_demands_department_id", "department_id"),
+        Index("ix_department_menu_row_demands_builder_menu_row_id", "builder_menu_row_id"),
     )
 
 

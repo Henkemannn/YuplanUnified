@@ -21,6 +21,9 @@ from .menu import ImportedMenuRow, MenuService
 bp = Blueprint("builder_menu_context_api", __name__, url_prefix="/api/builder/menus")
 
 
+_MISSING = object()
+
+
 def _bad_request(message: str):
     return jsonify({"ok": False, "error": "bad_request", "message": str(message)}), 400
 
@@ -45,6 +48,18 @@ def _optional_str(payload: dict[str, Any], field: str) -> str | None:
         return None
     value = str(raw).strip()
     return value or None
+
+
+def _patch_optional_str(payload: dict[str, Any], field: str) -> object:
+    if field not in payload:
+        return _MISSING
+    raw = payload.get(field)
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    if not value:
+        raise ValueError(f"{field} must be non-empty")
+    return value
 
 
 def _maybe_int(value: Any, *, field: str) -> int | None:
@@ -93,6 +108,7 @@ def _serialize_menu_detail(detail) -> dict[str, Any]:
         "meal_slot": detail.meal_slot,
         "display_label": getattr(detail, "display_label", None),
         "row_kind": getattr(detail, "row_kind", None),
+        "selection_group_id": getattr(detail, "selection_group_id", None),
         "composition_ref_type": detail.composition_ref_type,
         "composition_id": detail.composition_id,
         "unresolved_text": detail.unresolved_text,
@@ -110,6 +126,7 @@ def _serialize_menu_row(row: dict[str, Any]) -> dict[str, Any]:
         "meal_slot": row.get("meal_slot"),
         "display_label": row.get("display_label"),
         "row_kind": row.get("row_kind"),
+        "selection_group_id": row.get("selection_group_id"),
         "composition_ref_type": ref_type,
         "is_unresolved": ref_type == "unresolved",
         "is_empty": ref_type == "empty",
@@ -348,6 +365,7 @@ def add_composition_menu_row(menu_id: str):
                 display_label=display_label,
                 note=_optional_str(payload, "note"),
                 sort_order=_maybe_int(payload.get("sort_order"), field="sort_order"),
+                selection_group_id=_optional_str(payload, "selection_group_id"),
             )
         else:
             detail = flow.add_composition_menu_row(
@@ -359,6 +377,7 @@ def add_composition_menu_row(menu_id: str):
                 note=_optional_str(payload, "note"),
                 sort_order=_maybe_int(payload.get("sort_order"), field="sort_order") or 0,
                 display_label=_optional_str(payload, "display_label"),
+                selection_group_id=_optional_str(payload, "selection_group_id"),
             )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -451,15 +470,19 @@ def update_composition_menu_row(menu_id: str, menu_detail_id: str):
                 menu_detail_id=str(menu_detail_id),
             )
         else:
-            detail = flow.update_composition_menu_row(
-                menu_id=str(menu_id),
-                menu_detail_id=str(menu_detail_id),
-                day=_require_str(payload, "day"),
-                meal_slot=_require_str(payload, "meal_slot"),
-                composition_id=_require_str(payload, "composition_id"),
-                note=_optional_str(payload, "note"),
-                sort_order=_maybe_int(payload.get("sort_order"), field="sort_order"),
-            )
+            selection_group_id = _patch_optional_str(payload, "selection_group_id")
+            update_kwargs = {
+                "menu_id": str(menu_id),
+                "menu_detail_id": str(menu_detail_id),
+                "day": _require_str(payload, "day"),
+                "meal_slot": _require_str(payload, "meal_slot"),
+                "composition_id": _require_str(payload, "composition_id"),
+                "note": _optional_str(payload, "note"),
+                "sort_order": _maybe_int(payload.get("sort_order"), field="sort_order"),
+            }
+            if selection_group_id is not _MISSING:
+                update_kwargs["selection_group_id"] = selection_group_id
+            detail = flow.update_composition_menu_row(**update_kwargs)
     except ValueError as exc:
         return _bad_request(str(exc))
 

@@ -140,6 +140,7 @@ def _seed_publication_builder_context(
         meal_slot="lunch_alt1",
         composition_id=composition_id,
         sort_order=10,
+        selection_group_id="group-publish",
     )
     return builder_flow, composition_service
 
@@ -174,7 +175,7 @@ def test_publish_mirrors_builder_publication_pin(app_session, monkeypatch):
     try:
         pin = db.execute(
             text(
-                "SELECT builder_menu_id, builder_menu_version, legacy_menu_id FROM commun_builder_publication_pins "
+                "SELECT builder_menu_id, builder_menu_version, legacy_menu_id, projection_snapshot_json FROM commun_builder_publication_pins "
                 "WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week"
             ),
             {"tid": 1, "sid": site_id, "year": year, "week": week},
@@ -183,6 +184,7 @@ def test_publish_mirrors_builder_publication_pin(app_session, monkeypatch):
         assert pin[0] == "builder-menu-a"
         assert int(pin[1]) == 1
         assert int(pin[2]) == int(menu_id)
+        assert '"selection_group_id":"group-publish"' in pin[3]
     finally:
         db.close()
 
@@ -248,6 +250,19 @@ def test_publish_captures_immutable_snapshot_and_republish_refreshes_it(app_sess
             composition_name="Ny intern gryta",
             menu_name="Ny publik gryta",
         )
+        builder_flow._menu_service.update_menu(
+            "builder-menu-immutable",
+            version=2,
+            status="published",
+        )
+        CommunBuilderMenuLinkService(builder_menu_context_flow=builder_flow).create_or_replace_link(
+            tenant_id=1,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-immutable",
+            source="manual",
+        )
 
         pinned_after_edit = get_shadow_projection_reader().get_projection_for_pinned_menu(
             tenant_id=1,
@@ -262,7 +277,29 @@ def test_publish_captures_immutable_snapshot_and_republish_refreshes_it(app_sess
         assert pinned_after_edit.projection.rows[0].text == "Husets gryta"
 
         MenuServiceDB().publish_menu(tenant_id=1, menu_id=legacy_menu_id)
+        active_after_republish = publication_service.get_publication_for_week(
+            tenant_id=1,
+            site_id=site_id,
+            year=year,
+            week=week,
+        )
         republished = get_shadow_projection_reader().get_projection_for_pinned_menu(
+            tenant_id=1,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-immutable",
+            builder_menu_version=2,
+        )
+        assert republished.status == "ok"
+        assert republished.projection is not None
+        assert republished.projection.rows[0].text == "Ny publik gryta"
+        assert active_after_republish is not None
+        assert int(active_after_republish.builder_menu_version) == 2
+        assert active_after_republish.projection_snapshot_json is not None
+        assert "Ny publik gryta" in active_after_republish.projection_snapshot_json
+
+        historical_v1 = publication_service.get_publication_revision_for_version(
             tenant_id=1,
             site_id=site_id,
             year=year,
@@ -270,9 +307,9 @@ def test_publish_captures_immutable_snapshot_and_republish_refreshes_it(app_sess
             builder_menu_id="builder-menu-immutable",
             builder_menu_version=1,
         )
-        assert republished.status == "ok"
-        assert republished.projection is not None
-        assert republished.projection.rows[0].text == "Ny publik gryta"
+        assert historical_v1 is not None
+        assert historical_v1.projection_snapshot_json is not None
+        assert "Husets gryta" in historical_v1.projection_snapshot_json
 
 
 def test_broken_publication_snapshot_fails_controlledly(app_session, monkeypatch):
@@ -701,3 +738,178 @@ def test_builder_reader_overview_override_falls_back_on_projection_error(app_ses
         changed = _apply_builder_reader_weekview_overview(vm, tenant_id=1, site_id="site-publication-1", year=2025, week=48)
     assert changed is False
     assert vm == before
+
+
+def test_publication_history_is_immutable_and_version_addressable(app_session, monkeypatch):
+    site_id = "site-publication-history"
+    year = 2025
+    week = 46
+    _seed_site(app_session, site_id=site_id)
+    menu_id = _seed_menu_and_link(site_id, year, week, "builder-menu-history", 1)
+    _mark_menu_published(menu_id)
+
+    monkeypatch.setattr(CommunBuilderPublicationService, "_verify_projection", lambda self, **kwargs: None)
+
+    with app_session.app_context():
+        builder_flow, composition_service = _seed_publication_builder_context(
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-history",
+            builder_menu_version=1,
+            composition_id="comp_history_1",
+            composition_name="History Soup",
+        )
+        composition_service.create_composition(
+            composition_id="comp_history_2",
+            composition_name="History Salad",
+        )
+        builder_flow.add_composition_menu_row(
+            menu_id="builder-menu-history",
+            day="monday",
+            meal_slot="lunch_alt2",
+            composition_id="comp_history_2",
+            sort_order=20,
+            selection_group_id="grp_x",
+        )
+        MenuServiceDB().publish_menu(tenant_id=1, menu_id=menu_id)
+
+        publication_service = CommunBuilderPublicationService()
+        active_v1 = publication_service.get_publication_for_week(
+            tenant_id=1, site_id=site_id, year=year, week=week
+        )
+        revision_v1 = publication_service.get_publication_revision_for_version(
+            tenant_id=1,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-history",
+            builder_menu_version=1,
+        )
+
+        assert active_v1 is not None
+        assert active_v1.builder_menu_version == 1
+        assert revision_v1 is not None
+        assert revision_v1.builder_menu_version == 1
+        assert revision_v1.projection_snapshot_json is not None
+        assert '"selection_group_id":"grp_x"' in revision_v1.projection_snapshot_json
+        v1_snapshot = revision_v1.projection_snapshot_json
+
+        builder_flow._menu_service.update_menu("builder-menu-history", version=2)
+        composition_service.update_composition_metadata(
+            "comp_history_1",
+            composition_name="History Soup v2",
+        )
+        CommunBuilderMenuLinkService(builder_menu_context_flow=builder_flow).create_or_replace_link(
+            tenant_id=1,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-history",
+            source="manual",
+        )
+        MenuServiceDB().publish_menu(tenant_id=1, menu_id=menu_id)
+
+        active_v2 = publication_service.get_publication_for_week(
+            tenant_id=1, site_id=site_id, year=year, week=week
+        )
+        revision_v2 = publication_service.get_publication_revision_for_version(
+            tenant_id=1,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-history",
+            builder_menu_version=2,
+        )
+        revision_v1_after = publication_service.get_publication_revision_for_version(
+            tenant_id=1,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-history",
+            builder_menu_version=1,
+        )
+
+        assert active_v2 is not None
+        assert active_v2.builder_menu_version == 2
+        assert revision_v2 is not None
+        assert revision_v2.builder_menu_version == 2
+        assert revision_v2.projection_snapshot_json is not None
+        assert '"selection_group_id":"grp_x"' in revision_v2.projection_snapshot_json
+        assert '"History Soup v2"' in revision_v2.projection_snapshot_json
+        assert revision_v1_after is not None
+        assert revision_v1_after.projection_snapshot_json == v1_snapshot
+
+        composition_service.update_composition_metadata(
+            "comp_history_1",
+            composition_name="History Soup v3 draft only",
+        )
+        revision_v1_after_draft_edit = publication_service.get_publication_revision_for_version(
+            tenant_id=1,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-history",
+            builder_menu_version=1,
+        )
+        assert revision_v1_after_draft_edit is not None
+        assert revision_v1_after_draft_edit.projection_snapshot_json == v1_snapshot
+
+    with app_session.app_context():
+        publication_service = CommunBuilderPublicationService()
+        repeated = publication_service._repository.upsert_publication(
+            tenant_id=1,
+            site_id=site_id,
+            year=year,
+            week=week,
+            legacy_menu_id=menu_id,
+            builder_menu_id="builder-menu-history",
+            builder_menu_version=2,
+            source="manual",
+            projection_snapshot_json=revision_v2.projection_snapshot_json,
+        )
+        assert repeated is not None
+
+        from core.db import get_session
+
+        db = get_session()
+        try:
+            revision_count = db.execute(
+                text(
+                    "SELECT COUNT(*) FROM commun_builder_publication_revisions "
+                    "WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week"
+                ),
+                {"tid": 1, "sid": site_id, "year": year, "week": week},
+            ).fetchone()
+            assert revision_count is not None
+            assert int(revision_count[0]) == 2
+        finally:
+            db.close()
+
+        with pytest.raises(RuntimeError, match="publication_revision_conflict"):
+            publication_service._repository.upsert_publication(
+                tenant_id=1,
+                site_id=site_id,
+                year=year,
+                week=week,
+                legacy_menu_id=menu_id,
+                builder_menu_id="builder-menu-history",
+                builder_menu_version=2,
+                source="manual",
+                projection_snapshot_json=(revision_v2.projection_snapshot_json or "") + "x",
+            )
+
+        db = __import__("core.db", fromlist=["get_session"]).get_session()
+        try:
+            revision_rows = db.execute(
+                text(
+                    "SELECT builder_menu_version, projection_snapshot_json FROM commun_builder_publication_revisions "
+                    "WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week ORDER BY builder_menu_version"
+                ),
+                {"tid": 1, "sid": site_id, "year": year, "week": week},
+            ).fetchall()
+            assert [int(row[0]) for row in revision_rows] == [1, 2]
+            assert str(revision_rows[0][1]) == v1_snapshot
+            assert '"History Soup v2"' in str(revision_rows[1][1])
+        finally:
+            db.close()

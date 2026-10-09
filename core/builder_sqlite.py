@@ -177,6 +177,7 @@ def initialize_builder_sqlite(path: str) -> str:
                 sort_order INTEGER NOT NULL DEFAULT 0,
                 display_label TEXT NULL,
                 row_kind TEXT NOT NULL DEFAULT 'legacy',
+                selection_group_id TEXT NULL,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(menu_id) REFERENCES builder_menus(menu_id),
                 FOREIGN KEY(composition_id) REFERENCES builder_compositions(composition_id)
@@ -261,6 +262,8 @@ def initialize_builder_sqlite(path: str) -> str:
             conn.execute(
                 "ALTER TABLE builder_menu_rows ADD COLUMN row_kind TEXT NOT NULL DEFAULT 'legacy'"
             )
+        if "selection_group_id" not in menu_row_columns:
+            conn.execute("ALTER TABLE builder_menu_rows ADD COLUMN selection_group_id TEXT NULL")
         if "display_label" not in menu_row_columns:
             conn.execute(
                 """
@@ -960,8 +963,8 @@ class SQLiteMenuDetailRepository:
                 """
                 INSERT INTO builder_menu_rows (
                     menu_detail_id, menu_id, day, meal_slot, composition_ref_type,
-                    composition_id, unresolved_text, note, sort_order, display_label, row_kind
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    composition_id, unresolved_text, note, sort_order, display_label, row_kind, selection_group_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     detail.menu_detail_id,
@@ -975,6 +978,7 @@ class SQLiteMenuDetailRepository:
                     int(detail.sort_order),
                     detail.display_label,
                     detail.row_kind,
+                    detail.selection_group_id,
                 ),
             )
 
@@ -1002,6 +1006,9 @@ class SQLiteMenuDetailRepository:
             sort_order=int(row["sort_order"]),
             display_label=str(display_label) if display_label is not None else None,
             row_kind=str(row_kind),
+            selection_group_id=(
+                str(row["selection_group_id"]).strip() if "selection_group_id" in row.keys() and row["selection_group_id"] is not None else None
+            ),
         )
 
     def list_for_menu(self, menu_id: str) -> list[MenuDetail]:
@@ -1031,6 +1038,11 @@ class SQLiteMenuDetailRepository:
                     else str(row["meal_slot"])
                 ),
                 row_kind=str(row["row_kind"]) if "row_kind" in row.keys() else "legacy",
+                selection_group_id=(
+                    str(row["selection_group_id"]).strip()
+                    if "selection_group_id" in row.keys() and row["selection_group_id"] is not None
+                    else None
+                ),
             )
             for row in rows
         ]
@@ -1042,7 +1054,7 @@ class SQLiteMenuDetailRepository:
                 UPDATE builder_menu_rows
                 SET menu_id = ?, day = ?, meal_slot = ?, composition_ref_type = ?,
                     composition_id = ?, unresolved_text = ?, note = ?, sort_order = ?,
-                    display_label = ?, row_kind = ?
+                    display_label = ?, row_kind = ?, selection_group_id = ?
                 WHERE menu_detail_id = ?
                 """,
                 (
@@ -1056,6 +1068,7 @@ class SQLiteMenuDetailRepository:
                     int(detail.sort_order),
                     detail.display_label,
                     detail.row_kind,
+                    detail.selection_group_id,
                     detail.menu_detail_id,
                 ),
             )

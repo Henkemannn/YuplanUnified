@@ -34,6 +34,9 @@ from .planera_v2.adapters import build_menu_composition_production_shape_payload
 logger = logging.getLogger(__name__)
 
 
+_MISSING = object()
+
+
 @dataclass(frozen=True)
 class MenuCostOverview:
     menu_id: str
@@ -151,6 +154,7 @@ class BuilderMenuContextFlow:
         sort_order: int = 0,
         menu_detail_id: str | None = None,
         display_label: str | None = None,
+        selection_group_id: str | None = None,
     ) -> MenuDetail:
         detail_id = str(menu_detail_id or "").strip()
         if not detail_id:
@@ -168,6 +172,7 @@ class BuilderMenuContextFlow:
             sort_order=sort_order,
             display_label=display_label or meal_slot,
             row_kind="legacy",
+            selection_group_id=selection_group_id,
         )
 
     def create_empty_menu_row(
@@ -179,6 +184,7 @@ class BuilderMenuContextFlow:
         note: str | None = None,
         sort_order: int | None = None,
         menu_detail_id: str | None = None,
+        selection_group_id: str | None = None,
     ) -> MenuDetail:
         detail_id = str(menu_detail_id or "").strip()
         existing = self._menu_service.list_menu_details(menu_id)
@@ -194,6 +200,7 @@ class BuilderMenuContextFlow:
             display_label=display_label,
             note=note,
             sort_order=resolved_sort_order,
+            selection_group_id=selection_group_id,
         )
 
     def update_composition_menu_row(
@@ -206,13 +213,14 @@ class BuilderMenuContextFlow:
         composition_id: str,
         note: str | None = None,
         sort_order: int | None = None,
+        selection_group_id: object = _MISSING,
     ) -> MenuDetail:
         details = self._menu_service.list_menu_details(menu_id)
         match = next((detail for detail in details if detail.menu_detail_id == menu_detail_id), None)
         if match is None:
             raise ValueError("menu_detail_id not found for menu")
 
-        return self._menu_service.update_menu_detail(
+        update_kwargs = dict(
             menu_detail_id=menu_detail_id,
             day=day,
             meal_slot=meal_slot,
@@ -222,6 +230,9 @@ class BuilderMenuContextFlow:
             note=note,
             sort_order=sort_order,
         )
+        if selection_group_id is not _MISSING:
+            update_kwargs["selection_group_id"] = selection_group_id
+        return self._menu_service.update_menu_detail(**update_kwargs)
 
     def clear_menu_row_composition(
         self,
@@ -266,6 +277,7 @@ class BuilderMenuContextFlow:
                     "unresolved_text": detail.unresolved_text,
                     "note": detail.note,
                     "sort_order": detail.sort_order,
+                    "selection_group_id": detail.selection_group_id,
                     "_insertion_index": insertion_index,
                 }
             )

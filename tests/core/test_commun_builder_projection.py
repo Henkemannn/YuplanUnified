@@ -147,6 +147,7 @@ def test_projection_reader_explicit_slots_map_directly(app_session):
             meal_slot="lunch_main",
             composition_id="comp_1",
             sort_order=10,
+            selection_group_id="group-main",
         )
         builder_flow.add_composition_menu_row(
             menu_id="builder-menu-1",
@@ -194,6 +195,11 @@ def test_projection_reader_explicit_slots_map_directly(app_session):
         "builder-menu-1-row-1",
         "builder-menu-1-row-2",
         "builder-menu-1-row-3",
+    ]
+    assert [row.selection_group_id for row in result.projection.rows] == [
+        "group-main",
+        None,
+        None,
     ]
     assert [row.text for row in result.projection.rows] == ["Fish Plate", "Soup", "Cake"]
     assert all(row.error is None for row in result.projection.rows)

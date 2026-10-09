@@ -8,11 +8,24 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from .db import get_session
-from .models import CommunBuilderMenuLink, CommunBuilderPublicationPin
+from .models import CommunBuilderMenuLink, CommunBuilderPublicationPin, CommunBuilderPublicationRevision
 
 
 @dataclass(frozen=True)
 class CommunBuilderPublicationState:
+    tenant_id: int
+    site_id: str
+    year: int
+    week: int
+    legacy_menu_id: int | None
+    builder_menu_id: str
+    builder_menu_version: int
+    source: str
+    projection_snapshot_json: str | None
+
+
+@dataclass(frozen=True)
+class CommunBuilderPublicationRevisionState:
     tenant_id: int
     site_id: str
     year: int
@@ -46,6 +59,36 @@ class CommunBuilderPublicationRepository:
             if owns_session:
                 db.close()
 
+    def get_publication_revision_for_version(
+        self,
+        *,
+        tenant_id: int,
+        site_id: str,
+        year: int,
+        week: int,
+        builder_menu_id: str,
+        builder_menu_version: int,
+        db: Session | None = None,
+    ) -> CommunBuilderPublicationRevision | None:
+        owns_session = db is None
+        db = db or get_session()
+        try:
+            return (
+                db.query(CommunBuilderPublicationRevision)
+                .filter_by(
+                    tenant_id=tenant_id,
+                    site_id=site_id,
+                    year=year,
+                    week=week,
+                    builder_menu_id=builder_menu_id,
+                    builder_menu_version=builder_menu_version,
+                )
+                .one_or_none()
+            )
+        finally:
+            if owns_session:
+                db.close()
+
     def upsert_publication(
         self,
         *,
@@ -63,12 +106,44 @@ class CommunBuilderPublicationRepository:
         owns_session = db is None
         db = db or get_session()
         try:
+            now = datetime.now(timezone.utc)
+            revision_existing = (
+                db.query(CommunBuilderPublicationRevision)
+                .filter_by(
+                    tenant_id=tenant_id,
+                    site_id=site_id,
+                    year=year,
+                    week=week,
+                    builder_menu_id=builder_menu_id,
+                    builder_menu_version=builder_menu_version,
+                )
+                .first()
+            )
+            if revision_existing is None:
+                revision = CommunBuilderPublicationRevision(
+                    tenant_id=tenant_id,
+                    site_id=site_id,
+                    year=year,
+                    week=week,
+                    legacy_menu_id=legacy_menu_id,
+                    builder_menu_id=builder_menu_id,
+                    builder_menu_version=builder_menu_version,
+                    source=source,
+                    projection_snapshot_json=projection_snapshot_json,
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(revision)
+            else:
+                if str(revision_existing.projection_snapshot_json or "") != str(projection_snapshot_json or ""):
+                    raise RuntimeError("publication_revision_conflict")
+                revision = revision_existing
+
             existing = (
                 db.query(CommunBuilderPublicationPin)
                 .filter_by(tenant_id=tenant_id, site_id=site_id, year=year, week=week)
                 .first()
             )
-            now = datetime.now(timezone.utc)
             if existing is None:
                 pin = CommunBuilderPublicationPin(
                     tenant_id=tenant_id,
@@ -85,12 +160,20 @@ class CommunBuilderPublicationRepository:
                 )
                 db.add(pin)
             else:
-                existing.legacy_menu_id = legacy_menu_id
-                existing.builder_menu_id = builder_menu_id
-                existing.builder_menu_version = builder_menu_version
-                existing.source = source
-                existing.projection_snapshot_json = projection_snapshot_json
-                existing.updated_at = now
+                pin_matches = (
+                    existing.legacy_menu_id == legacy_menu_id
+                    and str(existing.builder_menu_id) == str(builder_menu_id)
+                    and int(existing.builder_menu_version) == int(builder_menu_version)
+                    and str(existing.source) == str(source)
+                    and str(existing.projection_snapshot_json or "") == str(projection_snapshot_json or "")
+                )
+                if not pin_matches:
+                    existing.legacy_menu_id = legacy_menu_id
+                    existing.builder_menu_id = builder_menu_id
+                    existing.builder_menu_version = builder_menu_version
+                    existing.source = source
+                    existing.projection_snapshot_json = projection_snapshot_json
+                    existing.updated_at = now
                 pin = existing
             db.flush()
             if owns_session:
@@ -166,6 +249,7 @@ class CommunBuilderPublicationService:
                     "variant_type": row.variant_type,
                     "sort_order": int(row.sort_order),
                     "builder_menu_row_id": row.builder_menu_row_id,
+                    "selection_group_id": row.selection_group_id,
                     "composition_id": row.composition_id,
                     "resolved": bool(row.resolved),
                     "text": row.text,
@@ -291,6 +375,38 @@ class CommunBuilderPublicationService:
         if row is None:
             return None
         return CommunBuilderPublicationState(
+            tenant_id=int(row.tenant_id),
+            site_id=str(row.site_id),
+            year=int(row.year),
+            week=int(row.week),
+            legacy_menu_id=int(row.legacy_menu_id) if row.legacy_menu_id is not None else None,
+            builder_menu_id=str(row.builder_menu_id),
+            builder_menu_version=int(row.builder_menu_version),
+            source=str(row.source),
+            projection_snapshot_json=str(row.projection_snapshot_json) if row.projection_snapshot_json is not None else None,
+        )
+
+    def get_publication_revision_for_version(
+        self,
+        *,
+        tenant_id: int,
+        site_id: str,
+        year: int,
+        week: int,
+        builder_menu_id: str,
+        builder_menu_version: int,
+    ) -> CommunBuilderPublicationRevisionState | None:
+        row = self._repository.get_publication_revision_for_version(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id=builder_menu_id,
+            builder_menu_version=builder_menu_version,
+        )
+        if row is None:
+            return None
+        return CommunBuilderPublicationRevisionState(
             tenant_id=int(row.tenant_id),
             site_id=str(row.site_id),
             year=int(row.year),

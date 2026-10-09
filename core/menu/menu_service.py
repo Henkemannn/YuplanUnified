@@ -6,6 +6,9 @@ from .menu_domain import Menu, MenuDetail
 from .menu_repository import InMemoryMenuDetailRepository, InMemoryMenuRepository
 
 
+_MISSING = object()
+
+
 class MenuService:
     def __init__(
         self,
@@ -99,6 +102,7 @@ class MenuService:
         sort_order: int = 0,
         display_label: str | None = None,
         row_kind: str | None = None,
+        selection_group_id: str | None = None,
     ) -> MenuDetail:
         self._require_menu(menu_id)
 
@@ -114,6 +118,7 @@ class MenuService:
             sort_order=sort_order,
             display_label=display_label,
             row_kind=row_kind,
+            selection_group_id=selection_group_id,
         )
         self._menu_detail_repository.add(detail)
         return detail
@@ -127,6 +132,7 @@ class MenuService:
         *,
         note: str | None = None,
         sort_order: int = 0,
+        selection_group_id: str | None = None,
     ) -> MenuDetail:
         self._require_menu(menu_id)
 
@@ -147,6 +153,7 @@ class MenuService:
             sort_order=sort_order,
             display_label=display_label,
             row_kind="dynamic",
+            selection_group_id=selection_group_id,
         )
 
     def update_menu_detail(
@@ -162,10 +169,20 @@ class MenuService:
         sort_order: int | None = None,
         display_label: str | None = None,
         row_kind: str | None = None,
+        selection_group_id: object = _MISSING,
     ) -> MenuDetail:
         current = self._menu_detail_repository.get(menu_detail_id)
         if current is None:
             raise ValueError(f"menu detail not found: {menu_detail_id}")
+
+        if selection_group_id is _MISSING:
+            selection_group_id_value = current.selection_group_id
+        elif selection_group_id is None:
+            selection_group_id_value = None
+        else:
+            selection_group_id_value = str(selection_group_id).strip()
+            if not selection_group_id_value:
+                raise ValueError("selection_group_id must be non-empty")
 
         detail = self._build_validated_menu_detail(
             menu_detail_id=current.menu_detail_id,
@@ -183,6 +200,7 @@ class MenuService:
             sort_order=current.sort_order if sort_order is None else sort_order,
             display_label=current.display_label if display_label is None else display_label,
             row_kind=current.row_kind if row_kind is None else row_kind,
+            selection_group_id=selection_group_id_value,
         )
         self._menu_detail_repository.update(detail)
         return detail
@@ -212,6 +230,7 @@ class MenuService:
         day: str | None = None,
         meal_slot: str | None = None,
         display_label: str | None = None,
+        selection_group_id: object = _MISSING,
     ) -> MenuDetail:
         current = self._menu_detail_repository.get(menu_detail_id)
         if current is None:
@@ -227,6 +246,9 @@ class MenuService:
             note=note,
             sort_order=sort_order,
             display_label=current.display_label if display_label is None else display_label,
+            selection_group_id=current.selection_group_id
+            if selection_group_id is _MISSING
+            else selection_group_id,
         )
 
     def list_menu_details(self, menu_id: str) -> list[MenuDetail]:
@@ -257,6 +279,7 @@ class MenuService:
         sort_order: int,
         display_label: str | None,
         row_kind: str | None,
+        selection_group_id: str | None,
     ) -> MenuDetail:
         menu_detail_id_value = str(menu_detail_id or "").strip()
         if not menu_detail_id_value:
@@ -279,6 +302,7 @@ class MenuService:
         composition_id_value = str(composition_id or "").strip() or None
         unresolved_text_value = str(unresolved_text or "").strip() or None
         display_label_value = str(display_label or "").strip() or None
+        selection_group_id_value = str(selection_group_id or "").strip() or None
 
         if ref_type_value == "composition":
             if not meal_slot_value:
@@ -331,4 +355,5 @@ class MenuService:
             sort_order=int(sort_order),
             display_label=display_label_value,
             row_kind=row_kind_value,
+            selection_group_id=selection_group_id_value,
         )

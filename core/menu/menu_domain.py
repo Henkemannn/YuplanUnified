@@ -26,3 +26,4 @@ class MenuDetail:
     sort_order: int = 0
     display_label: str | None = None
     row_kind: str = "legacy"
+    selection_group_id: str | None = None
