@@ -1,5 +1,5 @@
 Status: LOCKED
-Last reviewed: 2026-09-23
+Last reviewed: 2026-10-09
 
 # Ground Truth
 
@@ -28,6 +28,7 @@ Keep the files concise enough that a new project-lead conversation can read the 
 - [BUILDER_MENU_LOCK.md](BUILDER_MENU_LOCK.md)
 - [PLANERA_2_0_ARCHITECTURE_LOCK.md](PLANERA_2_0_ARCHITECTURE_LOCK.md)
 - [PORTALS_ARCHITECTURE_LOCK.md](PORTALS_ARCHITECTURE_LOCK.md)
+- [USER_PROVISIONING_AND_AUTH_FLOW.md](USER_PROVISIONING_AND_AUTH_FLOW.md)
 - [OFFSHORE_1_0_MVP_LOCK.md](OFFSHORE_1_0_MVP_LOCK.md)
 - [DECISION_LOG.md](DECISION_LOG.md)
 

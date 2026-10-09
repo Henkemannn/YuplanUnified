@@ -97,3 +97,13 @@ Last reviewed: 2026-10-07
 - First shared-modal gate is safety-locked: existing `showModal()` / `hideModal()` behavior and existing consumers must remain functionally unchanged; Menyimport is the only pilot consumer; Offshore, Weekview, Builder and picker internals remain untouched.
 - Shared modal must support two ownership modes: shell-owned-card for simple dialogs, and child-owned-card for embedded surfaces such as shared Dish editor and Rättbibliotek that already render their own card.
 - No current Menyimport/shared-modal work is to be committed until real Firefox acceptance, focused tests, diff hygiene, and single-surface modal behavior are all green.
+
+
+## 2026-10-09
+- User provisioning and authentication are locked as shared platform concerns in `USER_PROVISIONING_AND_AUTH_FLOW.md`: one canonical User/auth model, with Kommun/Offshore product modules binding users to operational scope rather than creating vertical-specific auth systems.
+- Tenant-facing product direction is `Admin -> Användare -> + Skapa användare` with understandable Admin/Kök/Avdelning choices, consolidating the existing general `/ui/admin/users` and Kitchen provisioning capabilities instead of building a third provisioning flow.
+- Kommun Department identity is anchored by `users.department_id`; site derives from the Department and normal Department users may not override their Department scope.
+- Account-state security is closed at checkpoint `5b301e8`: authentication requires `is_active == True` and `deleted_at IS NULL` for login, refresh, and protected authenticated access.
+- Credential-revocation architecture is approved but remains pending implementation/checkpoint: keep `refresh_token_jti` for refresh revocation and add one platform-level `auth_version` generation for browser-session/access-token invalidation on credential reset/change.
+- First-login enforcement remains a separate product decision after credential revocation; `must_change_password` is not Current Truth. Enterprise IAM features such as MFA, SSO, invite-email, multi-role users, and session-management dashboards remain parked beyond the first pilot.
+- Clean-customer acceptance is locked as an A-Z operator proof: Admin creates Department and Kitchen users, Department user logs into only its own Portal and submits menu choice, Kitchen user sees the propagated downstream state, and account reset/deactivation follows the shared auth lifecycle.
