@@ -126,10 +126,14 @@ Yuplan currently uses:
 - Refresh JWT: longer-lived (currently about 14 days), with users.refresh_token_jti as the server-side replay/revocation anchor.
 - Flask/browser session: signed client-side session state; protected requests reload current User and check account state.
 
-## Credential revocation architecture — APPROVED, IMPLEMENTATION PENDING
+## Credential revocation architecture — CLOSED
 The revocation census proved refresh_token_jti is sufficient for refresh-token revocation but does not invalidate old browser sessions or access JWTs after credential change/reset.
 
-Approved platform primitive:
+Checkpoint:
+129d2b8d4ea38a479c754866bb1bf1aa08e8907b
+fix(auth): revoke stale credentials after password changes
+
+Implemented platform primitive:
 **auth_version**
 
 Target contract:
@@ -165,7 +169,7 @@ Normal logout must:
 - clear the local Flask/browser session;
 - invalidate the matching refresh token/JTI when present.
 
-Important: this section is approved architecture, not Current Truth until the 32C credential-revocation implementation is accepted and checkpointed.
+Current Truth: this credential-revocation contract is implemented and checkpointed at `129d2b8`.
 
 ## Initial credential and first-login policy
 Current creation flows accept an initial credential and store only its hash. A self-service change route exists.
@@ -219,8 +223,8 @@ Lifecycle:
 
 ## Implementation sequence
 1. Account-state guard — CLOSED at 5b301e8.
-2. Credential revocation/auth_version — approved, implementation/checkpoint pending.
-3. First-login policy — product gate.
+2. Credential revocation/auth_version — CLOSED at `129d2b8`.
+3. First-login policy — ACTIVE PRODUCT GATE.
 4. Unified Admin -> Användare UX — consolidate existing generic and Kitchen provisioning.
 5. Clean-customer A-Z Firefox acceptance.
 6. Pilot freeze.

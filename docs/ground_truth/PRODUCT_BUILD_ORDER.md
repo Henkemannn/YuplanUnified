@@ -27,19 +27,22 @@ Do not trade a working A-Z customer flow for broad future architecture.
 # PHASE 0 — NOW: Kommun identity/auth closure
 
 Current stable auth checkpoint:
-`5b301e8d4fdf184e340c449953b739fc1c8cafd9`
+`129d2b8d4ea38a479c754866bb1bf1aa08e8907b`
+
+Closed:
+- inactive/deleted account guard at `5b301e8`;
+- credential revocation / `auth_version` at `129d2b8`.
 
 Order:
 
-1. Finish credential revocation / `auth_version` implementation and checkpoint.
-2. Product decision: first-login password change for pilot users.
-3. If approved, implement smallest safe `must_change_password` flow.
-4. Consolidate existing tenant user provisioning into **Admin -> Användare**:
+1. Product decision: first-login password change for pilot users.
+2. If approved, implement smallest safe `must_change_password` flow.
+3. Consolidate existing tenant user provisioning into **Admin -> Användare**:
    - Admin
    - Kök
    - Avdelning
-5. Expose/reactivate only the account-lifecycle actions needed for pilot.
-6. Real Firefox proof: create Department user -> login -> correct Department Portal scope.
+4. Expose/reactivate only the account-lifecycle actions needed for pilot.
+5. Real Firefox proof: create Department user -> login -> correct Department Portal scope.
 
 Explicitly not part of this phase:
 - SSO

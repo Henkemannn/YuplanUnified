@@ -114,3 +114,13 @@ Last reviewed: 2026-10-07
 - Historical documentation is retained rather than deleted. `docs/archive/` is the intended home for superseded legacy, audit, handoff, release and experiment material.
 - `PRODUCT_BUILD_ORDER.md` is locked as the canonical cross-product sequencing view. Current macro order: Kommun pilot closure -> real paying-user proof -> Offshore 1.0 -> Recipe/Production Needs -> Ingredient/Purchasing/Cost -> Hotel/Bankett/EventCase -> shared platform services as proven by vertical demand -> AI expansion -> Yuplan Home Future Lab.
 - Small parity/polish items must not derail the active operator journey. Future platform abstractions require a real consumer and must follow REUSE-BEFORE-BUILD.
+
+
+## 2026-10-09 — credential revocation closed
+- Credential revocation is CLOSED at checkpoint `129d2b8d4ea38a479c754866bb1bf1aa08e8907b` (`fix(auth): revoke stale credentials after password changes`).
+- `users.auth_version` is now the shared platform generation for browser-session/access-token invalidation after credential changes; `refresh_token_jti` remains the refresh-token replay/revocation guard.
+- Existing users migrate to `auth_version = 1`; session and access JWT carry the current generation; stale or missing generations fail closed.
+- Admin reset and systemadmin reset increment `auth_version` and clear the target user's refresh JTI. Self-service password change additionally clears the current browser session and requires re-login.
+- Browser logout clears the local session and delegates refresh-JTI invalidation to the central auth logout seam; duplicate UI revocation logic was removed.
+- The earlier account-state rule remains separate and still requires `is_active == True` and `deleted_at IS NULL`.
+- Next product gate is first-login credential policy. `must_change_password` is still not Current Truth until deliberately approved.
