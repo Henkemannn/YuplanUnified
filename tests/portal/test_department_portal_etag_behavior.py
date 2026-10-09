@@ -85,8 +85,9 @@ def _seed_base(db, alt2_enabled_monday: int = 1, dish_name_alt1: str = "Pannbiff
 
 
 def test_portal_etag_no_change_304(client_admin, seed_portal_department_data, seed_canonical_builder_publication):
+    builder_menu_id = "builder-menu-etag-no-change"
     seed_portal_department_data(dept_id=DEPT_ID, site_id=SITE_ID, year=YEAR, week=WEEK, alt2_enabled_monday=1)
-    seed_canonical_builder_publication(site_id=SITE_ID, year=YEAR, week=WEEK)
+    seed_canonical_builder_publication(site_id=SITE_ID, year=YEAR, week=WEEK, builder_menu_id=builder_menu_id)
 
     url = f"/portal/department/week?year={YEAR}&week={WEEK}"
     r1 = client_admin.get(url, headers=_h(), environ_overrides={"test_claims": {"department_id": DEPT_ID}})
@@ -100,8 +101,15 @@ def test_portal_etag_no_change_304(client_admin, seed_portal_department_data, se
 
 
 def test_portal_etag_stays_frozen_until_republish(client_admin, app_session, seed_portal_department_data, seed_canonical_builder_publication):
+    builder_menu_id = "builder-menu-etag-republish"
     seed_portal_department_data(dept_id=DEPT_ID, site_id=SITE_ID, year=YEAR, week=WEEK, alt2_enabled_monday=1)
-    composition_service = seed_canonical_builder_publication(site_id=SITE_ID, year=YEAR, week=WEEK, alt1_name="Pannbiff")
+    composition_service = seed_canonical_builder_publication(
+        site_id=SITE_ID,
+        year=YEAR,
+        week=WEEK,
+        builder_menu_id=builder_menu_id,
+        alt1_name="Pannbiff",
+    )
 
     url = f"/portal/department/week?year={YEAR}&week={WEEK}"
     r_before = client_admin.get(url, headers=_h(), environ_overrides={"test_claims": {"department_id": DEPT_ID}})
@@ -121,8 +129,20 @@ def test_portal_etag_stays_frozen_until_republish(client_admin, app_session, see
     lunch_alt1_after = r_after.get_json()["days"][0]["menu"]["lunch_alt1"]
     assert lunch_alt1_after == "Pannbiff"
 
-    # Explicit republish creates the new immutable snapshot.
-    seed_canonical_builder_publication(site_id=SITE_ID, year=YEAR, week=WEEK, alt1_name="Köttbullar")
+    # Explicit republish must advance the published builder version before capturing the new immutable snapshot.
+    with app_session.app_context():
+        builder_menu_context_flow = app_session.extensions["builder_menu_context_flow"]
+        builder_menu_context_flow._menu_service.update_menu(builder_menu_id, version=2, status="published")
+
+    # Explicit republish creates the new immutable snapshot under version 2.
+    seed_canonical_builder_publication(
+        site_id=SITE_ID,
+        year=YEAR,
+        week=WEEK,
+        builder_menu_id=builder_menu_id,
+        builder_version=2,
+        alt1_name="Köttbullar",
+    )
 
     r_republished = client_admin.get(url, headers=_h(), environ_overrides={"test_claims": {"department_id": DEPT_ID}})
     assert r_republished.status_code == 200
@@ -131,15 +151,38 @@ def test_portal_etag_stays_frozen_until_republish(client_admin, app_session, see
     lunch_alt1_republished = r_republished.get_json()["days"][0]["menu"]["lunch_alt1"]
     assert lunch_alt1_republished == "Köttbullar"
 
+    with app_session.app_context():
+        db = get_session()
+        try:
+            pin_row = db.execute(
+                text(
+                    "SELECT builder_menu_version, projection_snapshot_json FROM commun_builder_publication_pins WHERE site_id=:site_id AND year=:year AND week=:week"
+                ),
+                {"site_id": SITE_ID, "year": YEAR, "week": WEEK},
+            ).fetchone()
+            revision_rows = db.execute(
+                text(
+                    "SELECT builder_menu_version FROM commun_builder_publication_revisions WHERE site_id=:site_id AND year=:year AND week=:week AND builder_menu_id=:builder_menu_id ORDER BY builder_menu_version"
+                ),
+                {"site_id": SITE_ID, "year": YEAR, "week": WEEK, "builder_menu_id": builder_menu_id},
+            ).fetchall()
+        finally:
+            db.close()
+
+    assert pin_row is not None
+    assert int(pin_row[0]) == 2
+    assert revision_rows and [int(row[0]) for row in revision_rows] == [1, 2]
+
     # 304 check for new ETag
     r_304 = client_admin.get(url, headers={**_h(), "If-None-Match": etag_republished}, environ_overrides={"test_claims": {"department_id": DEPT_ID}})
     assert r_304.status_code == 304
 
 
 def test_portal_etag_changes_on_selected_alt_update(client_admin, seed_portal_department_data, seed_canonical_builder_publication, seed_portal_menu_choice):
+    builder_menu_id = "builder-menu-etag-choice"
     # Start with an explicit Alt1 choice; changing the explicit choice should move the ETag.
     seed_portal_department_data(dept_id=DEPT_ID, site_id=SITE_ID, year=YEAR, week=WEEK, alt2_enabled_monday=0)
-    seed_canonical_builder_publication(site_id=SITE_ID, year=YEAR, week=WEEK)
+    seed_canonical_builder_publication(site_id=SITE_ID, year=YEAR, week=WEEK, builder_menu_id=builder_menu_id)
     seed_portal_menu_choice(tenant_id=1, site_id=SITE_ID, department_id=DEPT_ID, year=YEAR, week=WEEK, weekday=1, selected_variant="Alt1")
 
     url = f"/portal/department/week?year={YEAR}&week={WEEK}"
