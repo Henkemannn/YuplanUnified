@@ -124,3 +124,13 @@ Last reviewed: 2026-10-07
 - Browser logout clears the local session and delegates refresh-JTI invalidation to the central auth logout seam; duplicate UI revocation logic was removed.
 - The earlier account-state rule remains separate and still requires `is_active == True` and `deleted_at IS NULL`.
 - Next product gate is first-login credential policy. `must_change_password` is still not Current Truth until deliberately approved.
+
+
+## 2026-10-09 — first-login temporary credential policy closed
+- First-login password change is CLOSED at checkpoint `9873ca3cbec762d752660c84b3f11e87a3e193ed` (`fix(auth): require password change for temporary credentials`).
+- New Admin/Kitchen/Department users receiving admin-issued initial credentials are marked `must_change_password = true`; existing migrated users default/backfill to `false`.
+- Admin/systemadmin password reset sets `must_change_password = true` while preserving the 32C revocation contract (`auth_version` increment + refresh JTI invalidation).
+- Forced-change users may reach the existing account/password flow and logout, but are blocked from normal Admin/Kitchen/Department Portal and protected business/API surfaces.
+- The canonical Department Portal route `/ui/portal/department/week` was explicitly proven blocked during forced-change state and accessible again after successful password change + re-login.
+- `must_change_password` and `auth_version` remain separate concepts: required action vs credential generation.
+- Next active product gate is unified `Admin -> Användare`, reusing existing provisioning seams and binding Department users only to already-registered Departments.
