@@ -1,5 +1,5 @@
 Status: LOCKED
-Last reviewed: 2026-10-07
+Last reviewed: 2026-10-10
 
 # Decision Log
 
@@ -134,3 +134,15 @@ Last reviewed: 2026-10-07
 - The canonical Department Portal route `/ui/portal/department/week` was explicitly proven blocked during forced-change state and accessible again after successful password change + re-login.
 - `must_change_password` and `auth_version` remain separate concepts: required action vs credential generation.
 - Next active product gate is unified `Admin -> Användare`, reusing existing provisioning seams and binding Department users only to already-registered Departments.
+
+
+## 2026-10-10 — unified tenant user management closed
+- Unified tenant-facing `Admin -> Användare` is CLOSED at checkpoint `f23f96dc690f3c7933bdf5b201b0592e06c409e5` (`feat(admin): unify tenant user management`).
+- The ordinary product types exposed to tenant Admin are exactly Admin, Kök and Avdelning; internal compatibility role names remain implementation details.
+- The tenant-facing create/edit flow no longer exposes a separate technical username; the internal username derives from normalized email.
+- Avdelning users bind to exactly one already-registered Department in the authenticated tenant + active Site. Same-tenant other-Site Departments and foreign-tenant Departments are hidden and rejected server-side; Site derives from the selected Department.
+- Kök users reuse the existing 1.0 kitchen Site binding. Current compatibility contract is one Kitchen user -> one Site, with `kitchen_user_sites.user_id` as the unique key; no new Alembic ownership or duplicate runtime unique-index repair was introduced.
+- The first-login forced password experience is a standalone auth gate, not the normal Yuplan App Shell. Normal Admin/Kitchen/Department navigation appears only after successful password change and re-login.
+- Existing safe lifecycle actions exposed in the unified list are Redigera, Återställ lösenord and Inaktivera. Reactivation remains a small pilot follow-up rather than a reason to reopen identity architecture.
+- Browser acceptance covered desktop/tablet layout, Department scope isolation, Kitchen/Admin creation, forced-password completion, session clear and Department Portal access after re-login.
+- Phase 0 identity/auth closure is complete. Active delivery moves to the Kommun clean-customer A-Z operational chain.
