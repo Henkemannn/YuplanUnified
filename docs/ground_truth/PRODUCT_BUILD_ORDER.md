@@ -1,5 +1,5 @@
 Status: LOCKED
-Last reviewed: 2026-10-09
+Last reviewed: 2026-10-10
 
 # Yuplan Product Build Order & Future Plans
 
@@ -24,24 +24,25 @@ Do not trade a working A-Z customer flow for broad future architecture.
 
 ---
 
-# PHASE 0 — NOW: Kommun identity/auth closure
+# PHASE 0 — CLOSED: Kommun identity/auth closure
 
-Current stable auth checkpoint:
-`9873ca3cbec762d752660c84b3f11e87a3e193ed`
+Current stable identity/user-management checkpoint:
+`f23f96dc690f3c7933bdf5b201b0592e06c409e5`
+`feat(admin): unify tenant user management`
 
 Closed:
 - inactive/deleted account guard at `5b301e8`;
 - credential revocation / `auth_version` at `129d2b8`;
-- first-login temporary-credential change / `must_change_password` at `9873ca3`.
+- first-login temporary-credential change / `must_change_password` at `9873ca3`;
+- unified tenant-facing **Admin -> Användare** at `f23f96d`;
+- product-facing Admin/Kök/Avdelning creation with no technical username field;
+- Department binding restricted to current tenant + active Site, with same-tenant cross-site and foreign-tenant attempts rejected;
+- Kitchen/Admin pilot-safe Site binding reuse;
+- standalone forced-password auth gate before normal Yuplan shell;
+- real browser proof: create Department user -> forced password change -> re-login -> correct Department Portal scope.
 
-Order:
-
-1. Consolidate existing tenant user provisioning into **Admin -> Användare**:
-   - Admin
-   - Kök
-   - Avdelning
-2. Expose/reactivate only the account-lifecycle actions needed for pilot.
-3. Real Firefox proof: create Department user -> login -> forced password change -> re-login -> correct Department Portal scope.
+Pilot follow-up, not a Phase-0 blocker:
+- browser reactivation action remains optional unless pilot operations prove it necessary.
 
 Explicitly not part of this phase:
 - SSO
@@ -52,7 +53,7 @@ Explicitly not part of this phase:
 
 ---
 
-# PHASE 1 — Kommun 1.1 clean-customer A-Z pilot closure
+# PHASE 1 — NOW: Kommun 1.1 clean-customer A-Z pilot closure
 
 Goal: prove the complete real operator chain on a clean tenant/site.
 
