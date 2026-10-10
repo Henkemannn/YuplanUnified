@@ -1503,6 +1503,8 @@ def account_page():
             "site_name": active_site_name,
         },
     }
+    if must_change_password:
+        return render_template("ui/account_forced_password.html", vm=vm)
     return render_template("ui/account.html", vm=vm)
 
 
@@ -8520,7 +8522,7 @@ def admin_kitchen_users_create():
         new_user_id = repo.create_user(
             tenant_id=int(tid),
             username=email,
-            email=email,
+            email=normalized_email,
             password=password,
             full_name=name,
             role="kitchen",
@@ -8588,38 +8590,59 @@ def admin_kitchen_users_delete(user_id: int):
         flash(f"Kunde inte ta bort köksanvändare: {str(exc)}", "error")
     return redirect(url_for("ui.admin_kitchen_users_page"))
 
-@ui_bp.get("/ui/admin/users")
-@require_roles(*ADMIN_ROLES)
-def admin_users_list():
-    """
-    List all users for the current tenant.
-    Admin/superuser only.
-    """
-    tid = session.get("tenant_id")
-    role = session.get("role")
-    
-    from core.admin_user_repo import AdminUserRepo
-    
-    repo = AdminUserRepo()
-    users = repo.list_users_for_tenant(tid)
-    
-    # Get current week for header
-    today = _date.today()
-    iso_cal = today.isocalendar()
-    current_year, current_week = iso_cal[0], iso_cal[1]
-    
-    vm = {
-        "users": users,
-        "current_year": current_year,
-        "current_week": current_week,
-        "user_role": role,
+
+def _admin_user_role_label(role: str | None) -> str:
+    normalized = (role or "").strip().lower()
+    labels = {
+        "admin": "Admin",
+        "cook": "Kök",
+        "kitchen": "Kök",
+        "unit_portal": "Avdelning",
+        "staff": "Personal",
+        "superuser": "Superanvändare",
     }
-    
-    return render_template("ui/unified_admin_users_list.html", vm=vm)
+    return labels.get(normalized, (role or "").strip().title() or "-")
 
 
-def _admin_user_department_choices(tenant_id: int | str | None) -> list[dict]:
-    if tenant_id is None:
+def _admin_user_role_choices(existing_role: str | None = None) -> list[dict[str, str]]:
+    choices = [
+        {"value": "admin", "label": "Admin"},
+        {"value": "cook", "label": "Kök"},
+        {"value": "unit_portal", "label": "Avdelning"},
+    ]
+    normalized_existing = (existing_role or "").strip().lower()
+    if normalized_existing and normalized_existing not in {choice["value"] for choice in choices}:
+        choices.append({"value": normalized_existing, "label": _admin_user_role_label(normalized_existing)})
+    return choices
+
+
+def _admin_user_active_scope() -> tuple[int | None, str | None, str]:
+    from .context import get_active_context as _get_ctx
+
+    ctx = _get_ctx()
+    tenant_id = ctx.get("tenant_id") or session.get("tenant_id")
+    if isinstance(tenant_id, str) and tenant_id.isdigit():
+        tenant_id = int(tenant_id)
+    site_id = str((ctx.get("site_id") or session.get("site_id") or "").strip()) or None
+    site_name = ""
+    if tenant_id is not None and site_id:
+        db = get_session()
+        try:
+            row = db.execute(
+                text("SELECT name FROM sites WHERE id=:sid AND tenant_id=:tid LIMIT 1"),
+                {"sid": site_id, "tid": int(tenant_id)},
+            ).fetchone()
+            if row and row[0]:
+                site_name = str(row[0]).strip()
+        finally:
+            db.close()
+    return (int(tenant_id) if tenant_id is not None else None), site_id, site_name
+
+
+def _admin_user_department_choices(tenant_id: int | str | None, site_id: str | None) -> list[dict]:
+    tenant_id_int = int(tenant_id) if tenant_id is not None else None
+    site_id_str = str(site_id or "").strip() or None
+    if tenant_id_int is None or not site_id_str:
         return []
     db = get_session()
     try:
@@ -8629,9 +8652,10 @@ def _admin_user_department_choices(tenant_id: int | str | None) -> list[dict]:
                 "FROM departments d "
                 "JOIN sites s ON s.id = d.site_id "
                 "WHERE s.tenant_id = :tid "
-                "ORDER BY s.name, d.name"
+                "AND d.site_id = :sid "
+                "ORDER BY d.name"
             ),
-            {"tid": int(tenant_id)},
+            {"tid": tenant_id_int, "sid": site_id_str},
         ).fetchall()
         return [
             {"id": str(row[0]), "name": str(row[1] or ""), "site_name": str(row[2] or "")}
@@ -8641,36 +8665,73 @@ def _admin_user_department_choices(tenant_id: int | str | None) -> list[dict]:
         db.close()
 
 
+def _admin_user_form_vm(*, mode: str, user: dict | None = None) -> dict:
+    tenant_id, site_id, site_name = _admin_user_active_scope()
+    role_value = str((user or {}).get("role") or ("admin" if mode == "new" else ""))
+    department_choices = _admin_user_department_choices(tenant_id, site_id)
+    vm = {
+        "mode": mode,
+        "user": user,
+        "current_year": _date.today().isocalendar()[0],
+        "current_week": _date.today().isocalendar()[1],
+        "user_role": session.get("role"),
+        "available_roles": _admin_user_role_choices(role_value),
+        "selected_role": role_value or "admin",
+        "department_choices": department_choices,
+        "active_site_id": site_id,
+        "active_site_name": site_name,
+        "department_empty_state_url": url_for("ui.admin_departments_list"),
+    }
+    return vm
+
+
+def _admin_user_list_vm(users: list[dict]) -> dict:
+    transformed: list[dict] = []
+    for user in users:
+        department_name = str(user.get("department_name") or "").strip()
+        site_name = str(user.get("site_name") or "").strip()
+        scope_label = "—"
+        if department_name:
+            scope_label = f"{site_name} / {department_name}" if site_name else department_name
+        elif site_name:
+            scope_label = site_name
+        transformed.append(
+            {
+                **user,
+                "display_role": _admin_user_role_label(user.get("role")),
+                "scope_label": scope_label,
+                "status_label": "Aktiv" if user.get("is_active") else "Inaktiv",
+            }
+        )
+    return {
+        "users": transformed,
+        "current_year": _date.today().isocalendar()[0],
+        "current_week": _date.today().isocalendar()[1],
+        "user_role": session.get("role"),
+    }
+
+
+@ui_bp.get("/ui/admin/users")
+@require_roles(*ADMIN_ROLES)
+def admin_users_list():
+    """
+    List all users for the current tenant.
+    Admin/superuser only.
+    """
+    from core.admin_user_repo import AdminUserRepo
+    repo = AdminUserRepo()
+    users = repo.list_users_for_tenant(session.get("tenant_id"))
+    vm = _admin_user_list_vm(users)
+    return render_template("ui/unified_admin_users_list.html", vm=vm)
+
+
 @ui_bp.get("/ui/admin/users/new")
 @require_roles(*ADMIN_ROLES)
 def admin_users_new_form():
     """
     Show form for creating a new user.
     """
-    role = session.get("role")
-    tid = session.get("tenant_id")
-    
-    # Get current week for header
-    today = _date.today()
-    iso_cal = today.isocalendar()
-    current_year, current_week = iso_cal[0], iso_cal[1]
-    
-    # Available roles
-    available_roles = ["admin", "staff", "cook", "unit_portal"]
-    if role == "superuser":
-        available_roles.append("superuser")
-    
-    vm = {
-        "current_year": current_year,
-        "current_week": current_week,
-        "user_role": role,
-        "mode": "new",
-        "user": None,
-        "available_roles": available_roles,
-        "selected_role": "staff",
-        "department_choices": _admin_user_department_choices(tid),
-    }
-    
+    vm = _admin_user_form_vm(mode="new")
     return render_template("ui/unified_admin_users_form.html", vm=vm)
 
 
@@ -8682,84 +8743,80 @@ def admin_users_create():
     """
     from flask import flash, redirect, url_for
     from core.admin_user_repo import AdminUserRepo
-    
-    tid = session.get("tenant_id")
-    
-    # Get form data
-    username = request.form.get("username", "").strip()
+
+    tenant_id_raw = session.get("tenant_id")
+    tenant_id, active_site_id, _active_site_name = _admin_user_active_scope()
+    if tenant_id_raw is None or tenant_id is None:
+        flash("Saknar tenant-kontext.", "error")
+        return redirect(url_for("ui.admin_users_new_form"))
+
     email = request.form.get("email", "").strip()
+    normalized_email = email.strip().lower()
     full_name = request.form.get("full_name", "").strip()
     password = request.form.get("password", "").strip()
     role = request.form.get("role", "staff").strip()
     department_id = (request.form.get("department_id") or "").strip() or None
-    active_site = (session.get("site_id") or "").strip()
-    
-    # Validate
+    username = normalized_email
+
     repo = AdminUserRepo()
-    
-    if not username:
-        flash("Användarnamn måste anges.", "error")
-        return redirect(url_for("ui.admin_users_new_form"))
-    
+
     if not email:
-        flash("E-post måste anges.", "error")
+        flash("E-post m?ste anges.", "error")
         return redirect(url_for("ui.admin_users_new_form"))
-    
+
     if not password:
-        flash("Lösenord måste anges.", "error")
+        flash("L?senord m?ste anges.", "error")
         return redirect(url_for("ui.admin_users_new_form"))
-    
+
     if repo.username_exists(username):
-        flash("Användarnamnet finns redan.", "error")
+        flash("Anv?ndarnamnet finns redan.", "error")
         return redirect(url_for("ui.admin_users_new_form"))
-    
-    if repo.email_exists(email):
-        flash("E-postadressen används redan.", "error")
+
+    if repo.email_exists(normalized_email):
+        flash("E-postadressen anv?nds redan.", "error")
         return redirect(url_for("ui.admin_users_new_form"))
-    
-    # Validate role
+
     valid_roles = ["admin", "staff", "cook", "unit_portal"]
-    current_role = session.get("role")
-    if current_role == "superuser":
+    if session.get("role") == "superuser":
         valid_roles.append("superuser")
-    
     if role not in valid_roles:
         flash("Ogiltig roll.", "error")
         return redirect(url_for("ui.admin_users_new_form"))
 
-    department_choices = _admin_user_department_choices(tid)
+    department_choices = _admin_user_department_choices(tenant_id, active_site_id)
     if role == "unit_portal":
         if not department_id:
-            flash("Enhetsportal-konton måste vara bundna till en avdelning.", "error")
+            flash("Avdelningskonton m?ste vara bundna till en avdelning.", "error")
             return redirect(url_for("ui.admin_users_new_form"))
         if not any(str(choice["id"]) == str(department_id) for choice in department_choices):
-            flash("Vald avdelning tillhör inte din tenant.", "error")
+            flash("Vald avdelning tillh?r inte din tenant.", "error")
             return redirect(url_for("ui.admin_users_new_form"))
+    elif role in {"admin", "cook"}:
+        if not active_site_id:
+            flash("V?lj en site innan du skapar anv?ndaren.", "error")
+            return redirect(url_for("ui.admin_users_new_form"))
+        department_id = None
     else:
         department_id = None
 
-    # Enforce site binding for customer admins: require active site context
-    if role == "admin" and not active_site:
-        flash("Admin-konton måste vara bundna till en site.", "error")
-        return redirect(url_for("ui.admin_users_new_form"))
-    
-    # Create user
     try:
         user_id = repo.create_user(
-            tenant_id=tid,
+            tenant_id=tenant_id,
             username=username,
-            email=email,
+            email=normalized_email,
             password=password,
             full_name=full_name or None,
             role=role,
             is_active=True,
             department_id=department_id,
         )
-        flash(f"Användare '{username}' skapad.", "success")
+        if role in {"admin", "cook"} and active_site_id:
+            repo.set_site_binding(int(user_id), int(tenant_id), str(active_site_id))
+        flash(f"Anv?ndare '{username}' skapad.", "success")
     except Exception as e:
-        flash(f"Kunde inte skapa användare: {str(e)}", "error")
+        flash(f"Kunde inte skapa anv?ndare: {str(e)}", "error")
         return redirect(url_for("ui.admin_users_new_form"))
-    
+
     return redirect(url_for("ui.admin_users_list"))
 
 
@@ -8770,45 +8827,23 @@ def admin_users_edit_form(user_id: int):
     Show form for editing a user.
     """
     tid = session.get("tenant_id")
-    role = session.get("role")
-    
+
     from core.admin_user_repo import AdminUserRepo
-    
+
     repo = AdminUserRepo()
     user = repo.get_user(user_id)
-    
+
     if not user:
         from flask import flash, redirect, url_for
-        flash("Användare hittades inte.", "error")
+        flash("Anv?ndare hittades inte.", "error")
         return redirect(url_for("ui.admin_users_list"))
-    
-    # Verify user belongs to same tenant
+
     if user["tenant_id"] != tid:
         from flask import flash, redirect, url_for
-        flash("Användare hittades inte.", "error")
+        flash("Anv?ndare hittades inte.", "error")
         return redirect(url_for("ui.admin_users_list"))
-    
-    # Get current week for header
-    today = _date.today()
-    iso_cal = today.isocalendar()
-    current_year, current_week = iso_cal[0], iso_cal[1]
-    
-    # Available roles
-    available_roles = ["admin", "staff", "cook", "unit_portal"]
-    if role == "superuser":
-        available_roles.append("superuser")
-    
-    vm = {
-        "current_year": current_year,
-        "current_week": current_week,
-        "user_role": role,
-        "mode": "edit",
-        "user": user,
-        "available_roles": available_roles,
-        "selected_role": user["role"],
-        "department_choices": _admin_user_department_choices(tid),
-    }
-    
+
+    vm = _admin_user_form_vm(mode="edit", user=user)
     return render_template("ui/unified_admin_users_form.html", vm=vm)
 
 
@@ -8820,8 +8855,9 @@ def admin_users_update(user_id: int):
     """
     from flask import flash, redirect, url_for
     from core.admin_user_repo import AdminUserRepo
-    
+
     tid = session.get("tenant_id")
+    tenant_id, active_site_id, _active_site_name = _admin_user_active_scope()
     current_role = session.get("role")
     current_user_id = session.get("user_id")
     if current_user_id is None:
@@ -8832,79 +8868,70 @@ def admin_users_update(user_id: int):
                 session["user_id"] = current_user_id
             except ValueError:
                 current_user_id = None
-    
+
     repo = AdminUserRepo()
     user = repo.get_user(user_id)
-    
+
     if (not user or user["tenant_id"] != tid):
-        # If attempting to deactivate own (missing) account, treat as self-case for test expectation
         if current_user_id is not None and user_id == current_user_id:
             flash("Du kan inte inaktivera ditt eget konto.", "error")
             return redirect(url_for("ui.admin_users_list"))
-        flash("Användare hittades inte.", "error")
+        flash("Anv?ndare hittades inte.", "error")
         return redirect(url_for("ui.admin_users_list"))
-    
-    # Get form data
+
     email = request.form.get("email", "").strip()
+    normalized_email = email.strip().lower()
     full_name = request.form.get("full_name", "").strip()
     role = request.form.get("role", "").strip()
     department_id = (request.form.get("department_id") or "").strip() or None
-    
-    # Validate
+
     if not email:
-        flash("E-post måste anges.", "error")
+        flash("E-post m?ste anges.", "error")
         return redirect(url_for("ui.admin_users_edit_form", user_id=user_id))
-    
-    if email != user["email"] and repo.email_exists(email, exclude_user_id=user_id):
-        flash("E-postadressen används redan.", "error")
+
+    if normalized_email != user["email"] and repo.email_exists(normalized_email, exclude_user_id=user_id):
+        flash("E-postadressen anv?nds redan.", "error")
         return redirect(url_for("ui.admin_users_edit_form", user_id=user_id))
-    
-    # Validate role
+
     valid_roles = ["admin", "staff", "cook", "unit_portal"]
     if current_role == "superuser":
         valid_roles.append("superuser")
-    
+
     if role not in valid_roles:
         flash("Ogiltig roll.", "error")
         return redirect(url_for("ui.admin_users_edit_form", user_id=user_id))
 
-    department_choices = _admin_user_department_choices(tid)
+    department_choices = _admin_user_department_choices(tenant_id, active_site_id)
     if role == "unit_portal":
         if not department_id:
-            flash("Enhetsportal-konton måste vara bundna till en avdelning.", "error")
+            flash("Avdelningskonton m?ste vara bundna till en avdelning.", "error")
             return redirect(url_for("ui.admin_users_edit_form", user_id=user_id))
         if not any(str(choice["id"]) == str(department_id) for choice in department_choices):
-            flash("Vald avdelning tillhör inte din tenant.", "error")
+            flash("Vald avdelning tillh?r inte din tenant.", "error")
             return redirect(url_for("ui.admin_users_edit_form", user_id=user_id))
+    elif role in {"admin", "cook"}:
+        if not active_site_id:
+            flash("V?lj en site innan du sparar anv?ndaren.", "error")
+            return redirect(url_for("ui.admin_users_edit_form", user_id=user_id))
+        department_id = None
     else:
         department_id = None
-    
-    # Update user
+
     try:
         repo.update_user(
             user_id=user_id,
-            email=email,
+            email=normalized_email,
             full_name=full_name or None,
             role=role,
             department_id=department_id,
         )
-        # If role transitioned to admin, ensure site binding is set
-        if role == "admin":
-            active_site = (session.get("site_id") or "").strip()
-            if not active_site:
-                flash("Admin-konton måste vara bundna till en site.", "error")
-                return redirect(url_for("ui.admin_users_edit_form", user_id=user_id))
-            db = get_session()
-            try:
-                db.execute(text("UPDATE users SET site_id=:sid WHERE id=:uid"), {"sid": active_site, "uid": user_id})
-                db.commit()
-            finally:
-                db.close()
-        flash(f"Användare '{user['username']}' uppdaterad.", "success")
+        if role in {"admin", "cook"} and active_site_id:
+            repo.set_site_binding(int(user_id), int(tid), str(active_site_id))
+        flash(f"Anv?ndare '{user['username']}' uppdaterad.", "success")
     except Exception as e:
-        flash(f"Kunde inte uppdatera användare: {str(e)}", "error")
+        flash(f"Kunde inte uppdatera anv?ndare: {str(e)}", "error")
         return redirect(url_for("ui.admin_users_edit_form", user_id=user_id))
-    
+
     return redirect(url_for("ui.admin_users_list"))
 
 

@@ -371,6 +371,8 @@ def test_forced_change_blocks_role_app_routes(monkeypatch, role, blocked_path):
         body = account.data.decode("utf-8")
         assert "Du måste byta lösenord innan du fortsätter." in body
         assert "/ui/account/password" in body
+        assert "app-shell__nav" not in body
+        assert "Mitt konto" not in body
 
         logout = client.post("/ui/logout", follow_redirects=False)
         assert logout.status_code in (301, 302)

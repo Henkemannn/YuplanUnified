@@ -16,6 +16,69 @@ def _normalize_email(email: Optional[str]) -> str:
     return str(email or "").strip().lower()
 
 
+def _users_table_has_site_id(db) -> bool:
+    try:
+        cols = db.execute(text("PRAGMA table_info(users)")).fetchall()
+        return any(str(col[1]) == "site_id" for col in cols)
+    except Exception:
+        return False
+
+
+def _kitchen_site_binding_table_exists(db) -> bool:
+    try:
+        row = db.execute(
+            text("SELECT 1 FROM sqlite_master WHERE type='table' AND name='kitchen_user_sites' LIMIT 1")
+        ).fetchone()
+        return row is not None
+    except Exception:
+        return False
+
+
+def _resolve_user_site_id(db, user_id: int, tenant_id: int | None = None) -> str | None:
+    if _users_table_has_site_id(db):
+        row = db.execute(text("SELECT site_id FROM users WHERE id=:uid LIMIT 1"), {"uid": int(user_id)}).fetchone()
+        site_id = str(row[0]).strip() if row and row[0] is not None else ""
+        if site_id:
+            return site_id
+    if _kitchen_site_binding_table_exists(db):
+        params = {"uid": int(user_id)}
+        query = "SELECT site_id FROM kitchen_user_sites WHERE user_id=:uid"
+        if tenant_id is not None:
+            query += " AND tenant_id=:tid"
+            params["tid"] = int(tenant_id)
+        row = db.execute(text(query + " LIMIT 1"), params).fetchone()
+        site_id = str(row[0]).strip() if row and row[0] is not None else ""
+        if site_id:
+            return site_id
+    return None
+
+
+def _set_user_site_binding(db, *, user_id: int, tenant_id: int, site_id: str) -> None:
+    if _users_table_has_site_id(db):
+        db.execute(
+            text("UPDATE users SET site_id=:sid WHERE id=:uid AND tenant_id=:tid"),
+            {"sid": str(site_id), "uid": int(user_id), "tid": int(tenant_id)},
+        )
+        return
+    db.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+            "user_id INTEGER PRIMARY KEY, "
+            "tenant_id INTEGER NOT NULL, "
+            "site_id TEXT NOT NULL"
+            ")"
+        )
+    )
+    db.execute(
+        text(
+            "INSERT INTO kitchen_user_sites (user_id, tenant_id, site_id) "
+            "VALUES (:uid, :tid, :sid) "
+            "ON CONFLICT(user_id) DO UPDATE SET tenant_id=excluded.tenant_id, site_id=excluded.site_id"
+        ),
+        {"uid": int(user_id), "tid": int(tenant_id), "sid": str(site_id)},
+    )
+
+
 class AdminUserRepo:
     """Repository for user CRUD operations in admin panel"""
 
@@ -41,6 +104,14 @@ class AdminUserRepo:
             
             users = []
             for row in rows:
+                site_id = _resolve_user_site_id(db, int(row[0]), tenant_id=tenant_id)
+                site_name = str(row[8] or "").strip()
+                if not site_name and site_id:
+                    site_row = db.execute(
+                        text("SELECT name FROM sites WHERE id=:sid AND tenant_id=:tid LIMIT 1"),
+                        {"sid": site_id, "tid": int(tenant_id)},
+                    ).fetchone()
+                    site_name = str(site_row[0] or "").strip() if site_row else ""
                 users.append({
                     "id": row[0],
                     "username": row[1],
@@ -50,7 +121,8 @@ class AdminUserRepo:
                     "is_active": bool(row[5]) if row[5] is not None else True,
                     "department_id": row[6],
                     "department_name": row[7],
-                    "site_name": row[8],
+                    "site_name": site_name,
+                    "site_id": site_id,
                     "must_change_password": bool(row[9]) if row[9] is not None else False,
                 })
             return users
@@ -75,6 +147,15 @@ class AdminUserRepo:
             
             if not row:
                 return None
+
+            site_id = _resolve_user_site_id(db, int(row[0]), tenant_id=int(row[6]) if row[6] is not None else None)
+            site_name = str(row[9] or "").strip()
+            if not site_name and site_id and row[6] is not None:
+                site_row = db.execute(
+                    text("SELECT name FROM sites WHERE id=:sid AND tenant_id=:tid LIMIT 1"),
+                    {"sid": site_id, "tid": int(row[6])},
+                ).fetchone()
+                site_name = str(site_row[0] or "").strip() if site_row else ""
             
             return {
                 "id": row[0],
@@ -86,7 +167,8 @@ class AdminUserRepo:
                 "tenant_id": row[6],
                 "department_id": row[7],
                 "department_name": row[8],
-                "site_name": row[9],
+                "site_name": site_name,
+                "site_id": site_id,
                 "must_change_password": bool(row[10]) if len(row) > 10 and row[10] is not None else False,
             }
         finally:
@@ -227,6 +309,14 @@ class AdminUserRepo:
             )
             db.commit()
             return temp_password
+        finally:
+            db.close()
+
+    def set_site_binding(self, user_id: int, tenant_id: int, site_id: str) -> None:
+        db = get_session()
+        try:
+            _set_user_site_binding(db, user_id=user_id, tenant_id=tenant_id, site_id=site_id)
+            db.commit()
         finally:
             db.close()
 

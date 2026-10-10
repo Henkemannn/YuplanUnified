@@ -26,6 +26,7 @@
         setupModalHandlers();
         setupSiteContextWarning();
         setupSiteContextVersionSync();
+        setupUnifiedAdminUsersForm();
         setupReportWeeklyAutosubmit();
         
         // Check mobile on load
@@ -1029,6 +1030,31 @@
             });
         }
     }
+
+    function setupUnifiedAdminUsersForm() {
+        const form = document.querySelector('.admin-users-form');
+        if (!form) return;
+
+        const roleSelect = form.querySelector('#role');
+        const departmentField = form.querySelector('#department-field');
+        if (!roleSelect || !departmentField) return;
+
+        const departmentSelect = form.querySelector('#department_id');
+
+        function syncDepartmentField() {
+            const needsDepartment = roleSelect.value === 'unit_portal';
+            departmentField.style.display = needsDepartment ? '' : 'none';
+            if (departmentSelect) {
+                departmentSelect.required = needsDepartment;
+                if (!needsDepartment) {
+                    departmentSelect.value = '';
+                }
+            }
+        }
+
+        roleSelect.addEventListener('change', syncDepartmentField);
+        syncDepartmentField();
+    }
     
     // ========================================================================
     // Button Ripple Effect
@@ -1187,6 +1213,12 @@
         document.addEventListener('DOMContentLoaded', init);
     } else {
         init();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setupUnifiedAdminUsersForm);
+    } else {
+        setupUnifiedAdminUsersForm();
     }
     
 })();

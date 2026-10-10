@@ -1,368 +1,165 @@
-{% extends "ui/unified_admin_base.html" %}
+﻿{% extends "ui/unified_admin_base.html" %}
 
-{% block admin_title %}{% if vm.mode == 'new' %}Ny användare{% else %}Redigera användare{% endif %}{% endblock %}
-{% block admin_subtitle %}Administrera användarkonton och behörigheter{% endblock %}
+{% block admin_title %}Användare{% endblock %}
+{% block admin_subtitle %}Skapa och hantera användare för verksamheten.{% endblock %}
 
 {% block admin_main %}
 <section class="ua-section">
-<div class="ua-card admin-users-form">
-    <!-- Header -->
+  <div class="ua-card admin-users-form">
     <div class="page-header">
-        <h1>
-            {% if vm.mode == 'new' %}
-            Ny användare
-            {% else %}
-            Redigera användare
-            {% endif %}
-        </h1>
-        <a href="{{ url_for('ui.admin_users_list') }}" class="yp-button yp-button-secondary">
-            ← Tillbaka
-        </a>
+      <div>
+        <h1>{% if vm.mode == 'new' %}Skapa användare{% else %}Redigera användare{% endif %}</h1>
+        <p class="page-header__lead">Använd rollerna Admin, Kök och Avdelning för att ge rätt åtkomst till befintliga organisatoriska objekt.</p>
+      </div>
+      <a href="{{ url_for('ui.admin_users_list') }}" class="yp-button yp-button-secondary">Tillbaka</a>
     </div>
 
-    <!-- Form -->
-    <div class="form-container">
-        <form method="post" 
-              action="{% if vm.mode == 'new' %}{{ url_for('ui.admin_users_create') }}{% else %}{{ url_for('ui.admin_users_update', user_id=vm.user.id) }}{% endif %}"
-              class="yp-form user-form">
-                        {{ csrf_token_input()|safe }}
-            
-            <!-- Username (only for new users) -->
-            {% if vm.mode == 'new' %}
-            <div class="yp-form-field">
-                <label for="username" class="yp-label">
-                    👤 Användarnamn <span class="required">*</span>
-                </label>
-                <input type="text" 
-                       id="username" 
-                       name="username" 
-                       class="yp-input"
-                       required
-                       maxlength="100"
-                       autocomplete="off"
-                       aria-label="Användarnamn"
-                       placeholder="t.ex. jdoe eller john.doe">
-                <small class="yp-form-help">Unikt användarnamn för inloggning.</small>
-            </div>
-            {% else %}
-            <div class="yp-form-field">
-                <label class="yp-label">👤 Användarnamn</label>
-                <div class="read-only-field">{{ vm.user.username }}</div>
-                <small class="yp-form-help">Användarnamn kan inte ändras.</small>
-            </div>
-            {% endif %}
-
-            <!-- Email -->
-            <div class="yp-form-field">
-                <label for="email" class="yp-label">
-                    📧 E-post <span class="required">*</span>
-                </label>
-                <input type="email" 
-                       id="email" 
-                       name="email" 
-                       class="yp-input"
-                       required
-                       maxlength="200"
-                       autocomplete="email"
-                       aria-label="E-postadress"
-                       value="{% if vm.user %}{{ vm.user.email }}{% endif %}"
-                       placeholder="namn@example.com">
-                <small class="yp-form-help">Används för kommunikation och återställning av lösenord.</small>
-            </div>
-
-            <!-- Full Name -->
-            <div class="yp-form-field">
-                <label for="full_name" class="yp-label">
-                    🏷️ Fullständigt namn
-                </label>
-                <input type="text" 
-                       id="full_name" 
-                       name="full_name" 
-                       class="yp-input"
-                       maxlength="200"
-                       autocomplete="name"
-                       aria-label="Fullständigt namn"
-                       value="{% if vm.user %}{{ vm.user.full_name or '' }}{% endif %}"
-                       placeholder="För- och efternamn">
-                <small class="yp-form-help">Valfritt, visas i användargränssnittet.</small>
-            </div>
-
-            <!-- Role -->
-            <div class="yp-form-field">
-                <label for="role" class="yp-label">
-                    👥 Roll <span class="required">*</span>
-                </label>
-                <select id="role" name="role" class="yp-input" required aria-label="Roll">
-                    {% for r in vm.available_roles %}
-                    <option value="{{ r }}" {% if (vm.user and vm.user.role == r) or (not vm.user and vm.selected_role == r) %}selected{% endif %}>
-                        {% if r == 'admin' %}
-                            👤 Admin
-                        {% elif r == 'superuser' %}
-                            ⭐ Superanvändare
-                        {% elif r == 'staff' %}
-                            👥 Personal
-                        {% elif r == 'cook' %}
-                            👨‍🍳 Kock
-                        {% elif r == 'unit_portal' %}
-                            🏢 Enhetsportal
-                        {% else %}
-                            {{ r }}
-                        {% endif %}
-                    </option>
-                    {% endfor %}
-                </select>
-                <small class="yp-form-help">
-                    <strong>Admin:</strong> Full åtkomst till admin-panelen.<br>
-                    <strong>Personal:</strong> Grundläggande åtkomst till veckovisning.<br>
-                    <strong>Kock:</strong> Åtkomst till matlagningsvyer.<br>
-                    <strong>Enhetsportal:</strong> Åtkomst till enhetsspecifika funktioner.
-                </small>
-            </div>
-
-            <!-- Department binding for unit_portal -->
-            <div class="yp-form-field" id="department-field" {% if (vm.user and vm.user.role != 'unit_portal') and vm.selected_role != 'unit_portal' %}style="display:none"{% endif %}>
-                <label for="department_id" class="yp-label">
-                    🏠 Avdelning <span class="required">*</span>
-                </label>
-                <select id="department_id"
-                        name="department_id"
-                        class="yp-input"
-                        aria-label="Avdelning"
-                        {% if (vm.user and vm.user.role == 'unit_portal') or vm.selected_role == 'unit_portal' %}required{% endif %}>
-                    <option value="">Välj avdelning</option>
-                    {% for dept in vm.department_choices or [] %}
-                    <option value="{{ dept.id }}" {% if vm.user and vm.user.department_id == dept.id %}selected{% endif %}>{{ dept.site_name }} - {{ dept.name }}</option>
-                    {% endfor %}
-                </select>
-                <small class="yp-form-help">Endast avdelningar i din tenant visas här.</small>
-            </div>
-
-            <!-- Password (only for new users) -->
-            {% if vm.mode == 'new' %}
-            <div class="yp-form-field">
-                <label for="password" class="yp-label">
-                    🔑 Lösenord <span class="required">*</span>
-                </label>
-                <input type="password" 
-                       id="password" 
-                       name="password" 
-                       class="yp-input"
-                       required
-                       minlength="6"
-                       autocomplete="new-password"
-                       aria-label="Lösenord"
-                       placeholder="Minst 6 tecken">
-                <small class="yp-form-help">Tillfälligt lösenord. Användaren bör ändra det efter första inloggningen.</small>
-            </div>
-            {% else %}
-            <div class="yp-form-field">
-                <label class="yp-label">🔑 Lösenord</label>
-                <div class="password-info">
-                    <p>Lösenord kan inte ändras här.</p>
-                    <p>Använd knappen "Återställ lösenord" på användarlistan för att generera ett nytt tillfälligt lösenord.</p>
-                </div>
-            </div>
-            {% endif %}
-
-            <!-- Buttons -->
-            <div class="form-actions">
-                <button type="submit" class="yp-button yp-button-primary">
-                    {% if vm.mode == 'new' %}
-                    💾 Skapa användare
-                    {% else %}
-                    💾 Spara ändringar
-                    {% endif %}
-                </button>
-                <a href="{{ url_for('ui.admin_users_list') }}" class="yp-button yp-button-secondary">
-                    ✖ Avbryt
-                </a>
-            </div>
-        </form>
+    <div class="context-card">
+      <div><strong>Aktiv site:</strong> {{ vm.active_site_name or vm.active_site_id or 'Ingen aktiv site' }}</div>
+      <div class="context-card__meta">Avdelningsanvändare måste bindas till en avdelning i den aktiva siten.</div>
     </div>
-</div>
 
-<script>
-(function() {
-    const roleSelect = document.getElementById('role');
-    const deptField = document.getElementById('department-field');
-    const deptSelect = document.getElementById('department_id');
-    if (!roleSelect || !deptField || !deptSelect) {
-        return;
-    }
-    function syncDepartmentField() {
-        const needsDepartment = roleSelect.value === 'unit_portal';
-        deptField.style.display = needsDepartment ? '' : 'none';
-        deptSelect.required = needsDepartment;
-        if (!needsDepartment) {
-            deptSelect.value = '';
-        }
-    }
-    roleSelect.addEventListener('change', syncDepartmentField);
-    syncDepartmentField();
-})();
-</script>
+    <form method="post" action="{% if vm.mode == 'new' %}{{ url_for('ui.admin_users_create') }}{% else %}{{ url_for('ui.admin_users_update', user_id=vm.user.id) }}{% endif %}" class="yp-form user-form">
+      {{ csrf_token_input()|safe }}
+
+      <div class="yp-form-field">
+        <label for="email" class="yp-label">E-post <span class="required">*</span></label>
+        <input id="email" name="email" type="email" class="yp-input" required maxlength="200" autocomplete="email" value="{% if vm.user %}{{ vm.user.email }}{% endif %}" placeholder="namn@example.com">
+      </div>
+
+      <div class="yp-form-field">
+        <label for="full_name" class="yp-label">Namn</label>
+        <input id="full_name" name="full_name" type="text" class="yp-input" maxlength="200" autocomplete="name" value="{% if vm.user %}{{ vm.user.full_name or '' }}{% endif %}" placeholder="För- och efternamn">
+      </div>
+
+      <div class="yp-form-field">
+        <label for="role" class="yp-label">Typ <span class="required">*</span></label>
+        <select id="role" name="role" class="yp-input" required>
+          {% for option in vm.available_roles or [] %}
+            <option value="{{ option.value }}" {% if (vm.user and vm.user.role == option.value) or (not vm.user and vm.selected_role == option.value) %}selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
+        <small class="yp-form-help">Admin ger administrationsåtkomst. Kök använder vald site. Avdelning väljer en befintlig avdelning.</small>
+      </div>
+
+      <div class="yp-form-field" id="site-field">
+        <label class="yp-label">Scope</label>
+        <div class="scope-summary">
+          <strong>{{ vm.active_site_name or vm.active_site_id or 'Ingen aktiv site' }}</strong>
+          <span>Site används för Admin- och Kök-användare.</span>
+        </div>
+      </div>
+
+      <div class="yp-form-field" id="department-field">
+        <label for="department_id" class="yp-label">Avdelning <span class="required">*</span></label>
+        {% if vm.department_choices %}
+          <select id="department_id" name="department_id" class="yp-input" {% if (vm.user and vm.user.role == 'unit_portal') or vm.selected_role == 'unit_portal' %}required{% endif %}>
+            <option value="">Välj avdelning</option>
+            {% for dept in vm.department_choices %}
+              <option value="{{ dept.id }}" {% if vm.user and vm.user.department_id == dept.id %}selected{% endif %}>{{ dept.site_name }} – {{ dept.name }}</option>
+            {% endfor %}
+          </select>
+          <small class="yp-form-help">Endast avdelningar inom den aktiva siten visas.</small>
+        {% else %}
+          <div class="empty-state empty-state--compact">
+            <p>Skapa en avdelning först</p>
+            <a href="{{ vm.department_empty_state_url }}" class="yp-button yp-button-secondary yp-button-sm">Gå till avdelningar</a>
+          </div>
+        {% endif %}
+      </div>
+
+      {% if vm.mode == 'new' %}
+        <div class="yp-form-field">
+          <label for="password" class="yp-label">Lösenord <span class="required">*</span></label>
+          <input id="password" name="password" type="password" class="yp-input" required minlength="6" autocomplete="new-password" placeholder="Minst 6 tecken">
+          <small class="yp-form-help">Användaren får ett tillfälligt lösenord och måste byta det vid första inloggningen.</small>
+        </div>
+      {% else %}
+        <div class="yp-form-field">
+          <label class="yp-label">Lösenord</label>
+          <div class="password-info">
+            <p>Lösenord kan inte ändras här.</p>
+            <p>Använd återställning för att ge ett nytt tillfälligt lösenord.</p>
+          </div>
+        </div>
+      {% endif %}
+
+      <div class="form-actions">
+        <button type="submit" class="yp-button yp-button-primary">{% if vm.mode == 'new' %}Skapa användare{% else %}Spara ändringar{% endif %}</button>
+      </div>
+    </form>
+  </div>
+</section>
 
 <style>
 .admin-users-form {
-    max-width: 700px;
+  max-width: 760px;
 }
 
 .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
-    gap: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
 }
 
 .page-header h1 {
-    margin: 0;
-    font-size: 1.75rem;
-    color: #2c3e50;
+  margin: 0;
+  font-size: 1.75rem;
 }
 
-.form-container {
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    padding: 2rem;
+.page-header__lead {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+}
+
+.context-card {
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.context-card__meta {
+  color: var(--muted);
+  font-size: 0.95rem;
 }
 
 .user-form {
-    max-width: 100%;
+  display: grid;
+  gap: 1rem;
 }
 
-.form-group {
-    margin-bottom: 1.5rem;
-}
-
-.form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 600;
-    color: #495057;
-}
-
-.form-group label.required::after {
-    content: ' *';
-    color: #dc3545;
-}
-
-.form-control {
-    width: 100%;
-    padding: 0.75rem;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
-    font-size: 1rem;
-    transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.form-control:focus {
-    outline: none;
-    border-color: #007bff;
-    box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25);
-}
-
-.form-control:invalid {
-    border-color: #dc3545;
-}
-
-.form-text {
-    display: block;
-    margin-top: 0.25rem;
-    font-size: 0.875rem;
-    color: #6c757d;
-    line-height: 1.4;
+.scope-summary {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.03);
 }
 
 .read-only-field {
-    padding: 0.75rem;
-    background: #e9ecef;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
-    color: #495057;
-    font-weight: 500;
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.03);
 }
 
-.password-info {
-    padding: 1rem;
-    background: #fff3cd;
-    border: 1px solid #ffc107;
-    border-radius: 4px;
-    color: #856404;
+.password-info,
+.empty-state--compact {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.9rem;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.03);
 }
 
-.password-info p {
-    margin: 0 0 0.5rem 0;
-}
-
-.password-info p:last-child {
-    margin-bottom: 0;
-}
-
-.form-actions {
-    display: flex;
-    gap: 1rem;
-    margin-top: 2rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid #dee2e6;
-}
-
-.btn {
-    display: inline-block;
-    padding: 0.75rem 1.5rem;
-    border: none;
-    border-radius: 4px;
-    font-size: 1rem;
-    font-weight: 500;
-    text-decoration: none;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.btn-primary {
-    background: #007bff;
-    color: white;
-}
-
-.btn-primary:hover {
-    background: #0056b3;
-}
-
-.btn-secondary {
-    background: #6c757d;
-    color: white;
-}
-
-.btn-secondary:hover {
-    background: #545b62;
-}
-
-@media (max-width: 768px) {
-    .page-header {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    
-    .page-header h1 {
-        font-size: 1.5rem;
-    }
-    
-    .form-container {
-        padding: 1.5rem;
-    }
-    
-    .form-actions {
-        flex-direction: column;
-    }
-    
-    .btn {
-        width: 100%;
-        text-align: center;
-    }
+.password-info p,
+.empty-state--compact p {
+  margin: 0;
 }
 </style>
-</div>
-</section>
 {% endblock %}
