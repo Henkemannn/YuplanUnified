@@ -1,5 +1,5 @@
 Status: LOCKED
-Last reviewed: 2026-10-09
+Last reviewed: 2026-10-10
 
 # User Provisioning and Authentication Flow
 
@@ -37,6 +37,8 @@ Relevant current User state includes:
 - department_id
 - unit_id
 - refresh_token_jti
+- auth_version
+- must_change_password
 - updated_at
 - deleted_at
 
@@ -45,8 +47,8 @@ Role is single-valued.
 There is no canonical ORM User.site_id field.
 
 ### Site/scope binding
-- Department Portal user: users.department_id -> departments.site_id.
-- Kitchen/admin site access: current pilot code uses existing site-binding infrastructure, primarily kitchen_user_sites; older DB variants may still have guarded users.site_id compatibility.
+- Department Portal user: users.department_id -> departments.site_id. Tenant Admin may choose only Departments in the authenticated tenant + active authorized Site; same-tenant cross-site and foreign-tenant bindings fail closed.
+- Kitchen/admin site access: current pilot code uses existing site-binding infrastructure, primarily kitchen_user_sites; current 1.0 contract is one Kitchen user -> one Site with user_id as the unique key. Older DB variants may still have guarded users.site_id compatibility.
 - Superuser is not restricted to one operational site in the same way.
 
 The historical users.site_id compatibility path is not the future canonical model.
@@ -66,27 +68,35 @@ Kommun external unit user. Active role: unit_portal. Expected landing: /ui/porta
 Yuplan/platform bootstrap and support. Not an ordinary tenant user type.
 
 ## Current provisioning surfaces
-Existing functionality is split but reusable:
-- /ui/admin/users: general browser user management; create/edit/deactivate/reset and Department binding for unit_portal.
-- /ui/admin/kitchen-users: dedicated Kitchen provisioning with site binding.
-- Systemadmin customer/site bootstrap: separate platform concern for initial site/admin provisioning.
-- /admin/users: existing JSON API contract with canonical API role semantics.
-
-## Target unified tenant UX
-Target:
+Canonical tenant-facing browser surface:
 **Admin -> Användare -> + Skapa användare**
 
-Product choices:
+Canonical route:
+- /ui/admin/users
+
+Product choices exposed to tenant Admin:
 - Admin
 - Kök
 - Avdelning
 
-Conditional fields:
-- Admin: identity + appropriate site access.
-- Kök: identity + site.
-- Avdelning: identity + Department; site should derive from Department where safe.
+Current behavior:
+- no product-level technical username field; tenant-facing creation derives the internal username from normalized email;
+- Admin reuses the current pilot-safe tenant/site scope;
+- Kök reuses the existing one-user/one-site kitchen binding and active authorized Site;
+- Avdelning selects exactly one already-registered Department from the current tenant + active Site; site derives from Department;
+- create/edit/deactivate/reset are exposed through the unified surface;
+- inactive users currently have no reactivation control in the browser UI.
 
-This consolidates existing capabilities. It is not a new auth system. The existing Köksanvändare surface is a useful starting point and should be evolved/reused, not discarded. Do not build a third provisioning flow.
+Compatibility:
+- /ui/admin/kitchen-users may remain as a legacy compatibility route, but is not the primary tenant navigation surface.
+- Systemadmin customer/site bootstrap remains a separate platform concern for initial site/admin provisioning.
+- /admin/users remains the existing JSON API contract with canonical API role semantics.
+
+Checkpoint:
+`f23f96dc690f3c7933bdf5b201b0592e06c409e5`
+`feat(admin): unify tenant user management`
+
+This consolidates existing capabilities. It is not a new auth system. Do not build a third provisioning flow.
 
 ## Department authorization contract
 For unit_portal:
@@ -183,8 +193,10 @@ Implemented:
 - migrated existing users default/backfill `false`;
 - admin-issued initial credentials set it `true`;
 - admin/systemadmin password reset sets it `true`;
-- forced-change users are restricted to the existing account/password flow and logout until they choose a new password;
+- forced-change users are restricted to the password-change flow and logout until they choose a new password;
+- the forced first-login page is a standalone auth gate without normal Admin/Kitchen/Department App Shell navigation;
 - successful self-service password change clears the flag, increments `auth_version`, clears refresh JTI, clears the browser session, and requires login again;
+- normal role-specific Yuplan shell appears only after successful password change + re-login;
 - inactive/deleted account-state checks remain prior authority.
 
 Still not implemented:
@@ -213,30 +225,32 @@ Admin:
 6. Log out.
 
 Department:
-7. Log in.
-8. Land directly in own Department Portal.
-9. Cannot access another Department.
-10. See published menu.
-11. Make allowed menu choice.
-12. Submit week.
+7. Log in with the admin-issued temporary credential.
+8. If `must_change_password=true`, complete the standalone password-change auth gate and re-login.
+9. Reach only the bound Department Portal.
+10. Cannot access another Department.
+11. See published menu.
+12. Make allowed menu choice.
+13. Submit week.
 
 Kitchen:
-13. Log in.
-14. Land in Kitchen.
-15. See the Department's propagated menu-choice state downstream.
+14. Log in.
+15. Land in Kitchen.
+16. See the Department's propagated menu-choice state downstream.
 
 Lifecycle:
-16. Admin resets or deactivates the Department user.
-17. Old auth artifacts follow the locked revocation/account-state contract.
-18. Recovery/reactivation is understandable enough for pilot operations.
+17. Admin resets or deactivates the Department user.
+18. Old auth artifacts follow the locked revocation/account-state contract.
+19. Recovery/reactivation is understandable enough for pilot operations.
 
 ## Implementation sequence
 1. Account-state guard — CLOSED at 5b301e8.
 2. Credential revocation/auth_version — CLOSED at `129d2b8`.
 3. First-login policy — CLOSED at `9873ca3`.
-4. Unified Admin -> Användare UX — ACTIVE PRODUCT GATE; consolidate existing generic and Kitchen provisioning.
-5. Clean-customer A-Z Firefox acceptance.
-6. Pilot freeze.
+4. Unified Admin -> Användare UX — CLOSED at `f23f96d`.
+5. Identity/browser proof for Department creation -> standalone forced password change -> re-login -> correct Department Portal scope — CLOSED during the 33A acceptance work leading to `f23f96d`.
+6. Clean-customer A-Z Kommun acceptance continues with the published-menu -> Department choice -> Kitchen -> Planera -> Produktionsunderlag chain.
+7. Pilot freeze.
 
 ## Explicitly parked beyond first pilot
 - MFA
