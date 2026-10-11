@@ -434,6 +434,75 @@
             });
         }
 
+        function parseVariationTable(raw) {
+            if (!raw) {
+                return [];
+            }
+            try {
+                const parsed = JSON.parse(raw);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function getVariationTable(dialog, scope) {
+            const form = dialog ? dialog.querySelector('#residents-variation-form') : null;
+            if (!form) {
+                return [];
+            }
+            const requestedScope = scope === 'week' ? 'week' : 'forever';
+            const primaryRaw = requestedScope === 'forever'
+                ? form.dataset.variationForeverTable
+                : form.dataset.variationWeekTable;
+            const fallbackRaw = requestedScope === 'forever'
+                ? form.dataset.variationWeekTable
+                : form.dataset.variationForeverTable;
+            const primaryTable = parseVariationTable(primaryRaw);
+            if (primaryTable.length) {
+                return primaryTable;
+            }
+            return parseVariationTable(fallbackRaw);
+        }
+
+        function applyVariationScope(dialog, scope) {
+            const form = dialog ? dialog.querySelector('#residents-variation-form') : null;
+            if (!form) {
+                return;
+            }
+            const rows = getVariationTable(dialog, scope);
+            if (!rows.length) {
+                return;
+            }
+            form.querySelectorAll('input[type="number"][name^="day_"]').forEach(function(input) {
+                const match = /^day_(\d+)_(lunch|dinner)$/.exec(String(input.name || ''));
+                if (!match) {
+                    return;
+                }
+                const weekday = parseInt(match[1], 10);
+                const mealKey = match[2];
+                const row = rows[weekday - 1];
+                if (!row) {
+                    return;
+                }
+                const nextValue = mealKey === 'lunch' ? row.lunch : row.dinner;
+                if (nextValue == null) {
+                    return;
+                }
+                input.value = String(nextValue);
+            });
+        }
+
+        function syncVariationModal(dialog) {
+            const form = dialog ? dialog.querySelector('#residents-variation-form') : null;
+            if (!form) {
+                return;
+            }
+            const scopeRadio = form.querySelector('input[name="mode"]:checked');
+            const scope = scopeRadio ? String(scopeRadio.value || 'forever') : 'forever';
+            applyVariationScope(dialog, scope);
+        }
+
         function toggleNeedPickerOption(dialog, value) {
             const nodes = getNeedPickerNodes(dialog);
             if (!nodes.modifierSelect) {
@@ -683,6 +752,7 @@
             }
             if (dialog.id === 'residents-variation-modal') {
                 seedVariationResidentDelta(dialog.querySelector('#residents-variation-form'));
+                syncVariationModal(dialog);
             }
             if (dialog.id === 'department-delete-modal') {
                 seedDepartmentDeleteModal(dialog, trigger);
@@ -780,6 +850,29 @@
                 return;
             }
             syncVariationResidentDelta(target);
+        });
+
+        document.addEventListener('change', function (event) {
+            const target = event.target;
+            if (!target || !target.matches) {
+                return;
+            }
+            if (target.matches('#residents-variation-form input[name="mode"]')) {
+                const dialog = target.closest('#residents-variation-modal');
+                if (dialog) {
+                    syncVariationModal(dialog);
+                }
+                return;
+            }
+            if (target.matches('#residents-variation-form select[name="selected_week_override"]')) {
+                const dialog = target.closest('#residents-variation-modal');
+                if (dialog) {
+                    const modeRadio = dialog.querySelector('input[name="mode"][value="week"]');
+                    if (modeRadio && modeRadio.checked) {
+                        syncVariationModal(dialog);
+                    }
+                }
+            }
         });
 
         seedVariationResidentDelta(document.querySelector('#residents-variation-form'));

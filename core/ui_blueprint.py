@@ -213,7 +213,8 @@ def _track_pilot_ui_usage():
                                 weekday_repo.delete_override_in_session(tx_db, pending_group_id, weekday, meal_key)
                             else:
                                 weekday_repo.set_override_in_session(tx_db, pending_group_id, weekday, meal_key, int(quantity))
-                    validate_special_diet_total_in_session(tx_db, dept_id, resident_count=resident_count_int)
+                    if _department_uses_fixed_resident_capacity(resident_count_mode):
+                        validate_special_diet_total_in_session(tx_db, dept_id, resident_count=resident_count_int)
                 session.pop("admin_need_conflict_state", None)
                 flash(f"Avdelning '{name}' uppdaterad.", "success")
                 return redirect(url_for("ui.admin_departments_list"))
@@ -6713,6 +6714,10 @@ def _department_resident_count_presentation(resident_count_mode: str | None, res
     }
 
 
+def _department_uses_fixed_resident_capacity(resident_count_mode: str | None) -> bool:
+    return str(resident_count_mode or "").strip() == "fixed"
+
+
 def _build_department_overview_sections(department_id: str, *, site_id: str | None) -> dict[str, object]:
     """Shape compact read-only department overview data shared by detail and quick view."""
     vm: dict[str, object] = {
@@ -6863,7 +6868,7 @@ def admin_departments_update_order(dept_id: str):
     db = get_session()
     try:
         row = db.execute(
-            text("SELECT id FROM departments WHERE id=:id AND site_id=:sid"),
+            text("SELECT id, COALESCE(resident_count_mode, 'fixed') FROM departments WHERE id=:id AND site_id=:sid"),
             {"id": dept_id, "sid": active_site_id},
         ).fetchone()
         if not row:
@@ -7134,35 +7139,52 @@ def admin_departments_edit_form(dept_id: str):
     
     # Prepare variation prefill for current week
     selected_week = current_week
-    weekly_table = None
+    selected_week_table = None
+    forever_table = None
+    initial_variation_scope = "forever"
+    has_forever_schedule = False
+    has_selected_week_override = False
     resident_variation_has_changes = False
     try:
         from core.residents_schedule_repo import ResidentsScheduleRepo
         sched_repo = ResidentsScheduleRepo()
         week_sched = sched_repo.get_week(dept_id, selected_week)
         forever_sched = sched_repo.get_forever(dept_id)
-        if week_sched or forever_sched:
-            day_names = ["Mån", "Tis", "Ons", "Tors", "Fre", "Lör", "Sön"]
-            counts_idx = {(int(it["weekday"]), str(it["meal"])): int(it["count"]) for it in week_sched}
-            forever_idx = {(int(it["weekday"]), str(it["meal"])): int(it["count"]) for it in forever_sched}
-            weekly_table = []
-            fixed = int(department["resident_count_fixed"] or 0)
+        has_forever_schedule = bool(forever_sched)
+        has_selected_week_override = bool(week_sched)
+        if has_forever_schedule:
+            initial_variation_scope = "forever"
+        elif has_selected_week_override:
+            initial_variation_scope = "week"
+        day_names = ["Mån", "Tis", "Ons", "Tors", "Fre", "Lör", "Sön"]
+        fixed = int(department["resident_count_fixed"] or 0)
+
+        def _rows_from_schedule(schedule_rows: list[dict]) -> list[dict[str, object]]:
+            schedule_idx = {(int(it["weekday"]), str(it["meal"])): int(it["count"]) for it in schedule_rows}
+            rows: list[dict[str, object]] = []
             for dow in range(1, 8):
-                rl = counts_idx.get((dow, "lunch"))
-                rd = counts_idx.get((dow, "dinner"))
-                if rl is None:
-                    rl = forever_idx.get((dow, "lunch"))
-                if rd is None:
-                    rd = forever_idx.get((dow, "dinner"))
-                if int(rl if rl is not None else fixed) != fixed or int(rd if rd is not None else fixed) != fixed:
+                rows.append(
+                    {
+                        "weekday": dow,
+                        "weekday_label": day_names[dow - 1],
+                        "lunch": int(schedule_idx.get((dow, "lunch"), fixed)),
+                        "dinner": int(schedule_idx.get((dow, "dinner"), fixed)),
+                    }
+                )
+            return rows
+
+        selected_week_table = _rows_from_schedule(week_sched if week_sched else forever_sched)
+        forever_table = _rows_from_schedule(forever_sched if forever_sched else week_sched)
+        weekly_table = selected_week_table
+        if weekly_table:
+            for row in weekly_table:
+                if int(row["lunch"]) != fixed or int(row["dinner"]) != fixed:
                     resident_variation_has_changes = True
-                weekly_table.append({
-                    "weekday": day_names[dow-1],
-                    "lunch": int(rl if rl is not None else fixed),
-                    "dinner": int(rd if rd is not None else fixed),
-                })
+                    break
     except Exception:
         weekly_table = None
+        selected_week_table = None
+        forever_table = None
 
     resident_variation_status = "Samma antal"
     if weekly_table and resident_variation_has_changes:
@@ -7178,6 +7200,12 @@ def admin_departments_edit_form(dept_id: str):
         "selected_residence_id": selected_residence_id,
         "selected_week": selected_week,
         "weekly_table": weekly_table,
+        "resident_variation_initial_table": forever_table if initial_variation_scope == "forever" else selected_week_table,
+        "resident_variation_selected_week_table": selected_week_table,
+        "resident_variation_forever_table": forever_table,
+        "has_forever_schedule": has_forever_schedule,
+        "has_selected_week_override": has_selected_week_override,
+        "initial_variation_scope": initial_variation_scope,
         "resident_variation_status": resident_variation_status,
         "diet_types": [],
         "diet_defaults": {},
@@ -7565,15 +7593,16 @@ def admin_departments_update(dept_id: str):
     db = get_session()
     try:
         dept_row = db.execute(
-            text("SELECT version, COALESCE(resident_count_fixed, 0), COALESCE(residence_id, '') FROM departments WHERE id = :id AND site_id = :sid"),
+            text("SELECT version, COALESCE(resident_count_mode, 'fixed'), COALESCE(resident_count_fixed, 0), COALESCE(residence_id, '') FROM departments WHERE id = :id AND site_id = :sid"),
             {"id": dept_id, "sid": active_site_id}
         ).fetchone()
         if not dept_row:
             flash("Avdelning hittades inte för vald site.", "error")
             return redirect(url_for("ui.admin_departments_list"))
         current_version = int(dept_row[0] or 0)
-        current_resident_count = int(dept_row[1] or 0)
-        current_residence_id = str(dept_row[2] or "").strip() or None
+        resident_count_mode = str(dept_row[1] or "fixed")
+        current_resident_count = int(dept_row[2] or 0)
+        current_residence_id = str(dept_row[3] or "").strip() or None
     finally:
         db.close()
     
@@ -8015,21 +8044,6 @@ def admin_departments_save_requirement_group(dept_id: str):
         pending_group_repo = DepartmentRequirementGroupsRepo()
         weekday_repo = DepartmentRequirementGroupWeekdayOverridesRepo()
         with tx_db.begin():
-            if resulting_active:
-                resident_count_row = tx_db.execute(
-                    text("SELECT COALESCE(resident_count_fixed, 0) FROM departments WHERE id=:id AND site_id=:sid"),
-                    {"id": dept_id, "sid": active_site_id},
-                ).fetchone()
-                resident_count_fixed = int(resident_count_row[0] or 0) if resident_count_row else 0
-                current_total = resolve_effective_special_diet_total_in_session(tx_db, dept_id)
-                if group_id and existing_group is not None:
-                    current_total -= int(existing_group.get("default_quantity") or 0)
-                validate_special_diet_total_in_session(
-                    tx_db,
-                    dept_id,
-                    resident_count=resident_count_fixed,
-                    expected_total=current_total + submitted_default_quantity,
-                )
             saved_group = pending_group_repo.save_group_in_session(
                 tx_db,
                 group_id=group_id,
@@ -8047,9 +8061,6 @@ def admin_departments_save_requirement_group(dept_id: str):
                         weekday_repo.delete_override_in_session(tx_db, pending_group_id, weekday, meal_key)
                     else:
                         weekday_repo.set_override_in_session(tx_db, pending_group_id, weekday, meal_key, quantity)
-            violations = collect_active_group_context_violations_in_session(tx_db, dept_id)
-            if violations:
-                raise RequirementCountExceededError(violations[0])
             session.pop("admin_need_conflict_state", None)
             flash("Registrerat behov sparat.", "success")
     except RequirementCountExceededError as exc:
@@ -8274,10 +8285,11 @@ def admin_departments_edit_save_service_addons(dept_id: str):
             db = get_session()
             try:
                 row = db.execute(
-                    text("SELECT COALESCE(resident_count_fixed, 0) FROM departments WHERE id=:id LIMIT 1"),
+                    text("SELECT COALESCE(resident_count_mode, 'fixed'), COALESCE(resident_count_fixed, 0) FROM departments WHERE id=:id LIMIT 1"),
                     {"id": dept_id},
                 ).fetchone()
-                resident_count = int(row[0] or 0) if row else None
+                resident_count_mode = str(row[0] or "fixed") if row else "fixed"
+                resident_count = int(row[1] or 0) if row and resident_count_mode == "fixed" else None
             finally:
                 db.close()
             if resident_count is not None:

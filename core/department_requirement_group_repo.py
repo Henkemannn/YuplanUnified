@@ -8,10 +8,9 @@ from sqlalchemy import text
 
 from .db import get_session
 from .department_requirement_group_invariant import (
-    department_fixed_resident_count,
+    RequirementCountExceededError,
     collect_active_group_context_violations_in_session,
     resolve_effective_special_diet_total_in_session,
-    format_requirement_count_violations,
     validate_special_diet_total_in_session,
 )
 from .models import (
@@ -96,6 +95,25 @@ class DepartmentRequirementGroupsRepo:
             raise ValueError("department_site_missing")
         return site_id
 
+    def _department_resident_capacity_limit(self, db, department_id: str) -> int | None:
+        row = db.execute(
+            text(
+                """
+                SELECT COALESCE(resident_count_mode, 'fixed'), COALESCE(resident_count_fixed, 0)
+                FROM departments
+                WHERE id=:id
+                LIMIT 1
+                """
+            ),
+            {"id": str(department_id)},
+        ).fetchone()
+        if row is None:
+            raise ValueError("department_not_found")
+        mode = str(row[0] or "fixed").strip()
+        if mode == "per_day_meal":
+            return None
+        return int(row[1] or 0)
+
     def _load_atomic_requirement(self, db, dietary_type_id: int, department_site_id: str) -> DietaryType:
         requirement = db.get(DietaryType, int(dietary_type_id))
         if requirement is None:
@@ -165,14 +183,15 @@ class DepartmentRequirementGroupsRepo:
                 self._load_atomic_requirement(db, dietary_type_id, department_site_id)
                 for dietary_type_id in normalized_requirement_ids
             ]
-            current_total = resolve_effective_special_diet_total_in_session(db, department_id)
-            resident_count = department_fixed_resident_count(department_id)
-            validate_special_diet_total_in_session(
-                db,
-                department_id,
-                resident_count=resident_count,
-                expected_total=current_total + quantity,
-            )
+            resident_count = self._department_resident_capacity_limit(db, department_id)
+            if resident_count is not None:
+                current_total = resolve_effective_special_diet_total_in_session(db, department_id)
+                validate_special_diet_total_in_session(
+                    db,
+                    department_id,
+                    resident_count=resident_count,
+                    expected_total=current_total + quantity,
+                )
             group = DepartmentRequirementGroup(
                 id=str(uuid.uuid4()),
                 department_id=str(department_id),
@@ -261,15 +280,16 @@ class DepartmentRequirementGroupsRepo:
             if default_quantity is not None:
                 new_quantity = self._normalize_default_quantity(default_quantity)
                 if resulting_active:
-                    current_total = resolve_effective_special_diet_total_in_session(db, group.department_id)
-                    old_quantity = int(group.default_quantity or 0)
-                    resident_count = department_fixed_resident_count(group.department_id)
-                    validate_special_diet_total_in_session(
-                        db,
-                        group.department_id,
-                        resident_count=resident_count,
-                        expected_total=current_total - old_quantity + new_quantity,
-                    )
+                    resident_count = self._department_resident_capacity_limit(db, group.department_id)
+                    if resident_count is not None:
+                        current_total = resolve_effective_special_diet_total_in_session(db, group.department_id)
+                        old_quantity = int(group.default_quantity or 0)
+                        validate_special_diet_total_in_session(
+                            db,
+                            group.department_id,
+                            resident_count=resident_count,
+                            expected_total=current_total - old_quantity + new_quantity,
+                        )
                 db.execute(
                     text("UPDATE department_requirement_groups SET default_quantity=:default_quantity WHERE id=:id"),
                     {"default_quantity": int(new_quantity), "id": str(group.id)},
@@ -365,11 +385,6 @@ class DepartmentRequirementGroupsRepo:
                 label=label,
                 is_active=is_active,
             )
-            violations = collect_active_group_context_violations_in_session(db, department_id)
-            if violations:
-                from .department_requirement_group_invariant import RequirementCountExceededError
-
-                raise RequirementCountExceededError(violations[0])
             db.commit()
             return result
         except Exception:
@@ -407,15 +422,11 @@ class DepartmentRequirementGroupsRepo:
         if group is not None and str(group.department_id) != str(department_id):
             raise ValueError("department_requirement_group_not_found")
         resulting_active = True if group is None and is_active is None else (bool(group.is_active) if is_active is None else bool(is_active))
-        if resulting_active:
+        resident_count = self._department_resident_capacity_limit(db, department_id)
+        if resulting_active and resident_count is not None:
             current_total = resolve_effective_special_diet_total_in_session(db, department_id)
             if group is not None:
                 current_total -= int(group.default_quantity or 0)
-            resident_row = db.execute(
-                text("SELECT COALESCE(resident_count_fixed, 0) FROM departments WHERE id=:id"),
-                {"id": str(department_id)},
-            ).fetchone()
-            resident_count = int(resident_row[0] or 0) if resident_row else 0
             validate_special_diet_total_in_session(
                 db,
                 department_id,
@@ -470,6 +481,10 @@ class DepartmentRequirementGroupsRepo:
             )
 
         db.flush()
+        if resident_count is not None:
+            violations = collect_active_group_context_violations_in_session(db, department_id)
+            if violations:
+                raise RequirementCountExceededError(violations[0])
         return self._serialize_group(db, group)
 
     def deactivate_group(self, group_id: str) -> dict | None:

@@ -76,6 +76,29 @@ def _seed_tuesday_resident_context(department_id: str, *, lunch: int, dinner: in
         ],
     )
 
+
+def _resident_schedule_snapshot(department_id: str) -> list[tuple[int | None, int, str, int]]:
+    db = get_session()
+    try:
+        rows = db.execute(
+            text(
+                """
+                SELECT week, weekday, meal, count
+                FROM department_residents_schedule
+                WHERE department_id=:id
+                ORDER BY COALESCE(week, -1), weekday, meal
+                """
+            ),
+            {"id": department_id},
+        ).fetchall()
+        return [
+            (None if row[0] is None else int(row[0]), int(row[1]), str(row[2]), int(row[3] or 0))
+            for row in rows
+        ]
+    finally:
+        db.close()
+
+
 def test_edit_form_shows_specialkost_heading(client_admin):
     # Create a department
     dep_id = str(uuid.uuid4())
@@ -425,6 +448,7 @@ def test_edit_form_renders_requirement_groups_and_can_create_update(client_admin
         headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
     assert create_resp.status_code == 200
+    assert "Registrerade kostbehov blir fler än det nya boendeantalet." not in create_resp.get_data(as_text=True)
 
     repo = DepartmentRequirementGroupsRepo()
     groups = repo.list_for_department(dep["id"])
@@ -449,11 +473,76 @@ def test_edit_form_renders_requirement_groups_and_can_create_update(client_admin
         headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
     assert update_resp.status_code == 200
+    assert "Registrerade kostbehov blir fler än det nya boendeantalet." not in update_resp.get_data(as_text=True)
 
     reread = repo.get_group(group_id)
     assert reread is not None
     assert reread["primary_requirement_id"] == flytande_id
     assert reread["default_quantity"] == 3
+
+
+def test_edit_form_variable_mode_does_not_emit_zero_capacity_warning_or_mutate_schedule(client_admin):
+    site, _ = SitesRepo().create_site(f"Variable specialkost site {uuid.uuid4()}")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Varierad",
+        resident_count_mode="per_day_meal",
+        resident_count_fixed=0,
+    )
+    meal_id = DietTypesRepo().create(site_id=site["id"], name="Timbal", default_select=False, semantics="atomic")
+    from core.residents_schedule_repo import ResidentsScheduleRepo
+
+    current_week = date.today().isocalendar()[1]
+    ResidentsScheduleRepo().upsert_items(
+        dep["id"],
+        current_week,
+        [
+            {"weekday": 1, "meal": "lunch", "count": 10},
+            {"weekday": 1, "meal": "dinner", "count": 10},
+            {"weekday": 2, "meal": "lunch", "count": 10},
+            {"weekday": 2, "meal": "dinner", "count": 10},
+            {"weekday": 3, "meal": "lunch", "count": 12},
+            {"weekday": 3, "meal": "dinner", "count": 12},
+            {"weekday": 4, "meal": "lunch", "count": 10},
+            {"weekday": 4, "meal": "dinner", "count": 10},
+            {"weekday": 5, "meal": "lunch", "count": 12},
+            {"weekday": 5, "meal": "dinner", "count": 14},
+            {"weekday": 6, "meal": "lunch", "count": 10},
+            {"weekday": 6, "meal": "dinner", "count": 10},
+            {"weekday": 7, "meal": "lunch", "count": 10},
+            {"weekday": 7, "meal": "dinner", "count": 10},
+        ],
+    )
+    schedule_before = _resident_schedule_snapshot(dep["id"])
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+
+    page = client_admin.get(f"/ui/admin/departments/{dep['id']}/edit", headers={"X-User-Role": "admin", "X-Tenant-Id": "1"})
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    assert "Varierar per dag/måltid" in html
+    assert "0 boende" not in html
+    assert _resident_schedule_snapshot(dep["id"]) == schedule_before
+
+    resp = client_admin.post(
+        f"/ui/admin/departments/{dep['id']}/requirement-groups",
+        data={
+            "primary_requirement_id": str(meal_id),
+            "default_quantity": "1",
+            "is_active": "1",
+        },
+        follow_redirects=True,
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "Registrerade kostbehov blir totalt 1 personer, men avdelningen har 0 boende." not in body
+    assert "Registrerade kostbehov blir fler än det nya boendeantalet." not in body
+    assert _resident_schedule_snapshot(dep["id"]) == schedule_before
+    groups = DepartmentRequirementGroupsRepo().list_for_department(dep["id"])
+    assert len(groups) == 1
+    assert groups[0]["default_quantity"] == 1
 
 
 def test_specialkost_create_path_seeds_atomic_requirement_types_for_department_edit(client_admin):
@@ -591,6 +680,172 @@ def test_edit_form_saves_residents_variation(client_admin):
     assert found[(1, "lunch")] == 7
     assert found[(1, "dinner")] == 8
     assert found[(7, "dinner")] == 20
+
+
+def test_edit_form_variation_modal_defaults_to_forever_when_both_scopes_exist(client_admin):
+    site, _ = SitesRepo().create_site(f"Variation scope site {uuid.uuid4()}")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Variation Scope",
+        resident_count_mode="per_day_meal",
+        resident_count_fixed=0,
+    )
+
+    from core.residents_schedule_repo import ResidentsScheduleRepo
+
+    week = date.today().isocalendar()[1]
+    ResidentsScheduleRepo().upsert_items(
+        dep["id"],
+        None,
+        [
+            {"weekday": 1, "meal": "lunch", "count": 10},
+            {"weekday": 1, "meal": "dinner", "count": 10},
+            {"weekday": 2, "meal": "lunch", "count": 10},
+            {"weekday": 2, "meal": "dinner", "count": 10},
+            {"weekday": 3, "meal": "lunch", "count": 12},
+            {"weekday": 3, "meal": "dinner", "count": 12},
+            {"weekday": 4, "meal": "lunch", "count": 10},
+            {"weekday": 4, "meal": "dinner", "count": 10},
+            {"weekday": 5, "meal": "lunch", "count": 12},
+            {"weekday": 5, "meal": "dinner", "count": 14},
+            {"weekday": 6, "meal": "lunch", "count": 10},
+            {"weekday": 6, "meal": "dinner", "count": 10},
+            {"weekday": 7, "meal": "lunch", "count": 10},
+            {"weekday": 7, "meal": "dinner", "count": 10},
+        ],
+    )
+    ResidentsScheduleRepo().upsert_items(
+        dep["id"],
+        week,
+        [
+            {"weekday": 1, "meal": "lunch", "count": 7},
+            {"weekday": 1, "meal": "dinner", "count": 8},
+            {"weekday": 2, "meal": "lunch", "count": 9},
+            {"weekday": 2, "meal": "dinner", "count": 10},
+            {"weekday": 3, "meal": "lunch", "count": 11},
+            {"weekday": 3, "meal": "dinner", "count": 12},
+            {"weekday": 4, "meal": "lunch", "count": 13},
+            {"weekday": 4, "meal": "dinner", "count": 14},
+            {"weekday": 5, "meal": "lunch", "count": 15},
+            {"weekday": 5, "meal": "dinner", "count": 16},
+            {"weekday": 6, "meal": "lunch", "count": 17},
+            {"weekday": 6, "meal": "dinner", "count": 18},
+            {"weekday": 7, "meal": "lunch", "count": 19},
+            {"weekday": 7, "meal": "dinner", "count": 20},
+        ],
+    )
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+
+    page = client_admin.get(f"/ui/admin/departments/{dep['id']}/edit", headers={"X-User-Role": "admin", "X-Tenant-Id": "1"})
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    assert 'data-variation-initial-scope="forever"' in html
+    assert 'input type="radio" name="mode" value="forever" checked' in html
+    assert 'input type="radio" name="mode" value="week" checked' not in html
+    assert f"Egen inställning finns för v.{week}." in html
+    assert 'name="day_1_lunch" value="10"' in html
+    assert 'name="day_1_dinner" value="10"' in html
+    assert '"lunch": 7' in html
+    assert '"dinner": 8' in html
+
+
+def test_edit_form_variation_modal_uses_week_scope_when_only_week_rows_exist(client_admin):
+    site, _ = SitesRepo().create_site(f"Variation week scope site {uuid.uuid4()}")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Variation Week Scope",
+        resident_count_mode="per_day_meal",
+        resident_count_fixed=0,
+    )
+
+    from core.residents_schedule_repo import ResidentsScheduleRepo
+
+    week = date.today().isocalendar()[1]
+    ResidentsScheduleRepo().upsert_items(
+        dep["id"],
+        week,
+        [
+            {"weekday": 1, "meal": "lunch", "count": 7},
+            {"weekday": 1, "meal": "dinner", "count": 8},
+            {"weekday": 2, "meal": "lunch", "count": 9},
+            {"weekday": 2, "meal": "dinner", "count": 10},
+            {"weekday": 3, "meal": "lunch", "count": 11},
+            {"weekday": 3, "meal": "dinner", "count": 12},
+            {"weekday": 4, "meal": "lunch", "count": 13},
+            {"weekday": 4, "meal": "dinner", "count": 14},
+            {"weekday": 5, "meal": "lunch", "count": 15},
+            {"weekday": 5, "meal": "dinner", "count": 16},
+            {"weekday": 6, "meal": "lunch", "count": 17},
+            {"weekday": 6, "meal": "dinner", "count": 18},
+            {"weekday": 7, "meal": "lunch", "count": 19},
+            {"weekday": 7, "meal": "dinner", "count": 20},
+        ],
+    )
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+
+    page = client_admin.get(f"/ui/admin/departments/{dep['id']}/edit", headers={"X-User-Role": "admin", "X-Tenant-Id": "1"})
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    assert 'data-variation-initial-scope="week"' in html
+    assert 'input type="radio" name="mode" value="week" checked' in html
+    assert 'input type="radio" name="mode" value="forever" checked' not in html
+    assert f"Egen inställning finns för v.{week}." in html
+    assert 'name="day_1_lunch" value="7"' in html
+    assert 'name="day_1_dinner" value="8"' in html
+    assert 'name="day_7_lunch" value="19"' in html
+    assert 'name="day_7_dinner" value="20"' in html
+
+
+def test_edit_form_saves_forever_variation_rows_with_null_week(client_admin):
+    site, _ = SitesRepo().create_site(f"Variation forever save site {uuid.uuid4()}")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Forever Save",
+        resident_count_mode="per_day_meal",
+        resident_count_fixed=0,
+    )
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+
+    resp = client_admin.post(
+        f"/ui/admin/departments/{dep['id']}/variation",
+        data={
+            "selected_week": "12",
+            "selected_week_override": "12",
+            "mode": "forever",
+            "day_1_lunch": "7",
+            "day_1_dinner": "8",
+            "day_2_lunch": "9",
+            "day_2_dinner": "10",
+            "day_3_lunch": "11",
+            "day_3_dinner": "12",
+            "day_4_lunch": "13",
+            "day_4_dinner": "14",
+            "day_5_lunch": "15",
+            "day_5_dinner": "16",
+            "day_6_lunch": "17",
+            "day_6_dinner": "18",
+            "day_7_lunch": "19",
+            "day_7_dinner": "20",
+        },
+        follow_redirects=True,
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert resp.status_code == 200
+
+    from core.residents_schedule_repo import ResidentsScheduleRepo
+
+    rows = ResidentsScheduleRepo().get_forever(dep["id"])
+    found = {(int(row["weekday"]), str(row["meal"])): int(row["count"]) for row in rows}
+    assert found[(1, "lunch")] == 7
+    assert found[(1, "dinner")] == 8
+    assert found[(7, "dinner")] == 20
+    assert ResidentsScheduleRepo().get_week(dep["id"], 12) == []
 
 
 def test_edit_form_allows_site_catalog_requirement_creation_without_department_defaults(client_admin):

@@ -787,7 +787,15 @@
             <button type="button" class="ua-modal-close" data-modal-close aria-label="Stäng">&times;</button>
         </header>
         <div class="ua-modal-body admin-variation-modal__body">
-            <form id="residents-variation-form" method="post" action="{{ url_for('ui.admin_department_save_variation', department_id=vm.department.id) }}" class="admin-variation-modal__form">
+            <form id="residents-variation-form"
+                  method="post"
+                  action="{{ url_for('ui.admin_department_save_variation', department_id=vm.department.id) }}"
+                  class="admin-variation-modal__form"
+                  data-variation-initial-scope="{{ vm.initial_variation_scope }}"
+                  data-variation-selected-week="{{ vm.selected_week }}"
+                  data-variation-has-selected-week-override="{{ '1' if vm.has_selected_week_override else '' }}"
+                  data-variation-forever-table='{{ vm.resident_variation_forever_table | tojson }}'
+                  data-variation-week-table='{{ vm.resident_variation_selected_week_table | tojson }}'>
                 {{ csrf_token_input()|safe }}
                 <input type="hidden" name="selected_year" value="{{ vm.current_year }}">
                 <input type="hidden" name="selected_week" value="{{ vm.selected_week if vm.selected_week else (vm.current_week if vm.current_week else 1) }}">
@@ -800,17 +808,18 @@
                             <th><span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🌙</span> Kväll</span></th>
                         </tr>
                         {% set day_names = ['Mån','Tis','Ons','Tors','Fre','Lör','Sön'] %}
+                        {% set variation_rows = vm.resident_variation_initial_table or vm.weekly_table or [] %}
                         {% for dow in range(1,8) %}
                             {% set lunch_default = vm.department.resident_count_fixed %}
                             {% set dinner_default = vm.department.resident_count_fixed %}
-                            {% if vm.weekly_table %}
-                                {% set lunch_default = vm.weekly_table[dow-1].lunch %}
-                                {% set dinner_default = vm.weekly_table[dow-1].dinner %}
+                            {% if variation_rows %}
+                                {% set lunch_default = variation_rows[dow-1].lunch %}
+                                {% set dinner_default = variation_rows[dow-1].dinner %}
                             {% endif %}
                             <tr>
                                 <td>{{ day_names[dow-1] }}</td>
-                                <td><input type="number" name="day_{{ dow }}_lunch" value="{{ lunch_default }}" min="0" class="yp-input admin-variation-input"></td>
-                                <td><input type="number" name="day_{{ dow }}_dinner" value="{{ dinner_default }}" min="0" class="yp-input admin-variation-input"></td>
+                                <td><input type="number" name="day_{{ dow }}_lunch" value="{{ lunch_default }}" min="0" class="yp-input admin-variation-input" data-variation-day="{{ dow }}" data-variation-meal="lunch"></td>
+                                <td><input type="number" name="day_{{ dow }}_dinner" value="{{ dinner_default }}" min="0" class="yp-input admin-variation-input" data-variation-day="{{ dow }}" data-variation-meal="dinner"></td>
                             </tr>
                         {% endfor %}
                     </table>
@@ -821,16 +830,19 @@
                         <h3 class="admin-variation-scope__title">Gäller:</h3>
                         <div class="admin-variation-scope__options">
                             <label class="admin-variation-scope__option admin-variation-scope__option--week">
-                                <input type="radio" name="mode" value="week" checked>
+                                <input type="radio" name="mode" value="week" {% if vm.initial_variation_scope == 'week' %}checked{% endif %}>
                                 <span>Endast för vecka</span>
                                 <select name="selected_week_override" class="yp-input admin-variation-week-select">
                                     {% for w in range(1,53) %}
                                         <option value="{{ w }}" {% if vm.selected_week and w == vm.selected_week %}selected{% endif %}>{{ w }}</option>
                                     {% endfor %}
                                 </select>
+                                {% if vm.has_selected_week_override %}
+                                <p class="yp-form-help admin-variation-scope__help">Egen inställning finns för v.{{ vm.selected_week }}.</p>
+                                {% endif %}
                             </label>
                             <label class="admin-variation-scope__option admin-variation-scope__option--forever">
-                                <input type="radio" name="mode" value="forever">
+                                <input type="radio" name="mode" value="forever" {% if vm.initial_variation_scope == 'forever' %}checked{% endif %}>
                                 <span>Tills vidare</span>
                             </label>
                         </div>

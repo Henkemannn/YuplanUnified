@@ -514,22 +514,25 @@ def _resolve_default_tenant_id(db) -> int | None:
         return None
 
 
-def _resident_count_for_department(db, dept_id: str) -> int:
+def _resident_count_for_department(db, dept_id: str) -> int | None:
     row = db.execute(
-        text("SELECT COALESCE(resident_count_fixed, 0) FROM departments WHERE id=:id LIMIT 1"),
+        text("SELECT COALESCE(resident_count_mode, 'fixed'), COALESCE(resident_count_fixed, 0) FROM departments WHERE id=:id LIMIT 1"),
         {"id": str(dept_id)},
     ).fetchone()
     if not row:
         raise ValueError("department_not_found")
-    return int(row[0] or 0)
+    mode = str(row[0] or "fixed").strip()
+    if mode == "per_day_meal":
+        return None
+    return int(row[1] or 0)
 
 
-def _validate_service_addon_count_limit(count: int | None, resident_count: int) -> int | None:
+def _validate_service_addon_count_limit(count: int | None, resident_count: int | None) -> int | None:
     if count is None:
         return None
     if count < 0:
         raise ValueError("service_addon_count_invalid")
-    if count > int(resident_count):
+    if resident_count is not None and count > int(resident_count):
         raise ValueError("service_addon_count_exceeds_resident_count")
     return int(count)
 

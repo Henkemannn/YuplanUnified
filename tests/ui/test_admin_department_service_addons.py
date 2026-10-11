@@ -508,6 +508,41 @@ def test_admin_department_service_addons_variable_department_inputs_do_not_get_z
     assert 'name="service_addon_dinner_count"' in dialog_block
 
 
+def test_admin_department_service_addons_variable_department_can_save_custom_count_without_zero_capacity_flash(app_session, client_admin):
+    site, _ = SitesRepo().create_site(f"Service addon variable save site {uuid.uuid4()}")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Variabel Spara",
+        resident_count_mode="per_day_meal",
+        resident_count_fixed=0,
+    )
+    addon_repo = ServiceAddonsRepo()
+    addon_id = addon_repo.create_if_missing("Variabel sås", site_id=site["id"], addon_family="ovrigt")
+
+    _set_site(client_admin, site["id"])
+    rv = client_admin.post(
+        f"/ui/admin/departments/{dep['id']}/edit/service-addons",
+        headers=_h("admin"),
+        data={
+            "service_addon_mode": "add",
+            "service_addon_id": addon_id,
+            "service_addon_lunch_count": "13",
+            "service_addon_dinner_count": "",
+            "service_addon_note": "Variabel",
+        },
+        follow_redirects=True,
+    )
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "Avdelningen har 0 boende." not in body
+    assert "Antalet kan inte vara högre än avdelningens 0 boende." not in body
+    rows = DepartmentServiceAddonsRepo().list_for_department(dep["id"], site_id=site["id"])
+    assert len(rows) == 1
+    assert rows[0]["lunch_count"] == 13
+    assert rows[0]["dinner_count"] is None
+    assert rows[0]["note"] == "Variabel"
+
+
 def test_admin_department_service_addons_zero_count_rejected_and_site_isolated(app_session, client_admin):
     site_a, _ = SitesRepo().create_site(f"Service addon site A {uuid.uuid4()}")
     site_b, _ = SitesRepo().create_site(f"Service addon site B {uuid.uuid4()}")
