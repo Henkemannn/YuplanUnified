@@ -56,7 +56,7 @@
           <select id="department_id" name="department_id" class="yp-input" {% if (vm.user and vm.user.role == 'unit_portal') or vm.selected_role == 'unit_portal' %}required{% endif %}>
             <option value="">Välj avdelning</option>
             {% for dept in vm.department_choices %}
-              <option value="{{ dept.id }}" {% if vm.user and vm.user.department_id == dept.id %}selected{% endif %}>{{ dept.site_name }} – {{ dept.name }}</option>
+              <option value="{{ dept.id }}" {% if vm.user and vm.user.department_id == dept.id %}selected{% endif %}>{{ dept.display_label }}</option>
             {% endfor %}
           </select>
           <small class="yp-form-help">Endast avdelningar inom den aktiva siten visas.</small>

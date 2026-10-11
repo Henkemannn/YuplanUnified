@@ -16,6 +16,7 @@ import uuid
 import pytest
 from sqlalchemy import text
 
+from core.admin_repo import ResidencesRepo
 from core.db import get_session
 
 
@@ -42,8 +43,18 @@ def _list_csrf(client_admin) -> str:
     return _csrf_from_html(resp.data.decode("utf-8"))
 
 
-def _seed_unit_portal_department(app, *, tenant_id: int, site_id: str, department_id: str, site_name: str = "Site") -> None:
+def _seed_unit_portal_department(
+    app,
+    *,
+    tenant_id: int,
+    site_id: str,
+    department_id: str,
+    site_name: str = "Site",
+    department_name: str | None = None,
+    residence_name: str | None = None,
+) -> None:
     with app.app_context():
+        residence_id = ResidencesRepo().create_for_site(site_id, residence_name)["id"] if residence_name else None
         db = get_session()
         try:
             db.execute(text("INSERT OR IGNORE INTO tenants(id, name, active) VALUES(:tid, :name, 1)"), {"tid": tenant_id, "name": f"Tenant {tenant_id}"})
@@ -52,8 +63,16 @@ def _seed_unit_portal_department(app, *, tenant_id: int, site_id: str, departmen
                 {"sid": site_id, "name": site_name, "tid": tenant_id},
             )
             db.execute(
-                text("INSERT OR REPLACE INTO departments(id, site_id, name, resident_count_mode) VALUES(:did, :sid, :name, 'manual')"),
-                {"did": department_id, "sid": site_id, "name": f"Dept {department_id[:8]}"},
+                text(
+                    "INSERT OR REPLACE INTO departments(id, site_id, name, residence_id, resident_count_mode) "
+                    "VALUES(:did, :sid, :name, :rid, 'manual')"
+                ),
+                {
+                    "did": department_id,
+                    "sid": site_id,
+                    "name": department_name or f"Dept {department_id[:8]}",
+                    "rid": residence_id,
+                },
             )
             db.commit()
         finally:
@@ -195,6 +214,46 @@ def test_users_list_shows_users(client_admin):
     assert "Staff User Test" in html
 
 
+def test_users_list_shows_residence_department_label(client_admin):
+    """Test user list scopes use residence + department labels."""
+    app = client_admin.application
+    _, active_site_id = _current_admin_scope(client_admin)
+    dept_id = str(uuid.uuid4())
+    _seed_unit_portal_department(
+        app,
+        tenant_id=1,
+        site_id=active_site_id,
+        department_id=dept_id,
+        site_name="Centralköket",
+        department_name="Avdelning 2",
+        residence_name="Kaktusen",
+    )
+    with app.app_context():
+        db = get_session()
+        try:
+            db.execute(
+                text(
+                    "INSERT INTO users (tenant_id, email, password_hash, role, username, full_name, is_active, department_id) "
+                    "VALUES (1, :email, 'hash', 'unit_portal', :username, 'List User', 1, :department_id)"
+                ),
+                {
+                    "email": f"list-user-{uuid.uuid4().hex[:8]}@example.com",
+                    "username": f"list-user-{uuid.uuid4().hex[:8]}",
+                    "department_id": dept_id,
+                },
+            )
+            db.commit()
+        finally:
+            db.close()
+
+    resp = client_admin.get("/ui/admin/users", headers=_h("admin"))
+    html = resp.data.decode("utf-8")
+
+    assert resp.status_code == 200
+    assert "Kaktusen \u2013 Avdelning 2" in html
+    assert "Centralköket / Avdelning 2" not in html
+
+
 def test_users_list_shows_roles(client_admin):
     """Test users list displays user roles"""
     app = client_admin.application
@@ -303,6 +362,53 @@ def test_users_new_form_limits_departments_to_active_site(client_admin):
     assert "Skapa en avdelning först" not in html
 
 
+def test_users_new_form_uses_residence_labels_for_departments(client_admin):
+    """Test the department selector labels combine residence and department, not site and department."""
+    app = client_admin.application
+    _, active_site_id = _current_admin_scope(client_admin)
+    dept_with_residence = str(uuid.uuid4())
+    dept_other_residence = str(uuid.uuid4())
+    dept_without_residence = str(uuid.uuid4())
+    _seed_unit_portal_department(
+        app,
+        tenant_id=1,
+        site_id=active_site_id,
+        department_id=dept_with_residence,
+        site_name="Centralköket",
+        department_name="Avdelning 2",
+        residence_name="Kaktusen",
+    )
+    _seed_unit_portal_department(
+        app,
+        tenant_id=1,
+        site_id=active_site_id,
+        department_id=dept_other_residence,
+        site_name="Centralköket",
+        department_name="Avdelning 9",
+        residence_name="Solgläntan",
+    )
+    _seed_unit_portal_department(
+        app,
+        tenant_id=1,
+        site_id=active_site_id,
+        department_id=dept_without_residence,
+        site_name="Centralköket",
+        department_name="Avdelning 7",
+    )
+
+    resp = client_admin.get("/ui/admin/users/new", headers=_h("admin"))
+    html = resp.data.decode("utf-8")
+
+    assert resp.status_code == 200
+    assert f'value="{dept_with_residence}"' in html
+    assert f'value="{dept_other_residence}"' in html
+    assert f'value="{dept_without_residence}"' in html
+    assert "Kaktusen \u2013 Avdelning 2" in html
+    assert "Solgläntan \u2013 Avdelning 9" in html
+    assert "Avdelning 7" in html
+    assert "Centralköket \u2013 Avdelning 2" not in html
+
+
 def test_users_edit_form_shows_empty_state_when_active_site_has_no_departments(client_admin):
     """Test the unit_portal edit form stays empty-state when active site has no departments."""
     app = client_admin.application
@@ -362,6 +468,48 @@ def test_users_edit_form_shows_empty_state_when_active_site_has_no_departments(c
     assert "Skapa en avdelning först" in html
     assert "Other Site Department" not in html
     assert "Foreign Tenant Department" not in html
+
+
+def test_users_edit_form_uses_same_residence_labels_as_create_form(client_admin):
+    """Test the edit form uses the same canonical residence-plus-department labels."""
+    app = client_admin.application
+    _, active_site_id = _current_admin_scope(client_admin)
+    dept_with_residence = str(uuid.uuid4())
+    _seed_unit_portal_department(
+        app,
+        tenant_id=1,
+        site_id=active_site_id,
+        department_id=dept_with_residence,
+        site_name="Centralköket",
+        department_name="Avdelning 2",
+        residence_name="Kaktusen",
+    )
+
+    with app.app_context():
+        db = get_session()
+        try:
+            db.execute(
+                text(
+                    "INSERT INTO users (tenant_id, email, password_hash, role, username, full_name, is_active, department_id) "
+                    "VALUES (1, :email, 'hash', 'unit_portal', :username, 'Edit User', 1, :department_id)"
+                ),
+                {
+                    "email": f"edit-user-{uuid.uuid4().hex[:8]}@example.com",
+                    "username": f"edit-user-{uuid.uuid4().hex[:8]}",
+                    "department_id": dept_with_residence,
+                },
+            )
+            db.commit()
+            user_id = db.execute(text("SELECT id FROM users WHERE department_id = :department_id ORDER BY id DESC LIMIT 1"), {"department_id": dept_with_residence}).fetchone()[0]
+        finally:
+            db.close()
+
+    resp = client_admin.get(f"/ui/admin/users/{user_id}/edit", headers=_h("admin"))
+    html = resp.data.decode("utf-8")
+
+    assert resp.status_code == 200
+    assert f'<option value="{dept_with_residence}" selected>Kaktusen \u2013 Avdelning 2</option>' in html
+    assert f'<option value="{dept_with_residence}" selected>Centralköket \u2013 Avdelning 2</option>' not in html
 
 
 def test_users_create_success(client_admin):

@@ -8906,6 +8906,16 @@ def _admin_user_active_scope() -> tuple[int | None, str | None, str]:
     return (int(tenant_id) if tenant_id is not None else None), site_id, site_name
 
 
+def _admin_user_department_label(department_name: str | None, residence_name: str | None = None) -> str:
+    department = str(department_name or "").strip()
+    residence = str(residence_name or "").strip()
+    if department and residence:
+            return f"{residence} – {department}"
+    if department:
+            return department
+    return residence or "—"
+
+
 def _admin_user_department_choices(tenant_id: int | str | None, site_id: str | None) -> list[dict]:
     tenant_id_int = int(tenant_id) if tenant_id is not None else None
     site_id_str = str(site_id or "").strip() or None
@@ -8915,9 +8925,10 @@ def _admin_user_department_choices(tenant_id: int | str | None, site_id: str | N
     try:
         rows = db.execute(
             text(
-                "SELECT d.id, d.name, s.name "
+                "SELECT d.id, d.name, COALESCE(r.name, ''), s.name "
                 "FROM departments d "
                 "JOIN sites s ON s.id = d.site_id "
+                "LEFT JOIN residences r ON r.id = d.residence_id "
                 "WHERE s.tenant_id = :tid "
                 "AND d.site_id = :sid "
                 "ORDER BY d.name"
@@ -8925,7 +8936,12 @@ def _admin_user_department_choices(tenant_id: int | str | None, site_id: str | N
             {"tid": tenant_id_int, "sid": site_id_str},
         ).fetchall()
         return [
-            {"id": str(row[0]), "name": str(row[1] or ""), "site_name": str(row[2] or "")}
+            {
+                "id": str(row[0]),
+                "name": str(row[1] or ""),
+                "residence_name": str(row[2] or ""),
+                "site_name": str(row[3] or ""),
+            }
             for row in rows
         ]
     finally:
@@ -8936,6 +8952,13 @@ def _admin_user_form_vm(*, mode: str, user: dict | None = None) -> dict:
     tenant_id, site_id, site_name = _admin_user_active_scope()
     role_value = str((user or {}).get("role") or ("admin" if mode == "new" else ""))
     department_choices = _admin_user_department_choices(tenant_id, site_id)
+    department_choices = [
+        {
+            **choice,
+            "display_label": _admin_user_department_label(choice.get("name"), choice.get("residence_name")),
+        }
+        for choice in department_choices
+    ]
     vm = {
         "mode": mode,
         "user": user,
@@ -8956,10 +8979,11 @@ def _admin_user_list_vm(users: list[dict]) -> dict:
     transformed: list[dict] = []
     for user in users:
         department_name = str(user.get("department_name") or "").strip()
+        residence_name = str(user.get("residence_name") or "").strip()
         site_name = str(user.get("site_name") or "").strip()
         scope_label = "—"
         if department_name:
-            scope_label = f"{site_name} / {department_name}" if site_name else department_name
+            scope_label = _admin_user_department_label(department_name, residence_name)
         elif site_name:
             scope_label = site_name
         transformed.append(

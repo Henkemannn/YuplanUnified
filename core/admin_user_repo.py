@@ -92,9 +92,10 @@ class AdminUserRepo:
             # Query aligned columns from unified schema
             rows = db.execute(
                 text(
-                    "SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.department_id, d.name, s.name, u.must_change_password "
+                    "SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.department_id, d.name, COALESCE(r.name, ''), s.name, u.must_change_password "
                     "FROM users u "
                     "LEFT JOIN departments d ON d.id = u.department_id "
+                    "LEFT JOIN residences r ON r.id = d.residence_id "
                     "LEFT JOIN sites s ON s.id = d.site_id "
                     "WHERE u.tenant_id = :tid "
                     "ORDER BY u.username, u.email"
@@ -105,7 +106,7 @@ class AdminUserRepo:
             users = []
             for row in rows:
                 site_id = _resolve_user_site_id(db, int(row[0]), tenant_id=tenant_id)
-                site_name = str(row[8] or "").strip()
+                site_name = str(row[9] or "").strip()
                 if not site_name and site_id:
                     site_row = db.execute(
                         text("SELECT name FROM sites WHERE id=:sid AND tenant_id=:tid LIMIT 1"),
@@ -121,9 +122,10 @@ class AdminUserRepo:
                     "is_active": bool(row[5]) if row[5] is not None else True,
                     "department_id": row[6],
                     "department_name": row[7],
+                    "residence_name": str(row[8] or "").strip(),
                     "site_name": site_name,
                     "site_id": site_id,
-                    "must_change_password": bool(row[9]) if row[9] is not None else False,
+                    "must_change_password": bool(row[10]) if row[10] is not None else False,
                 })
             return users
         finally:
@@ -135,9 +137,10 @@ class AdminUserRepo:
         try:
             row = db.execute(
                 text(
-                    "SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.tenant_id, u.department_id, d.name, s.name, u.must_change_password "
+                    "SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.tenant_id, u.department_id, d.name, COALESCE(r.name, ''), s.name, u.must_change_password "
                     "FROM users u "
                     "LEFT JOIN departments d ON d.id = u.department_id "
+                    "LEFT JOIN residences r ON r.id = d.residence_id "
                     "LEFT JOIN sites s ON s.id = d.site_id "
                     "WHERE u.id = :uid"
                 ),
@@ -149,7 +152,7 @@ class AdminUserRepo:
                 return None
 
             site_id = _resolve_user_site_id(db, int(row[0]), tenant_id=int(row[6]) if row[6] is not None else None)
-            site_name = str(row[9] or "").strip()
+            site_name = str(row[10] or "").strip()
             if not site_name and site_id and row[6] is not None:
                 site_row = db.execute(
                     text("SELECT name FROM sites WHERE id=:sid AND tenant_id=:tid LIMIT 1"),
@@ -167,9 +170,10 @@ class AdminUserRepo:
                 "tenant_id": row[6],
                 "department_id": row[7],
                 "department_name": row[8],
+                "residence_name": str(row[9] or "").strip(),
                 "site_name": site_name,
                 "site_id": site_id,
-                "must_change_password": bool(row[10]) if len(row) > 10 and row[10] is not None else False,
+                "must_change_password": bool(row[11]) if len(row) > 11 and row[11] is not None else False,
             }
         finally:
             db.close()
