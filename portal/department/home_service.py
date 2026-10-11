@@ -112,6 +112,20 @@ def _presentation_requirement_group(group: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _department_resident_count_presentation(resident_count_mode: str | None, resident_count_fixed: int | None) -> dict[str, str]:
+    is_variable = str(resident_count_mode or "").strip() == "per_day_meal"
+    count = int(resident_count_fixed or 0)
+    if is_variable:
+        return {
+            "resident_count_summary": "Varierat boendeantal",
+            "resident_count_detail_value": "Varierar per dag/måltid",
+        }
+    return {
+        "resident_count_summary": f"{count} boende",
+        "resident_count_detail_value": f"{count} boende",
+    }
+
+
 def _current_effective_resident_count(department_id: str, year: int, week: int) -> int:
     effective = get_effective_residents_for_week(department_id, year, week)
     lunch = effective.get("residents_lunch")
@@ -130,7 +144,7 @@ def build_department_home_payload(scope: DepartmentPortalScope) -> dict[str, Any
     try:
         row = db.execute(
             text(
-                "SELECT d.id, d.name, COALESCE(r.name, '') AS residence_name, d.site_id "
+                "SELECT d.id, d.name, COALESCE(r.name, '') AS residence_name, d.site_id, COALESCE(d.resident_count_mode, 'fixed'), COALESCE(d.resident_count_fixed, 0) "
                 "FROM departments d LEFT JOIN residences r ON r.id = d.residence_id WHERE d.id=:department_id"
             ),
             {"department_id": scope.department_id},
@@ -141,9 +155,12 @@ def build_department_home_payload(scope: DepartmentPortalScope) -> dict[str, Any
         department_name = str(row[1] or "").strip()
         residence_name = str(row[2] or "").strip()
         site_id = str(row[3] or "").strip() or scope.site_id
+        resident_count_presentation = _department_resident_count_presentation(row[4], row[5])
 
         department_context = {
             "resident_count": _current_effective_resident_count(department_id, int(current_year), int(current_week)),
+            "resident_count_summary": resident_count_presentation["resident_count_summary"],
+            "resident_count_detail_value": resident_count_presentation["resident_count_detail_value"],
             "requirement_groups": [],
             "service_addons": [],
         }

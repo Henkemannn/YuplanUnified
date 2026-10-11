@@ -289,7 +289,7 @@ def test_login_replaces_display_identity_in_same_session(monkeypatch):
 @pytest.mark.parametrize(
     ("role", "expected_target"),
     [
-        ("unit_portal", "/ui/portal/department/week"),
+        ("unit_portal", "/ui/portal/department"),
         ("staff", "/ui/portal/week"),
         ("department", "/ui/portal/week"),
         ("admin", "/ui/admin"),
@@ -363,11 +363,22 @@ def test_login_unit_portal_follow_redirect_reaches_department_portal(monkeypatch
                 "/auth/login",
                 data={"email": email, "password": "PortalPassw0rd!"},
                 headers={"Accept": "text/html"},
+                follow_redirects=False,
+            )
+            assert resp.status_code in (301, 302)
+            assert (resp.headers.get("Location") or "").endswith("/ui/portal/department")
+
+            follow = c.post(
+                "/auth/login",
+                data={"email": email, "password": "PortalPassw0rd!"},
+                headers={"Accept": "text/html"},
                 follow_redirects=True,
             )
-            assert resp.status_code == 200
-            html = resp.get_data(as_text=True)
+            assert follow.status_code == 200
+            assert follow.request.path == "/ui/portal/department"
+            html = follow.get_data(as_text=True)
             assert "Avdelningsportal" in html
+            assert "/ui/portal/department/week" not in html
         finally:
             db.close()
 
@@ -407,7 +418,7 @@ def test_login_unit_portal_missing_department_binding_is_denied(monkeypatch):
             )
             assert resp.status_code in (301, 302)
             location = resp.headers.get("Location") or ""
-            assert "/ui/portal/department/week" in location
+            assert "/ui/portal/department" in location
 
             next_resp = c.get(location)
             assert next_resp.status_code == 403

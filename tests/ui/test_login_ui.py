@@ -45,7 +45,7 @@ def _seed_login_user(db, *, role: str, password: str = "UiPassw0rd!") -> str:
 @pytest.mark.parametrize(
     ("role", "expected_target"),
     [
-        ("unit_portal", "/ui/portal/department/week"),
+        ("unit_portal", "/ui/portal/department"),
         ("staff", "/ui/portal/week"),
         ("department", "/ui/portal/week"),
         ("admin", "/ui/admin"),

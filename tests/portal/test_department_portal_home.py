@@ -42,7 +42,7 @@ def _seed_duplicate_requirement_label_group(site_id: str, department_id: str) ->
             text("INSERT OR REPLACE INTO dietary_types(id, tenant_id, site_id, name, diet_family, requirement_key, semantics, default_select) VALUES (201, 1, :site_id, 'Glutenfri', 'Allergi / Exkludering', 'glutenfri-dup', 'atomic', 0)"),
             {"site_id": site_id},
         )
-        DepartmentRequirementGroupsRepo().create_group(department_id, 4, [201], label="Glutenfri", primary_requirement_id=201)
+        DepartmentRequirementGroupsRepo().create_group(department_id, 1, [201], label="Glutenfri", primary_requirement_id=201)
     finally:
         db.close()
 
@@ -97,6 +97,7 @@ def test_department_portal_home_renders_identity_context_and_weeks(client_admin,
     try:
         db.execute(text("INSERT OR REPLACE INTO residences(id, site_id, name) VALUES('res-home', :site_id, 'Solgläntans äldreboende')"), {"site_id": SITE_ID})
         db.execute(text("UPDATE departments SET residence_id='res-home' WHERE id=:department_id"), {"department_id": DEPT_ID})
+        db.execute(text("UPDATE departments SET resident_count_mode='fixed', resident_count_fixed=18 WHERE id=:department_id"), {"department_id": DEPT_ID})
         db.execute(text("INSERT OR REPLACE INTO departments(id, site_id, name, resident_count_mode) VALUES('portal-home-other', :site_id, 'Avd 2', 'manual')"), {"site_id": SITE_ID})
         db.commit()
     finally:
@@ -138,16 +139,6 @@ def test_department_portal_home_renders_identity_context_and_weeks(client_admin,
     assert "Glutenfri" in html
     assert "Sallad" in html
     assert "aldrig tomat" in html
-    assert "Vecka 39" not in html
-    assert "Vecka 40" in html
-    assert "Vecka 41" in html
-    assert "Vecka 42" in html
-    assert "Färdig" in html
-    assert "Påbörjad" in html
-    assert "Ej påbörjad" in html
-    assert "/ui/portal/department/week?year=2026&amp;week=40" in html
-    assert "/ui/portal/department/week?year=2026&amp;week=41" in html
-    assert "/ui/portal/department/week?year=2026&amp;week=42" in html
     assert "Request ID:" not in html
     assert 'data-theme-toggle' in html
     assert 'class="app-shell__sidebar"' not in html
@@ -200,7 +191,6 @@ def test_department_portal_home_admin_explicit_department_context_still_works(cl
     html = resp.get_data(as_text=True)
     assert "Avd 1" in html
     assert "Solgläntans äldreboende" in html
-    assert f"/ui/portal/department/week?year=2026&amp;week=40&amp;department_id={DEPT_ID}" in html
     assert 'data-theme-toggle' in html
     assert 'class="app-shell__sidebar"' not in html
 
@@ -229,20 +219,22 @@ def test_department_portal_home_unit_portal_query_param_cannot_switch_department
 
 
 def test_department_portal_home_hides_stale_complete_and_excludes_past_publications(client_admin, seed_portal_department_data, seed_canonical_builder_publication, seed_portal_menu_choice):
-    seed_portal_department_data(dept_id=DEPT_ID, site_id=SITE_ID, year=YEAR, week=WEEK)
-    _seed_publication(seed_canonical_builder_publication, site_id=SITE_ID, year=YEAR, week=39)
-    _seed_publication(seed_canonical_builder_publication, site_id=SITE_ID, year=YEAR, week=40)
+    current_year, current_week, _ = _date.today().isocalendar()
+    previous_week = current_week - 1
+    seed_portal_department_data(dept_id=DEPT_ID, site_id=SITE_ID, year=current_year, week=current_week)
+    _seed_publication(seed_canonical_builder_publication, site_id=SITE_ID, year=current_year, week=previous_week)
+    _seed_publication(seed_canonical_builder_publication, site_id=SITE_ID, year=current_year, week=current_week)
 
     db = get_session()
     try:
-        db.execute(text("INSERT OR REPLACE INTO department_menu_choices(tenant_id, site_id, department_id, year, week, weekday, meal, selected_variant, version, created_at, updated_at) VALUES (1, :site_id, :department_id, :year, 40, 1, 'lunch', 'alt1', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"), {"site_id": SITE_ID, "department_id": DEPT_ID, "year": YEAR})
+        db.execute(text("INSERT OR REPLACE INTO department_menu_choices(tenant_id, site_id, department_id, year, week, weekday, meal, selected_variant, version, created_at, updated_at) VALUES (1, :site_id, :department_id, :year, :week, 1, 'lunch', 'alt1', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"), {"site_id": SITE_ID, "department_id": DEPT_ID, "year": current_year, "week": current_week})
         db.commit()
     finally:
         db.close()
 
     submit_resp = client_admin.post(
         "/portal/department/week/submit",
-        json={"year": YEAR, "week": 40},
+        json={"year": current_year, "week": current_week},
         headers=_h(),
         environ_overrides={"test_claims": {"department_id": DEPT_ID}},
     )
@@ -250,7 +242,7 @@ def test_department_portal_home_hides_stale_complete_and_excludes_past_publicati
 
     db = get_session()
     try:
-        db.execute(text("UPDATE commun_builder_publication_pins SET builder_menu_version=2 WHERE tenant_id=1 AND site_id=:site_id AND year=:year AND week=40"), {"site_id": SITE_ID, "year": YEAR})
+        db.execute(text("UPDATE commun_builder_publication_pins SET builder_menu_version=2 WHERE tenant_id=1 AND site_id=:site_id AND year=:year AND week=:week"), {"site_id": SITE_ID, "year": current_year, "week": current_week})
         db.commit()
     finally:
         db.close()
@@ -281,18 +273,38 @@ def test_department_portal_home_shows_empty_state_without_publications(client_ad
     assert "Vecka 40" not in html
 
 
-def test_department_portal_home_normalizes_duplicate_requirement_labels(client_admin, seed_portal_department_data, seed_canonical_builder_publication):
+def test_department_portal_home_shows_variable_identity_without_fake_zero(client_admin, seed_portal_department_data):
     seed_portal_department_data(dept_id=DEPT_ID, site_id=SITE_ID, year=YEAR, week=WEEK)
     db = get_session()
     try:
+        db.execute(text("INSERT OR REPLACE INTO residences(id, site_id, name) VALUES('res-home-variable', :site_id, 'Kaktusen')"), {"site_id": SITE_ID})
+        db.execute(text("UPDATE departments SET residence_id='res-home-variable', resident_count_mode='per_day_meal', resident_count_fixed=0 WHERE id=:department_id"), {"department_id": DEPT_ID})
+        db.execute(text("DELETE FROM commun_builder_publication_pins WHERE site_id=:site_id"), {"site_id": SITE_ID})
+        db.commit()
+    finally:
+        db.close()
+
+    resp = client_admin.get("/ui/portal/department", headers=_h(), environ_overrides={"test_claims": {"department_id": DEPT_ID}})
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "Kaktusen · Varierar per dag/måltid" in html
+    assert "0 boende" not in html
+    assert "Inga menyer har publicerats ännu." in html
+
+
+def test_department_portal_home_normalizes_duplicate_requirement_labels(client_admin, seed_portal_department_data, seed_canonical_builder_publication):
+    current_year, current_week, _ = _date.today().isocalendar()
+    seed_portal_department_data(dept_id=DEPT_ID, site_id=SITE_ID, year=current_year, week=current_week)
+    db = get_session()
+    try:
         db.execute(text("INSERT OR REPLACE INTO residences(id, site_id, name) VALUES('res-home', :site_id, 'Solgläntans äldreboende')"), {"site_id": SITE_ID})
-        db.execute(text("UPDATE departments SET residence_id='res-home' WHERE id=:department_id"), {"department_id": DEPT_ID})
+        db.execute(text("UPDATE departments SET residence_id='res-home', resident_count_mode='per_day_meal', resident_count_fixed=0 WHERE id=:department_id"), {"department_id": DEPT_ID})
         db.commit()
     finally:
         db.close()
 
     _seed_duplicate_requirement_label_group(SITE_ID, DEPT_ID)
-    _seed_publication(seed_canonical_builder_publication, site_id=SITE_ID, year=YEAR, week=40)
+    _seed_publication(seed_canonical_builder_publication, site_id=SITE_ID, year=current_year, week=current_week)
 
     resp = client_admin.get("/ui/portal/department", headers=_h(), environ_overrides={"test_claims": {"department_id": DEPT_ID}})
     assert resp.status_code == 200

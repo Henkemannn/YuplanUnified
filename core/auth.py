@@ -524,7 +524,7 @@ def login():
                     else:
                         target = url_for("ui.admin_dashboard")
                 elif target is None and r == "unit_portal":
-                    target = url_for("portal_dept_ui.portal_department_week_ui")
+                    target = url_for("portal_dept_ui.portal_department_home_ui")
                 elif target is None and r in ("staff", "department"):
                     target = url_for("ui.portal_week")
                 elif target is None:
