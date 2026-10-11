@@ -16,6 +16,37 @@ from sqlalchemy.exc import IntegrityError
 
 _MISMATCH_LOGGED: set[str] = set()
 
+_DAY_KEY_ORDER = {
+    "mon": 0,
+    "monday": 0,
+    "mån": 0,
+    "måndag": 0,
+    "tue": 1,
+    "tuesday": 1,
+    "tis": 1,
+    "tisdag": 1,
+    "wed": 2,
+    "wednesday": 2,
+    "ons": 2,
+    "onsdag": 2,
+    "thu": 3,
+    "thursday": 3,
+    "tor": 3,
+    "torsdag": 3,
+    "fri": 4,
+    "friday": 4,
+    "fre": 4,
+    "fredag": 4,
+    "sat": 5,
+    "saturday": 5,
+    "lör": 5,
+    "lördag": 5,
+    "sun": 6,
+    "sunday": 6,
+    "sön": 6,
+    "söndag": 6,
+}
+
 
 @dataclass(frozen=True)
 class _LegacyWeekViewRow:
@@ -50,6 +81,68 @@ def _week_view_variant_keys(meal: str, variant_type: str) -> tuple[str, ...]:
         # Canonical output first, legacy alias second.
         return ("main", "kvall")
     return (raw_variant,)
+
+
+def _legacy_day_key(value: str) -> str:
+    raw = str(value or "").strip().lower()
+    aliases = {
+        "mon": "mon",
+        "monday": "mon",
+        "mån": "mon",
+        "måndag": "mon",
+        "tue": "tue",
+        "tuesday": "tue",
+        "tis": "tue",
+        "tisdag": "tue",
+        "wed": "wed",
+        "wednesday": "wed",
+        "ons": "wed",
+        "onsdag": "wed",
+        "thu": "thu",
+        "thursday": "thu",
+        "tor": "thu",
+        "torsdag": "thu",
+        "fri": "fri",
+        "friday": "fri",
+        "fre": "fri",
+        "fredag": "fri",
+        "sat": "sat",
+        "saturday": "sat",
+        "lör": "sat",
+        "lördag": "sat",
+        "sun": "sun",
+        "sunday": "sun",
+        "sön": "sun",
+        "söndag": "sun",
+    }
+    return aliases.get(raw, raw)
+
+
+def _projection_to_week_view_days(rows: list[Any]) -> dict[str, dict[str, dict[str, _VariantInfo]]]:
+    structure: dict[str, dict[str, dict[str, _VariantInfo]]] = {}
+    rows_sorted = sorted(
+        rows,
+        key=lambda row: (
+            _DAY_KEY_ORDER.get(str(getattr(row, "day", "") or "").strip().lower(), 99),
+            str(getattr(row, "day", "") or "").strip().lower(),
+            int(getattr(row, "sort_order", 0) or 0),
+            str(getattr(row, "builder_menu_row_id", "") or ""),
+        ),
+    )
+    for row in rows_sorted:
+        day_key = _legacy_day_key(str(getattr(row, "day", "") or ""))
+        meal = str(getattr(row, "meal", "") or "").strip().lower()
+        if not day_key or not meal:
+            continue
+        meal_bucket = structure.setdefault(day_key, {}).setdefault(meal, {})
+        variant_keys = _week_view_variant_keys(meal, str(getattr(row, "variant_type", "") or ""))
+        variant_info: _VariantInfo = {
+            "dish_id": None,
+            "dish_name": str(getattr(row, "text", "") or "").strip(),
+        }
+        for variant_key in variant_keys:
+            meal_bucket[variant_key] = variant_info
+    return structure
 
 
 class WeekView(TypedDict):
@@ -662,7 +755,24 @@ class MenuServiceDB:
                     .order_by(Menu.status.desc())  # 'published' > 'draft' alphabetically
                     .first()
                 )
-            if not menu:
+            if menu and menu.updated_at is None:
+                menu.updated_at = datetime.now(timezone.utc)
+                db.commit()
+                db.refresh(menu)
+            publication = None
+            try:
+                from .commun_builder_publication import CommunBuilderPublicationService
+
+                publication = CommunBuilderPublicationService().get_publication_for_week(
+                    tenant_id=int(effective_tenant_id),
+                    site_id=str(site_id),
+                    year=int(year),
+                    week=int(week),
+                )
+            except Exception:
+                publication = None
+
+            if publication is None and menu is None:
                 payload = {"menu_id": None, "menu_status": None, "updated_at": None, "days": {}}
                 self._maybe_run_builder_shadow_projection(
                     tenant_id=tenant_id,
@@ -672,81 +782,98 @@ class MenuServiceDB:
                     legacy_payload=payload,
                 )
                 return payload  # type: ignore[return-value]
-            # Ensure updated_at populated (older seed data may have NULL)
-            if menu.updated_at is None:
-                menu.updated_at = datetime.now(timezone.utc)
-                db.commit()
-                db.refresh(menu)
-            variants = (
-                db.query(MenuVariant, Dish)
-                .join(Dish, Dish.id == MenuVariant.dish_id, isouter=True)
-                .filter(MenuVariant.menu_id == menu.id)
-                .all()
-            )
-            structure: dict[str, dict[str, dict[str, _VariantInfo]]] = {}
-            for mv, dish in variants:
-                meal_bucket = structure.setdefault(mv.day, {}).setdefault(mv.meal, {})
-                variant_info = {
-                    "dish_id": mv.dish_id,
-                    "dish_name": dish.name if dish else None,
+
+            if publication is not None:
+                from .commun_builder_projection import CommunBuilderMenuProjectionReader
+
+                projection_outcome = CommunBuilderMenuProjectionReader().get_projection_for_pinned_menu(
+                    tenant_id=int(effective_tenant_id),
+                    site_id=str(site_id),
+                    year=int(year),
+                    week=int(week),
+                    builder_menu_id=str(publication.builder_menu_id),
+                    builder_menu_version=int(publication.builder_menu_version),
+                )
+                if projection_outcome.status != "ok" or projection_outcome.projection is None:
+                    raise RuntimeError(f"published_builder_projection_invalid:{projection_outcome.error or projection_outcome.status}")
+                if any(bool(row.error) for row in projection_outcome.projection.rows):
+                    first_error = next((row.error for row in projection_outcome.projection.rows if row.error), "projection_error")
+                    raise RuntimeError(f"published_builder_projection_invalid:{first_error}")
+                structure = _projection_to_week_view_days(projection_outcome.projection.rows)
+            else:
+                variants = (
+                    db.query(MenuVariant, Dish)
+                    .join(Dish, Dish.id == MenuVariant.dish_id, isouter=True)
+                    .filter(MenuVariant.menu_id == menu.id)
+                    .all()
+                )
+                structure: dict[str, dict[str, dict[str, _VariantInfo]]] = {}
+                for mv, dish in variants:
+                    meal_bucket = structure.setdefault(mv.day, {}).setdefault(mv.meal, {})
+                    variant_info = {
+                        "dish_id": mv.dish_id,
+                        "dish_name": dish.name if dish else None,
+                    }
+                    for variant_key in _week_view_variant_keys(mv.meal, mv.variant_type):
+                        meal_bucket[variant_key] = variant_info
+                day_aliases = {
+                    "monday": "mon",
+                    "mon": "mon",
+                    "måndag": "mon",
+                    "mån": "mon",
+                    "tuesday": "tue",
+                    "tue": "tue",
+                    "tisdag": "tue",
+                    "tis": "tue",
+                    "wednesday": "wed",
+                    "wed": "wed",
+                    "onsdag": "wed",
+                    "ons": "wed",
+                    "thursday": "thu",
+                    "thu": "thu",
+                    "torsdag": "thu",
+                    "tor": "thu",
+                    "friday": "fri",
+                    "fri": "fri",
+                    "fredag": "fri",
+                    "fre": "fri",
+                    "saturday": "sat",
+                    "sat": "sat",
+                    "lördag": "sat",
+                    "lör": "sat",
+                    "sunday": "sun",
+                    "sun": "sun",
+                    "söndag": "sun",
+                    "sön": "sun",
                 }
-                for variant_key in _week_view_variant_keys(mv.meal, mv.variant_type):
-                    meal_bucket[variant_key] = variant_info
-            day_aliases = {
-                "monday": "mon",
-                "mon": "mon",
-                "måndag": "mon",
-                "mån": "mon",
-                "tuesday": "tue",
-                "tue": "tue",
-                "tisdag": "tue",
-                "tis": "tue",
-                "wednesday": "wed",
-                "wed": "wed",
-                "onsdag": "wed",
-                "ons": "wed",
-                "thursday": "thu",
-                "thu": "thu",
-                "torsdag": "thu",
-                "tor": "thu",
-                "friday": "fri",
-                "fri": "fri",
-                "fredag": "fri",
-                "fre": "fri",
-                "saturday": "sat",
-                "sat": "sat",
-                "lördag": "sat",
-                "lör": "sat",
-                "sunday": "sun",
-                "sun": "sun",
-                "söndag": "sun",
-                "sön": "sun",
-            }
-            meal_aliases = {
-                "lunch": "lunch",
-                "Lunch": "lunch",
-                "dinner": "dinner",
-                "Dinner": "dinner",
-                "Kväll": "dinner",
-                "kväll": "dinner",
-                "kvall": "dinner",
-            }
-            normalized_days: dict[str, dict[str, dict[str, _VariantInfo]]] = {}
-            for raw_day, meals in structure.items():
-                if not isinstance(meals, dict):
-                    continue
-                day_key = day_aliases.get(str(raw_day).strip().lower())
-                if not day_key:
-                    continue
-                day_bucket = normalized_days.setdefault(day_key, {})
-                for raw_meal, variants_map in meals.items():
-                    meal_key = meal_aliases.get(str(raw_meal).strip(), meal_aliases.get(str(raw_meal).strip().lower()))
-                    if meal_key is None:
+                meal_aliases = {
+                    "lunch": "lunch",
+                    "Lunch": "lunch",
+                    "dinner": "dinner",
+                    "Dinner": "dinner",
+                    "Kväll": "dinner",
+                    "kväll": "dinner",
+                    "kvall": "dinner",
+                }
+                normalized_days: dict[str, dict[str, dict[str, _VariantInfo]]] = {}
+                for raw_day, meals in structure.items():
+                    if not isinstance(meals, dict):
                         continue
-                    day_bucket[meal_key] = variants_map
-            for alias_day, meals in normalized_days.items():
-                structure.setdefault(alias_day, {}).update(meals)
-            payload = {"menu_id": menu.id, "menu_status": menu.status, "updated_at": menu.updated_at, "days": structure}
+                    day_key = day_aliases.get(str(raw_day).strip().lower())
+                    if not day_key:
+                        continue
+                    day_bucket = normalized_days.setdefault(day_key, {})
+                    for raw_meal, variants_map in meals.items():
+                        meal_key = meal_aliases.get(str(raw_meal).strip(), meal_aliases.get(str(raw_meal).strip().lower()))
+                        if meal_key is None:
+                            continue
+                        day_bucket[meal_key] = variants_map
+                for alias_day, meals in normalized_days.items():
+                    structure.setdefault(alias_day, {}).update(meals)
+            if menu is None:
+                payload = {"menu_id": None, "menu_status": None, "updated_at": None, "days": structure}
+            else:
+                payload = {"menu_id": menu.id, "menu_status": menu.status, "updated_at": menu.updated_at, "days": structure}
             self._maybe_run_builder_shadow_projection(
                 tenant_id=tenant_id,
                 site_id=site_id,

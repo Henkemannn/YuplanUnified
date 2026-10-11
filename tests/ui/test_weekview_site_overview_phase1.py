@@ -2,6 +2,21 @@ import uuid
 
 import pytest
 
+from core.builder import BuilderFlow
+from core.builder_menu_context_flow import BuilderMenuContextFlow
+from core.components import (
+    ComponentService,
+    CompositionService,
+    InMemoryComponentAliasRepository,
+    InMemoryComponentRepository,
+    InMemoryCompositionRepository,
+    InMemoryRecipeIngredientLineRepository,
+    InMemoryRecipeRepository,
+)
+from core.commun_builder_linkage import CommunBuilderMenuLinkService
+from core.menu import InMemoryCompositionAliasRepository, MenuService
+from core.menu_service import MenuServiceDB
+
 ETAG_RE = __import__("re").compile(r'^W/"weekview:dept:.*:year:\d{4}:week:\d{1,2}:v\d+"$')
 
 
@@ -140,3 +155,107 @@ def test_weekview_site_overview_phase1(client_admin):
 
     # Link to department-level Weekview exists
     assert f"/ui/weekview?site_id={site_id}&department_id={dep_a}&year={year}&week={week}" in html
+
+
+@pytest.mark.usefixtures("enable_weekview")
+def test_weekview_site_overview_prefers_published_builder_projection(client_admin):
+    app = client_admin.application
+    site_id = str(uuid.uuid4())
+    dep_a = str(uuid.uuid4())
+    year, week = 2026, 42
+
+    from core.db import create_all, get_session
+    from sqlalchemy import text
+
+    def _build_builder_menu_context_flow():
+        component_repository = InMemoryComponentRepository()
+        composition_repository = InMemoryCompositionRepository()
+        alias_repository = InMemoryCompositionAliasRepository()
+        recipe_repository = InMemoryRecipeRepository()
+        ingredient_repository = InMemoryRecipeIngredientLineRepository()
+        builder_flow = BuilderFlow(
+            component_service=ComponentService(repository=component_repository),
+            composition_service=CompositionService(repository=composition_repository),
+            composition_repository=composition_repository,
+            alias_repository=alias_repository,
+            component_alias_repository=InMemoryComponentAliasRepository(),
+        )
+        menu_context_flow = BuilderMenuContextFlow(
+            menu_service=MenuService(composition_repository=composition_repository),
+            composition_repository=composition_repository,
+            alias_repository=alias_repository,
+            recipe_repository=recipe_repository,
+            ingredient_repository=ingredient_repository,
+            library_flow=builder_flow,
+        )
+        return menu_context_flow, CompositionService(repository=composition_repository)
+
+    with app.app_context():
+        create_all()
+        db = get_session()
+        try:
+            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), {"i": site_id, "n": "Varberg"})
+            db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',0,0) ON CONFLICT(id) DO NOTHING"), {"i": dep_a, "s": site_id, "n": "Avd A"})
+            db.commit()
+            menu = MenuServiceDB().create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)
+        finally:
+            db.close()
+
+        builder_flow, composition_service = _build_builder_menu_context_flow()
+        app.extensions["builder_menu_context_flow"] = builder_flow
+        app.extensions["builder_flow"] = builder_flow
+        builder_flow.create_menu(menu_id="builder-menu-weekview", site_id=site_id, week_key="2026-W42", version=1, status="published")
+        for day, specs in {
+            "monday": [
+                (10, "comp_mon_1", "Mon Alt1"),
+                (20, "comp_mon_2", "Mon Alt2"),
+                (30, "comp_mon_3", "Mon Dessert"),
+                (40, "comp_mon_4", "Mon Dinner"),
+            ],
+            "sunday": [
+                (6010, "comp_sun_1", "Sun Alt1"),
+                (6030, "comp_sun_3", "Sun Dessert"),
+                (6040, "comp_sun_4", "Sun Dinner"),
+            ],
+        }.items():
+            for index, (sort_order, composition_id, composition_name) in enumerate(specs, start=1):
+                composition_service.create_composition(composition_id=composition_id, composition_name=composition_name)
+                created = builder_flow.create_empty_menu_row(
+                    menu_id="builder-menu-weekview",
+                    day=day,
+                    display_label=f"{day} {index}",
+                    sort_order=sort_order,
+                )
+                builder_flow.update_composition_menu_row(
+                    menu_id="builder-menu-weekview",
+                    menu_detail_id=created.menu_detail_id,
+                    day=day,
+                    meal_slot=created.meal_slot,
+                    composition_id=composition_id,
+                    sort_order=sort_order,
+                )
+        CommunBuilderMenuLinkService(builder_menu_context_flow=builder_flow).create_or_replace_link(
+            tenant_id=1,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-weekview",
+            source="manual",
+        )
+        MenuServiceDB().publish_menu(tenant_id=1, menu_id=menu.id)
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
+
+    resp = client_admin.get(f"/ui/weekview_overview?site_id={site_id}&year={year}&week={week}", headers=_h("admin"))
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "Ingen meny ännu" not in html
+    assert "Mon Alt1" in html
+    assert "Mon Alt2" in html
+    assert "Mon Dessert" in html
+    assert "Mon Dinner" in html
+    assert "Sun Alt1" in html
+    assert "Sun Dessert" in html
+    assert "Sun Dinner" in html
+    assert "Sun Alt2" not in html

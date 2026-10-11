@@ -191,6 +191,47 @@ def _seed_dynamic_publication_builder_context(
         )
 
 
+def _seed_publication_builder_context_with_day_specs(
+    *,
+    site_id: str,
+    year: int,
+    week: int,
+    builder_menu_id: str,
+    builder_menu_version: int,
+    day_specs: dict[str, list[tuple[int, str, str]]],
+) -> None:
+    builder_flow, composition_service = _build_builder_menu_context_flow()
+    current_app.extensions["builder_menu_context_flow"] = builder_flow
+    current_app.extensions["builder_flow"] = builder_flow
+    builder_flow.create_menu(
+        menu_id=builder_menu_id,
+        site_id=site_id,
+        week_key=f"{year}-W{week:02d}",
+        version=builder_menu_version,
+        status="published",
+    )
+    for day, specs in day_specs.items():
+        for index, (sort_order, composition_id, composition_name) in enumerate(specs, start=1):
+            composition_service.create_composition(
+                composition_id=composition_id,
+                composition_name=composition_name,
+            )
+            created = builder_flow.create_empty_menu_row(
+                menu_id=builder_menu_id,
+                day=day,
+                display_label=f"{day} {index}",
+                sort_order=sort_order,
+            )
+            builder_flow.update_composition_menu_row(
+                menu_id=builder_menu_id,
+                menu_detail_id=created.menu_detail_id,
+                day=day,
+                meal_slot=created.meal_slot,
+                composition_id=composition_id,
+                sort_order=sort_order,
+            )
+
+
 def test_publish_mirrors_builder_publication_pin(app_session, monkeypatch):
     site_id = "site-publication-1"
     year = 2025
@@ -275,6 +316,49 @@ def test_publish_captures_dynamic_position_compatible_projection(app_session):
         assert all("slot_" not in str(row["variant_type"]) for row in snapshot["rows"])
     finally:
         db.close()
+
+
+def test_get_week_view_prefers_published_builder_projection_and_preserves_gap(app_session):
+    site_id = "site-publication-read-compat"
+    year = 2026
+    week = 42
+    _seed_site(app_session, site_id=site_id)
+    menu_id = _seed_menu_and_link(site_id, year, week, "builder-menu-read-compat", 1)
+
+    with app_session.app_context():
+        _seed_publication_builder_context_with_day_specs(
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-read-compat",
+            builder_menu_version=1,
+            day_specs={
+                "monday": [
+                    (10, "comp_read_mon_1", "Monday Alt1"),
+                    (20, "comp_read_mon_2", "Monday Alt2"),
+                    (30, "comp_read_mon_3", "Monday Dessert"),
+                    (40, "comp_read_mon_4", "Monday Dinner"),
+                ],
+                "sunday": [
+                    (6010, "comp_read_sun_1", "Sunday Alt1"),
+                    (6030, "comp_read_sun_3", "Sunday Dessert"),
+                    (6040, "comp_read_sun_4", "Sunday Dinner"),
+                ],
+            },
+        )
+        MenuServiceDB().publish_menu(tenant_id=1, menu_id=menu_id)
+
+    week_view = MenuServiceDB().get_week_view(1, site_id, week, year)
+
+    assert week_view["menu_status"] == "published"
+    assert week_view["days"]["mon"]["lunch"]["alt1"]["dish_name"] == "Monday Alt1"
+    assert week_view["days"]["mon"]["lunch"]["alt2"]["dish_name"] == "Monday Alt2"
+    assert week_view["days"]["mon"]["lunch"]["dessert"]["dish_name"] == "Monday Dessert"
+    assert week_view["days"]["mon"]["dinner"]["main"]["dish_name"] == "Monday Dinner"
+    assert week_view["days"]["sun"]["lunch"]["alt1"]["dish_name"] == "Sunday Alt1"
+    assert "alt2" not in week_view["days"]["sun"]["lunch"]
+    assert week_view["days"]["sun"]["lunch"]["dessert"]["dish_name"] == "Sunday Dessert"
+    assert week_view["days"]["sun"]["dinner"]["main"]["dish_name"] == "Sunday Dinner"
 
 
 def test_publish_captures_immutable_snapshot_and_republish_refreshes_it(app_session, monkeypatch):
