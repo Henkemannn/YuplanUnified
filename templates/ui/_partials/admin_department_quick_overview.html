@@ -1,0 +1,106 @@
+<section class="admin-departments__inspector-shell" data-department-quick-overview-content>
+    <div class="admin-departments__inspector-head">
+        <h2 class="app-shell__card-title admin-departments__inspector-title">Snabböversikt</h2>
+        <p class="admin-departments__inspector-subtitle">{{ vm.site_name or '—' }}</p>
+    </div>
+
+    <div class="admin-departments__overview-stack">
+        <section class="admin-departments__inspector-section">
+            <h3 class="admin-departments__inspector-section-title">Avdelningen</h3>
+            <div class="admin-departments__inspector-rows">
+                <div class="admin-departments__inspector-row">
+                    <span class="admin-departments__inspector-label">Namn</span>
+                    <strong class="admin-departments__inspector-value">{{ vm.department.name }}</strong>
+                </div>
+                <div class="admin-departments__inspector-row">
+                    <span class="admin-departments__inspector-label">Boende / enhet</span>
+                    <span class="admin-departments__inspector-value">{{ vm.department.residence_name or 'Ej valt boende' }}</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="admin-departments__inspector-section">
+            <h3 class="admin-departments__inspector-section-title">Boendeantal</h3>
+            <p class="admin-departments__inspector-copy">
+                {% if vm.department.resident_count_mode == 'per_day_meal' %}
+                    {{ vm.department.resident_count_detail_value }}
+                {% else %}
+                    {{ vm.department.resident_count_summary }}
+                {% endif %}
+            </p>
+        </section>
+
+        {% set requirement_group_count = vm.requirement_groups|length %}
+        <details class="admin-departments__inspector-section admin-departments__inspector-accordion" data-department-quick-overview-accordion>
+            <summary class="admin-departments__inspector-accordion-summary">
+                <span class="admin-departments__inspector-section-title">Specialkost / behov</span>
+                <span class="admin-departments__inspector-accordion-summary-meta">
+                    {% if requirement_group_count == 0 %}
+                        0
+                    {% elif requirement_group_count == 1 %}
+                        1 grupp
+                    {% else %}
+                        {{ requirement_group_count }} grupper
+                    {% endif %}
+                </span>
+                <span class="admin-departments__inspector-accordion-chevron" aria-hidden="true">▾</span>
+            </summary>
+            <div class="admin-departments__inspector-accordion-body">
+                {% if vm.requirement_groups %}
+                    <div class="admin-departments__summary-list" role="list" aria-label="Registrerade kostbehov">
+                        {% for group in vm.requirement_groups %}
+                            <div class="admin-departments__summary-item" role="listitem">
+                                <div class="admin-departments__summary-item-main">
+                                    <strong class="admin-departments__summary-item-title">{{ group.display_name }}</strong>
+                                    <span class="admin-departments__summary-item-meta">{{ group.display_meta }}</span>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="admin-departments__inspector-copy">Inga registrerade</p>
+                {% endif %}
+            </div>
+        </details>
+
+        {% set department_service_addons_count = vm.department_service_addons|length %}
+        <details class="admin-departments__inspector-section admin-departments__inspector-accordion" data-department-quick-overview-accordion>
+            <summary class="admin-departments__inspector-accordion-summary">
+                <span class="admin-departments__inspector-section-title">Serveringsanpassningar</span>
+                <span class="admin-departments__inspector-accordion-summary-meta">
+                    {% if department_service_addons_count == 0 %}
+                        0
+                    {% elif department_service_addons_count == 1 %}
+                        1 anpassning
+                    {% else %}
+                        {{ department_service_addons_count }} anpassningar
+                    {% endif %}
+                </span>
+                <span class="admin-departments__inspector-accordion-chevron" aria-hidden="true">▾</span>
+            </summary>
+            <div class="admin-departments__inspector-accordion-body">
+                {% if vm.department_service_addons %}
+                    <div class="admin-departments__summary-list" role="list" aria-label="Registrerade serveringsanpassningar">
+                        {% for row in vm.department_service_addons %}
+                            <div class="admin-departments__summary-item" role="listitem">
+                                <div class="admin-departments__summary-item-main">
+                                    <strong class="admin-departments__summary-item-title">{{ row.addon_name }}</strong>
+                                    <span class="admin-departments__summary-item-meta">{{ row.addon_family }} · {{ row.quantity_summary }}</span>
+                                    {% if row.note %}
+                                        <span class="admin-departments__summary-item-note">{{ row.note }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="admin-departments__inspector-copy">Inga registrerade</p>
+                {% endif %}
+            </div>
+        </details>
+    </div>
+
+    <div class="admin-departments__inspector-footer">
+        <a class="yp-button yp-button-primary" href="{{ url_for('ui.admin_departments_edit_form', dept_id=vm.department.id) }}">Redigera avdelning</a>
+    </div>
+</section>

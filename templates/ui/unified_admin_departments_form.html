@@ -45,7 +45,7 @@
     <header class="admin-department-profile__header">
         <div class="admin-department-profile__identity">
             <h1 class="admin-department-profile__title">{{ vm.department.name }}</h1>
-            <p class="admin-department-profile__meta">{{ department_profile.residence_name or 'Ej valt boende' }} · {{ vm.department.resident_count_fixed }} boende</p>
+            <p class="admin-department-profile__meta">{{ department_profile.residence_name or 'Ej valt boende' }} · {{ vm.department.resident_count_header_text }}</p>
         </div>
     </header>
 
@@ -65,9 +65,9 @@
                 </div>
 
                 <div class="admin-profile-row admin-profile-row--read">
-                    <div class="admin-profile-row__label">Normalt antal boende</div>
+                    <div class="admin-profile-row__label">Boendeantal</div>
                     <div class="admin-profile-row__value admin-profile-row__value--with-action">
-                        <span>{{ vm.department.resident_count_fixed }} · {{ vm.resident_variation_status }}</span>
+                        <span>{{ vm.department.resident_count_detail_value }}</span>
                         <button type="button" class="yp-button yp-button-secondary js-open-modal" data-modal-target="#residents-variation-modal">Hantera variation</button>
                     </div>
                 </div>
@@ -93,12 +93,12 @@
 
             <div class="admin-needs-list" role="list" aria-label="Registrerade kostbehov">
                 {% for group in vm.requirement_groups or [] %}
-                {% set group_display_name = (group.member_names|join(' + ')) if group.member_names else (group.label or group.primary_name or 'Kostbehov saknas') %}
+                {% set group_display_name = group.display_name or group.primary_name or group.label or 'Kostbehov saknas' %}
                 <div class="admin-need-item" role="listitem">
                     <div class="admin-need-item__main">
                         <strong class="admin-need-item__name">{{ group_display_name }}</strong>
                         <div class="admin-need-item__meta-line">
-                            <span class="admin-need-item__count">{{ group.default_quantity }} person{% if group.default_quantity != 1 %}er{% endif %}</span>
+                            <span class="admin-need-item__count">{{ group.display_meta or (group.default_quantity ~ ' person' ~ ('er' if group.default_quantity != 1 else '')) }}</span>
                         </div>
                     </div>
                     <div class="admin-need-item__actions">
@@ -117,78 +117,6 @@
                 <p class="ua-muted">Inga registrerade kostbehov ännu.</p>
                 {% endfor %}
                                 </div>
-
-                            <details class="admin-specialkost-config">
-                                <summary class="admin-specialkost-config__summary">Standardvärden / avancerade inställningar</summary>
-                                <div class="admin-specialkost-config__body">
-                                    <p class="yp-form-help admin-specialkost-config__lead">Standardvärden för kostbehov. Den här inställningen är stödjande och ändrar inte de registrerade kostbehoven ovan.</p>
-                                    <div class="yp-form">
-                                        {% if vm.diet_types and vm.diet_types|length > 0 %}
-                                        <div class="specialkost-edit-search-row" data-specialkost-filter-root>
-                                            <input type="search" class="yp-input specialkost-edit-search" placeholder="Sök specialkost..." aria-label="Sök specialkost" data-specialkost-filter-input>
-                                        </div>
-                                        {% set diet_categories = ['Textur', 'Allergi / Exkludering', 'Anpassning', 'Kostval', 'Övrigt'] %}
-                                        {% set totals = namespace(value=0) %}
-                                        {% for t in vm.diet_types %}
-                                            {% set dtid = t.id %}
-                                            {% set val = (vm.diet_defaults.get(dtid|string, 0) if vm.diet_defaults else 0)|int %}
-                                            {% set totals.value = totals.value + val %}
-                                        {% endfor %}
-                                        <p class="app-shell__card-text specialkost-edit-total"><strong>Totalt:</strong> {{ totals.value }} personer</p>
-                                        <div class="specialkost-edit-groups" role="group" aria-label="Specialkost antal per kategori">
-                                            {% for category in diet_categories %}
-                                                {% set ns = namespace(rows=[]) %}
-                                                {% for t in vm.diet_types %}
-                                                    {% set t_family = t.diet_family if t.diet_family in diet_categories else 'Övrigt' %}
-                                                    {% if t_family == category %}
-                                                        {% set ns.rows = ns.rows + [t] %}
-                                                    {% endif %}
-                                                {% endfor %}
-                                                {% if ns.rows %}
-                                                <details class="specialkost-edit-group" data-specialkost-group open>
-                                                    <summary class="specialkost-edit-group__summary">{{ category }}</summary>
-                                                    <div class="specialkost-edit-grid" role="group" aria-label="Specialkost antal {{ category }}">
-                                                        {% set families = namespace(names=[]) %}
-                                                        {% for t in ns.rows %}
-                                                            {% set family_base = t.name.replace('–', '-').split('-')[0].strip() %}
-                                                            {% set family_base = family_base if family_base else (t.name or 'Övrigt') %}
-                                                            {% if family_base not in families.names %}
-                                                                {% set families.names = families.names + [family_base] %}
-                                                            {% endif %}
-                                                        {% endfor %}
-                                                        {% for family_name in families.names %}
-                                                        <details class="specialkost-edit-family" data-specialkost-subgroup>
-                                                            <summary class="specialkost-edit-family__summary">{{ family_name }}</summary>
-                                                            <div class="specialkost-edit-family__list">
-                                                                {% for t in ns.rows %}
-                                                                    {% set row_family_base = t.name.replace('–', '-').split('-')[0].strip() %}
-                                                                    {% set row_family_base = row_family_base if row_family_base else (t.name or 'Övrigt') %}
-                                                                    {% if row_family_base == family_name %}
-                                                                        {% set dtid = t.id %}
-                                                                        {% set val = vm.diet_defaults.get(dtid|string, 0) if vm.diet_defaults else 0 %}
-                                                                        <div class="specialkost-edit-row" data-specialkost-item>
-                                                                            <label class="specialkost-edit-label" data-specialkost-name for="diet_default_{{ dtid }}">{{ t.name }}</label>
-                                                                            <div class="specialkost-edit-actions">
-                                                                                <input type="number" id="diet_default_{{ dtid }}" name="diet_default_{{ dtid }}" class="yp-input specialkost-edit-input sk-input" form="department-form" min="0" value="{{ val }}">
-                                                                                <button type="button" class="yp-button yp-button-secondary specialkost-edit-override{% if vm.diet_overrides_present and vm.diet_overrides_present.get(dtid|string) %} is-active{% endif %} js-open-diet-override" data-modal-target="#dietOverrideModal" data-department-id="{{ vm.department.id }}" data-site-id="{{ vm.department.site_id }}" data-diet-type-id="{{ dtid }}" data-diet-name="{{ t.name }}" aria-label="Avvikande schema{% if vm.diet_overrides_present and vm.diet_overrides_present.get(dtid|string) %} (aktivt){% endif %}">Avvikande schema</button>
-                                                                            </div>
-                                                                        </div>
-                                                                    {% endif %}
-                                                                {% endfor %}
-                                                            </div>
-                                                        </details>
-                                                        {% endfor %}
-                                                    </div>
-                                                </details>
-                                                {% endif %}
-                                            {% endfor %}
-                                        </div>
-                                        {% else %}
-                                        <p class="ua-muted">Inga specialkosttyper finns på denna site – skapa under <a href="{{ url_for('ui.admin_specialkost_list') }}">Specialkost</a>.</p>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            </details>
                         </article>
 
         <article class="app-shell__card admin-section admin-section--addons">
@@ -207,12 +135,17 @@
                 {% if vm.department_service_addons and vm.department_service_addons|length > 0 %}
                     {% for row in vm.department_service_addons %}
                     {% set quantity_parts = namespace(items=[]) %}
+                    {% set scope_label = {'all_services': 'Alla serveringar', 'lunch': 'Lunch', 'dinner': 'Kväll'}.get((row.service_scope or 'all_services')|lower, 'Alla serveringar') %}
                     {% set family_label = {'mos': 'Mos', 'sallad': 'Sallad', 'ovrigt': 'Övrigt'}.get((row.addon_family or 'ovrigt')|lower, row.addon_family) %}
-                    {% if row.lunch_count is not none and row.lunch_count|int > 0 %}
-                        {% set quantity_parts.items = quantity_parts.items + ['Lunch ' ~ row.lunch_count] %}
-                    {% endif %}
-                    {% if row.dinner_count is not none and row.dinner_count|int > 0 %}
-                        {% set quantity_parts.items = quantity_parts.items + ['Kväll ' ~ row.dinner_count] %}
+                    {% if (row.quantity_mode or 'custom') == 'whole_department' %}
+                        {% set quantity_parts.items = quantity_parts.items + [scope_label, 'Hela avdelningen'] %}
+                    {% else %}
+                        {% if row.lunch_count is not none and row.lunch_count|int > 0 %}
+                            {% set quantity_parts.items = quantity_parts.items + ['Lunch ' ~ row.lunch_count] %}
+                        {% endif %}
+                        {% if row.dinner_count is not none and row.dinner_count|int > 0 %}
+                            {% set quantity_parts.items = quantity_parts.items + ['Kväll ' ~ row.dinner_count] %}
+                        {% endif %}
                     {% endif %}
                     <div class="admin-service-addon-item" role="listitem">
                         <div class="admin-service-addon-item__main">
@@ -240,6 +173,8 @@
                                     data-service-addon-addon-id="{{ row.addon_id }}"
                                     data-service-addon-addon-name="{{ row.addon_name }}"
                                     data-service-addon-addon-family="{{ row.addon_family }}"
+                                    data-service-addon-service-scope="{{ row.service_scope or 'all_services' }}"
+                                    data-service-addon-quantity-mode="{{ row.quantity_mode or 'custom' }}"
                                     data-service-addon-lunch="{{ row.lunch_count if row.lunch_count is not none else '' }}"
                                     data-service-addon-dinner="{{ row.dinner_count if row.dinner_count is not none else '' }}"
                                     data-service-addon-note="{{ row.note or '' }}">Redigera</button>
@@ -267,6 +202,7 @@
                 </div>
                 <button type="button" class="ua-modal-close" data-modal-close data-service-addon-close aria-label="Stäng">&times;</button>
             </header>
+            {% set service_addon_count_max = vm.department.resident_count_fixed if vm.department and vm.department.resident_count_mode == 'fixed' and (vm.department.resident_count_fixed or 0)|int > 0 else none %}
             <section class="admin-service-addon-modal__state" data-service-addon-state="add">
                 <div class="ua-modal-body admin-service-addon-modal__body">
                     <label class="admin-service-addon-modal__field admin-service-addon-modal__field--wide">
@@ -280,14 +216,43 @@
                         </select>
                     </label>
 
-                    <div class="admin-service-addon-modal__quantity-grid">
-                        <label class="admin-service-addon-modal__field">
-                            <span class="admin-service-addon-modal__label">Lunch</span>
-                            <input type="number" min="0" max="{{ vm.department.resident_count_fixed }}" name="service_addon_lunch_count" class="yp-input" value="">
+                    <p class="admin-service-addon-modal__section-label">Gäller vid</p>
+                    <fieldset class="admin-resident-count-mode admin-service-addon-modal__choice-group" data-service-addon-scope-group>
+                        <legend class="yp-sr-only">Gäller vid</legend>
+                        <label class="admin-resident-count-mode__option" data-service-addon-scope-card>
+                            <input type="radio" name="service_scope" value="all_services" checked data-service-addon-scope-option>
+                            <span class="admin-resident-count-mode__title">Alla serveringar</span>
                         </label>
-                        <label class="admin-service-addon-modal__field">
+                        <label class="admin-resident-count-mode__option" data-service-addon-scope-card>
+                            <input type="radio" name="service_scope" value="lunch" data-service-addon-scope-option>
+                            <span class="admin-resident-count-mode__title">Lunch</span>
+                        </label>
+                        <label class="admin-resident-count-mode__option" data-service-addon-scope-card>
+                            <input type="radio" name="service_scope" value="dinner" data-service-addon-scope-option>
+                            <span class="admin-resident-count-mode__title">Kväll</span>
+                        </label>
+                    </fieldset>
+                    <p class="admin-service-addon-modal__section-label">Omfattning</p>
+                    <fieldset class="admin-resident-count-mode admin-service-addon-modal__choice-group" data-service-addon-quantity-group>
+                        <legend class="yp-sr-only">Omfattning</legend>
+                        <label class="admin-resident-count-mode__option" data-service-addon-quantity-card>
+                            <input type="radio" name="quantity_mode" value="whole_department" checked data-service-addon-quantity-option>
+                            <span class="admin-resident-count-mode__title">Hela avdelningen</span>
+                        </label>
+                        <label class="admin-resident-count-mode__option" data-service-addon-quantity-card>
+                            <input type="radio" name="quantity_mode" value="custom" data-service-addon-quantity-option>
+                            <span class="admin-resident-count-mode__title">Anpassat antal</span>
+                        </label>
+                    </fieldset>
+                    <p class="yp-form-help admin-service-addon-modal__help" data-service-addon-whole-department-help hidden>Gäller alla boende vid valda serveringar.</p>
+                    <div class="admin-service-addon-modal__quantity-grid" data-service-addon-quantity-panel>
+                        <label class="admin-service-addon-modal__field admin-service-addon-modal__count-field" data-service-addon-count-field="lunch">
+                            <span class="admin-service-addon-modal__label">Lunch</span>
+                            <input type="number" min="1" {% if service_addon_count_max is not none %}max="{{ service_addon_count_max }}"{% endif %} name="service_addon_lunch_count" class="yp-input" value="">
+                        </label>
+                        <label class="admin-service-addon-modal__field admin-service-addon-modal__count-field" data-service-addon-count-field="dinner">
                             <span class="admin-service-addon-modal__label">Kväll</span>
-                            <input type="number" min="0" max="{{ vm.department.resident_count_fixed }}" name="service_addon_dinner_count" class="yp-input" value="">
+                            <input type="number" min="1" {% if service_addon_count_max is not none %}max="{{ service_addon_count_max }}"{% endif %} name="service_addon_dinner_count" class="yp-input" value="">
                         </label>
                     </div>
 
@@ -339,14 +304,43 @@
                             </label>
                         </div>
                     </div>
-                    <div class="admin-service-addon-modal__quantity-grid">
-                        <label class="admin-service-addon-modal__field">
-                            <span class="admin-service-addon-modal__label">Lunch</span>
-                            <input type="number" min="0" max="{{ vm.department.resident_count_fixed }}" name="service_addon_lunch_count" class="yp-input" value="">
+                    <p class="admin-service-addon-modal__section-label">Gäller vid</p>
+                    <fieldset class="admin-resident-count-mode admin-service-addon-modal__choice-group" data-service-addon-scope-group>
+                        <legend class="yp-sr-only">Gäller vid</legend>
+                        <label class="admin-resident-count-mode__option" data-service-addon-scope-card>
+                            <input type="radio" name="service_scope" value="all_services" checked data-service-addon-scope-option>
+                            <span class="admin-resident-count-mode__title">Alla serveringar</span>
                         </label>
-                        <label class="admin-service-addon-modal__field">
+                        <label class="admin-resident-count-mode__option" data-service-addon-scope-card>
+                            <input type="radio" name="service_scope" value="lunch" data-service-addon-scope-option>
+                            <span class="admin-resident-count-mode__title">Lunch</span>
+                        </label>
+                        <label class="admin-resident-count-mode__option" data-service-addon-scope-card>
+                            <input type="radio" name="service_scope" value="dinner" data-service-addon-scope-option>
+                            <span class="admin-resident-count-mode__title">Kväll</span>
+                        </label>
+                    </fieldset>
+                    <p class="admin-service-addon-modal__section-label">Omfattning</p>
+                    <fieldset class="admin-resident-count-mode admin-service-addon-modal__choice-group" data-service-addon-quantity-group>
+                        <legend class="yp-sr-only">Omfattning</legend>
+                        <label class="admin-resident-count-mode__option" data-service-addon-quantity-card>
+                            <input type="radio" name="quantity_mode" value="whole_department" checked data-service-addon-quantity-option>
+                            <span class="admin-resident-count-mode__title">Hela avdelningen</span>
+                        </label>
+                        <label class="admin-resident-count-mode__option" data-service-addon-quantity-card>
+                            <input type="radio" name="quantity_mode" value="custom" data-service-addon-quantity-option>
+                            <span class="admin-resident-count-mode__title">Anpassat antal</span>
+                        </label>
+                    </fieldset>
+                    <p class="yp-form-help admin-service-addon-modal__help" data-service-addon-whole-department-help hidden>Gäller alla boende vid valda serveringar.</p>
+                    <div class="admin-service-addon-modal__quantity-grid" data-service-addon-quantity-panel>
+                        <label class="admin-service-addon-modal__field admin-service-addon-modal__count-field" data-service-addon-count-field="lunch">
+                            <span class="admin-service-addon-modal__label">Lunch</span>
+                            <input type="number" min="1" {% if service_addon_count_max is not none %}max="{{ service_addon_count_max }}"{% endif %} name="service_addon_lunch_count" class="yp-input" value="">
+                        </label>
+                        <label class="admin-service-addon-modal__field admin-service-addon-modal__count-field" data-service-addon-count-field="dinner">
                             <span class="admin-service-addon-modal__label">Kväll</span>
-                            <input type="number" min="0" max="{{ vm.department.resident_count_fixed }}" name="service_addon_dinner_count" class="yp-input" value="">
+                            <input type="number" min="1" {% if service_addon_count_max is not none %}max="{{ service_addon_count_max }}"{% endif %} name="service_addon_dinner_count" class="yp-input" value="">
                         </label>
                     </div>
                     <label class="admin-service-addon-modal__field admin-service-addon-modal__field--wide">
@@ -366,14 +360,43 @@
                         <p class="admin-service-addon-modal__subtitle" data-service-addon-edit-name></p>
                         <p class="admin-service-addon-modal__meta" data-service-addon-edit-family></p>
                     </div>
-                    <div class="admin-service-addon-modal__quantity-grid">
-                        <label class="admin-service-addon-modal__field">
-                            <span class="admin-service-addon-modal__label">Lunch</span>
-                            <input type="number" min="0" max="{{ vm.department.resident_count_fixed }}" name="service_addon_lunch_count" class="yp-input" value="">
+                    <p class="admin-service-addon-modal__section-label">Gäller vid</p>
+                    <fieldset class="admin-resident-count-mode admin-service-addon-modal__choice-group" data-service-addon-scope-group>
+                        <legend class="yp-sr-only">Gäller vid</legend>
+                        <label class="admin-resident-count-mode__option" data-service-addon-scope-card>
+                            <input type="radio" name="service_scope" value="all_services" checked data-service-addon-scope-option>
+                            <span class="admin-resident-count-mode__title">Alla serveringar</span>
                         </label>
-                        <label class="admin-service-addon-modal__field">
+                        <label class="admin-resident-count-mode__option" data-service-addon-scope-card>
+                            <input type="radio" name="service_scope" value="lunch" data-service-addon-scope-option>
+                            <span class="admin-resident-count-mode__title">Lunch</span>
+                        </label>
+                        <label class="admin-resident-count-mode__option" data-service-addon-scope-card>
+                            <input type="radio" name="service_scope" value="dinner" data-service-addon-scope-option>
+                            <span class="admin-resident-count-mode__title">Kväll</span>
+                        </label>
+                    </fieldset>
+                    <p class="admin-service-addon-modal__section-label">Omfattning</p>
+                    <fieldset class="admin-resident-count-mode admin-service-addon-modal__choice-group" data-service-addon-quantity-group>
+                        <legend class="yp-sr-only">Omfattning</legend>
+                        <label class="admin-resident-count-mode__option" data-service-addon-quantity-card>
+                            <input type="radio" name="quantity_mode" value="whole_department" checked data-service-addon-quantity-option>
+                            <span class="admin-resident-count-mode__title">Hela avdelningen</span>
+                        </label>
+                        <label class="admin-resident-count-mode__option" data-service-addon-quantity-card>
+                            <input type="radio" name="quantity_mode" value="custom" data-service-addon-quantity-option>
+                            <span class="admin-resident-count-mode__title">Anpassat antal</span>
+                        </label>
+                    </fieldset>
+                    <p class="yp-form-help admin-service-addon-modal__help" data-service-addon-whole-department-help hidden>Gäller alla boende vid valda serveringar.</p>
+                    <div class="admin-service-addon-modal__quantity-grid" data-service-addon-quantity-panel>
+                        <label class="admin-service-addon-modal__field admin-service-addon-modal__count-field" data-service-addon-count-field="lunch">
+                            <span class="admin-service-addon-modal__label">Lunch</span>
+                            <input type="number" min="1" {% if service_addon_count_max is not none %}max="{{ service_addon_count_max }}"{% endif %} name="service_addon_lunch_count" class="yp-input" value="">
+                        </label>
+                        <label class="admin-service-addon-modal__field admin-service-addon-modal__count-field" data-service-addon-count-field="dinner">
                             <span class="admin-service-addon-modal__label">Kväll</span>
-                            <input type="number" min="0" max="{{ vm.department.resident_count_fixed }}" name="service_addon_dinner_count" class="yp-input" value="">
+                            <input type="number" min="1" {% if service_addon_count_max is not none %}max="{{ service_addon_count_max }}"{% endif %} name="service_addon_dinner_count" class="yp-input" value="">
                         </label>
                     </div>
                     <label class="admin-service-addon-modal__field admin-service-addon-modal__field--wide">
@@ -415,48 +438,84 @@
 </section>
 
 {% else %}
-<section class="app-shell__grid">
-    <article class="app-shell__card">
-        <h2 class="app-shell__card-title">Avdelningsuppgifter</h2>
+<section class="app-shell__grid admin-department-create-shell">
+    <article class="app-shell__card admin-department-create-card">
         <form method="POST"
               action="{{ url_for('ui.admin_departments_create') }}"
-              class="yp-form department-form">
+              class="yp-form department-form admin-department-create-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <div class="yp-form-field">
-                <label for="name" class="yp-label">Namn <span class="required">*</span></label>
-                <input type="text" id="name" name="name" class="yp-input" value="{% if vm.department %}{{ vm.department.name }}{% endif %}" required aria-required="true" placeholder="T.ex. Avdelning 1">
-            </div>
-            <div class="yp-form-field">
-                <label for="residence_id" class="yp-label">Boende</label>
-                <div class="admin-inline-actions">
-                    <select id="residence_id" name="residence_id" class="yp-input">
-                        <option value="">Välj boende...</option>
-                        {% for residence in vm.residences or [] %}
-                        <option value="{{ residence.id }}" {% if vm.selected_residence_id and vm.selected_residence_id == residence.id %}selected{% endif %}>{{ residence.name }}</option>
-                        {% endfor %}
-                    </select>
-                    <button type="button" class="yp-button yp-button-secondary" data-modal-target="#residence-create-modal" aria-label="Lägg till boende">+ Lägg till</button>
+
+            <div class="admin-department-create__section">
+                <div class="admin-department-create__section-head">
+                    <h2 class="app-shell__card-title">Avdelning</h2>
+                    <p class="admin-department-create__section-lead">Grunduppgifter för den nya avdelningen.</p>
+                </div>
+                <div class="yp-form-field">
+                    <label for="name" class="yp-label">Avdelningsnamn <span class="required">*</span></label>
+                    <input type="text" id="name" name="name" class="yp-input" value="{% if vm.department %}{{ vm.department.name }}{% endif %}" required aria-required="true" placeholder="T.ex. Avdelning 1">
+                </div>
+                <div class="yp-form-field">
+                    <label for="residence_id" class="yp-label">Boende / enhet</label>
+                    <div class="admin-inline-actions">
+                        <select id="residence_id" name="residence_id" class="yp-input">
+                            <option value="">Välj boende...</option>
+                            {% for residence in vm.residences or [] %}
+                            <option value="{{ residence.id }}" {% if vm.selected_residence_id and vm.selected_residence_id == residence.id %}selected{% endif %}>{{ residence.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="button" class="yp-button yp-button-secondary" data-modal-target="#residence-create-modal" aria-label="Lägg till boende">+ Lägg till</button>
+                    </div>
                 </div>
             </div>
-            <div class="yp-form-field">
-                <label for="resident_count" class="yp-label">Antal boende <span class="required">*</span></label>
-                <input type="number" id="resident_count" name="resident_count" class="yp-input" value="{% if vm.department %}{{ vm.department.resident_count_fixed }}{% else %}0{% endif %}" min="0" required aria-required="true" placeholder="0">
+
+            <hr class="admin-department-create__divider">
+
+            <div class="admin-department-create__section">
+                <div class="admin-department-create__section-head">
+                    <h2 class="app-shell__card-title">Boendeantal</h2>
+                    <p class="admin-department-create__section-lead">Välj om antalet är fast eller varierar per dag och måltid.</p>
+                </div>
+                <fieldset class="admin-resident-count-mode" data-resident-count-mode-group>
+                    <legend class="yp-sr-only">Boendeantal</legend>
+                    <label class="admin-resident-count-mode__option" data-resident-count-mode-card>
+                        <input type="radio" name="resident_count_mode" value="fixed" {% if not vm.department or vm.department.resident_count_mode == 'fixed' %}checked{% endif %} data-resident-count-mode-option>
+                        <span class="admin-resident-count-mode__title">Fast antal</span>
+                    </label>
+                    <label class="admin-resident-count-mode__option" data-resident-count-mode-card>
+                        <input type="radio" name="resident_count_mode" value="per_day_meal" {% if vm.department and vm.department.resident_count_mode == 'per_day_meal' %}checked{% endif %} data-resident-count-mode-option>
+                        <span class="admin-resident-count-mode__title">Varierar</span>
+                    </label>
+                </fieldset>
+                <div class="admin-resident-count-mode__fixed" data-resident-count-fixed-panel>
+                    <label for="resident_count" class="yp-label">Antal personer <span class="required">*</span></label>
+                    <input type="number" id="resident_count" name="resident_count" class="yp-input" value="{% if vm.department %}{{ vm.department.resident_count_fixed }}{% else %}0{% endif %}" min="0" placeholder="0" data-resident-count-input>
+                </div>
+                <p class="yp-form-help" data-resident-count-helper hidden>Antalet anges per dag och måltid efter att avdelningen har skapats.</p>
             </div>
-            <div class="yp-form-field">
-                <label for="notes" class="yp-label">Faktaruta</label>
-                <textarea id="notes" name="notes" class="yp-input" rows="4" placeholder="Valfri beskrivning">{% if vm.department %}{{ vm.department.notes }}{% endif %}</textarea>
-                <p class="yp-form-help">Intern faktaruta/anteckningar för avdelningen</p>
+
+            <hr class="admin-department-create__divider">
+
+            <div class="admin-department-create__section">
+                <div class="admin-department-create__section-head">
+                    <h2 class="app-shell__card-title">Intern information</h2>
+                </div>
+                <div class="yp-form-field">
+                    <label for="notes" class="yp-label">Faktaruta</label>
+                    <textarea id="notes" name="notes" class="yp-input" rows="4" placeholder="Valfri beskrivning">{% if vm.department %}{{ vm.department.notes }}{% endif %}</textarea>
+                    <p class="yp-form-help">Intern faktaruta/anteckningar för avdelningen</p>
+                </div>
             </div>
-            <div class="form-actions">
-                <button type="submit" class="yp-button yp-button-primary">💾 Skapa avdelning</button>
-                <a href="{{ url_for('ui.admin_departments_list') }}" class="yp-button yp-button-secondary">✖ Avbryt</a>
-            </div>
+
+            <footer class="admin-department-create__footer form-actions">
+                <button type="submit" class="yp-button yp-button-primary">Skapa avdelning</button>
+                <a href="{{ url_for('ui.admin_departments_list') }}" class="yp-button yp-button-secondary">Avbryt</a>
+            </footer>
         </form>
     </article>
 </section>
 {% endif %}
 
-{% if vm.mode == 'edit' and vm.department %}
+{% if vm.mode == 'new' or (vm.mode == 'edit' and vm.department) %}
 <dialog id="residence-create-modal" class="ua-modal">
     <div class="ua-modal-inner">
         <header class="ua-modal-header">
@@ -465,11 +524,14 @@
         </header>
         <form method="POST" action="{{ url_for('ui.admin_residences_create') }}" class="yp-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <input type="hidden" name="return_to" value="edit">
+            <input type="hidden" name="return_to" value="{{ 'edit' if vm.mode == 'edit' else 'new' }}">
+            {% if vm.mode == 'edit' and vm.department %}
             <input type="hidden" name="dept_id" value="{{ vm.department.id }}">
+            {% endif %}
             <div class="yp-form-field">
                 <label for="residence_name" class="yp-label">Namn <span class="required">*</span></label>
                 <input id="residence_name" name="name" class="yp-input" type="text" required aria-required="true" placeholder="T.ex. Boende Solrosen">
+                <p class="yp-form-help" data-residence-create-status hidden aria-live="polite"></p>
             </div>
             <div class="form-actions">
                 <button type="submit" class="yp-button yp-button-primary">Spara boende</button>
@@ -556,15 +618,20 @@
                 </div>
 
                 <div class="admin-department-edit-modal__row">
-                    <label for="department-edit-resident-count">Normalt antal boende</label>
-                    <input type="number"
-                           id="department-edit-resident-count"
-                           name="resident_count"
-                           class="yp-input"
-                           value="{{ vm.department.resident_count_fixed }}"
-                           min="0"
-                           required
-                           aria-required="true">
+                    <label for="department-edit-resident-count">{% if vm.department.resident_count_mode == 'per_day_meal' %}Boendeantal{% else %}Normalt antal boende{% endif %}</label>
+                    {% if vm.department.resident_count_mode == 'per_day_meal' %}
+                        <div id="department-edit-resident-count" class="yp-input" aria-readonly="true">Varierar per dag/måltid</div>
+                        <input type="hidden" name="resident_count" value="{{ vm.department.resident_count_fixed }}">
+                    {% else %}
+                        <input type="number"
+                               id="department-edit-resident-count"
+                               name="resident_count"
+                               class="yp-input"
+                               value="{{ vm.department.resident_count_fixed }}"
+                               min="0"
+                               required
+                               aria-required="true">
+                    {% endif %}
                 </div>
 
                 <div class="admin-department-edit-modal__row admin-department-edit-modal__row--notes">

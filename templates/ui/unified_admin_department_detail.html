@@ -27,6 +27,10 @@
 
   <article class="app-shell__card">
     <h2 class="app-shell__card-title">Boendeantal</h2>
+    <p class="app-shell__card-text">{{ vm.department.resident_count_header_text }}</p>
+    <p class="app-shell__card-text">
+      <a class="yp-button yp-button-secondary" href="{{ url_for('ui.admin_departments_edit_form', dept_id=vm.department.id) }}">Hantera variation</a>
+    </p>
     <div class="admin-department-detail__weeknav">
       {% set prev_w = vm.selected_week-1 if vm.selected_week>1 else 1 %}
       {% set next_w = vm.selected_week+1 if vm.selected_week<52 else 52 %}
@@ -34,7 +38,7 @@
       <span class="app-shell__card-text"><strong>Vecka {{ vm.selected_week }}</strong></span>
       <a class="yp-button yp-button-secondary" href="{{ url_for('ui.admin_department_detail', department_id=vm.department.id, week=next_w) }}" aria-label="Nästa vecka">▶︎</a>
     </div>
-    <p class="app-shell__card-text"><strong>Normalt antal:</strong> {{ vm.resident_count_fixed }} boende</p>
+    <p class="app-shell__card-text"><strong>Boendeantal:</strong> {{ vm.department.resident_count_detail_value }}</p>
     {% if vm.has_variation and vm.weekly_table %}
       <p class="app-shell__card-text"><strong>Veckoöverstyrning:</strong> Lunch/Kväll visas nedan.</p>
       <table class="ua-table ua-table-compact">

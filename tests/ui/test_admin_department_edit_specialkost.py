@@ -1,5 +1,5 @@
 """
-Verify diet types (specialkost) appear on department edit and can be saved as defaults.
+Verify the department edit page keeps the specialkost defaults UI hidden while the backend save path still works.
 - Seed tenant/site, one diet type, one department
 - GET edit form shows the diet type
 - POST save defaults, reload shows saved count
@@ -41,8 +41,8 @@ def test_edit_department_shows_diet_types_and_saves_defaults(app_session, client
     assert r_get.status_code == 200
     html = r_get.data.decode("utf-8")
     assert "Kostbehov" in html
-    assert "Standardvärden / avancerade inställningar" in html
-    assert "Laktosfri" in html
+    assert "Standardvärden / avancerade inställningar" not in html
+    assert "Laktosfri" not in html
 
     # POST save defaults (set 3 for Laktosfri). Version is 0 from seed.
     r_post = client_admin.post(
@@ -60,5 +60,8 @@ def test_edit_department_shows_diet_types_and_saves_defaults(app_session, client
     r_get2 = client_admin.get(f"/ui/admin/departments/{dept_id}/edit", headers=_h("admin"))
     assert r_get2.status_code == 200
     html2 = r_get2.data.decode("utf-8")
-    # Look for the input reflecting saved value 3
-    assert 'name="diet_default_1"' in html2 and 'value="3"' in html2
+    assert "Laktosfri" not in html2
+    from core.admin_repo import DietDefaultsRepo
+    defaults = DietDefaultsRepo().list_for_department(dept_id)
+    found = {int(item["diet_type_id"]): int(item.get("default_count", 0)) for item in defaults}
+    assert found.get(1) == 3

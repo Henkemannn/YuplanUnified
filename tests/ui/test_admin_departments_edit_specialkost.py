@@ -91,7 +91,7 @@ def test_edit_form_shows_specialkost_heading(client_admin):
     assert r.status_code == 200
     html = r.get_data(as_text=True)
     assert "Kostbehov" in html
-    assert "Standardvärden / avancerade inställningar" in html
+    assert "Standardvärden / avancerade inställningar" not in html
     assert "app-shell__env-badge" in html
     assert '<div class="app-shell__card-meta">Vecka ' not in html
 
@@ -353,6 +353,7 @@ def test_edit_form_renders_requirement_groups_and_can_create_update(client_admin
     glutenfri_id = DietTypesRepo().create(site_id=site["id"], name="Glutenfri", default_select=False, semantics="atomic")
     laktosfri_id = DietTypesRepo().create(site_id=site["id"], name="Laktosfri", default_select=False, semantics="atomic")
     flytande_id = DietTypesRepo().create(site_id=site["id"], name="Flytande kost", default_select=False, semantics="atomic")
+    grovpate_id = DietTypesRepo().create(site_id=site["id"], name="Grovpaté", default_select=False, semantics="atomic")
 
     dept_repo = DepartmentsRepo()
     dept_repo.upsert_department_diet_defaults(
@@ -363,6 +364,21 @@ def test_edit_form_renders_requirement_groups_and_can_create_update(client_admin
             {"diet_type_id": glutenfri_id, "default_count": 1},
             {"diet_type_id": flytande_id, "default_count": 1},
         ],
+    )
+    group_repo = DepartmentRequirementGroupsRepo()
+    group_repo.create_group(
+        dep["id"],
+        1,
+        [grovpate_id, laktosfri_id],
+        label=None,
+        primary_requirement_id=grovpate_id,
+    )
+    group_repo.create_group(
+        dep["id"],
+        2,
+        [timbal_id],
+        label=None,
+        primary_requirement_id=timbal_id,
     )
 
     defaults_before = DietDefaultsRepo().list_for_department(dep["id"])
@@ -383,6 +399,14 @@ def test_edit_form_renders_requirement_groups_and_can_create_update(client_admin
     assert "Glutenfri" in create_options
     assert "Flytande kost" in create_options
     assert "Laktosfri" in create_options
+    assert "Grovpaté" in create_options
+    assert '<strong class="admin-need-item__name">Grovpaté</strong>' in html
+    assert '1 person · Laktosfri' in html
+    assert '<strong class="admin-need-item__name">Timbal</strong>' in html
+    assert '2 personer' in html
+    assert 'Laktosfri + Grovpaté' not in html
+    assert html.index('<strong class="admin-need-item__name">Grovpaté</strong>') < html.index('<strong class="admin-need-item__name">Timbal</strong>')
+    assert "Standardvärden / avancerade inställningar" not in html
     assert html.count('+ Lägg till kostbehov') >= 1
     assert 'data-need-picker-toggle' in html
     assert 'data-need-picker-search' in html
@@ -393,7 +417,7 @@ def test_edit_form_renders_requirement_groups_and_can_create_update(client_admin
     create_resp = client_admin.post(
         f"/ui/admin/departments/{dep['id']}/requirement-groups",
         data={
-            "primary_requirement_id": str(timbal_id),
+            "primary_requirement_id": str(flytande_id),
             "default_quantity": "2",
             "is_active": "1",
         },
@@ -404,8 +428,9 @@ def test_edit_form_renders_requirement_groups_and_can_create_update(client_admin
 
     repo = DepartmentRequirementGroupsRepo()
     groups = repo.list_for_department(dep["id"])
-    assert len(groups) == 1
-    group_id = str(groups[0]["id"])
+    assert len(groups) == 3
+    created_group = next(group for group in groups if group["primary_requirement_id"] == flytande_id)
+    group_id = str(created_group["id"])
     defaults_after_create = DietDefaultsRepo().list_for_department(dep["id"])
     diet_count_after_create = len(DietTypesRepo().list_all(site_id=site["id"]))
     assert defaults_after_create == defaults_before
@@ -415,7 +440,7 @@ def test_edit_form_renders_requirement_groups_and_can_create_update(client_admin
         f"/ui/admin/departments/{dep['id']}/requirement-groups",
         data={
             "group_id": group_id,
-            "primary_requirement_id": str(timbal_id),
+            "primary_requirement_id": str(flytande_id),
             "modifier_requirement_ids": [str(glutenfri_id)],
             "default_quantity": "3",
             "is_active": "1",
@@ -427,7 +452,7 @@ def test_edit_form_renders_requirement_groups_and_can_create_update(client_admin
 
     reread = repo.get_group(group_id)
     assert reread is not None
-    assert reread["primary_requirement_id"] == timbal_id
+    assert reread["primary_requirement_id"] == flytande_id
     assert reread["default_quantity"] == 3
 
 
@@ -588,7 +613,7 @@ def test_edit_form_allows_site_catalog_requirement_creation_without_department_d
     assert page.status_code == 200
     html = page.get_data(as_text=True)
     assert "Inga registrerade kostbehov ännu." in html
-    assert "Standardvärden / avancerade inställningar" in html
+    assert "Standardvärden / avancerade inställningar" not in html
     assert 'id="need-modal-modifier-requirement-ids"' in html
     assert 'data-need-picker-panel' in html
     assert 'data-need-picker-list' in html
@@ -611,7 +636,7 @@ def test_edit_form_allows_site_catalog_requirement_creation_without_department_d
     html = resp.get_data(as_text=True)
     assert "Inga registrerade behov ännu." not in html
     assert html.count("Hantera variation") == 1
-    assert "Standardvärden / avancerade inställningar" in html
+    assert "Standardvärden / avancerade inställningar" not in html
     assert html.count('+ Lägg till kostbehov') >= 2
     assert 'Välj ytterligare behov' not in html
     assert 'data-need-picker-panel' in html

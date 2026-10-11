@@ -893,6 +893,7 @@ def kitchen_planering_product2_day():
         row = db.execute(text("SELECT tenant_id, name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
     finally:
         db.close()
+    resident_count_presentation = _department_resident_count_presentation(resident_count_mode, resident_count_fixed)
     if not row:
         return abort(404)
     try:
@@ -2081,7 +2082,7 @@ def admin_department_detail_get(department_id: str):
     try:
         row = db.execute(
             text(
-                "SELECT d.name, COALESCE(d.resident_count_fixed,0), COALESCE(d.notes,''), d.site_id, COALESCE(r.name, 'Ej valt') AS residence_name "
+                "SELECT d.name, COALESCE(d.resident_count_mode, 'fixed'), COALESCE(d.resident_count_fixed,0), COALESCE(d.notes,''), d.site_id, COALESCE(r.name, 'Ej valt') AS residence_name "
                 "FROM departments d LEFT JOIN residences r ON r.id = d.residence_id WHERE d.id=:id"
             ),
             {"id": department_id},
@@ -2089,17 +2090,18 @@ def admin_department_detail_get(department_id: str):
         if not row:
             return jsonify({"error": "not_found", "message": "Department not found"}), 404
         dept_name = str(row[0] or "")
-        resident_count_fixed = int(row[1] or 0)
-        notes = str(row[2] or "")
-        dept_site_id = str(row[3]) if row[3] is not None else None
-        residence_name = str(row[4] or "Ej valt")
+        resident_count_mode = str(row[1] or "fixed")
+        resident_count_fixed = int(row[2] or 0)
+        notes = str(row[3] or "")
+        dept_site_id = str(row[4]) if row[4] is not None else None
+        residence_name = str(row[5] or "Ej valt")
         site_name_row = None
         if dept_site_id:
             site_name_row = db.execute(text("SELECT name FROM sites WHERE id=:id"), {"id": dept_site_id}).fetchone()
         dept_site_name = str(site_name_row[0] or "") if site_name_row else ""
     finally:
         db.close()
-
+    resident_count_presentation = _department_resident_count_presentation(resident_count_mode, resident_count_fixed)
     # Current ISO week and selected_week from query
     today = _date.today()
     iso = today.isocalendar()
@@ -2137,20 +2139,24 @@ def admin_department_detail_get(department_id: str):
         "department": {
             "id": department_id,
             "name": dept_name,
+            "resident_count_mode": resident_count_mode,
             "resident_count_fixed": resident_count_fixed,
             "notes": notes,
             "residence_name": residence_name,
+            **resident_count_presentation,
         },
         "year": year,
         "week": week,
         "selected_week": week,
         "resident_count_fixed": resident_count_fixed,
+        "resident_count_mode": resident_count_mode,
         "site_id": site_id,
         "site_name": dept_site_name,
         "residents_lunch": lunch_eff,
         "residents_dinner": dinner_eff,
         "has_override": bool(ov.get("residents_lunch") or ov.get("residents_dinner")),
     }
+    vm.update(_build_department_overview_sections(department_id, site_id=dept_site_id))
     # Variation flags and weekly_table
     has_week_variation = bool(week_sched)
     has_forever_variation = bool(forever_sched)
@@ -2204,6 +2210,57 @@ def admin_department_detail_get(department_id: str):
         vm["specialkost_rows"] = []
         vm["specialkost_total"] = 0
     return render_template("ui/unified_admin_department_detail.html", vm=vm)
+
+
+@ui_bp.get("/ui/admin/departments/<department_id>/quick-overview")
+@require_roles(*ADMIN_ROLES)
+def admin_department_quick_overview_get(department_id: str):
+    """Return a compact read-only department overview fragment."""
+    from .context import get_active_context as _get_ctx
+
+    ctx = _get_ctx()
+    active_site_id = str(ctx.get("site_id") or "").strip()
+    if not active_site_id:
+        return jsonify({"error": "forbidden", "message": "active_site_required"}), 403
+
+    db = get_session()
+    try:
+        row = db.execute(
+            text(
+                "SELECT d.name, COALESCE(d.resident_count_mode, 'fixed'), COALESCE(d.resident_count_fixed,0), COALESCE(d.notes,''), d.site_id, COALESCE(r.name, 'Ej valt') AS residence_name "
+                "FROM departments d LEFT JOIN residences r ON r.id = d.residence_id WHERE d.id=:id"
+            ),
+            {"id": department_id},
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "not_found", "message": "Department not found"}), 404
+        dept_site_id = str(row[4]) if row[4] is not None else None
+        if not dept_site_id or dept_site_id != active_site_id:
+            return jsonify({"error": "not_found", "message": "forbidden_site"}), 404
+        site_name_row = None
+        if dept_site_id:
+            site_name_row = db.execute(text("SELECT name FROM sites WHERE id=:id"), {"id": dept_site_id}).fetchone()
+        dept_site_name = str(site_name_row[0] or "") if site_name_row else ""
+    finally:
+        db.close()
+
+    vm = {
+        "department": {
+            "id": department_id,
+            "name": str(row[0] or ""),
+            "resident_count_mode": str(row[1] or "fixed"),
+            "resident_count_fixed": int(row[2] or 0),
+            "notes": str(row[3] or ""),
+            "residence_name": str(row[5] or "Ej valt"),
+            **_department_resident_count_presentation(str(row[1] or "fixed"), int(row[2] or 0)),
+        },
+        "site_id": dept_site_id,
+        "site_name": dept_site_name,
+        "department_name": str(row[0] or ""),
+    }
+    vm.update(_build_department_overview_sections(department_id, site_id=dept_site_id))
+    return render_template("ui/_partials/admin_department_quick_overview.html", vm=vm)
+
 
 @ui_bp.post("/ui/admin/diets/create")
 @require_roles(*ADMIN_ROLES)
@@ -4180,9 +4237,12 @@ def kitchen_planering_v1():
             try:
                 from .admin_repo import DepartmentServiceAddonsRepo
 
-                service_addons_summary = DepartmentServiceAddonsRepo().list_totals_for_site_meal(
+                service_addons_summary = DepartmentServiceAddonsRepo().list_totals_for_site_meal_with_context(
                     site_id=site_id,
                     meal=effective_planera_meal,
+                    year=year,
+                    week=week,
+                    weekday=int(selected_day) + 1,
                 )
                 selected_service_addon_id = str(request.args.get("addon_id") or "").strip() or None
                 if selected_service_addon_id and not any(
@@ -6556,7 +6616,7 @@ def admin_departments_list():
             rows = db.execute(
                 text(
                     """
-                    SELECT d.id, d.site_id, d.name, COALESCE(d.resident_count_fixed, 0) AS rc_fixed, s.name AS site_name, COALESCE(d.notes,'') AS notes, COALESCE(r.name, 'Ej valt') AS residence_name, d.display_order, COALESCE(d.version, 0)
+                    SELECT d.id, d.site_id, d.name, COALESCE(d.resident_count_mode, 'fixed') AS rc_mode, COALESCE(d.resident_count_fixed, 0) AS rc_fixed, s.name AS site_name, COALESCE(d.notes,'') AS notes, COALESCE(r.name, 'Ej valt') AS residence_name, d.display_order, COALESCE(d.version, 0)
                     FROM departments d
                     LEFT JOIN sites s ON s.id = d.site_id
                     LEFT JOIN residences r ON r.id = d.residence_id
@@ -6574,15 +6634,16 @@ def admin_departments_list():
                     "id": r[0],
                     "site_id": r[1],
                     "name": r[2],
-                    "resident_count_mode": "fixed",
-                    "resident_count_fixed": int(r[3] or 0),
-                    "site_name": r[4] or None,
-                    "notes": r[5] or "",
-                    "residence_name": r[6] or "Ej valt",
-                    "display_order": (int(r[7]) if r[7] is not None else None),
-                    "version": int(r[8] or 0),
+                    "resident_count_mode": str(r[3] or "fixed"),
+                    "resident_count_fixed": int(r[4] or 0),
+                    "site_name": r[5] or None,
+                    "notes": r[6] or "",
+                    "residence_name": r[7] or "Ej valt",
+                    "display_order": (int(r[8]) if r[8] is not None else None),
+                    "version": int(r[9] or 0),
                 }
             )
+            departments[-1].update(_department_resident_count_presentation(departments[-1]["resident_count_mode"], departments[-1]["resident_count_fixed"]))
         # Site header: strictly resolve from active site
         try:
             row_site = db.execute(text("SELECT name FROM sites WHERE id=:id"), {"id": active_site_id}).fetchone()
@@ -6609,8 +6670,10 @@ def admin_departments_list():
             week_sched = sched.get_week(str(d["id"]), current_week)
             forever_sched = sched.get_forever(str(d["id"]))
             d["has_variation"] = bool(week_sched or forever_sched or has_weekly_override)
+            d["resident_count_state_badge"] = "Varierat" if d["resident_count_mode"] == "per_day_meal" or d["has_variation"] else "Fast"
         except Exception:
             d["has_variation"] = False
+            d["resident_count_state_badge"] = "Fast"
 
     # Empty-state hint for tests/UI
     if not departments:
@@ -6628,6 +6691,140 @@ def admin_departments_list():
     }
     
     return render_template("ui/unified_admin_departments_list.html", vm=vm, nav_context="admin")
+
+
+def _department_resident_count_presentation(resident_count_mode: str | None, resident_count_fixed: int | None) -> dict[str, object]:
+    is_variable = str(resident_count_mode or "").strip() == "per_day_meal"
+    count = int(resident_count_fixed or 0)
+    if is_variable:
+        return {
+            "resident_count_mode": "per_day_meal",
+            "resident_count_summary": "Varierat boendeantal",
+            "resident_count_detail_value": "Varierar per dag/måltid",
+            "resident_count_list_text": "Varierat boendeantal",
+            "resident_count_header_text": "Varierat boendeantal",
+        }
+    return {
+        "resident_count_mode": "fixed",
+        "resident_count_summary": f"{count} boende",
+        "resident_count_detail_value": f"{count} personer",
+        "resident_count_list_text": f"{count} boende",
+        "resident_count_header_text": f"{count} boende",
+    }
+
+
+def _build_department_overview_sections(department_id: str, *, site_id: str | None) -> dict[str, object]:
+    """Shape compact read-only department overview data shared by detail and quick view."""
+    vm: dict[str, object] = {
+        "requirement_groups": [],
+        "department_service_addons": [],
+        "requirement_group_diet_types": [],
+    }
+
+    try:
+        from core.admin_repo import DietTypesRepo, DepartmentServiceAddonsRepo
+
+        atomic_types = []
+        if site_id:
+            try:
+                atomic_types = [
+                    t
+                    for t in DietTypesRepo().list_all(site_id=site_id)
+                    if str(t.get("semantics") or "").strip().lower() == "atomic"
+                ]
+            except Exception:
+                atomic_types = []
+        type_lookup = {str(t.get("id")): t for t in atomic_types}
+
+        groups = DepartmentRequirementGroupsRepo().list_for_department(department_id)
+        formatted_groups: list[dict[str, object]] = []
+        for group in groups:
+            requirement_rows = group.get("requirements") or []
+            member_ids = [str(row.get("dietary_type_id")) for row in requirement_rows if str(row.get("dietary_type_id") or "").strip()]
+            primary_id = str(group.get("primary_requirement_id")) if group.get("primary_requirement_id") is not None else None
+            primary_name = None
+            if primary_id:
+                primary_name = str((type_lookup.get(primary_id) or {}).get("name") or "") or None
+            member_names = [str((type_lookup.get(member_id) or {}).get("name") or member_id) for member_id in member_ids]
+            display_name = primary_name or (member_names[0] if member_names else None) or str(group.get("label") or "").strip() or "Kostbehov saknas"
+            modifier_names = [name for name in member_names if name and name != display_name]
+            default_quantity = int(group.get("default_quantity") or 0)
+            display_meta = f"{default_quantity} person{'er' if default_quantity != 1 else ''}"
+            if modifier_names:
+                display_meta = f"{display_meta} · {' + '.join(modifier_names)}"
+            formatted_groups.append(
+                {
+                    "id": str(group.get("id")),
+                    "label": group.get("label"),
+                    "default_quantity": default_quantity,
+                    "is_active": bool(group.get("is_active")),
+                    "primary_requirement_id": primary_id,
+                    "primary_name": primary_name,
+                    "display_name": display_name,
+                    "display_meta": display_meta,
+                    "member_ids": member_ids,
+                    "modifier_ids": [member_id for member_id in member_ids if member_id != primary_id],
+                    "member_names": member_names,
+                    "modifier_names": modifier_names,
+                    "unresolved_primary": primary_id is None,
+                }
+            )
+
+        active_groups = [group for group in formatted_groups if bool(group.get("is_active"))]
+        active_groups.sort(
+            key=lambda group: (
+                str(group.get("display_name") or "").strip().casefold(),
+                str(group.get("display_meta") or "").strip().casefold(),
+                str(group.get("id") or ""),
+            )
+        )
+        vm["requirement_groups"] = active_groups
+        vm["requirement_group_diet_types"] = atomic_types
+    except Exception:
+        vm["requirement_groups"] = []
+        vm["requirement_group_diet_types"] = []
+
+    try:
+        addon_rows = DepartmentServiceAddonsRepo().list_for_department(department_id, site_id=site_id)
+        summarized_addons: list[dict[str, object]] = []
+        for row in addon_rows:
+            scope_key = str(row.get("service_scope") or "all_services").strip().lower()
+            quantity_mode = str(row.get("quantity_mode") or "custom").strip().lower()
+            addon_family = str(row.get("addon_family") or "ovrigt").strip().lower()
+            scope_label = {"all_services": "Alla serveringar", "lunch": "Lunch", "dinner": "Kväll"}.get(scope_key, "Alla serveringar")
+            family_label = {"mos": "Mos", "sallad": "Sallad", "ovrigt": "Övrigt"}.get(addon_family, str(row.get("addon_family") or "").strip() or "Övrigt")
+            quantity_parts = [scope_label]
+            if quantity_mode == "whole_department":
+                quantity_parts.append("Hela avdelningen")
+            else:
+                lunch_count = int(row.get("lunch_count") or 0)
+                dinner_count = int(row.get("dinner_count") or 0)
+                if lunch_count > 0:
+                    quantity_parts.append(f"Lunch {lunch_count}")
+                if dinner_count > 0:
+                    quantity_parts.append(f"Kväll {dinner_count}")
+                if lunch_count <= 0 and dinner_count <= 0:
+                    quantity_parts.append("Inga mängder")
+            summarized_addons.append(
+                {
+                    "id": str(row.get("id") or ""),
+                    "addon_name": str(row.get("addon_name") or ""),
+                    "addon_family": family_label,
+                    "service_scope": scope_key,
+                    "service_scope_label": scope_label,
+                    "quantity_mode": quantity_mode,
+                    "quantity_mode_label": "Hela avdelningen" if quantity_mode == "whole_department" else "Anpassat antal",
+                    "quantity_summary": " · ".join(quantity_parts),
+                    "lunch_count": row.get("lunch_count"),
+                    "dinner_count": row.get("dinner_count"),
+                    "note": str(row.get("note") or "").strip(),
+                }
+            )
+        vm["department_service_addons"] = summarized_addons
+    except Exception:
+        vm["department_service_addons"] = []
+
+    return vm
 
 
 @ui_bp.post("/ui/admin/departments/<dept_id>/order")
@@ -6683,6 +6880,38 @@ def admin_departments_update_order(dept_id: str):
     except Exception:
         flash("Kunde inte spara sorteringsordning.", "error")
     return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+
+
+@ui_bp.post("/ui/admin/departments/reorder")
+@require_roles(*ADMIN_ROLES)
+def admin_departments_reorder():
+    from core.admin_repo import DepartmentsRepo
+
+    from .context import get_active_context as _get_ctx
+
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id")
+    if not active_site_id:
+        return jsonify({"ok": False, "message": "Ingen site vald."}), 400
+
+    payload = request.get_json(silent=True) or {}
+    department_ids = payload.get("department_ids")
+    if department_ids is None:
+        department_ids = request.form.getlist("department_ids[]") or request.form.getlist("department_ids")
+    if isinstance(department_ids, str):
+        department_ids = [department_ids]
+    if not isinstance(department_ids, list):
+        return jsonify({"ok": False, "message": "Ogiltig ordning."}), 400
+
+    ordered_ids = [str(dept_id).strip() for dept_id in department_ids if str(dept_id).strip()]
+    try:
+        persisted_ids = DepartmentsRepo().resequence_departments_for_site(str(active_site_id), ordered_ids)
+    except ValueError as exc:
+        return jsonify({"ok": False, "message": "Ogiltig ordning."}), 400
+    except Exception:
+        return jsonify({"ok": False, "message": "Kunde inte spara ordningen."}), 500
+
+    return jsonify({"ok": True, "department_ids": persisted_ids, "display_orders": list(range(1, len(persisted_ids) + 1))})
 
 
 @ui_bp.get("/ui/admin/departments/new")
@@ -6744,6 +6973,7 @@ def admin_departments_create():
     
     # Get form data
     name = request.form.get("name", "").strip()
+    resident_count_mode = (request.form.get("resident_count_mode") or "fixed").strip()
     resident_count = request.form.get("resident_count", "0").strip()
     residence_id = request.form.get("residence_id", "").strip()
     notes = request.form.get("notes")
@@ -6762,31 +6992,38 @@ def admin_departments_create():
         flash("Valt boende hittades inte för vald site.", "error")
         return redirect(url_for("ui.admin_departments_new_form"))
     
-    try:
-        resident_count_int = int(resident_count)
-        if resident_count_int < 0:
-            flash("Antal boende måste vara 0 eller högre.", "error")
-            return redirect(url_for("ui.admin_departments_new_form"))
-    except ValueError:
-        flash("Antal boende måste vara ett heltal.", "error")
+    if resident_count_mode not in {"fixed", "per_day_meal"}:
+        flash("Ogiltigt boendeantal-läge.", "error")
         return redirect(url_for("ui.admin_departments_new_form"))
+
+    if resident_count_mode == "fixed":
+        try:
+            resident_count_int = int(resident_count)
+            if resident_count_int < 0:
+                flash("Antal personer måste vara 0 eller högre.", "error")
+                return redirect(url_for("ui.admin_departments_new_form"))
+        except ValueError:
+            flash("Antal personer måste vara ett heltal.", "error")
+            return redirect(url_for("ui.admin_departments_new_form"))
+    else:
+        resident_count_int = 0
     
     # Create department
     repo = DepartmentsRepo()
     try:
-        repo.create_department(
+        department, _ = repo.create_department(
             site_id=site_id,
             name=name,
-            resident_count_mode="fixed",
+            resident_count_mode=resident_count_mode,
             resident_count_fixed=resident_count_int,
             residence_id=str(residence_id),
             notes=notes,
         )
         flash(f"Avdelning '{name}' skapad.", "success")
+        return redirect(url_for("ui.admin_departments_edit_form", dept_id=department["id"]))
     except Exception as e:
         flash(f"Kunde inte skapa avdelning: {str(e)}", "error")
-    
-    return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+        return redirect(url_for("ui.admin_departments_new_form"))
 
 
 @ui_bp.post("/ui/admin/residences/new")
@@ -6794,6 +7031,7 @@ def admin_departments_create():
 def admin_residences_create():
     """Create a residence for the active site and return to department form."""
     from core.admin_repo import ResidencesRepo
+    from flask import jsonify
 
     from .context import get_active_context as _get_ctx
 
@@ -6806,7 +7044,10 @@ def admin_residences_create():
     name = (request.form.get("name") or "").strip()
     return_to = (request.form.get("return_to") or "new").strip().lower()
     dept_id = (request.form.get("dept_id") or "").strip()
+    wants_json = (request.headers.get("X-Requested-With") or "").lower() == "xmlhttprequest" or "application/json" in (request.headers.get("Accept") or "").lower()
     if not name:
+        if wants_json:
+            return jsonify({"ok": False, "message": "Namn på boende måste anges."}), 400
         flash("Namn på boende måste anges.", "error")
         if return_to == "edit" and dept_id:
             return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
@@ -6814,11 +7055,15 @@ def admin_residences_create():
 
     try:
         residence = ResidencesRepo().create_for_site(str(site_id), name)
+        if wants_json:
+            return jsonify({"ok": True, "residence": {"id": str(residence["id"]), "name": str(residence["name"] or "")}}), 200
         flash(f"Boende '{residence['name']}' sparat.", "success")
         if return_to == "edit" and dept_id:
             return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id, residence_id=residence["id"]))
         return redirect(url_for("ui.admin_departments_new_form", residence_id=residence["id"]))
     except Exception as exc:
+        if wants_json:
+            return jsonify({"ok": False, "message": f"Kunde inte skapa boende: {str(exc)}"}), 400
         flash(f"Kunde inte skapa boende: {str(exc)}", "error")
         if return_to == "edit" and dept_id:
             return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
@@ -6867,6 +7112,7 @@ def admin_departments_edit_form(dept_id: str):
             "notes": dept_row[6] or "",
             "version": int(dept_row[7] or 0),
         }
+        department.update(_department_resident_count_presentation(department["resident_count_mode"], department["resident_count_fixed"]))
     finally:
         db.close()
 
@@ -7007,12 +7253,18 @@ def admin_departments_edit_form(dept_id: str):
             primary_name = None
             if primary_id:
                 primary_name = str((type_lookup.get(primary_id) or {}).get("name") or "") or None
+            member_names = [str((type_lookup.get(member_id) or {}).get("name") or member_id) for member_id in member_ids]
+            display_name = primary_name or (member_names[0] if member_names else None) or str(group.get("label") or "").strip() or "Kostbehov saknas"
             member_options = list(atomic_types)
             if primary_id:
                 modifier_options = [item for item in member_options if str(item.get("id")) != primary_id]
             else:
                 modifier_options = list(member_options)
             default_quantity = int(group.get("default_quantity") or 0)
+            modifier_names = [name for name in member_names if name and name != display_name]
+            display_meta = f"{default_quantity} person{'er' if default_quantity != 1 else ''}"
+            if modifier_names:
+                display_meta = f"{display_meta} · {' + '.join(modifier_names)}"
             weekday_override_rows = []
             try:
                 weekday_override_rows = DepartmentRequirementGroupWeekdayOverridesRepo().list_for_group(str(group.get("id")))
@@ -7039,18 +7291,28 @@ def admin_departments_edit_form(dept_id: str):
                     "is_active": bool(group.get("is_active")),
                     "primary_requirement_id": primary_id,
                     "primary_name": primary_name,
+                    "display_name": display_name,
+                    "display_meta": display_meta,
                     "primary_options": member_options,
                     "modifier_options": modifier_options,
                     "member_ids": member_ids,
                     "modifier_ids": [member_id for member_id in member_ids if member_id != primary_id],
-                    "member_names": [str((type_lookup.get(member_id) or {}).get("name") or member_id) for member_id in member_ids],
-                    "modifier_names": [str((type_lookup.get(member_id) or {}).get("name") or member_id) for member_id in member_ids if member_id != primary_id],
+                    "member_names": member_names,
+                    "modifier_names": modifier_names,
                     "unresolved_primary": primary_id is None,
                     "weekday_rows": _build_weekday_quantity_rows(default_quantity=default_quantity, override_rows=weekday_override_rows),
                     "variation_rows": variation_rows,
                 }
             )
-        vm["requirement_groups"] = [group for group in formatted_groups if bool(group.get("is_active"))]
+        active_groups = [group for group in formatted_groups if bool(group.get("is_active"))]
+        active_groups.sort(
+            key=lambda group: (
+                str(group.get("display_name") or "").strip().casefold(),
+                str(group.get("display_meta") or "").strip().casefold(),
+                str(group.get("id") or ""),
+            )
+        )
+        vm["requirement_groups"] = active_groups
         vm["requirement_group_diet_types"] = configured_types
     except Exception:
         vm["requirement_groups"] = []
@@ -7961,6 +8223,8 @@ def admin_departments_edit_save_service_addons(dept_id: str):
     new_name = (request.form.get("service_addon_new_name") or "").strip()
     family = (request.form.get("service_addon_family") or "").strip()
     family_custom = (request.form.get("service_addon_family_custom") or "").strip()
+    service_scope = (request.form.get("service_scope") or "").strip().lower()
+    quantity_mode = (request.form.get("quantity_mode") or "").strip().lower()
     note = (request.form.get("service_addon_note") or "").strip()
 
     def _parse_count(raw: str | None) -> int | None:
@@ -7969,11 +8233,13 @@ def admin_departments_edit_save_service_addons(dept_id: str):
             return None
         return int(value)
 
-    def _load_ints() -> tuple[int | None, int | None]:
+    def _load_ints(*, allow_blank: bool = False) -> tuple[int | None, int | None]:
         raw_l = request.form.get("service_addon_lunch_count")
         raw_d = request.form.get("service_addon_dinner_count")
         lunch = _parse_count(raw_l)
         dinner = _parse_count(raw_d)
+        if allow_blank and not ((lunch is not None and lunch > 0) or (dinner is not None and dinner > 0)):
+            return None, None
         if not ((lunch is not None and lunch > 0) or (dinner is not None and dinner > 0)):
             raise ValueError("service_addon_counts_required")
         return lunch, dinner
@@ -7988,6 +8254,22 @@ def admin_departments_edit_save_service_addons(dept_id: str):
             return "Antalet måste vara större än 0 för minst en måltid."
         if text_value == "service_addon_count_invalid":
             return "Antalet kan inte vara negativt."
+        if text_value == "service_addon_scope_invalid":
+            return "Välj en giltig serveringsnivå."
+        if text_value == "service_addon_quantity_mode_invalid":
+            return "Välj om anpassningen gäller hela avdelningen eller ett anpassat antal."
+        if text_value == "service_addon_whole_department_counts_must_be_null":
+            return "Hela avdelningen får inte ha angivna antal."
+        if text_value == "service_addon_lunch_count_required":
+            return "Ange ett antal för lunch."
+        if text_value == "service_addon_dinner_count_required":
+            return "Ange ett antal för kväll."
+        if text_value == "service_addon_lunch_count_must_be_null":
+            return "Lunchnumret ska lämnas tomt för vald serveringsnivå."
+        if text_value == "service_addon_dinner_count_must_be_null":
+            return "Kvällsnumret ska lämnas tomt för vald serveringsnivå."
+        if text_value == "service_addon_all_services_counts_required":
+            return "Ange antal för både lunch och kväll."
         if text_value == "service_addon_count_exceeds_resident_count":
             db = get_session()
             try:
@@ -8019,10 +8301,12 @@ def admin_departments_edit_save_service_addons(dept_id: str):
 
     if addon_mode == "edit" and addon_row_id:
         try:
-            lunch_count, dinner_count = _load_ints()
+            lunch_count, dinner_count = _load_ints(allow_blank=quantity_mode == "whole_department")
             DepartmentServiceAddonsRepo().update_for_department_row(
                 addon_row_id,
                 dept_id,
+                service_scope=service_scope or None,
+                quantity_mode=quantity_mode or None,
                 lunch_count=lunch_count,
                 dinner_count=dinner_count,
                 note=note,
@@ -8035,7 +8319,7 @@ def admin_departments_edit_save_service_addons(dept_id: str):
 
     if addon_mode in {"add", "create"} or addon_id or new_name:
         try:
-            lunch_count, dinner_count = _load_ints()
+            lunch_count, dinner_count = _load_ints(allow_blank=quantity_mode == "whole_department")
             selected_addon_id = addon_id
             addon_family = normalize_addon_family(family_custom or family)
             if addon_mode == "create" or new_name:
@@ -8049,6 +8333,8 @@ def admin_departments_edit_save_service_addons(dept_id: str):
             DepartmentServiceAddonsRepo().add_for_department(
                 dept_id,
                 selected_addon_id,
+                service_scope=service_scope or None,
+                quantity_mode=quantity_mode or None,
                 lunch_count=lunch_count,
                 dinner_count=dinner_count,
                 note=note,
@@ -8268,64 +8554,33 @@ def admin_departments_delete(dept_id: str):
     """
     Delete a department.
     """
-    from flask import flash, redirect, url_for
-    
-    # Get department and delete it
-    from .context import get_active_context as _get_ctx
-    ctx = _get_ctx()
-    active_site_id = ctx.get("site_id")
-    db = get_session()
-    try:
-        # Get department name strictly within active site
-        dept_row = db.execute(
-            text(
-                "SELECT d.name FROM departments d "
-                "WHERE d.id = :id AND d.site_id = :sid"
-            ),
-            {"id": dept_id, "sid": active_site_id}
-        ).fetchone()
-        
-        if not dept_row:
-            flash("Avdelning hittades inte för vald site.", "error")
-            return redirect(url_for("ui.admin_departments_list"))
-        
-        dept_name = dept_row[0]
+    from flask import flash, redirect, request, url_for
 
-        # Explicit canonical ownership cleanup in the same transaction.
-        # This must not rely on SQLite foreign-key enforcement.
-        db.execute(
-            text(
-                "DELETE FROM department_requirement_group_service_overrides "
-                "WHERE group_id IN (SELECT id FROM department_requirement_groups WHERE department_id = :id)"
-            ),
-            {"id": dept_id},
-        )
-        db.execute(
-            text(
-                "DELETE FROM department_requirement_group_requirements "
-                "WHERE group_id IN (SELECT id FROM department_requirement_groups WHERE department_id = :id)"
-            ),
-            {"id": dept_id},
-        )
-        db.execute(
-            text("DELETE FROM department_requirement_groups WHERE department_id = :id"),
-            {"id": dept_id},
-        )
-        
-        # Delete department within site scope
-        db.execute(
-            text("DELETE FROM departments WHERE id = :id AND site_id = :sid"),
-            {"id": dept_id, "sid": active_site_id}
-        )
-        db.commit()
-        
+    from .context import get_active_context as _get_ctx
+    from .admin_repo import DepartmentsRepo
+
+    ctx = _get_ctx()
+    active_site_id = str(ctx.get("site_id") or "").strip()
+    confirmation = str(request.form.get("confirmation") or "").strip()
+    if not active_site_id:
+        flash("Välj aktiv site innan du tar bort en avdelning.", "error")
+        return redirect(url_for("ui.admin_departments_list"))
+    if not confirmation:
+        flash("Skriv avdelningens namn för att bekräfta borttagningen.", "error")
+        return redirect(url_for("ui.admin_departments_list"))
+
+    try:
+        dept_name = DepartmentsRepo().delete_department_for_site(dept_id, active_site_id, confirmation)
         flash(f"Avdelning '{dept_name}' borttagen.", "success")
-    except Exception as e:
-        db.rollback()
-        flash(f"Kunde inte ta bort avdelning: {str(e)}", "error")
-    finally:
-        db.close()
-    
+    except ValueError as exc:
+        code = str(exc)
+        if code in {"department_not_found", "department_delete_confirmation_mismatch"}:
+            flash("Bekräftelsen matchar inte avdelningens namn.", "error")
+        else:
+            flash(f"Kunde inte ta bort avdelning: {code}", "error")
+    except Exception as exc:
+        flash(f"Kunde inte ta bort avdelning: {str(exc)}", "error")
+
     return redirect(url_for("ui.admin_departments_list"))
 
 

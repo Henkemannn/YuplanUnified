@@ -11,6 +11,7 @@
     // ========================================================================
     
     let sidebarOpen = true;
+    let departmentQuickOverviewRequestId = 0;
     
     // ========================================================================
     // Initialization
@@ -26,7 +27,12 @@
         setupModalHandlers();
         setupSiteContextWarning();
         setupSiteContextVersionSync();
+        setupDepartmentCreateForm();
+        setupResidenceCreateModal();
         setupUnifiedAdminUsersForm();
+        setupDepartmentReorderControls();
+        setupDepartmentListOverflowMenus();
+        setupDepartmentQuickOverview();
         setupReportWeeklyAutosubmit();
         
         // Check mobile on load
@@ -541,6 +547,91 @@
             dialog.classList.remove('ua-modal-open');
         }
 
+        function getDepartmentDeleteNodes(dialog) {
+            if (!dialog || !dialog.querySelector) {
+                return {
+                    form: null,
+                    title: null,
+                    nameText: null,
+                    input: null,
+                    confirmButton: null,
+                };
+            }
+            return {
+                form: dialog.querySelector('[data-department-delete-form]'),
+                title: dialog.querySelector('[data-department-delete-title]'),
+                nameText: dialog.querySelector('[data-department-delete-name-text]'),
+                input: dialog.querySelector('[data-department-delete-confirm-input]'),
+                confirmButton: dialog.querySelector('[data-department-delete-confirm-button]'),
+            };
+        }
+
+        function resetDepartmentDeleteModal(dialog) {
+            const nodes = getDepartmentDeleteNodes(dialog);
+            if (nodes.form) {
+                nodes.form.action = '';
+            }
+            if (nodes.title) {
+                nodes.title.textContent = 'Ta bort avdelning?';
+            }
+            if (nodes.nameText) {
+                nodes.nameText.textContent = '';
+            }
+            if (nodes.input) {
+                nodes.input.value = '';
+                nodes.input.setAttribute('placeholder', 'Skriv avdelningens namn');
+            }
+            if (nodes.confirmButton) {
+                nodes.confirmButton.disabled = true;
+            }
+            if (dialog) {
+                dialog.dataset.departmentDeleteName = '';
+                dialog.dataset.departmentDeleteUrl = '';
+            }
+        }
+
+        function syncDepartmentDeleteConfirmation(dialog) {
+            const nodes = getDepartmentDeleteNodes(dialog);
+            const expected = String(dialog && dialog.dataset ? dialog.dataset.departmentDeleteName || '' : '');
+            const inputValue = String(nodes.input && nodes.input.value ? nodes.input.value : '').trim();
+            if (nodes.confirmButton) {
+                nodes.confirmButton.disabled = !expected || inputValue !== expected;
+            }
+        }
+
+        function seedDepartmentDeleteModal(dialog, trigger) {
+            const nodes = getDepartmentDeleteNodes(dialog);
+            const deptName = String(trigger.getAttribute('data-department-delete-name') || '').trim();
+            const deleteTitle = String(trigger.getAttribute('data-department-delete-title') || '').trim();
+            const deleteUrl = String(trigger.getAttribute('data-department-delete-url') || '').trim();
+            if (!deptName || !deleteUrl) {
+                return;
+            }
+            if (nodes.form) {
+                nodes.form.action = deleteUrl;
+            }
+            if (nodes.title) {
+                nodes.title.textContent = deleteTitle || ('Ta bort ' + deptName + '?');
+            }
+            if (nodes.nameText) {
+                nodes.nameText.textContent = 'Avdelning: ' + deptName;
+            }
+            if (nodes.input) {
+                nodes.input.value = '';
+                nodes.input.setAttribute('placeholder', deptName);
+            }
+            if (dialog) {
+                dialog.dataset.departmentDeleteName = deptName;
+                dialog.dataset.departmentDeleteUrl = deleteUrl;
+            }
+            syncDepartmentDeleteConfirmation(dialog);
+            window.setTimeout(function() {
+                if (nodes.input && typeof nodes.input.focus === 'function') {
+                    nodes.input.focus();
+                }
+            }, 0);
+        }
+
         const autoOpenNeedConflict = document.querySelector('[data-auto-open-need-conflict]');
         if (autoOpenNeedConflict) {
             autoOpenNeedConflict.click();
@@ -593,6 +684,9 @@
             if (dialog.id === 'residents-variation-modal') {
                 seedVariationResidentDelta(dialog.querySelector('#residents-variation-form'));
             }
+            if (dialog.id === 'department-delete-modal') {
+                seedDepartmentDeleteModal(dialog, trigger);
+            }
 
             try {
                 if (typeof dialog.showModal === 'function') {
@@ -635,6 +729,9 @@
             }
             if (focusGroupInput) {
                 focusGroupInput.value = '';
+            }
+            if (dialog && dialog.id === 'department-delete-modal') {
+                resetDepartmentDeleteModal(dialog);
             }
         });
 
@@ -781,6 +878,15 @@
                 return;
             }
 
+            const deleteConfirm = event.target.closest('[data-department-delete-confirm-input]');
+            if (deleteConfirm) {
+                const dialog = deleteConfirm.closest('#department-delete-modal');
+                if (dialog) {
+                    syncDepartmentDeleteConfirmation(dialog);
+                }
+                return;
+            }
+
             document.querySelectorAll('dialog.ua-modal [data-need-picker]').forEach(function(pickerNode) {
                 if (pickerNode.hidden) {
                     return;
@@ -824,6 +930,47 @@
             event.preventDefault();
             event.stopPropagation();
         });
+
+        document.addEventListener('input', function(event) {
+            const input = event.target;
+            if (!input || !input.matches || !input.matches('[data-department-delete-confirm-input]')) {
+                return;
+            }
+            const dialog = input.closest('#department-delete-modal');
+            if (dialog) {
+                syncDepartmentDeleteConfirmation(dialog);
+            }
+        });
+
+        document.addEventListener('submit', function(event) {
+            const form = event.target && event.target.closest ? event.target.closest('[data-department-delete-form]') : null;
+            if (!form) {
+                return;
+            }
+            const dialog = form.closest('#department-delete-modal');
+            if (!dialog) {
+                return;
+            }
+            const nodes = getDepartmentDeleteNodes(dialog);
+            const expected = String(dialog.dataset.departmentDeleteName || '');
+            const actual = String(nodes.input && nodes.input.value ? nodes.input.value : '').trim();
+            if (!expected || actual !== expected) {
+                event.preventDefault();
+                if (nodes.confirmButton) {
+                    nodes.confirmButton.disabled = true;
+                }
+                if (nodes.input && typeof nodes.input.focus === 'function') {
+                    nodes.input.focus();
+                }
+            }
+        });
+
+        const deleteDialog = document.getElementById('department-delete-modal');
+        if (deleteDialog) {
+            deleteDialog.addEventListener('close', function() {
+                resetDepartmentDeleteModal(deleteDialog);
+            });
+        }
     }
 
     function toggleSidebar() {
@@ -917,7 +1064,11 @@
     
     function getCsrfToken() {
         const meta = document.querySelector('meta[name="csrf-token"]');
-        return meta ? meta.getAttribute('content') : '';
+        if (meta) {
+            return meta.getAttribute('content') || '';
+        }
+        const match = document.cookie ? document.cookie.match(/(?:^|; )csrf_token=([^;]+)/) : null;
+        return match ? decodeURIComponent(match[1]) : '';
     }
 
     function getMeta(name) {
@@ -1029,6 +1180,501 @@
                 }
             });
         }
+    }
+
+    function setupDepartmentReorderControls() {
+        const listRoot = document.querySelector('.admin-departments[data-department-reorder-url]');
+        if (!listRoot) {
+            return;
+        }
+
+        const rowsSelector = '.admin-departments__row[data-department-row]';
+        const handleSelector = '[data-department-drag-handle]';
+        const reorderUrl = listRoot.getAttribute('data-department-reorder-url') || '';
+        const listNode = listRoot.querySelector('.admin-departments__list');
+        if (!listNode || !reorderUrl) {
+            return;
+        }
+
+        let activeDrag = null;
+        let saving = false;
+
+        function getRows() {
+            return Array.from(listNode.querySelectorAll(rowsSelector));
+        }
+
+        function getRowIds() {
+            return getRows().map(function(row) {
+                return row.getAttribute('data-department-id') || '';
+            }).filter(Boolean);
+        }
+
+        function rowsMatch(a, b) {
+            if (!a || !b || a.length !== b.length) {
+                return false;
+            }
+            for (let index = 0; index < a.length; index += 1) {
+                if (a[index] !== b[index]) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function setRowDragging(row, isDragging) {
+            if (!row) {
+                return;
+            }
+            row.classList.toggle('is-dragging', !!isDragging);
+            row.setAttribute('aria-grabbed', isDragging ? 'true' : 'false');
+        }
+
+        function insertRowAt(row, targetRow, beforeTarget) {
+            if (!row || !targetRow || row === targetRow) {
+                return;
+            }
+            if (beforeTarget) {
+                listNode.insertBefore(row, targetRow);
+                return;
+            }
+            if (targetRow.nextElementSibling) {
+                listNode.insertBefore(row, targetRow.nextElementSibling);
+            } else {
+                listNode.appendChild(row);
+            }
+        }
+
+        function resetRowOrder(rowIds) {
+            const currentRows = getRows();
+            const rowsById = {};
+            currentRows.forEach(function(row) {
+                const id = row.getAttribute('data-department-id') || '';
+                if (id) {
+                    rowsById[id] = row;
+                }
+            });
+            rowIds.forEach(function(id) {
+                const row = rowsById[id];
+                if (row) {
+                    listNode.appendChild(row);
+                }
+            });
+        }
+
+        function showError(message) {
+            const flash = document.createElement('div');
+            flash.className = 'ua-flash ua-flash-error';
+            flash.setAttribute('role', 'alert');
+            flash.textContent = message || 'Kunde inte spara ordningen.';
+            const page = listRoot.querySelector('.admin-departments__page-header');
+            if (page && page.parentNode) {
+                page.parentNode.insertBefore(flash, page.nextSibling);
+            } else {
+                listRoot.insertBefore(flash, listRoot.firstChild);
+            }
+        }
+
+        async function persistOrder(initialRowIds) {
+            if (saving) {
+                return;
+            }
+            const currentRowIds = getRowIds();
+            if (!currentRowIds.length || rowsMatch(currentRowIds, initialRowIds)) {
+                return;
+            }
+            saving = true;
+            listRoot.classList.add('is-saving-reorder');
+            try {
+                const csrfToken = getCsrfToken();
+                const response = await fetch(reorderUrl, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: Object.assign({
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }, csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+                    body: JSON.stringify({
+                        department_ids: currentRowIds
+                    })
+                });
+                if (!response.ok) {
+                    let message = 'Kunde inte spara ordningen.';
+                    try {
+                        const payload = await response.json();
+                        if (payload && payload.message) {
+                            message = String(payload.message);
+                        }
+                    } catch (error) {
+                        // fall back to default message
+                    }
+                    resetRowOrder(initialRowIds);
+                    showError(message);
+                    window.setTimeout(function() {
+                        window.location.reload();
+                    }, 1200);
+                    return;
+                }
+            } catch (error) {
+                resetRowOrder(initialRowIds);
+                showError('Kunde inte spara ordningen.');
+                window.setTimeout(function() {
+                    window.location.reload();
+                }, 1200);
+                return;
+            } finally {
+                saving = false;
+                listRoot.classList.remove('is-saving-reorder');
+            }
+        }
+
+        function beginDrag(handle, event) {
+            if (!handle || !event) {
+                return;
+            }
+            const row = handle.closest(rowsSelector);
+            if (!row) {
+                return;
+            }
+
+            const pointerId = event.pointerId;
+            const startPoint = { x: event.clientX, y: event.clientY };
+            const initialRowIds = getRowIds();
+
+            activeDrag = {
+                handle: handle,
+                row: row,
+                pointerId: pointerId,
+                startPoint: startPoint,
+                started: false,
+                initialRowIds: initialRowIds
+            };
+
+            if (handle.setPointerCapture) {
+                try {
+                    handle.setPointerCapture(pointerId);
+                } catch (error) {
+                    // no-op
+                }
+            }
+        }
+
+        function updateDrag(event) {
+            if (!activeDrag || event.pointerId !== activeDrag.pointerId) {
+                return;
+            }
+
+            const row = activeDrag.row;
+            const deltaX = Math.abs(event.clientX - activeDrag.startPoint.x);
+            const deltaY = Math.abs(event.clientY - activeDrag.startPoint.y);
+            const shouldStart = !activeDrag.started && (deltaX > 4 || deltaY > 4);
+            if (!activeDrag.started && !shouldStart) {
+                return;
+            }
+
+            if (!activeDrag.started) {
+                activeDrag.started = true;
+                setRowDragging(row, true);
+                listRoot.classList.add('is-reordering');
+            }
+
+            event.preventDefault();
+            const element = document.elementFromPoint(event.clientX, event.clientY);
+            const targetRow = element && element.closest ? element.closest(rowsSelector) : null;
+            if (!targetRow || targetRow === row || !listNode.contains(targetRow)) {
+                return;
+            }
+
+            const rect = targetRow.getBoundingClientRect();
+            const beforeTarget = event.clientY < (rect.top + rect.height / 2);
+            insertRowAt(row, targetRow, beforeTarget);
+        }
+
+        function finishDrag(event) {
+            if (!activeDrag || event.pointerId !== activeDrag.pointerId) {
+                return;
+            }
+
+            const drag = activeDrag;
+            activeDrag = null;
+            setRowDragging(drag.row, false);
+            listRoot.classList.remove('is-reordering');
+
+            if (drag.handle && drag.handle.releasePointerCapture) {
+                try {
+                    drag.handle.releasePointerCapture(drag.pointerId);
+                } catch (error) {
+                    // no-op
+                }
+            }
+
+            if (drag.started) {
+                void persistOrder(drag.initialRowIds);
+            }
+        }
+
+        document.addEventListener('pointermove', updateDrag, { passive: false });
+        document.addEventListener('pointerup', finishDrag);
+        document.addEventListener('pointercancel', finishDrag);
+
+        document.addEventListener('pointerdown', function(event) {
+            const handle = event.target.closest(handleSelector);
+            if (!handle || !listNode.contains(handle)) {
+                return;
+            }
+            const row = handle.closest(rowsSelector);
+            if (!row) {
+                return;
+            }
+            if (event.button !== 0 && event.pointerType !== 'touch') {
+                return;
+            }
+            beginDrag(handle, event);
+        });
+
+        document.addEventListener('keydown', function(event) {
+            const handle = event.target.closest(handleSelector);
+            if (!handle || !listNode.contains(handle)) {
+                return;
+            }
+            if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') {
+                return;
+            }
+            const row = handle.closest(rowsSelector);
+            if (!row) {
+                return;
+            }
+            const previousOrder = getRowIds();
+            const sibling = event.key === 'ArrowUp' ? row.previousElementSibling : row.nextElementSibling;
+            if (!sibling || !sibling.matches || !sibling.matches(rowsSelector)) {
+                return;
+            }
+            event.preventDefault();
+            if (event.key === 'ArrowUp') {
+                listNode.insertBefore(row, sibling);
+            } else if (sibling.nextElementSibling) {
+                listNode.insertBefore(row, sibling.nextElementSibling);
+            } else {
+                listNode.appendChild(row);
+            }
+            handle.focus();
+            void persistOrder(previousOrder);
+        });
+    }
+
+    function setupDepartmentListOverflowMenus() {
+        const menus = Array.from(document.querySelectorAll('.admin-departments__overflow'));
+        if (!menus.length) {
+            return;
+        }
+
+        function closeMenu(menu, restoreFocus) {
+            if (!menu || !menu.hasAttribute('open')) {
+                return;
+            }
+            menu.removeAttribute('open');
+            menu.classList.remove('is-overflow-open');
+            const row = menu.closest('.admin-departments__row');
+            if (row) {
+                row.classList.remove('is-overflow-open');
+            }
+            if (restoreFocus) {
+                const summary = menu.querySelector('summary');
+                if (summary && typeof summary.focus === 'function') {
+                    summary.focus();
+                }
+            }
+        }
+
+        function closeOtherMenus(activeMenu) {
+            menus.forEach(function(menu) {
+                if (menu !== activeMenu) {
+                    closeMenu(menu, false);
+                }
+            });
+        }
+
+        menus.forEach(function(menu) {
+            const summary = menu.querySelector('summary');
+            if (!summary) {
+                return;
+            }
+
+            summary.addEventListener('click', function(event) {
+                event.stopPropagation();
+            });
+
+            menu.addEventListener('toggle', function() {
+                if (menu.open) {
+                    menu.classList.add('is-overflow-open');
+                    const row = menu.closest('.admin-departments__row');
+                    if (row) {
+                        row.classList.add('is-overflow-open');
+                    }
+                    closeOtherMenus(menu);
+                } else {
+                    menu.classList.remove('is-overflow-open');
+                    const row = menu.closest('.admin-departments__row');
+                    if (row) {
+                        row.classList.remove('is-overflow-open');
+                    }
+                }
+            });
+        });
+
+        document.addEventListener('pointerdown', function(event) {
+            const openMenu = menus.find(function(menu) {
+                return menu.open;
+            });
+            if (!openMenu) {
+                return;
+            }
+            if (openMenu.contains(event.target)) {
+                return;
+            }
+            closeMenu(openMenu, false);
+        });
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key !== 'Escape') {
+                return;
+            }
+            const openMenu = menus.find(function(menu) {
+                return menu.open;
+            });
+            if (!openMenu) {
+                return;
+            }
+            closeMenu(openMenu, true);
+            event.preventDefault();
+            event.stopPropagation();
+        });
+    }
+
+    function setupDepartmentCreateForm() {
+        const form = document.querySelector('form.department-form');
+        if (!form || !form.querySelector) return;
+
+        const modeOptions = form.querySelectorAll('[data-resident-count-mode-option]');
+        const fixedPanel = form.querySelector('[data-resident-count-fixed-panel]');
+        const countInput = form.querySelector('[data-resident-count-input]');
+        const helper = form.querySelector('[data-resident-count-helper]');
+        const modeCards = form.querySelectorAll('[data-resident-count-mode-card]');
+
+        if (!modeOptions.length || !fixedPanel || !countInput || !helper) return;
+
+        function syncResidentCountMode() {
+            const selected = form.querySelector('[data-resident-count-mode-option]:checked');
+            const isFixed = !selected || selected.value === 'fixed';
+            const selectedValue = selected ? selected.value : 'fixed';
+
+            fixedPanel.hidden = !isFixed;
+            helper.hidden = isFixed;
+            countInput.disabled = !isFixed;
+            countInput.required = isFixed;
+            if (isFixed && !countInput.value) {
+                countInput.value = '0';
+            }
+            modeCards.forEach(function(card) {
+                const input = card.querySelector('[data-resident-count-mode-option]');
+                card.classList.toggle('is-selected', !!input && input.value === selectedValue);
+            });
+        }
+
+        modeOptions.forEach(function(option) {
+            option.addEventListener('change', syncResidentCountMode);
+        });
+
+        syncResidentCountMode();
+    }
+
+    function setupResidenceCreateModal() {
+        const dialog = document.getElementById('residence-create-modal');
+        if (!dialog) return;
+
+        const form = dialog.querySelector('form[action*="/ui/admin/residences/new"]');
+        const input = dialog.querySelector('input[name="name"]');
+        const status = dialog.querySelector('[data-residence-create-status]');
+        if (!form || !input) return;
+
+        function setStatus(message, kind) {
+            if (!status) return;
+            status.textContent = message || '';
+            status.hidden = !message;
+            status.dataset.state = kind || 'neutral';
+        }
+
+        function getResidenceSelects() {
+            return Array.prototype.slice.call(document.querySelectorAll('select[name="residence_id"]'));
+        }
+
+        function ensureResidenceOption(residence) {
+            if (!residence || !residence.id) return;
+            const selects = getResidenceSelects();
+            selects.forEach(function(select) {
+                let option = Array.prototype.slice.call(select.options).find(function(opt) {
+                    return String(opt.value) === String(residence.id);
+                });
+                if (!option) {
+                    option = document.createElement('option');
+                    option.value = String(residence.id);
+                    option.textContent = String(residence.name || '');
+                    select.appendChild(option);
+                } else if (!option.textContent) {
+                    option.textContent = String(residence.name || '');
+                }
+                select.value = String(residence.id);
+                select.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+        }
+
+        async function submitInline(event) {
+            if (!window.fetch || !window.FormData) {
+                return;
+            }
+            event.preventDefault();
+            setStatus('', 'neutral');
+            const submitButton = form.querySelector('button[type="submit"]');
+            const originalText = submitButton ? submitButton.textContent : '';
+            if (submitButton) submitButton.disabled = true;
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    },
+                    body: new FormData(form)
+                });
+                const payload = await response.json().catch(function() {
+                    return null;
+                });
+                if (!response.ok || !payload || !payload.ok) {
+                    setStatus((payload && payload.message) ? String(payload.message) : 'Kunde inte skapa boende.', 'error');
+                    return;
+                }
+                ensureResidenceOption(payload.residence || {});
+                setStatus('', 'neutral');
+                try {
+                    dialog.close();
+                } catch (closeError) {
+                    dialog.removeAttribute('open');
+                }
+                if (input) input.value = '';
+            } catch (error) {
+                setStatus('Kunde inte skapa boende.', 'error');
+            } finally {
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    submitButton.textContent = originalText;
+                }
+            }
+        }
+
+        form.addEventListener('submit', submitInline);
+        dialog.addEventListener('close', function() {
+            setStatus('', 'neutral');
+        });
     }
 
     function setupUnifiedAdminUsersForm() {
@@ -1191,6 +1837,127 @@
                 top: 0,
                 behavior: 'smooth'
             });
+        });
+    }
+
+    function setupDepartmentQuickOverview() {
+        const list = document.querySelector('.admin-departments__list');
+        const panel = document.querySelector('[data-department-quick-overview-panel]');
+        if (!list || !panel) {
+            return;
+        }
+
+        function clearSelectedRow() {
+            const selectedRows = list.querySelectorAll('[data-department-row].is-selected');
+            selectedRows.forEach(function(row) {
+                row.classList.remove('is-selected');
+            });
+            const selectedButtons = list.querySelectorAll('[data-department-quick-overview-trigger][aria-pressed="true"]');
+            selectedButtons.forEach(function(button) {
+                button.setAttribute('aria-pressed', 'false');
+            });
+        }
+
+        function selectRow(trigger) {
+            clearSelectedRow();
+            const row = trigger && trigger.closest ? trigger.closest('[data-department-row]') : null;
+            if (row) {
+                row.classList.add('is-selected');
+            }
+            if (trigger) {
+                trigger.setAttribute('aria-pressed', 'true');
+            }
+        }
+
+        function renderLoading() {
+            panel.setAttribute('aria-busy', 'true');
+            panel.innerHTML = '<div class="admin-departments__inspector-shell"><div class="admin-departments__inspector-head"><h2 class="app-shell__card-title admin-departments__inspector-title">Snabböversikt</h2><p class="admin-departments__inspector-subtitle">Laddar vald avdelning…</p></div><p class="admin-departments__inspector-copy">Ett ögonblick.</p></div>';
+        }
+
+        function renderError(message) {
+            panel.setAttribute('aria-busy', 'false');
+            panel.innerHTML = '<div class="admin-departments__inspector-shell"><div class="admin-departments__inspector-head"><h2 class="app-shell__card-title admin-departments__inspector-title">Snabböversikt</h2><p class="admin-departments__inspector-subtitle">Kunde inte läsa avdelningen.</p></div><p class="admin-departments__inspector-copy">' + escapeHtml(message) + '</p></div>';
+        }
+
+        function setupAccordionState() {
+            const accordions = Array.prototype.slice.call(panel.querySelectorAll('[data-department-quick-overview-accordion]'));
+            if (!accordions.length) {
+                return;
+            }
+
+            accordions.forEach(function(accordion) {
+                accordion.open = false;
+            });
+
+            accordions.forEach(function(accordion) {
+                accordion.addEventListener('toggle', function() {
+                    if (!accordion.open) {
+                        return;
+                    }
+                    accordions.forEach(function(other) {
+                        if (other !== accordion) {
+                            other.open = false;
+                        }
+                    });
+                });
+            });
+        }
+
+        async function loadQuickOverview(trigger) {
+            const row = trigger && trigger.closest ? trigger.closest('[data-department-row]') : null;
+            const url = row ? String(row.getAttribute('data-department-quick-overview-url') || '').trim() : '';
+            if (!url) {
+                renderError('Snabböversikt saknar adress.');
+                return;
+            }
+
+            const requestId = ++departmentQuickOverviewRequestId;
+            selectRow(trigger);
+            renderLoading();
+
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'fetch',
+                        'Accept': 'text/html'
+                    }
+                });
+                if (requestId !== departmentQuickOverviewRequestId) {
+                    return;
+                }
+                if (!response.ok) {
+                    if (response.status === 403) {
+                        throw new Error('Du har inte åtkomst till den här avdelningen.');
+                    }
+                    if (response.status === 404) {
+                        throw new Error('Avdelningen kunde inte hittas.');
+                    }
+                    throw new Error('Kunde inte läsa snabböversikten.');
+                }
+                const html = await response.text();
+                if (requestId !== departmentQuickOverviewRequestId) {
+                    return;
+                }
+                panel.setAttribute('aria-busy', 'false');
+                panel.innerHTML = html;
+                setupAccordionState();
+            } catch (error) {
+                if (requestId !== departmentQuickOverviewRequestId) {
+                    return;
+                }
+                renderError(error && error.message ? error.message : 'Kunde inte läsa snabböversikten.');
+            }
+        }
+
+        list.addEventListener('click', function(event) {
+            const trigger = event.target && event.target.closest ? event.target.closest('[data-department-quick-overview-trigger]') : null;
+            if (!trigger || !list.contains(trigger)) {
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            loadQuickOverview(trigger);
         });
     }
     

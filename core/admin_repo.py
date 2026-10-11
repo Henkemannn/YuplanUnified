@@ -11,6 +11,10 @@ from flask import current_app, has_app_context
 from .db import get_session
 from .diet_family import DIET_FAMILY_OTHER, infer_diet_family, normalize_diet_family
 from .etag import ConcurrencyError
+from .service_addon_contract import (
+    canonicalize_service_addon_assignment,
+    resolve_service_addon_quantity,
+)
 
 
 SERVICE_ADDON_FAMILIES: tuple[str, str, str] = ("mos", "sallad", "ovrigt")
@@ -119,6 +123,26 @@ def _table_has_column(db, table_name: str, column_name: str) -> bool:
             return False
 
 
+def _table_exists(db, table_name: str) -> bool:
+    try:
+        if _is_sqlite(db):
+            row = db.execute(
+                text("SELECT 1 FROM sqlite_master WHERE type='table' AND name=:name LIMIT 1"),
+                {"name": str(table_name)},
+            ).fetchone()
+            return row is not None
+        row = db.execute(
+            text(
+                "SELECT 1 FROM information_schema.tables "
+                "WHERE table_name=:name LIMIT 1"
+            ),
+            {"name": str(table_name)},
+        ).fetchone()
+        return row is not None
+    except Exception:
+        return False
+
+
 def _ensure_departments_residence_id_column(db) -> None:
     if _table_has_column(db, "departments", "residence_id"):
         return
@@ -218,6 +242,8 @@ def _ensure_service_addons_tables(db) -> None:
                     id TEXT PRIMARY KEY,
                     department_id TEXT NOT NULL,
                     addon_id TEXT NOT NULL,
+                    service_scope TEXT NULL,
+                    quantity_mode TEXT NULL,
                     lunch_count INTEGER NULL,
                     dinner_count INTEGER NULL,
                     note TEXT NULL,
@@ -226,7 +252,23 @@ def _ensure_service_addons_tables(db) -> None:
                 """
             )
         )
+        try:
+            cols = {r[1] for r in db.execute(text("PRAGMA table_info('department_service_addons')")).fetchall()}
+            if "service_scope" not in cols:
+                db.execute(text("ALTER TABLE department_service_addons ADD COLUMN service_scope TEXT"))
+            if "quantity_mode" not in cols:
+                db.execute(text("ALTER TABLE department_service_addons ADD COLUMN quantity_mode TEXT"))
+        except Exception:
+            pass
+    try:
+        if not _table_has_column(db, "department_service_addons", "service_scope"):
+            db.execute(text("ALTER TABLE department_service_addons ADD COLUMN service_scope TEXT"))
+        if not _table_has_column(db, "department_service_addons", "quantity_mode"):
+            db.execute(text("ALTER TABLE department_service_addons ADD COLUMN quantity_mode TEXT"))
+    except Exception:
+        pass
     _backfill_service_addons_site_scope(db)
+    _backfill_service_addon_semantics(db)
 
 
 def _ensure_service_addons_sqlite_scoped_uniqueness(db) -> None:
@@ -500,6 +542,49 @@ def tenant_exists(db, tenant_id: int | None) -> bool:
         return row is not None
     except Exception:
         return False
+def _backfill_service_addon_semantics(db) -> None:
+    if not _table_has_column(db, "department_service_addons", "service_scope") or not _table_has_column(db, "department_service_addons", "quantity_mode"):
+        return
+
+    rows = db.execute(
+        text(
+            """
+            SELECT id, lunch_count, dinner_count, service_scope, quantity_mode
+            FROM department_service_addons
+            """
+        )
+    ).fetchall()
+    for row in rows:
+        row_id = str(row[0])
+        lunch_count = row[1]
+        dinner_count = row[2]
+        service_scope = row[3]
+        quantity_mode = row[4]
+        canonical = canonicalize_service_addon_assignment(
+            service_scope=service_scope,
+            quantity_mode=quantity_mode,
+            lunch_count=lunch_count,
+            dinner_count=dinner_count,
+        )
+        db.execute(
+            text(
+                """
+                UPDATE department_service_addons
+                SET service_scope=:service_scope,
+                    quantity_mode=:quantity_mode,
+                    lunch_count=:lunch_count,
+                    dinner_count=:dinner_count
+                WHERE id=:id
+                """
+            ),
+            {
+                "id": row_id,
+                "service_scope": canonical["service_scope"],
+                "quantity_mode": canonical["quantity_mode"],
+                "lunch_count": canonical["lunch_count"],
+                "dinner_count": canonical["dinner_count"],
+            },
+        )
 
 
 class SitesRepo:
@@ -535,6 +620,7 @@ class SitesRepo:
                         tenant_value = 1
                 except Exception:
                     pass
+
             if tenant_value is None:
                 raise ValueError("tenant_required")
             if not tenant_exists(db, tenant_value):
@@ -841,56 +927,53 @@ class DepartmentsRepo:
     def update_department(self, dept_id: str, expected_version: int, **fields) -> int:
         db = get_session()
         try:
-            sets = []
-            params = {"id": dept_id, "v": int(expected_version)}
-            if "name" in fields and fields["name"] is not None:
-                sets.append("name=:name")
-                params["name"] = str(fields["name"]).strip()
-            if "resident_count_mode" in fields and fields["resident_count_mode"] is not None:
-                sets.append("resident_count_mode=:mode")
-                params["mode"] = str(fields["resident_count_mode"]).strip()
-            if "resident_count_fixed" in fields and fields["resident_count_fixed"] is not None:
-                sets.append("resident_count_fixed=:fixed")
-                params["fixed"] = int(fields["resident_count_fixed"])
-            if "residence_id" in fields:
-                sets.append("residence_id=:residence_id")
-                params["residence_id"] = str(fields["residence_id"]).strip() if fields["residence_id"] else None
-            if "display_order" in fields:
-                sets.append("display_order=:display_order")
-                params["display_order"] = int(fields["display_order"]) if fields["display_order"] is not None else None
-            if "notes" in fields and fields["notes"] is not None:
-                sets.append("notes=:notes")
-                params["notes"] = str(fields["notes"]).strip()
-            if not sets:
-                # No-op: still bump version to reflect write intent
-                sets.append("version=version")  # sqlite path bumps separately; postgres will still increment
-            if _is_sqlite(db):
-                _ensure_departments_display_order_column(db)
-                sql = f"UPDATE departments SET {', '.join(sets)}, version=version+1, updated_at=CURRENT_TIMESTAMP WHERE id=:id AND version=:v"
-            else:
-                # Always bump version for postgres as part of update to maintain optimistic concurrency & collection ETag semantics.
-                sql = f"UPDATE departments SET {', '.join(sets)}, version=version+1, updated_at=now() WHERE id=:id AND version=:v RETURNING version"
-            res = db.execute(text(sql), params)
-            if _is_sqlite(db):
-                if res.rowcount == 0:
-                    db.rollback()
-                    raise ConcurrencyError("stale version")
-                # fetch new version
-                row = db.execute(text("SELECT version FROM departments WHERE id=:id"), {"id": dept_id}).fetchone()
-                db.commit()
-                return int(row[0]) if row else 0
-            else:
-                row = res.fetchone()
-                if not row:
-                    db.rollback()
-                    raise ConcurrencyError("stale version")
-                db.commit()
-                return int(row[0])
+            new_version = self.update_department_in_session(db, dept_id, expected_version, **fields)
+            db.commit()
+            return new_version
         except Exception:
             db.rollback()
             raise
         finally:
             db.close()
+
+    def update_department_in_session(self, db, dept_id: str, expected_version: int, **fields) -> int:
+        sets = []
+        params = {"id": dept_id, "v": int(expected_version)}
+        if "name" in fields and fields["name"] is not None:
+            sets.append("name=:name")
+            params["name"] = str(fields["name"]).strip()
+        if "resident_count_mode" in fields and fields["resident_count_mode"] is not None:
+            sets.append("resident_count_mode=:mode")
+            params["mode"] = str(fields["resident_count_mode"]).strip()
+        if "resident_count_fixed" in fields and fields["resident_count_fixed"] is not None:
+            sets.append("resident_count_fixed=:fixed")
+            params["fixed"] = int(fields["resident_count_fixed"])
+        if "residence_id" in fields:
+            sets.append("residence_id=:residence_id")
+            params["residence_id"] = str(fields["residence_id"]).strip() if fields["residence_id"] else None
+        if "display_order" in fields:
+            sets.append("display_order=:display_order")
+            params["display_order"] = int(fields["display_order"]) if fields["display_order"] is not None else None
+        if "notes" in fields and fields["notes"] is not None:
+            sets.append("notes=:notes")
+            params["notes"] = str(fields["notes"]).strip()
+        if not sets:
+            sets.append("version=version")
+        if _is_sqlite(db):
+            _ensure_departments_display_order_column(db)
+            sql = f"UPDATE departments SET {', '.join(sets)}, version=version+1, updated_at=CURRENT_TIMESTAMP WHERE id=:id AND version=:v"
+        else:
+            sql = f"UPDATE departments SET {', '.join(sets)}, version=version+1, updated_at=now() WHERE id=:id AND version=:v RETURNING version"
+        res = db.execute(text(sql), params)
+        if _is_sqlite(db):
+            if res.rowcount == 0:
+                raise ConcurrencyError("stale version")
+            row = db.execute(text("SELECT version FROM departments WHERE id=:id"), {"id": dept_id}).fetchone()
+            return int(row[0]) if row else 0
+        row = res.fetchone()
+        if not row:
+            raise ConcurrencyError("stale version")
+        return int(row[0])
 
     def update_department_notes(self, dept_id: str, expected_version: int, notes: str | None) -> int:
         return self.update_department(dept_id, expected_version, notes=notes)
@@ -952,6 +1035,156 @@ class DepartmentsRepo:
                 }
                 for r in rows
             ]
+        finally:
+            db.close()
+
+    def resequence_departments_for_site(self, site_id: str, ordered_department_ids: Iterable[str]) -> list[str]:
+        db = get_session()
+        try:
+            ordered_ids = [str(dept_id).strip() for dept_id in ordered_department_ids if str(dept_id).strip()]
+            if not ordered_ids:
+                raise ValueError("ordered_department_ids_required")
+            if len(set(ordered_ids)) != len(ordered_ids):
+                raise ValueError("duplicate_department_ids")
+
+            if _is_sqlite(db):
+                _ensure_departments_display_order_column(db)
+
+            rows = db.execute(
+                text("SELECT id FROM departments WHERE site_id=:sid"),
+                {"sid": site_id},
+            ).fetchall()
+            current_ids = [str(r[0]) for r in rows if r and r[0] is not None]
+            if len(current_ids) != len(ordered_ids) or set(current_ids) != set(ordered_ids):
+                raise ValueError("department_set_mismatch")
+
+            params = {"sid": site_id}
+            when_clauses = []
+            in_placeholders = []
+            for index, dept_id in enumerate(ordered_ids, start=1):
+                key = f"id_{index}"
+                params[key] = dept_id
+                when_clauses.append(f"WHEN :{key} THEN {index}")
+                in_placeholders.append(f":{key}")
+
+            timestamp_sql = "CURRENT_TIMESTAMP" if _is_sqlite(db) else "now()"
+            sql = text(
+                f"""
+                UPDATE departments
+                SET display_order = CASE id {' '.join(when_clauses)} END,
+                    version = version + 1,
+                    updated_at = {timestamp_sql}
+                WHERE site_id = :sid
+                  AND id IN ({', '.join(in_placeholders)})
+                """
+            )
+            res = db.execute(sql, params)
+            if res.rowcount != len(ordered_ids):
+                raise ValueError("department_update_mismatch")
+            db.commit()
+            return ordered_ids
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    def delete_department_for_site(self, dept_id: str, site_id: str, confirmation: str) -> str:
+        db = get_session()
+        try:
+            dept_row = db.execute(
+                text("SELECT name FROM departments WHERE id=:id AND site_id=:sid LIMIT 1"),
+                {"id": str(dept_id), "sid": str(site_id)},
+            ).fetchone()
+            if not dept_row:
+                raise ValueError("department_not_found")
+
+            dept_name = str(dept_row[0] or "").strip()
+            if not dept_name:
+                raise ValueError("department_name_missing")
+            if str(confirmation or "").strip() != dept_name:
+                raise ValueError("department_delete_confirmation_mismatch")
+
+            if _table_has_column(db, "users", "department_id"):
+                db.execute(
+                    text("UPDATE users SET department_id=NULL WHERE department_id=:id"),
+                    {"id": str(dept_id)},
+                )
+
+            explicit_department_cleanup: list[tuple[str, str, str]] = [
+                ("department_residents_schedule", "department_id", "DELETE FROM department_residents_schedule WHERE department_id=:id"),
+                ("department_residents_weekly", "department_id", "DELETE FROM department_residents_weekly WHERE department_id=:id"),
+                ("department_diet_defaults", "department_id", "DELETE FROM department_diet_defaults WHERE department_id=:id"),
+                ("department_diet_overrides", "department_id", "DELETE FROM department_diet_overrides WHERE department_id=:id"),
+                ("department_service_addons", "department_id", "DELETE FROM department_service_addons WHERE department_id=:id"),
+                ("department_menu_choices", "department_id", "DELETE FROM department_menu_choices WHERE department_id=:id"),
+                ("department_menu_row_demands", "department_id", "DELETE FROM department_menu_row_demands WHERE department_id=:id"),
+                ("department_portal_week_submissions", "department_id", "DELETE FROM department_portal_week_submissions WHERE department_id=:id"),
+                ("alt2_flags", "department_id", "DELETE FROM alt2_flags WHERE department_id=:id"),
+                ("weekview_alt2_flags", "department_id", "DELETE FROM weekview_alt2_flags WHERE department_id=:id"),
+                ("department_notes", "department_id", "DELETE FROM department_notes WHERE department_id=:id"),
+                ("weekview_registrations", "department_id", "DELETE FROM weekview_registrations WHERE department_id=:id"),
+                ("weekview_residents_count", "department_id", "DELETE FROM weekview_residents_count WHERE department_id=:id"),
+            ]
+            for table_name, column_name, sql in explicit_department_cleanup:
+                if _table_has_column(db, table_name, column_name):
+                    db.execute(text(sql), {"id": str(dept_id)})
+
+            if _table_has_column(db, "department_requirement_groups", "department_id"):
+                if _table_has_column(db, "department_requirement_group_service_overrides", "group_id"):
+                    db.execute(
+                        text(
+                            "DELETE FROM department_requirement_group_service_overrides "
+                            "WHERE group_id IN (SELECT id FROM department_requirement_groups WHERE department_id=:id)"
+                        ),
+                        {"id": str(dept_id)},
+                    )
+                if _table_has_column(db, "department_requirement_group_completions", "group_id"):
+                    db.execute(
+                        text(
+                            "DELETE FROM department_requirement_group_completions "
+                            "WHERE group_id IN (SELECT id FROM department_requirement_groups WHERE department_id=:id)"
+                        ),
+                        {"id": str(dept_id)},
+                    )
+                if _table_has_column(db, "department_requirement_group_weekday_overrides", "group_id"):
+                    db.execute(
+                        text(
+                            "DELETE FROM department_requirement_group_weekday_overrides "
+                            "WHERE group_id IN (SELECT id FROM department_requirement_groups WHERE department_id=:id)"
+                        ),
+                        {"id": str(dept_id)},
+                    )
+                if _table_has_column(db, "department_requirement_group_requirements", "group_id"):
+                    db.execute(
+                        text(
+                            "DELETE FROM department_requirement_group_requirements "
+                            "WHERE group_id IN (SELECT id FROM department_requirement_groups WHERE department_id=:id)"
+                        ),
+                        {"id": str(dept_id)},
+                    )
+                if _table_has_column(db, "planning_option_review_decisions", "requirement_group_id"):
+                    db.execute(
+                        text(
+                            "DELETE FROM planning_option_review_decisions "
+                            "WHERE requirement_group_id IN (SELECT id FROM department_requirement_groups WHERE department_id=:id)"
+                        ),
+                        {"id": str(dept_id)},
+                    )
+                db.execute(
+                    text("DELETE FROM department_requirement_groups WHERE department_id=:id"),
+                    {"id": str(dept_id)},
+                )
+
+            db.execute(
+                text("DELETE FROM departments WHERE id=:id AND site_id=:sid"),
+                {"id": str(dept_id), "sid": str(site_id)},
+            )
+            db.commit()
+            return dept_name
+        except Exception:
+            db.rollback()
+            raise
         finally:
             db.close()
 
@@ -1574,18 +1807,49 @@ class ServiceAddonsRepo:
 
 
 class DepartmentServiceAddonsRepo:
+    def _shape_service_addon_row(
+        self,
+        *,
+        row: tuple,
+        has_family_col: bool,
+        has_semantic_cols: bool,
+    ) -> dict:
+        lunch_count = row[5 if has_family_col else 4]
+        dinner_count = row[6 if has_family_col else 5]
+        service_scope = row[7 if has_family_col else 6] if has_semantic_cols else None
+        quantity_mode = row[8 if has_family_col else 7] if has_semantic_cols else None
+        canonical = canonicalize_service_addon_assignment(
+            service_scope=service_scope,
+            quantity_mode=quantity_mode,
+            lunch_count=lunch_count,
+            dinner_count=dinner_count,
+        )
+        return {
+            "id": str(row[0]),
+            "department_id": str(row[1]),
+            "addon_id": str(row[2]),
+            "addon_name": str(row[3]),
+            "addon_family": normalize_addon_family((row[4] if has_family_col else "ovrigt")),
+            "service_scope": canonical["service_scope"],
+            "quantity_mode": canonical["quantity_mode"],
+            "lunch_count": canonical["lunch_count"],
+            "dinner_count": canonical["dinner_count"],
+            "note": str((row[9 if has_family_col else 8] if has_semantic_cols else (row[7 if has_family_col else 6])) or ""),
+        }
+
     def get_for_department_row(self, row_id: str, dept_id: str, site_id: str | None = None) -> dict | None:
         db = get_session()
         try:
             _ensure_service_addons_tables(db)
             has_family_col = _table_has_column(db, "service_addons", "addon_family")
             has_site_col = _table_has_column(db, "service_addons", "site_id")
+            has_semantic_cols = _table_has_column(db, "department_service_addons", "service_scope") and _table_has_column(db, "department_service_addons", "quantity_mode")
             if has_family_col:
                 sql = (
                     """
                     SELECT dsa.id, dsa.department_id, dsa.addon_id, sa.name,
                            COALESCE(sa.addon_family, 'ovrigt') AS addon_family,
-                           dsa.lunch_count, dsa.dinner_count, COALESCE(dsa.note, '')
+                           dsa.lunch_count, dsa.dinner_count, dsa.service_scope, dsa.quantity_mode, COALESCE(dsa.note, '')
                     FROM department_service_addons dsa
                     JOIN service_addons sa ON sa.id = dsa.addon_id
                     JOIN departments d ON d.id = dsa.department_id
@@ -1605,7 +1869,7 @@ class DepartmentServiceAddonsRepo:
                     text(
                         """
                         SELECT dsa.id, dsa.department_id, dsa.addon_id, sa.name,
-                               dsa.lunch_count, dsa.dinner_count, COALESCE(dsa.note, '')
+                               dsa.lunch_count, dsa.dinner_count, dsa.service_scope, dsa.quantity_mode, COALESCE(dsa.note, '')
                         FROM department_service_addons dsa
                         JOIN service_addons sa ON sa.id = dsa.addon_id
                         WHERE dsa.id=:row_id AND dsa.department_id=:d
@@ -1615,16 +1879,7 @@ class DepartmentServiceAddonsRepo:
                 ).fetchone()
             if not row:
                 return None
-            return {
-                "id": str(row[0]),
-                "department_id": str(row[1]),
-                "addon_id": str(row[2]),
-                "addon_name": str(row[3]),
-                "addon_family": normalize_addon_family((row[4] if has_family_col else "ovrigt")),
-                "lunch_count": (int((row[5] if has_family_col else row[4])) if (row[5] if has_family_col else row[4]) is not None else None),
-                "dinner_count": (int((row[6] if has_family_col else row[5])) if (row[6] if has_family_col else row[5]) is not None else None),
-                "note": str((row[7] if has_family_col else row[6]) or ""),
-            }
+            return self._shape_service_addon_row(row=row, has_family_col=has_family_col, has_semantic_cols=has_semantic_cols)
         finally:
             db.close()
 
@@ -1634,12 +1889,13 @@ class DepartmentServiceAddonsRepo:
             _ensure_service_addons_tables(db)
             has_family_col = _table_has_column(db, "service_addons", "addon_family")
             has_site_col = _table_has_column(db, "service_addons", "site_id")
+            has_semantic_cols = _table_has_column(db, "department_service_addons", "service_scope") and _table_has_column(db, "department_service_addons", "quantity_mode")
             if has_family_col:
                 sql = (
                     """
                     SELECT dsa.id, dsa.department_id, dsa.addon_id, sa.name,
                            COALESCE(sa.addon_family, 'ovrigt') AS addon_family,
-                           dsa.lunch_count, dsa.dinner_count, COALESCE(dsa.note, '')
+                           dsa.lunch_count, dsa.dinner_count, dsa.service_scope, dsa.quantity_mode, COALESCE(dsa.note, '')
                     FROM department_service_addons dsa
                     JOIN service_addons sa ON sa.id = dsa.addon_id
                     JOIN departments d ON d.id = dsa.department_id
@@ -1660,7 +1916,7 @@ class DepartmentServiceAddonsRepo:
                     text(
                         """
                         SELECT dsa.id, dsa.department_id, dsa.addon_id, sa.name,
-                               dsa.lunch_count, dsa.dinner_count, COALESCE(dsa.note, '')
+                               dsa.lunch_count, dsa.dinner_count, dsa.service_scope, dsa.quantity_mode, COALESCE(dsa.note, '')
                         FROM department_service_addons dsa
                         JOIN service_addons sa ON sa.id = dsa.addon_id
                         WHERE dsa.department_id=:d
@@ -1671,18 +1927,7 @@ class DepartmentServiceAddonsRepo:
                 ).fetchall()
             out: list[dict] = []
             for r in rows:
-                out.append(
-                    {
-                        "id": str(r[0]),
-                        "department_id": str(r[1]),
-                        "addon_id": str(r[2]),
-                        "addon_name": str(r[3]),
-                        "addon_family": normalize_addon_family((r[4] if has_family_col else "ovrigt")),
-                        "lunch_count": (int((r[5] if has_family_col else r[4])) if (r[5] if has_family_col else r[4]) is not None else None),
-                        "dinner_count": (int((r[6] if has_family_col else r[5])) if (r[6] if has_family_col else r[5]) is not None else None),
-                        "note": str((r[7] if has_family_col else r[6]) or ""),
-                    }
-                )
+                out.append(self._shape_service_addon_row(row=r, has_family_col=has_family_col, has_semantic_cols=has_semantic_cols))
             return out
         finally:
             db.close()
@@ -1692,6 +1937,8 @@ class DepartmentServiceAddonsRepo:
         dept_id: str,
         addon_id: str,
         *,
+        service_scope: str | None = None,
+        quantity_mode: str | None = None,
         lunch_count: int | None,
         dinner_count: int | None,
         note: str | None = None,
@@ -1717,23 +1964,29 @@ class DepartmentServiceAddonsRepo:
             if addon_site_id and addon_site_id != str(dept_site_id):
                 raise AssertionError("service_addon_site_mismatch")
 
-            lunch_i = _validate_service_addon_count_limit(lunch_count, resident_count)
-            dinner_i = _validate_service_addon_count_limit(dinner_count, resident_count)
-            if not ((lunch_i is not None and lunch_i > 0) or (dinner_i is not None and dinner_i > 0)):
-                raise ValueError("service_addon_counts_required")
+            canonical = canonicalize_service_addon_assignment(
+                service_scope=service_scope,
+                quantity_mode=quantity_mode,
+                lunch_count=lunch_count,
+                dinner_count=dinner_count,
+            )
+            lunch_i = _validate_service_addon_count_limit(canonical["lunch_count"], resident_count)
+            dinner_i = _validate_service_addon_count_limit(canonical["dinner_count"], resident_count)
 
             db.execute(
                 text(
                     """
                     INSERT INTO department_service_addons(
-                        id, department_id, addon_id, lunch_count, dinner_count, note, created_at
-                    ) VALUES(:id, :department_id, :addon_id, :lunch_count, :dinner_count, :note, CURRENT_TIMESTAMP)
+                        id, department_id, addon_id, service_scope, quantity_mode, lunch_count, dinner_count, note, created_at
+                    ) VALUES(:id, :department_id, :addon_id, :service_scope, :quantity_mode, :lunch_count, :dinner_count, :note, CURRENT_TIMESTAMP)
                     """
                 ),
                 {
                     "id": str(uuid.uuid4()),
                     "department_id": str(dept_id),
                     "addon_id": str(addon_id),
+                    "service_scope": canonical["service_scope"],
+                    "quantity_mode": canonical["quantity_mode"],
                     "lunch_count": lunch_i,
                     "dinner_count": dinner_i,
                     "note": str(note or "").strip() or None,
@@ -1751,6 +2004,8 @@ class DepartmentServiceAddonsRepo:
         row_id: str,
         dept_id: str,
         *,
+        service_scope: str | None = None,
+        quantity_mode: str | None = None,
         lunch_count: int | None,
         dinner_count: int | None,
         note: str | None = None,
@@ -1769,7 +2024,7 @@ class DepartmentServiceAddonsRepo:
             row = db.execute(
                 text(
                     """
-                    SELECT dsa.id, dsa.department_id, dsa.addon_id, sa.site_id
+                    SELECT dsa.id, dsa.department_id, dsa.addon_id, sa.site_id, dsa.service_scope, dsa.quantity_mode
                     FROM department_service_addons dsa
                     JOIN service_addons sa ON sa.id = dsa.addon_id
                     WHERE dsa.id=:row_id AND dsa.department_id=:d
@@ -1784,16 +2039,22 @@ class DepartmentServiceAddonsRepo:
             if addon_site_id and addon_site_id != str(dept_site_id):
                 raise AssertionError("service_addon_site_mismatch")
 
-            lunch_i = _validate_service_addon_count_limit(lunch_count, resident_count)
-            dinner_i = _validate_service_addon_count_limit(dinner_count, resident_count)
-            if not ((lunch_i is not None and lunch_i > 0) or (dinner_i is not None and dinner_i > 0)):
-                raise ValueError("service_addon_counts_required")
+            canonical = canonicalize_service_addon_assignment(
+                service_scope=service_scope if service_scope is not None else row[4],
+                quantity_mode=quantity_mode if quantity_mode is not None else row[5],
+                lunch_count=lunch_count,
+                dinner_count=dinner_count,
+            )
+            lunch_i = _validate_service_addon_count_limit(canonical["lunch_count"], resident_count)
+            dinner_i = _validate_service_addon_count_limit(canonical["dinner_count"], resident_count)
 
             db.execute(
                 text(
                     """
                     UPDATE department_service_addons
-                    SET lunch_count=:lunch_count,
+                    SET service_scope=:service_scope,
+                        quantity_mode=:quantity_mode,
+                        lunch_count=:lunch_count,
                         dinner_count=:dinner_count,
                         note=:note
                     WHERE id=:row_id AND department_id=:dept_id
@@ -1802,6 +2063,8 @@ class DepartmentServiceAddonsRepo:
                 {
                     "row_id": str(row_id),
                     "dept_id": str(dept_id),
+                    "service_scope": canonical["service_scope"],
+                    "quantity_mode": canonical["quantity_mode"],
                     "lunch_count": lunch_i,
                     "dinner_count": dinner_i,
                     "note": str(note or "").strip() or None,
@@ -1886,25 +2149,37 @@ class DepartmentServiceAddonsRepo:
 
                 lunch = row.get("lunch_count")
                 dinner = row.get("dinner_count")
+                service_scope = row.get("service_scope")
+                quantity_mode = row.get("quantity_mode")
                 note = str(row.get("note") or "").strip() or None
-                lunch_i = _validate_service_addon_count_limit(int(lunch) if lunch is not None else None, resident_count)
-                dinner_i = _validate_service_addon_count_limit(int(dinner) if dinner is not None else None, resident_count)
-                # Only persist rows that have at least one shown count (>0)
-                if not ((lunch_i is not None and lunch_i > 0) or (dinner_i is not None and dinner_i > 0)):
-                    continue
+                try:
+                    canonical = canonicalize_service_addon_assignment(
+                        service_scope=service_scope,
+                        quantity_mode=quantity_mode,
+                        lunch_count=lunch,
+                        dinner_count=dinner,
+                    )
+                except ValueError as exc:
+                    if str(exc) == "service_addon_counts_required" and not service_scope and not quantity_mode:
+                        continue
+                    raise
+                lunch_i = _validate_service_addon_count_limit(canonical["lunch_count"], resident_count)
+                dinner_i = _validate_service_addon_count_limit(canonical["dinner_count"], resident_count)
                 rid = str(uuid.uuid4())
                 db.execute(
                     text(
                         """
                         INSERT INTO department_service_addons(
-                            id, department_id, addon_id, lunch_count, dinner_count, note, created_at
-                        ) VALUES(:id, :department_id, :addon_id, :lunch_count, :dinner_count, :note, CURRENT_TIMESTAMP)
+                            id, department_id, addon_id, service_scope, quantity_mode, lunch_count, dinner_count, note, created_at
+                        ) VALUES(:id, :department_id, :addon_id, :service_scope, :quantity_mode, :lunch_count, :dinner_count, :note, CURRENT_TIMESTAMP)
                         """
                     ),
                     {
                         "id": rid,
                         "department_id": str(dept_id),
                         "addon_id": addon_id,
+                        "service_scope": canonical["service_scope"],
+                        "quantity_mode": canonical["quantity_mode"],
                         "lunch_count": lunch_i,
                         "dinner_count": dinner_i,
                         "note": note,
@@ -1972,6 +2247,111 @@ class DepartmentServiceAddonsRepo:
                 dept_name = str(r[4] if has_family_col else r[3])
                 count = int((r[5] if has_family_col else r[4]) or 0)
                 note = str((r[6] if has_family_col else r[5]) or "").strip()
+                if count <= 0:
+                    continue
+                if addon_id not in by_addon:
+                    by_addon[addon_id] = {
+                        "addon_id": addon_id,
+                        "addon_name": addon_name,
+                        "addon_family": addon_family,
+                        "total_count": 0,
+                        "departments": [],
+                    }
+                by_addon[addon_id]["total_count"] += count
+                by_addon[addon_id]["departments"].append(
+                    {
+                        "department_id": dept_id,
+                        "department_name": dept_name,
+                        "count": count,
+                        "note": note,
+                    }
+                )
+            out = list(by_addon.values())
+            out.sort(
+                key=lambda x: (
+                    _addon_family_rank(str(x.get("addon_family") or "ovrigt")),
+                    str(normalize_addon_family(str(x.get("addon_family") or "ovrigt"))).lower(),
+                    -(int(x.get("total_count") or 0)),
+                    str(x.get("addon_name") or ""),
+                )
+            )
+            return out
+        finally:
+            db.close()
+
+    def list_totals_for_site_meal_with_context(
+        self,
+        site_id: str,
+        meal: str,
+        *,
+        year: int,
+        week: int,
+        weekday: int,
+    ) -> list[dict]:
+        meal_key = str(meal or "").strip().lower()
+        db = get_session()
+        try:
+            _ensure_service_addons_tables(db)
+            has_family_col = _table_has_column(db, "service_addons", "addon_family")
+            has_site_col = _table_has_column(db, "service_addons", "site_id")
+            has_semantic_cols = _table_has_column(db, "department_service_addons", "service_scope") and _table_has_column(db, "department_service_addons", "quantity_mode")
+            if has_family_col:
+                where_site = " AND sa.site_id = :site_id" if has_site_col else ""
+                rows = db.execute(
+                    text(
+                        f"""
+                        SELECT sa.id, sa.name, COALESCE(sa.addon_family, 'ovrigt') AS addon_family, d.id, d.name,
+                               dsa.lunch_count, dsa.dinner_count, dsa.service_scope, dsa.quantity_mode, COALESCE(dsa.note, '')
+                        FROM department_service_addons dsa
+                        JOIN service_addons sa ON sa.id = dsa.addon_id
+                        JOIN departments d ON d.id = dsa.department_id
+                        WHERE d.site_id = :site_id
+                        {where_site}
+                        ORDER BY sa.name, d.name
+                        """
+                    ),
+                    {"site_id": str(site_id)},
+                ).fetchall()
+            else:
+                rows = db.execute(
+                    text(
+                        """
+                        SELECT sa.id, sa.name, d.id, d.name,
+                               dsa.lunch_count, dsa.dinner_count, dsa.service_scope, dsa.quantity_mode, COALESCE(dsa.note, '')
+                        FROM department_service_addons dsa
+                        JOIN service_addons sa ON sa.id = dsa.addon_id
+                        JOIN departments d ON d.id = dsa.department_id
+                        WHERE d.site_id = :site_id
+                        ORDER BY sa.name, d.name
+                        """
+                    ),
+                    {"site_id": str(site_id)},
+                ).fetchall()
+            by_addon: dict[str, dict] = {}
+            for r in rows:
+                addon_id = str(r[0])
+                addon_name = str(r[1])
+                addon_family = normalize_addon_family((r[2] if has_family_col else "ovrigt"))
+                dept_id = str(r[3] if has_family_col else r[2])
+                dept_name = str(r[4] if has_family_col else r[3])
+                lunch_count = r[5 if has_family_col else 4]
+                dinner_count = r[6 if has_family_col else 5]
+                service_scope = r[7 if has_family_col else 6] if has_semantic_cols else None
+                quantity_mode = r[8 if has_family_col else 7] if has_semantic_cols else None
+                note = str((r[9 if has_family_col else 8] if has_semantic_cols else (r[6 if has_family_col else 5])) or "").strip()
+                count = resolve_service_addon_quantity(
+                    {
+                        "department_id": dept_id,
+                        "service_scope": service_scope,
+                        "quantity_mode": quantity_mode,
+                        "lunch_count": lunch_count,
+                        "dinner_count": dinner_count,
+                    },
+                    meal=meal_key,
+                    year=year,
+                    week=week,
+                    weekday=weekday,
+                )
                 if count <= 0:
                     continue
                 if addon_id not in by_addon:

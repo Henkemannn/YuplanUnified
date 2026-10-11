@@ -26,6 +26,8 @@ def _post_service_addon(
     new_name: str = "",
     family: str = "ovrigt",
     family_custom: str = "",
+    service_scope: str = "",
+    quantity_mode: str = "",
     lunch: str = "",
     dinner: str = "",
     note: str = "",
@@ -39,6 +41,8 @@ def _post_service_addon(
         "service_addon_new_name": new_name,
         "service_addon_family": family,
         "service_addon_family_custom": family_custom,
+        "service_scope": service_scope,
+        "quantity_mode": quantity_mode,
         "service_addon_lunch_count": lunch,
         "service_addon_dinner_count": dinner,
         "service_addon_note": note,
@@ -122,6 +126,16 @@ def test_admin_department_service_addons_renders_compact_read_state_and_modal_co
     assert 'data-service-addon-switch-create' in html
     assert 'data-service-addon-remove-start' in html
     assert 'data-service-addon-remove-confirm' in html
+    assert 'name="service_scope"' in html
+    assert 'name="quantity_mode"' in html
+    assert 'value="all_services" checked' in html
+    assert 'value="whole_department" checked' in html
+    assert 'Gäller vid' in html
+    assert 'Omfattning' in html
+    assert 'Gäller alla boende vid valda serveringar.' in html
+    assert 'data-service-addon-quantity-panel' in html
+    assert 'data-service-addon-count-field="lunch"' in html
+    assert 'data-service-addon-count-field="dinner"' in html
     assert '+ Skapa ny familj…' in html
     assert 'Välj befintlig' not in html
     assert 'Välj befintlig serveringsanpassning' not in html
@@ -139,6 +153,8 @@ def test_admin_department_service_addons_renders_compact_read_state_and_modal_co
     assert "Kväll 3" in html
     assert "Lunch 0" not in html
     assert "Kväll 0" not in html
+    assert 'data-service-addon-service-scope="' in html
+    assert 'data-service-addon-quantity-mode="' in html
     assert "Aldrig tomat" in html
     assert "Serveras separat" in html
     add_block = _state_block(html, "add")
@@ -413,6 +429,83 @@ def test_admin_department_service_addons_create_quantities_and_blank_validation(
     assert "Antalet måste vara större än 0 för minst en måltid." in rv.get_data(as_text=True)
     rows_after_reject = DepartmentServiceAddonsRepo().list_for_department(dep["id"], site_id=site["id"])
     assert len(rows_after_reject) == 3
+
+
+def test_admin_department_service_addons_semantic_scope_and_quantity_mode_roundtrip(app_session, client_admin):
+    site, _ = SitesRepo().create_site(f"Service addon semantic site {uuid.uuid4()}")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Semantic",
+        resident_count_mode="fixed",
+        resident_count_fixed=12,
+    )
+
+    addon_repo = ServiceAddonsRepo()
+    addon_id = addon_repo.create_if_missing("Alltid mos vid kokt potatis", site_id=site["id"], addon_family="mos")
+
+    _set_site(client_admin, site["id"])
+    _post_service_addon(
+        client_admin,
+        dep["id"],
+        addon_id=addon_id,
+        service_scope="all_services",
+        quantity_mode="whole_department",
+        note="Hela avdelningen",
+    )
+
+    rows = DepartmentServiceAddonsRepo().list_for_department(dep["id"], site_id=site["id"])
+    assert len(rows) == 1
+    assert rows[0]["service_scope"] == "all_services"
+    assert rows[0]["quantity_mode"] == "whole_department"
+    assert rows[0]["lunch_count"] is None
+    assert rows[0]["dinner_count"] is None
+
+    _post_service_addon(
+        client_admin,
+        dep["id"],
+        mode="edit",
+        row_id=rows[0]["id"],
+        service_scope="lunch",
+        quantity_mode="custom",
+        lunch="6",
+        dinner="",
+        note="Lunch only",
+    )
+
+    rows_after_edit = DepartmentServiceAddonsRepo().list_for_department(dep["id"], site_id=site["id"])
+    assert rows_after_edit[0]["service_scope"] == "lunch"
+    assert rows_after_edit[0]["quantity_mode"] == "custom"
+    assert rows_after_edit[0]["lunch_count"] == 6
+    assert rows_after_edit[0]["dinner_count"] is None
+    assert rows_after_edit[0]["note"] == "Lunch only"
+
+    rv = client_admin.get(f"/ui/admin/departments/{dep['id']}/edit", headers=_h("admin"))
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert 'data-service-addon-service-scope="lunch"' in html
+    assert 'data-service-addon-quantity-mode="custom"' in html
+
+
+def test_admin_department_service_addons_variable_department_inputs_do_not_get_zero_max(app_session, client_admin):
+    site, _ = SitesRepo().create_site(f"Service addon variable site {uuid.uuid4()}")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Variabel",
+        resident_count_mode="per_day_meal",
+        resident_count_fixed=0,
+    )
+
+    _set_site(client_admin, site["id"])
+    rv = client_admin.get(f"/ui/admin/departments/{dep['id']}/edit", headers=_h("admin"))
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    dialog_block = _dialog_block(html)
+    assert 'Gäller vid' in html
+    assert 'Omfattning' in html
+    assert 'class="admin-service-addon-modal__section-label"' in html
+    assert 'max="0"' not in dialog_block
+    assert 'name="service_addon_lunch_count"' in dialog_block
+    assert 'name="service_addon_dinner_count"' in dialog_block
 
 
 def test_admin_department_service_addons_zero_count_rejected_and_site_isolated(app_session, client_admin):

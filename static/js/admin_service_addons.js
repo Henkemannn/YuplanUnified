@@ -42,6 +42,8 @@
     var fields = {
       add: {
         addonId: $('select[name="service_addon_id"]', addState),
+        scope: $('input[name="service_scope"]:checked', addState),
+        quantityMode: $('input[name="quantity_mode"]:checked', addState),
         lunch: $('input[name="service_addon_lunch_count"]', addState),
         dinner: $('input[name="service_addon_dinner_count"]', addState),
         note: $('textarea[name="service_addon_note"]', addState),
@@ -50,11 +52,15 @@
         name: $('input[name="service_addon_new_name"]', createState),
         family: familySelect,
         familyCustom: familyInput,
+        scope: $('input[name="service_scope"]:checked', createState),
+        quantityMode: $('input[name="quantity_mode"]:checked', createState),
         lunch: $('input[name="service_addon_lunch_count"]', createState),
         dinner: $('input[name="service_addon_dinner_count"]', createState),
         note: $('textarea[name="service_addon_note"]', createState),
       },
       edit: {
+        scope: $('input[name="service_scope"]:checked', editState),
+        quantityMode: $('input[name="quantity_mode"]:checked', editState),
         lunch: $('input[name="service_addon_lunch_count"]', editState),
         dinner: $('input[name="service_addon_dinner_count"]', editState),
         note: $('textarea[name="service_addon_note"]', editState),
@@ -163,6 +169,53 @@
       }
     }
 
+    function updateOptionCards(root, name, selector) {
+      $all(selector, root).forEach(function (card) {
+        var input = $('input[name="' + name + '"]', card);
+        card.classList.toggle('is-selected', !!(input && input.checked));
+      });
+    }
+
+    function syncServiceAddonQuantity(stateName) {
+      var root = states[stateName];
+      if (!root) return;
+      var scopeInput = $('input[name="service_scope"]:checked', root);
+      var quantityInput = $('input[name="quantity_mode"]:checked', root);
+      var scope = scopeInput ? scopeInput.value : 'all_services';
+      var quantityMode = quantityInput ? quantityInput.value : 'whole_department';
+      var helper = $('[data-service-addon-whole-department-help]', root);
+      var panel = $('[data-service-addon-quantity-panel]', root);
+      var lunchField = $('[data-service-addon-count-field="lunch"]', root);
+      var dinnerField = $('[data-service-addon-count-field="dinner"]', root);
+      var lunchInput = $('input[name="service_addon_lunch_count"]', root);
+      var dinnerInput = $('input[name="service_addon_dinner_count"]', root);
+      var showLunch = quantityMode === 'custom' && (scope === 'all_services' || scope === 'lunch');
+      var showDinner = quantityMode === 'custom' && (scope === 'all_services' || scope === 'dinner');
+      var wholeDepartment = quantityMode === 'whole_department';
+
+      updateOptionCards(root, 'service_scope', '[data-service-addon-scope-card]');
+      updateOptionCards(root, 'quantity_mode', '[data-service-addon-quantity-card]');
+
+      if (helper) helper.hidden = !wholeDepartment;
+      if (panel) panel.hidden = wholeDepartment;
+
+      if (lunchField) lunchField.hidden = !showLunch;
+      if (dinnerField) dinnerField.hidden = !showDinner;
+
+      if (lunchInput) {
+        lunchInput.disabled = !showLunch;
+        lunchInput.required = showLunch;
+      }
+      if (dinnerInput) {
+        dinnerInput.disabled = !showDinner;
+        dinnerInput.required = showDinner;
+      }
+    }
+
+    function syncServiceAddonState(stateName) {
+      syncServiceAddonQuantity(stateName);
+    }
+
     function resetFields() {
       if (typeof form.reset === 'function') {
         form.reset();
@@ -189,6 +242,7 @@
       showState('add');
       setShellTitle('add');
       filterAddSelect('');
+      syncServiceAddonState('add');
     }
 
     function openDialog() {
@@ -216,6 +270,7 @@
       resetFields();
       setShellTitle('add');
       showState('add');
+      syncServiceAddonState('add');
       openDialog();
       if (addSelect && typeof addSelect.focus === 'function') {
         addSelect.focus();
@@ -223,8 +278,10 @@
     }
 
     function openCreateState() {
+      resetFields();
       showState('create');
       setShellTitle('create');
+      syncServiceAddonState('create');
       openDialog();
       if (fields.create.name && typeof fields.create.name.focus === 'function') {
         fields.create.name.focus();
@@ -237,15 +294,24 @@
       showState('edit');
       rowIdInput.value = text(trigger.getAttribute('data-service-addon-row-id'));
       actionInput.value = '';
+      var serviceScope = text(trigger.getAttribute('data-service-addon-service-scope')) || 'all_services';
+      var quantityMode = text(trigger.getAttribute('data-service-addon-quantity-mode')) || 'custom';
+      var scopeInput = $('input[name="service_scope"][value="' + serviceScope + '"]', editState);
+      var quantityInput = $('input[name="quantity_mode"][value="' + quantityMode + '"]', editState);
+      if (scopeInput) scopeInput.checked = true;
+      if (quantityInput) quantityInput.checked = true;
       if (fields.edit.lunch) fields.edit.lunch.value = text(trigger.getAttribute('data-service-addon-lunch'));
       if (fields.edit.dinner) fields.edit.dinner.value = text(trigger.getAttribute('data-service-addon-dinner'));
       if (fields.edit.note) fields.edit.note.value = text(trigger.getAttribute('data-service-addon-note'));
       if (editName) editName.textContent = text(trigger.getAttribute('data-service-addon-addon-name'));
       if (editFamily) editFamily.textContent = familyLabel(trigger.getAttribute('data-service-addon-addon-family'));
       if (removeName) removeName.textContent = text(trigger.getAttribute('data-service-addon-addon-name'));
+      syncServiceAddonState('edit');
       openDialog();
-      if (fields.edit.lunch && typeof fields.edit.lunch.focus === 'function') {
+      if (fields.edit.lunch && !fields.edit.lunch.disabled && typeof fields.edit.lunch.focus === 'function') {
         fields.edit.lunch.focus();
+      } else if (fields.edit.dinner && !fields.edit.dinner.disabled && typeof fields.edit.dinner.focus === 'function') {
+        fields.edit.dinner.focus();
       }
     }
 
@@ -278,11 +344,7 @@
 
       if (event.target.closest('[data-service-addon-switch-create]')) {
         event.preventDefault();
-        showState('create');
-        setShellTitle('create');
-        if (fields.create.name && typeof fields.create.name.focus === 'function') {
-          fields.create.name.focus();
-        }
+        openCreateState();
         return;
       }
 
@@ -302,6 +364,7 @@
       if (event.target.closest('[data-service-addon-remove-cancel]')) {
         event.preventDefault();
         if (removeForm) removeForm.hidden = true;
+        actionInput.value = '';
         showState('edit');
         setShellTitle('edit', editName ? editName.textContent : '');
         if (removeName && editName) {
@@ -335,6 +398,10 @@
           if (familySelect) familySelect.hidden = false;
           if (familyInput) familyInput.value = '';
         }
+        return;
+      }
+      if (event.target && (event.target.name === 'service_scope' || event.target.name === 'quantity_mode')) {
+        syncServiceAddonState(dialog.dataset.serviceAddonState || 'add');
         return;
       }
       if (event.target === addSelect) {

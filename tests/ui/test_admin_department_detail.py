@@ -84,8 +84,8 @@ def test_post_updates_fixed_resident_count(app_session: Flask, client_admin: Fla
     # GET detail and verify value in page
     r2 = client_admin.get(f"/ui/admin/departments/{dept['id']}/detail", headers=HEADERS_ADMIN)
     html2 = r2.data.decode()
-    assert "Normalt antal:" in html2
-    assert "12" in html2
+    assert "Boendeantal:" in html2
+    assert "12 personer" in html2
 
 
 def test_post_creates_weekly_override_and_reflects(app_session: Flask, client_admin: FlaskClient) -> None:
@@ -138,8 +138,8 @@ def test_post_clears_weekly_override(app_session: Flask, client_admin: FlaskClie
     r2 = client_admin.get(f"/ui/admin/departments/{dept['id']}/detail", headers=HEADERS_ADMIN)
     html2 = r2.data.decode()
     assert "Inga veckovariationer sparade för vald vecka." in html2
-    assert "Normalt antal:" in html2
-    assert "10 boende" in html2
+    assert "Boendeantal:" in html2
+    assert "10 personer" in html2
 
 
 def test_departments_list_shows_link_and_varierat_badge(app_session: Flask, client_admin: FlaskClient) -> None:
@@ -167,12 +167,13 @@ def test_departments_list_shows_link_and_varierat_badge(app_session: Flask, clie
     r = client_admin.get("/ui/admin/departments", headers=HEADERS_ADMIN)
     assert r.status_code == 200
     html = r.data.decode()
-    # Link to detail page
-    assert f"/ui/admin/departments/{dept['id']}/detail" in html
-    # Notes are visible
-    assert "Viktig info" in html
-    # Varierat badge present
-    assert "Varierat" in html
+    # Link to edit page
+    assert f"/ui/admin/departments/{dept['id']}/edit" in html
+    # Compact semantic row text is visible
+    assert "Boende / enhet" in html
+    assert "11 boende" in html
+    assert "Viktig info" not in html
+    assert "Varierat" not in html
 
 
 def test_departments_list_and_detail_show_residence_name(app_session: Flask, client_admin: FlaskClient) -> None:
@@ -204,12 +205,46 @@ def test_departments_list_and_detail_show_residence_name(app_session: Flask, cli
     list_resp = client_admin.get("/ui/admin/departments", headers=HEADERS_ADMIN)
     assert list_resp.status_code == 200
     list_html = list_resp.data.decode()
-    assert "Boende: Solgarden" in list_html
+    assert "Boende / enhet" in list_html
+    assert "Solgarden" in list_html
 
     detail_resp = client_admin.get(f"/ui/admin/departments/{dept['id']}/detail", headers=HEADERS_ADMIN)
     assert detail_resp.status_code == 200
     detail_html = detail_resp.data.decode()
     assert "Boende:</strong> Solgarden" in detail_html
+
+
+def test_variable_department_surfaces_show_semantic_state_without_zero(app_session: Flask, client_admin: FlaskClient) -> None:
+    site = _seed_basic()
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+    dept, _ = DepartmentsRepo().create_department(
+        site_id=site["id"], name="Avd Varierar", resident_count_mode="per_day_meal", resident_count_fixed=0
+    )
+
+    detail_resp = client_admin.get(f"/ui/admin/departments/{dept['id']}/detail", headers=HEADERS_ADMIN)
+    assert detail_resp.status_code == 200
+    detail_html = detail_resp.data.decode()
+    assert "0 boende" not in detail_html
+    assert "Varierat boendeantal" in detail_html
+    assert "Boendeantal" in detail_html
+    assert "Varierar per dag/måltid" in detail_html
+    assert "Hantera variation" in detail_html
+
+    edit_resp = client_admin.get(f"/ui/admin/departments/{dept['id']}/edit", headers=HEADERS_ADMIN)
+    assert edit_resp.status_code == 200
+    edit_html = edit_resp.data.decode()
+    assert "0 boende" not in edit_html
+    assert "Varierat boendeantal" in edit_html
+    assert "Boendeantal" in edit_html
+    assert "Varierar per dag/måltid" in edit_html
+    assert "Hantera variation" in edit_html
+
+    list_resp = client_admin.get("/ui/admin/departments", headers=HEADERS_ADMIN)
+    assert list_resp.status_code == 200
+    list_html = list_resp.data.decode()
+    assert "0 boende" not in list_html
+    assert "Varierat boendeantal" in list_html
 
 
 def test_department_detail_is_read_only_dashboard(app_session: Flask, client_admin: FlaskClient) -> None:

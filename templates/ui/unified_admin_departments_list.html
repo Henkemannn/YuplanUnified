@@ -6,13 +6,20 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_departments.css') }}">
 {% endblock %}
 
+{% block scripts %}
+    {{ super() }}
+    <script src="{{ url_for('static', filename='js/unified_admin.js') }}"></script>
+{% endblock %}
+
 {% block content %}
-    <div class="app-page admin-departments">
-        <section class="app-shell__page-header">
-            <div>
+    <div class="app-page admin-departments" data-department-reorder-url="{{ url_for('ui.admin_departments_reorder') }}">
+        <section class="app-shell__page-header admin-departments__page-header">
+            <div class="admin-departments__page-heading">
                 <h1 class="app-shell__title">Avdelningar</h1>
-                <p class="app-shell__subtitle">Hantera avdelningar och boende per enhet.</p>
+                <p class="app-shell__subtitle">Avdelningsöversikt för {{ vm.site_name or 'vald site' }}.</p>
+                <p class="admin-departments__page-help">Klicka på avdelningsnamnet för snabböversikt. Redigera för att göra ändringar.</p>
             </div>
+            <a class="yp-button yp-button-primary" href="{{ url_for('ui.admin_departments_new_form') }}">+ Ny avdelning</a>
         </section>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -25,44 +32,56 @@
             {% endif %}
         {% endwith %}
 
-        <section class="app-shell__grid">
-            <article class="app-shell__card">
-                <div class="admin-departments__card-header">
-                    <h2 class="app-shell__card-title">Avdelningar</h2>
-                    <a class="admin-departments__create-btn" href="{{ url_for('ui.admin_departments_new_form') }}">+ Skapa avdelning</a>
-                </div>
-                <p class="app-shell__card-text">Tryck på en avdelning för detaljer.</p>
+        <section class="app-shell__grid admin-departments__layout">
+            <article class="app-shell__card admin-departments__list-card">
                 {% if vm.departments and vm.departments|length > 0 %}
-                    <div class="app-shell__list">
+                    <div class="app-shell__list admin-departments__list" role="list" aria-label="Avdelningslista">
                         {% for dept in vm.departments %}
-                        <div class="app-shell__list-item">
-                            <a class="app-shell__list-link" href="{{ url_for('ui.admin_department_detail', department_id=dept.id) }}" aria-label="Öppna {{ dept.name }}"></a>
-                            <div class="app-shell__list-main">
-                                <a class="app-shell__list-title" href="{{ url_for('ui.admin_department_detail', department_id=dept.id) }}">{{ dept.name }}</a>
-                                <div class="app-shell__list-meta">
-                                    {{ dept.resident_count_fixed }} boende ·
-                                    <span class="admin-departments__mode-badge {% if dept.has_variation %}is-variable{% else %}is-fixed{% endif %}">
-                                        {% if dept.has_variation %}Varierat{% else %}Fast{% endif %}
-                                    </span>
+                        <div class="app-shell__list-item admin-departments__row"
+                             data-department-row
+                             data-department-id="{{ dept.id }}"
+                             data-department-version="{{ dept.version }}"
+                             data-department-quick-overview-url="{{ url_for('ui.admin_department_quick_overview_get', department_id=dept.id) }}">
+                            <button type="button"
+                                    class="admin-departments__drag-handle"
+                                    data-department-drag-handle
+                                    aria-label="Dra för att ändra ordning på {{ dept.name }}">
+                                <span aria-hidden="true">⋮⋮</span>
+                                <span class="u-visually-hidden">Dra för att ändra ordning på {{ dept.name }}</span>
+                            </button>
+                            <div class="app-shell__list-main admin-departments__row-main">
+                                <button type="button"
+                                        class="admin-departments__row-title-button"
+                                        data-department-quick-overview-trigger
+                                        aria-controls="department-quick-overview-panel"
+                                        aria-label="Snabböversikt för {{ dept.name }}"
+                                        title="Visa snabböversikt">{{ dept.name }}</button>
+                                <div class="admin-departments__row-meta">
+                                    <div class="admin-departments__meta-line">
+                                        <span class="admin-departments__meta-label">Boende / enhet</span>
+                                        <span class="admin-departments__meta-value">{{ dept.residence_name or 'Ej valt' }}</span>
+                                    </div>
+                                    <span class="admin-departments__row-state">{{ dept.resident_count_list_text }}</span>
                                 </div>
-                                <div class="app-shell__list-note">Boende: {{ dept.residence_name or 'Ej valt' }}</div>
-                                {% if dept.notes %}
-                                    <div class="app-shell__list-note">ℹ {{ dept.notes }}</div>
-                                {% endif %}
                             </div>
-                            <div class="app-shell__list-actions">
-                                <form method="POST" action="{{ url_for('ui.admin_departments_update_order', dept_id=dept.id) }}" class="admin-departments__order-form">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                    <input type="hidden" name="version" value="{{ dept.version }}">
-                                    <label for="display_order_{{ dept.id }}" class="u-visually-hidden">Visningsordning för {{ dept.name }}</label>
-                                    <input id="display_order_{{ dept.id }}" name="display_order" type="number" min="0" step="1" value="{{ '' if dept.display_order is none else dept.display_order }}" class="yp-input" placeholder="Ordning" aria-label="Visningsordning">
-                                    <button type="submit" class="app-shell__btn app-shell__btn--ghost">Spara ordning</button>
-                                </form>
-                                <a class="app-shell__btn app-shell__btn--ghost" href="{{ url_for('ui.admin_departments_edit_form', dept_id=dept.id) }}">Redigera</a>
-                                <form method="POST" action="{{ url_for('ui.admin_departments_delete', dept_id=dept.id) }}" data-confirm="Är du säker på att du vill ta bort avdelningen {{ dept.name }}?">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                    <button type="submit" class="app-shell__icon-btn app-shell__icon-btn--danger" aria-label="Ta bort avdelning {{ dept.name }}" title="Ta bort">🗑️</button>
-                                </form>
+                            <div class="app-shell__list-actions admin-departments__row-actions">
+                                <a class="yp-button yp-button-primary yp-button-sm" href="{{ url_for('ui.admin_departments_edit_form', dept_id=dept.id) }}">Redigera</a>
+                                <details class="app-shell__details admin-departments__overflow">
+                                    <summary class="admin-departments__overflow-toggle" aria-label="Fler åtgärder för {{ dept.name }}">
+                                        <span aria-hidden="true">•••</span>
+                                        <span class="u-visually-hidden">Fler åtgärder för {{ dept.name }}</span>
+                                    </summary>
+                                    <div class="app-shell__details-body admin-departments__overflow-panel">
+                                        <button type="button"
+                                                class="yp-button yp-button-secondary yp-button-sm admin-departments__delete-btn"
+                                                data-modal-target="#department-delete-modal"
+                                                data-department-delete-url="{{ url_for('ui.admin_departments_delete', dept_id=dept.id) }}"
+                                                data-department-delete-name="{{ dept.name }}"
+                                                data-department-delete-title="Ta bort {{ dept.name }}?"
+                                                aria-label="Ta bort avdelning {{ dept.name }}"
+                                                title="Ta bort avdelning">Ta bort avdelning</button>
+                                    </div>
+                                </details>
                             </div>
                         </div>
                         {% endfor %}
@@ -70,12 +89,50 @@
                 {% else %}
                     <div class="admin-departments__empty">
                         <div class="admin-departments__empty-icon">📋</div>
-                        <h3 class="admin-departments__empty-title">Inga avdelningar ännu</h3>
-                        <p class="app-shell__card-text">Skapa din första avdelning för att börja hantera boende och specialkost per enhet.</p>
-                        <a class="yp-button yp-button-primary" href="{{ url_for('ui.admin_departments_new_form') }}">➕ Lägg till avdelning</a>
+                        <h3 class="admin-departments__empty-title">Inga avdelningar ännu.</h3>
+                        <a class="yp-button yp-button-primary" href="{{ url_for('ui.admin_departments_new_form') }}">+ Ny avdelning</a>
                     </div>
                 {% endif %}
             </article>
+            <aside class="app-shell__card admin-departments__inspector" id="department-quick-overview-panel" data-department-quick-overview-panel aria-live="polite" aria-busy="false">
+                <div class="admin-departments__inspector-empty" data-department-quick-overview-empty>
+                    <h2 class="app-shell__card-title admin-departments__inspector-title">Snabböversikt</h2>
+                    <p class="admin-departments__inspector-empty-text">Välj en avdelning för att se information.</p>
+                </div>
+            </aside>
         </section>
+
+        <dialog id="department-delete-modal" class="ua-modal admin-department-delete-modal">
+            <div class="ua-modal-inner admin-department-delete-modal__inner">
+                <div class="ua-modal-header">
+                    <h2 class="app-shell__title admin-department-delete-modal__title" data-department-delete-title>Ta bort avdelning?</h2>
+                </div>
+                <div class="ua-modal-body admin-department-delete-modal__body">
+                    <p class="admin-department-delete-modal__text">
+                        Avdelningen och information som hör till den kommer att tas bort.
+                    </p>
+                    <p class="admin-department-delete-modal__text" data-department-delete-name-text></p>
+                    <form method="POST" action="" class="admin-department-delete-modal__form" data-department-delete-form>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <label class="admin-department-delete-modal__label" for="department-delete-confirmation">
+                            Skriv avdelningens namn för att bekräfta.
+                        </label>
+                        <input id="department-delete-confirmation"
+                               name="confirmation"
+                               type="text"
+                               class="yp-input admin-department-delete-modal__input"
+                               autocomplete="off"
+                               autocapitalize="off"
+                               spellcheck="false"
+                               data-department-delete-confirm-input
+                               placeholder="Skriv avdelningens namn">
+                        <div class="ua-modal-footer admin-department-delete-modal__footer">
+                            <button type="button" class="yp-button yp-button-secondary" data-modal-close>Avbryt</button>
+                            <button type="submit" class="yp-button yp-button-danger" data-department-delete-confirm-button disabled>Ta bort avdelning</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </dialog>
     </div>
 {% endblock %}
