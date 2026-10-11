@@ -22,7 +22,7 @@ from core.components import (
     InMemoryRecipeRepository,
 )
 from core.db import get_session
-from core.menu import ImportedMenuRow, InMemoryCompositionAliasRepository, MenuService
+from core.menu import ImportedMenuRow, InMemoryCompositionAliasRepository, MenuDetail, MenuService
 from core.models import Dish, Tenant
 
 
@@ -100,6 +100,31 @@ def _create_legacy_menu_rows(tenant_id: int, site_id: str, year: int, week: int,
         return int(menu.id)
     finally:
         db.close()
+
+
+def _create_dynamic_menu_row(
+    builder_flow: BuilderMenuContextFlow,
+    *,
+    menu_id: str,
+    day: str,
+    display_label: str,
+    composition_id: str,
+    sort_order: int,
+) -> None:
+    created = builder_flow.create_empty_menu_row(
+        menu_id=menu_id,
+        day=day,
+        display_label=display_label,
+        sort_order=sort_order,
+    )
+    builder_flow.update_composition_menu_row(
+        menu_id=menu_id,
+        menu_detail_id=created.menu_detail_id,
+        day=day,
+        meal_slot=created.meal_slot,
+        composition_id=composition_id,
+        sort_order=sort_order,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -203,6 +228,321 @@ def test_projection_reader_explicit_slots_map_directly(app_session):
     ]
     assert [row.text for row in result.projection.rows] == ["Fish Plate", "Soup", "Cake"]
     assert all(row.error is None for row in result.projection.rows)
+
+
+@pytest.mark.parametrize(
+    ("sort_order", "expected_meal", "expected_variant"),
+    [
+        (10, "lunch", "alt1"),
+        (20, "lunch", "alt2"),
+        (30, "lunch", "dessert"),
+        (40, "dinner", "main"),
+    ],
+)
+def test_projection_reader_opaque_dynamic_positions_map_to_kommun_contract(
+    app_session,
+    sort_order: int,
+    expected_meal: str,
+    expected_variant: str,
+):
+    tenant_id, site_id = _seed_tenant_and_site(app_session)
+    builder_flow, composition_service, _ = _build_builder_menu_context_flow()
+
+    with app_session.app_context():
+        current_app.extensions["builder_menu_context_flow"] = builder_flow
+        builder_flow.create_menu(menu_id="builder-menu-opaque", site_id=site_id, week_key="2026-W16", version=1)
+        composition_service.create_composition(composition_id="comp_opaque", composition_name="Opaque Dish")
+        _create_dynamic_menu_row(
+            builder_flow,
+            menu_id="builder-menu-opaque",
+            day="monday",
+            display_label="Totally unrelated label",
+            composition_id="comp_opaque",
+            sort_order=sort_order,
+        )
+        CommunBuilderMenuLinkService(builder_menu_context_flow=builder_flow).create_or_replace_link(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-opaque",
+            source="manual",
+        )
+
+        result = CommunBuilderMenuProjectionReader().get_projection_for_builder_menu(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-opaque",
+            builder_menu_version=1,
+        )
+
+    assert result.status == "ok"
+    assert result.projection is not None
+    assert len(result.projection.rows) == 1
+    row = result.projection.rows[0]
+    assert row.meal == expected_meal
+    assert row.variant_type == expected_variant
+    assert row.sort_order == sort_order
+    assert row.text == "Opaque Dish"
+    assert row.error is None
+
+
+def test_projection_reader_opaque_dynamic_day_offsets_map_identically(app_session):
+    tenant_id, site_id = _seed_tenant_and_site(app_session)
+    builder_flow, composition_service, _ = _build_builder_menu_context_flow()
+
+    with app_session.app_context():
+        current_app.extensions["builder_menu_context_flow"] = builder_flow
+        builder_flow.create_menu(menu_id="builder-menu-offset", site_id=site_id, week_key="2026-W16", version=1)
+        composition_service.create_composition(composition_id="comp_offset", composition_name="Offset Dish")
+        for sort_order in [1010, 1020, 1030, 1040]:
+            _create_dynamic_menu_row(
+                builder_flow,
+                menu_id="builder-menu-offset",
+                day="tuesday",
+                display_label=f"Offset {sort_order}",
+                composition_id="comp_offset",
+                sort_order=sort_order,
+            )
+        CommunBuilderMenuLinkService(builder_menu_context_flow=builder_flow).create_or_replace_link(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-offset",
+            source="manual",
+        )
+
+        result = CommunBuilderMenuProjectionReader().get_projection_for_builder_menu(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-offset",
+            builder_menu_version=1,
+        )
+
+    assert result.status == "ok"
+    assert result.projection is not None
+    assert [(row.sort_order, row.meal, row.variant_type) for row in result.projection.rows] == [
+        (1010, "lunch", "alt1"),
+        (1020, "lunch", "alt2"),
+        (1030, "lunch", "dessert"),
+        (1040, "dinner", "main"),
+    ]
+
+
+def test_projection_reader_missing_position_does_not_collapse_and_skips_alt2(app_session):
+    tenant_id, site_id = _seed_tenant_and_site(app_session)
+    builder_flow, composition_service, _ = _build_builder_menu_context_flow()
+
+    with app_session.app_context():
+        current_app.extensions["builder_menu_context_flow"] = builder_flow
+        builder_flow.create_menu(menu_id="builder-menu-sunday", site_id=site_id, week_key="2026-W16", version=1)
+        composition_service.create_composition(composition_id="comp_sunday", composition_name="Sunday Dish")
+        for sort_order in [6010, 6030, 6040]:
+            _create_dynamic_menu_row(
+                builder_flow,
+                menu_id="builder-menu-sunday",
+                day="sunday",
+                display_label=f"Sunday {sort_order}",
+                composition_id="comp_sunday",
+                sort_order=sort_order,
+            )
+        CommunBuilderMenuLinkService(builder_menu_context_flow=builder_flow).create_or_replace_link(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-sunday",
+            source="manual",
+        )
+
+        result = CommunBuilderMenuProjectionReader().get_projection_for_builder_menu(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-sunday",
+            builder_menu_version=1,
+        )
+
+    assert result.status == "ok"
+    assert result.projection is not None
+    assert [row.sort_order for row in result.projection.rows] == [6010, 6030, 6040]
+    assert [row.variant_type for row in result.projection.rows] == ["alt1", "dessert", "main"]
+    assert all(row.variant_type != "alt2" for row in result.projection.rows)
+
+
+def test_projection_reader_semantic_meal_slots_still_pass_through(app_session):
+    tenant_id, site_id = _seed_tenant_and_site(app_session)
+    builder_flow, composition_service, _ = _build_builder_menu_context_flow()
+
+    with app_session.app_context():
+        current_app.extensions["builder_menu_context_flow"] = builder_flow
+        builder_flow.create_menu(menu_id="builder-menu-semantic", site_id=site_id, week_key="2026-W16", version=1)
+        composition_service.create_composition(composition_id="comp_semantic", composition_name="Semantic Dish")
+        builder_flow.add_composition_menu_row(
+            menu_id="builder-menu-semantic",
+            day="monday",
+            meal_slot="lunch_alt1",
+            composition_id="comp_semantic",
+            sort_order=999,
+            display_label="Misleading label",
+        )
+        CommunBuilderMenuLinkService(builder_menu_context_flow=builder_flow).create_or_replace_link(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-semantic",
+            source="manual",
+        )
+
+        result = CommunBuilderMenuProjectionReader().get_projection_for_builder_menu(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-semantic",
+            builder_menu_version=1,
+        )
+
+    assert result.status == "ok"
+    assert result.projection is not None
+    row = result.projection.rows[0]
+    assert row.meal == "lunch"
+    assert row.variant_type == "alt1"
+    assert row.sort_order == 999
+
+
+def test_projection_reader_rejects_unsupported_opaque_position(app_session):
+    tenant_id, site_id = _seed_tenant_and_site(app_session)
+    builder_flow, composition_service, _ = _build_builder_menu_context_flow()
+
+    with app_session.app_context():
+        current_app.extensions["builder_menu_context_flow"] = builder_flow
+        builder_flow.create_menu(menu_id="builder-menu-bad-pos", site_id=site_id, week_key="2026-W16", version=1)
+        composition_service.create_composition(composition_id="comp_bad_pos", composition_name="Bad Position")
+        _create_dynamic_menu_row(
+            builder_flow,
+            menu_id="builder-menu-bad-pos",
+            day="monday",
+            display_label="Too far",
+            composition_id="comp_bad_pos",
+            sort_order=50,
+        )
+        CommunBuilderMenuLinkService(builder_menu_context_flow=builder_flow).create_or_replace_link(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-bad-pos",
+            source="manual",
+        )
+
+        result = CommunBuilderMenuProjectionReader().get_projection_for_builder_menu(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-bad-pos",
+            builder_menu_version=1,
+        )
+
+    assert result.status == "projection_error"
+    assert result.error == "unsupported compatibility slot position: 50"
+
+
+def test_projection_reader_rejects_malformed_sort_order_in_opaque_row(app_session):
+    tenant_id, site_id = _seed_tenant_and_site(app_session)
+    builder_flow, composition_service, _ = _build_builder_menu_context_flow()
+
+    with app_session.app_context():
+        current_app.extensions["builder_menu_context_flow"] = builder_flow
+        builder_flow.create_menu(menu_id="builder-menu-bad-sort", site_id=site_id, week_key="2026-W16", version=1)
+        composition_service.create_composition(composition_id="comp_bad_sort", composition_name="Bad Sort")
+        builder_flow._menu_service._menu_detail_repository.add(  # type: ignore[attr-defined]
+            MenuDetail(
+                menu_detail_id="builder-menu-bad-sort-row-1",
+                menu_id="builder-menu-bad-sort",
+                day="monday",
+                meal_slot="slot_broken",
+                composition_ref_type="composition",
+                composition_id="comp_bad_sort",
+                unresolved_text=None,
+                note=None,
+                sort_order="bad",
+                display_label="Broken",
+                row_kind="dynamic",
+                selection_group_id=None,
+            )
+        )
+        CommunBuilderMenuLinkService(builder_menu_context_flow=builder_flow).create_or_replace_link(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-bad-sort",
+            source="manual",
+        )
+
+        result = CommunBuilderMenuProjectionReader().get_projection_for_builder_menu(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-bad-sort",
+            builder_menu_version=1,
+        )
+
+    assert result.status == "projection_error"
+    assert result.error is not None
+    assert "invalid literal" in result.error or "invalid sort_order" in result.error
+
+
+def test_projection_reader_display_label_does_not_drive_resolution(app_session):
+    tenant_id, site_id = _seed_tenant_and_site(app_session)
+    builder_flow, composition_service, _ = _build_builder_menu_context_flow()
+
+    with app_session.app_context():
+        current_app.extensions["builder_menu_context_flow"] = builder_flow
+        builder_flow.create_menu(menu_id="builder-menu-label", site_id=site_id, week_key="2026-W16", version=1)
+        composition_service.create_composition(composition_id="comp_label", composition_name="Label Dish")
+        _create_dynamic_menu_row(
+            builder_flow,
+            menu_id="builder-menu-label",
+            day="monday",
+            display_label="Dessert",
+            composition_id="comp_label",
+            sort_order=10,
+        )
+        CommunBuilderMenuLinkService(builder_menu_context_flow=builder_flow).create_or_replace_link(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-label",
+            source="manual",
+        )
+
+        result = CommunBuilderMenuProjectionReader().get_projection_for_builder_menu(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-label",
+            builder_menu_version=1,
+        )
+
+    assert result.status == "ok"
+    assert result.projection is not None
+    row = result.projection.rows[0]
+    assert row.meal == "lunch"
+    assert row.variant_type == "alt1"
+    assert row.text == "Label Dish"
 
 
 def test_projection_reader_generic_meal_slots_remain_unresolved(app_session):
@@ -410,15 +750,17 @@ def test_projection_reader_rejects_unknown_explicit_variant_suffix(app_session):
             builder_menu_id="builder-menu-1",
             source="manual",
         )
-        with pytest.raises(ValueError, match="unknown variant slot: lunch_alt9"):
-            CommunBuilderMenuProjectionReader().get_projection_for_builder_menu(
-                tenant_id=tenant_id,
-                site_id=site_id,
-                year=2026,
-                week=16,
-                builder_menu_id="builder-menu-1",
-                builder_menu_version=1,
-            )
+        result = CommunBuilderMenuProjectionReader().get_projection_for_builder_menu(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-1",
+            builder_menu_version=1,
+        )
+
+    assert result.status == "projection_error"
+    assert result.error == "unknown variant slot: lunch_alt9"
 
 
 def test_week_view_shadow_flag_off_does_not_touch_shadow_path(app_session, monkeypatch):

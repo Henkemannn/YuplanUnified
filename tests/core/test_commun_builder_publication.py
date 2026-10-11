@@ -145,6 +145,52 @@ def _seed_publication_builder_context(
     return builder_flow, composition_service
 
 
+def _seed_dynamic_publication_builder_context(
+    *,
+    site_id: str,
+    year: int,
+    week: int,
+    builder_menu_id: str,
+    builder_menu_version: int,
+) -> None:
+    builder_flow, composition_service = _build_builder_menu_context_flow()
+    current_app.extensions["builder_menu_context_flow"] = builder_flow
+    current_app.extensions["builder_flow"] = builder_flow
+    builder_flow.create_menu(
+        menu_id=builder_menu_id,
+        site_id=site_id,
+        week_key=f"{year}-W{week:02d}",
+        version=builder_menu_version,
+        status="published",
+    )
+    slot_specs = [
+        (10, "Dynamic Soup"),
+        (20, "Dynamic Fish"),
+        (30, "Dynamic Cake"),
+        (40, "Dynamic Dinner"),
+    ]
+    for index, (sort_order, composition_name) in enumerate(slot_specs, start=1):
+        composition_id = f"comp_dynamic_{index}"
+        composition_service.create_composition(
+            composition_id=composition_id,
+            composition_name=composition_name,
+        )
+        created = builder_flow.create_empty_menu_row(
+            menu_id=builder_menu_id,
+            day="monday",
+            display_label=f"Label {index}",
+            sort_order=sort_order,
+        )
+        builder_flow.update_composition_menu_row(
+            menu_id=builder_menu_id,
+            menu_detail_id=created.menu_detail_id,
+            day="monday",
+            meal_slot=created.meal_slot,
+            composition_id=composition_id,
+            sort_order=sort_order,
+        )
+
+
 def test_publish_mirrors_builder_publication_pin(app_session, monkeypatch):
     site_id = "site-publication-1"
     year = 2025
@@ -185,6 +231,48 @@ def test_publish_mirrors_builder_publication_pin(app_session, monkeypatch):
         assert int(pin[1]) == 1
         assert int(pin[2]) == int(menu_id)
         assert '"selection_group_id":"group-publish"' in pin[3]
+    finally:
+        db.close()
+
+
+def test_publish_captures_dynamic_position_compatible_projection(app_session):
+    site_id = "site-publication-dynamic-position"
+    year = 2025
+    week = 49
+    _seed_site(app_session, site_id=site_id)
+    menu_id = _seed_menu_and_link(site_id, year, week, "builder-menu-dynamic", 1)
+
+    with app_session.app_context():
+        _seed_dynamic_publication_builder_context(
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-dynamic",
+            builder_menu_version=1,
+        )
+        MenuServiceDB().publish_menu(tenant_id=1, menu_id=menu_id)
+
+    from core.db import get_session
+
+    db = get_session()
+    try:
+        pin = db.execute(
+            text(
+                "SELECT projection_snapshot_json FROM commun_builder_publication_pins "
+                "WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week"
+            ),
+            {"tid": 1, "sid": site_id, "year": year, "week": week},
+        ).fetchone()
+        assert pin is not None
+        snapshot = json.loads(pin[0])
+        assert [(row["meal"], row["variant_type"], row["sort_order"]) for row in snapshot["rows"]] == [
+            ("lunch", "alt1", 10),
+            ("lunch", "alt2", 20),
+            ("lunch", "dessert", 30),
+            ("dinner", "main", 40),
+        ]
+        assert all("slot_" not in str(row["meal"]) for row in snapshot["rows"])
+        assert all("slot_" not in str(row["variant_type"]) for row in snapshot["rows"])
     finally:
         db.close()
 

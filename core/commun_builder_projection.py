@@ -22,6 +22,12 @@ _SUPPORTED_BUILDER_MEALS = {
 
 _SUPPORTED_EXPLICIT_VARIANTS = {"main", "alt1", "alt2", "alt3", "alt4", "alt5", "dessert"}
 _UNRESOLVED_VARIANT = "unresolved_variant"
+_COMPATIBILITY_POSITION_TO_MEAL_SLOT = {
+    1: "lunch_alt1",
+    2: "lunch_alt2",
+    3: "lunch_dessert",
+    4: "dinner_main",
+}
 
 
 @dataclass(frozen=True)
@@ -200,6 +206,32 @@ def _normalize_builder_meal_slot(value: str) -> tuple[str, str | None]:
     if variant and variant not in _SUPPORTED_EXPLICIT_VARIANTS:
         raise ValueError(f"unknown variant slot: {value}")
     return meal, variant
+
+
+def _normalize_compatibility_sort_order(value: object) -> int:
+    try:
+        sort_order = int(str(value).strip())
+    except (TypeError, ValueError):
+        raise ValueError(f"invalid sort_order: {value}")
+    if sort_order <= 0:
+        raise ValueError(f"invalid sort_order: {value}")
+    remainder = sort_order % 1000
+    if remainder not in {10, 20, 30, 40}:
+        raise ValueError(f"unsupported compatibility slot position: {value}")
+    return sort_order
+
+
+def _resolve_compatibility_meal_slot(row: dict[str, Any]) -> str:
+    meal_slot = str(row.get("meal_slot") or "").strip()
+    row_kind = str(row.get("row_kind") or "").strip().lower()
+    if row_kind == "dynamic" and meal_slot.startswith("slot_"):
+        sort_order = _normalize_compatibility_sort_order(row.get("sort_order"))
+        position = (sort_order % 1000) // 10
+        compat_slot = _COMPATIBILITY_POSITION_TO_MEAL_SLOT.get(position)
+        if compat_slot is None:
+            raise ValueError(f"unsupported compatibility slot position: {row.get('sort_order')}")
+        return compat_slot
+    return meal_slot
 
 
 def _normalize_row_sort_key(row: dict[str, Any]) -> tuple[int, str]:
@@ -467,84 +499,100 @@ class CommunBuilderMenuProjectionReader:
                 error="version_mismatch",
             )
 
-        rows_raw = flow.list_menu_rows(builder_menu_id)
-        rows_out: list[CommunMenuProjectionRow] = []
-        composition_repository = getattr(flow, "_composition_repository", None)
-        row_errors: list[str] = []
-        for row in rows_raw:
-            day = _normalize_day(str(row.get("day") or ""))
-            meal_slot_value = str(row.get("meal_slot") or "")
-            meal, explicit_variant = _normalize_builder_meal_slot(meal_slot_value)
-            variant_type = explicit_variant or _UNRESOLVED_VARIANT
+        try:
+            rows_raw = flow.list_menu_rows(builder_menu_id)
+            rows_out: list[CommunMenuProjectionRow] = []
+            composition_repository = getattr(flow, "_composition_repository", None)
+            row_errors: list[str] = []
+            for row in rows_raw:
+                day = _normalize_day(str(row.get("day") or ""))
+                raw_meal_slot_value = str(row.get("meal_slot") or "").strip()
+                row_kind = str(row.get("row_kind") or "").strip().lower()
+                meal_slot_value = _resolve_compatibility_meal_slot(row)
+                meal, explicit_variant = _normalize_builder_meal_slot(meal_slot_value)
+                variant_type = explicit_variant or _UNRESOLVED_VARIANT
 
-            composition_id = str(row.get("composition_id") or "").strip() or None
-            unresolved_text = str(row.get("unresolved_text") or "").strip() or None
-            composition_name = str(row.get("composition_name") or "").strip() or None
-            composition_effective_name = composition_name
-            resolved = bool(composition_id)
-            error = None
-            if explicit_variant is None:
-                error = "variant_mapping_missing"
-            if resolved and composition_repository is not None:
-                composition = composition_repository.get(composition_id)
-                if composition is None:
-                    resolved = False
-                    error = "composition_missing"
-                    composition_id = None
-                    composition_name = None
-                    composition_effective_name = None
-                else:
-                    composition_name = str(getattr(composition, "composition_name", "") or "").strip() or None
-                    composition_effective_name = str(
-                        getattr(composition, "effective_menu_name", composition_name) or ""
-                    ).strip() or None
-            if not resolved and unresolved_text is None and error is None:
-                error = "unresolved_text_missing"
+                composition_id = str(row.get("composition_id") or "").strip() or None
+                unresolved_text = str(row.get("unresolved_text") or "").strip() or None
+                composition_name = str(row.get("composition_name") or "").strip() or None
+                composition_effective_name = composition_name
+                resolved = bool(composition_id)
+                error = None
+                if explicit_variant is None:
+                    error = "variant_mapping_missing"
+                if resolved and composition_repository is not None:
+                    composition = composition_repository.get(composition_id)
+                    if composition is None:
+                        resolved = False
+                        error = "composition_missing"
+                        composition_id = None
+                        composition_name = None
+                        composition_effective_name = None
+                    else:
+                        composition_name = str(getattr(composition, "composition_name", "") or "").strip() or None
+                        composition_effective_name = str(
+                            getattr(composition, "effective_menu_name", composition_name) or ""
+                        ).strip() or None
+                if not resolved and unresolved_text is None and error is None:
+                    error = "unresolved_text_missing"
 
-            text_value = _projection_text(
-                resolved=resolved,
-                composition_name=composition_name,
-                unresolved_text=unresolved_text,
-                composition_effective_name=composition_effective_name,
-            )
-            rows_out.append(
-                CommunMenuProjectionRow(
-                    day=day,
-                    meal=meal,
-                    variant_type=variant_type,
-                    sort_order=int(row.get("sort_order") or 0),
-                    builder_menu_id=builder_menu_id,
-                    builder_menu_version=int(builder_menu_version),
-                    builder_menu_row_id=str(row.get("menu_detail_id") or ""),
-                    selection_group_id=str(row.get("selection_group_id") or "").strip() or None,
-                    composition_id=composition_id,
+                text_value = _projection_text(
                     resolved=resolved,
-                    text=text_value,
-                    unresolved_text=unresolved_text if not resolved else None,
-                    error=error,
+                    composition_name=composition_name,
+                    unresolved_text=unresolved_text,
+                    composition_effective_name=composition_effective_name,
                 )
-            )
-            if error:
-                row_errors.append(error)
+                if row_kind == "dynamic" and raw_meal_slot_value.startswith("slot_"):
+                    sort_order_value = _normalize_compatibility_sort_order(row.get("sort_order"))
+                else:
+                    sort_order_value = int(row.get("sort_order") or 0)
 
-        projection = CommunMenuWeekProjection(
-            tenant_id=int(tenant_id),
-            site_id=str(site_id),
-            year=int(year),
-            week=int(week),
-            builder_menu_id=builder_menu_id,
-            builder_menu_version=int(builder_menu_version),
-            builder_status=str(getattr(menu, "status", "") or "draft").strip() or "draft",
-            rows=rows_out,
-        )
-        return CommunBuilderProjectionOutcome(
-            status="projection_error" if row_errors else "ok",
-            projection=projection,
-            builder_menu_id=builder_menu_id,
-            linked_version=int(builder_menu_version),
-            current_version=current_version,
-            error=row_errors[0] if row_errors else None,
-        )
+                rows_out.append(
+                    CommunMenuProjectionRow(
+                        day=day,
+                        meal=meal,
+                        variant_type=variant_type,
+                        sort_order=sort_order_value,
+                        builder_menu_id=builder_menu_id,
+                        builder_menu_version=int(builder_menu_version),
+                        builder_menu_row_id=str(row.get("menu_detail_id") or ""),
+                        selection_group_id=str(row.get("selection_group_id") or "").strip() or None,
+                        composition_id=composition_id,
+                        resolved=resolved,
+                        text=text_value,
+                        unresolved_text=unresolved_text if not resolved else None,
+                        error=error,
+                    )
+                )
+                if error:
+                    row_errors.append(error)
+
+            projection = CommunMenuWeekProjection(
+                tenant_id=int(tenant_id),
+                site_id=str(site_id),
+                year=int(year),
+                week=int(week),
+                builder_menu_id=builder_menu_id,
+                builder_menu_version=int(builder_menu_version),
+                builder_status=str(getattr(menu, "status", "") or "draft").strip() or "draft",
+                rows=rows_out,
+            )
+            return CommunBuilderProjectionOutcome(
+                status="projection_error" if row_errors else "ok",
+                projection=projection,
+                builder_menu_id=builder_menu_id,
+                linked_version=int(builder_menu_version),
+                current_version=current_version,
+                error=row_errors[0] if row_errors else None,
+            )
+        except ValueError as exc:
+            return CommunBuilderProjectionOutcome(
+                status="projection_error",
+                builder_menu_id=builder_menu_id,
+                linked_version=int(builder_menu_version),
+                current_version=current_version,
+                error=str(exc),
+            )
 
     def get_projection_for_builder_menu(
         self,
