@@ -894,7 +894,6 @@ def kitchen_planering_product2_day():
         row = db.execute(text("SELECT tenant_id, name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
     finally:
         db.close()
-    resident_count_presentation = _department_resident_count_presentation(resident_count_mode, resident_count_fixed)
     if not row:
         return abort(404)
     try:
