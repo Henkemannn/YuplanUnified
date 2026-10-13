@@ -29,6 +29,7 @@ from core.department_requirement_group_repo import DepartmentRequirementGroupsRe
 from core.department_requirement_group_service_overrides_repo import DepartmentRequirementGroupServiceOverridesRepo
 from core.menu import InMemoryCompositionAliasRepository, MenuService
 from core.planera_product2_page2_context import build_product2_page2_planning_context
+from core.ui_blueprint import _build_product2_page2_vm
 
 
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
@@ -320,6 +321,132 @@ def _page2_path(site_id: str, service_date: date, meal: str = "lunch", ui: str =
     return f"/ui/kitchen/planering/day?ui={ui}&site_id={site_id}&date={service_date.isoformat()}&meal={meal}"
 
 
+def _seed_page2_composite_identity_data(app, *, site_name: str) -> dict[str, object]:
+    service_date = date(2026, 10, 12)
+    year, week, _weekday = service_date.isocalendar()
+    site_id = _seed_site(app, site_name=site_name)
+    dept_atomic = _seed_department(site_id=site_id, name="Avdelning A", resident_count=18)
+    dept_composite = _seed_department(site_id=site_id, name="Avdelning B", resident_count=12)
+    dept_vegetarian = _seed_department(site_id=site_id, name="Avdelning C", resident_count=16)
+
+    req_timbal = _seed_requirement(site_id, "Timbal", f"req_timbal_{uuid.uuid4().hex[:8]}")
+    req_glutenfri = _seed_requirement(site_id, "Glutenfri", f"req_gluten_{uuid.uuid4().hex[:8]}")
+    req_grovpate = _seed_requirement(site_id, "Grovpaté", f"req_grovpate_{uuid.uuid4().hex[:8]}")
+    req_laktosfri = _seed_requirement(site_id, "Laktosfri", f"req_laktos_{uuid.uuid4().hex[:8]}")
+    req_vegetarisk = _seed_requirement(site_id, "Vegetarisk", f"req_veg_{uuid.uuid4().hex[:8]}")
+    req_aggfri = _seed_requirement(site_id, "Äggfri", f"req_agg_{uuid.uuid4().hex[:8]}")
+
+    atomic_group = _seed_group(department_id=dept_atomic["id"], requirement_ids=[req_timbal], quantity=2, label="Timbal")
+    composite_timbal_glutenfri = _seed_group(
+        department_id=dept_atomic["id"],
+        requirement_ids=[req_timbal, req_glutenfri],
+        quantity=1,
+        label="Timbal",
+    )
+    composite_grovpate_laktosfri = _seed_group(
+        department_id=dept_composite["id"],
+        requirement_ids=[req_grovpate, req_laktosfri],
+        quantity=1,
+        label="Grovpaté",
+    )
+    composite_vegetarisk_aggfri = _seed_group(
+        department_id=dept_vegetarian["id"],
+        requirement_ids=[req_vegetarisk, req_aggfri],
+        quantity=1,
+        label="Vegetarisk",
+    )
+
+    _seed_publication(
+        app,
+        site_id=site_id,
+        year=year,
+        week=week,
+        builder_menu_id=f"builder-menu-{uuid.uuid4().hex[:8]}",
+        rows=[
+            ("monday", "lunch_alt1", "Köttbullar med potatismos", 10),
+            ("monday", "lunch_alt2", "Fiskeboller med hvitsaus og råkostsalat", 20),
+        ],
+    )
+    MenuChoiceRepo().set_choice(tenant_id=1, site_id=site_id, department_id=dept_atomic["id"], year=year, week=week, weekday=1, selected_alt="alt1")
+    MenuChoiceRepo().set_choice(tenant_id=1, site_id=site_id, department_id=dept_composite["id"], year=year, week=week, weekday=1, selected_alt="alt1")
+    MenuChoiceRepo().set_choice(tenant_id=1, site_id=site_id, department_id=dept_vegetarian["id"], year=year, week=week, weekday=1, selected_alt="alt1")
+
+    return {
+        "service_date": service_date,
+        "site_id": site_id,
+        "atomic_group": atomic_group,
+        "composite_timbal_glutenfri": composite_timbal_glutenfri,
+        "composite_grovpate_laktosfri": composite_grovpate_laktosfri,
+        "composite_vegetarisk_aggfri": composite_vegetarisk_aggfri,
+        "dept_atomic": dept_atomic,
+        "dept_composite": dept_composite,
+        "dept_vegetarian": dept_vegetarian,
+    }
+
+
+def _seed_page2_primary_id_contract_data(app, *, site_name: str) -> dict[str, object]:
+    service_date = date(2026, 10, 12)
+    year, week, _weekday = service_date.isocalendar()
+    site_id = _seed_site(app, site_name=site_name)
+    dept_atomic = _seed_department(site_id=site_id, name="Avdelning A", resident_count=18)
+    dept_composite = _seed_department(site_id=site_id, name="Avdelning B", resident_count=12)
+    dept_vegetarian = _seed_department(site_id=site_id, name="Avdelning C", resident_count=16)
+
+    req_timbal = _seed_requirement(site_id, "Timbal", "req_z_timbal_" + uuid.uuid4().hex[:8])
+    req_glutenfri = _seed_requirement(site_id, "Glutenfri", "req_a_gluten_" + uuid.uuid4().hex[:8])
+    req_grovpate = _seed_requirement(site_id, "Grovpaté", "req_z_grovpate_" + uuid.uuid4().hex[:8])
+    req_laktosfri = _seed_requirement(site_id, "Laktosfri", "req_a_laktos_" + uuid.uuid4().hex[:8])
+    req_vegetarisk = _seed_requirement(site_id, "Vegetarisk", "req_z_vegetarisk_" + uuid.uuid4().hex[:8])
+    req_aggfri = _seed_requirement(site_id, "Äggfri", "req_a_agg_" + uuid.uuid4().hex[:8])
+
+    atomic_group = _seed_group(department_id=dept_atomic["id"], requirement_ids=[req_timbal], quantity=2, label="Timbal")
+    composite_timbal_glutenfri = _seed_group(
+        department_id=dept_atomic["id"],
+        requirement_ids=[req_timbal, req_glutenfri],
+        quantity=1,
+        label="Timbal",
+    )
+    composite_grovpate_laktosfri = _seed_group(
+        department_id=dept_composite["id"],
+        requirement_ids=[req_grovpate, req_laktosfri],
+        quantity=1,
+        label="Grovpaté",
+    )
+    composite_vegetarisk_aggfri = _seed_group(
+        department_id=dept_vegetarian["id"],
+        requirement_ids=[req_vegetarisk, req_aggfri],
+        quantity=1,
+        label="Vegetarisk",
+    )
+
+    _seed_publication(
+        app,
+        site_id=site_id,
+        year=year,
+        week=week,
+        builder_menu_id=f"builder-menu-{uuid.uuid4().hex[:8]}",
+        rows=[
+            ("monday", "lunch_alt1", "Köttbullar med potatismos", 10),
+            ("monday", "lunch_alt2", "Fiskeboller med hvitsaus og råkostsalat", 20),
+        ],
+    )
+    MenuChoiceRepo().set_choice(tenant_id=1, site_id=site_id, department_id=dept_atomic["id"], year=year, week=week, weekday=1, selected_alt="alt1")
+    MenuChoiceRepo().set_choice(tenant_id=1, site_id=site_id, department_id=dept_composite["id"], year=year, week=week, weekday=1, selected_alt="alt1")
+    MenuChoiceRepo().set_choice(tenant_id=1, site_id=site_id, department_id=dept_vegetarian["id"], year=year, week=week, weekday=1, selected_alt="alt1")
+
+    return {
+        "service_date": service_date,
+        "site_id": site_id,
+        "atomic_group": atomic_group,
+        "composite_timbal_glutenfri": composite_timbal_glutenfri,
+        "composite_grovpate_laktosfri": composite_grovpate_laktosfri,
+        "composite_vegetarisk_aggfri": composite_vegetarisk_aggfri,
+        "dept_atomic": dept_atomic,
+        "dept_composite": dept_composite,
+        "dept_vegetarian": dept_vegetarian,
+    }
+
+
 def test_route_requires_kitchen_roles(client_admin, app_session):
     service_date, site_id, *_rest = _seed_common_page2_data(app_session, site_name="Role Site")
     rv = client_admin.get(_page2_path(site_id, service_date), headers=_headers("viewer"))
@@ -427,6 +554,72 @@ def test_two_options_render_titles_and_destination_labels(app_session):
     assert "Inga relevanta kostbehov för den här rätten ännu." not in html
     assert "Visa produktionsunderlag" in html
     assert "/ui/kitchen/planering/day/production?ui=product2" in html
+
+
+def test_composite_requirement_identity_renders_primary_first(app_session):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+    data = _seed_page2_composite_identity_data(app_session, site_name="Composite Identity Site")
+    context = build_product2_page2_planning_context(
+        tenant_id=1,
+        site_id=data["site_id"],
+        service_date=data["service_date"],
+        meal="lunch",
+    )
+    ctx_group = next(group for group in context.requirement_groups if group.requirement_group_id == data["composite_timbal_glutenfri"]["id"])
+    vm = None
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+    with app_session.test_request_context(_page2_path(data["site_id"], data["service_date"])):
+        from flask import session as flask_session
+
+        flask_session["tenant_id"] = 1
+        vm = _build_product2_page2_vm(context=context, site_name="Composite Identity Site", service_date=data["service_date"])
+    dest_vm = next(dest for dest in vm["destinations"] if dest["destination_id"] == data["dept_atomic"]["id"])
+    group_vm = next(group for group in dest_vm["requirement_groups"] if group["requirement_group_id"] == data["composite_timbal_glutenfri"]["id"])
+    assert group_vm["primary_requirement_id"] == ctx_group.primary_requirement_id
+    rv = client.get(_page2_path(data["site_id"], data["service_date"]), headers=_headers())
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+
+    assert 'data-page2-review-group-id="' + data["atomic_group"]["id"] + '"' in html
+    assert 'data-page2-review-group-id="' + data["composite_timbal_glutenfri"]["id"] + '"' in html
+    assert 'data-page2-review-group-id="' + data["composite_grovpate_laktosfri"]["id"] + '"' in html
+    assert 'data-page2-review-group-id="' + data["composite_vegetarisk_aggfri"]["id"] + '"' in html
+
+    assert 'data-page2-review-destination-id="' + data["dept_atomic"]["id"] + '"' in html
+    assert 'data-page2-review-destination-id="' + data["dept_composite"]["id"] + '"' in html
+    assert 'data-page2-review-destination-id="' + data["dept_vegetarian"]["id"] + '"' in html
+
+    assert '<span class="yp-planera-page2-review-row__label">Timbal</span>' in html
+    assert html.count('Timbal + Glutenfri') == 1
+    assert html.count('Grovpaté + Laktosfri') == 1
+    assert html.count('Vegetarisk + Äggfri') == 1
+    assert '<span class="yp-planera-page2-review-row__quantity">2</span>' in html
+    assert '<span class="yp-planera-page2-review-row__quantity">1</span>' in html
+    assert 'data-page2-review-checkbox' in html
+    assert 'data-page2-review-initial="0"' in html
+
+
+def test_reversed_member_order_still_renders_primary_first(app_session):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+    data = _seed_page2_primary_id_contract_data(app_session, site_name="Primary Order Site")
+    rv = client.get(_page2_path(data["site_id"], data["service_date"]), headers=_headers())
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+
+    assert 'data-page2-review-group-id="' + data["composite_timbal_glutenfri"]["id"] + '"' in html
+    assert 'data-page2-review-group-id="' + data["composite_grovpate_laktosfri"]["id"] + '"' in html
+    assert 'data-page2-review-group-id="' + data["composite_vegetarisk_aggfri"]["id"] + '"' in html
+    assert html.count('Timbal + Glutenfri') == 1
+    assert html.count('Grovpaté + Laktosfri') == 1
+    assert html.count('Vegetarisk + Äggfri') == 1
+    assert '<span class="yp-planera-page2-review-row__label">Timbal</span>' in html
+    assert 'Grovpat' in html
+    assert 'Vegetarisk' in html
 
 
 def test_three_options_render_collection_shape(app_session):

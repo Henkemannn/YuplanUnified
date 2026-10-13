@@ -24,6 +24,29 @@
   <script src="{{ url_for('static', filename='js/planera_product2_page2.js') }}" defer></script>
 </head>
 <body class="yp-product-body">
+  {%- macro render_requirement_identity(group) -%}
+  {%- set primary_requirement_id = group.primary_requirement_id|default('', true)|string -%}
+  {%- set identity = namespace(primary=None, secondaries=[]) -%}
+  {%- for requirement in group.requirements|default([]) -%}
+  {%- set requirement_id = requirement.dietary_type_id|string -%}
+  {%- if primary_requirement_id and requirement_id == primary_requirement_id and identity.primary is none -%}
+  {%- set identity.primary = requirement.name -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {%- if identity.primary is none -%}
+  {%- set identity.primary = group.label|default('', true) -%}
+  {%- endif -%}
+  {%- for requirement in group.requirements|default([]) -%}
+  {%- if requirement.name and requirement.name != identity.primary -%}
+  {%- set identity.secondaries = identity.secondaries + [requirement.name] -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {%- if identity.primary -%}
+  {{- ([identity.primary] + identity.secondaries)|join(' + ') -}}
+  {%- else -%}
+  {{- group.label -}}
+  {%- endif -%}
+  {%- endmacro -%}
   {% set status = vm.status|default('no_publication') %}
   {% set options = vm.options|default([]) %}
   {% set destinations = vm.destinations|default([]) %}
@@ -155,7 +178,7 @@
                         {% if group.review_checked %}checked{% endif %}
                       />
                       <span class="yp-planera-page2-review-row__mark" aria-hidden="true"></span>
-                      <span class="yp-planera-page2-review-row__label">{{ group.label }}</span>
+                      <span class="yp-planera-page2-review-row__label">{{ render_requirement_identity(group) }}</span>
                       <span class="yp-planera-page2-review-row__quantity">{{ group.effective_quantity }}</span>
                       <span class="yp-planera-page2-review-row__chevron" aria-hidden="true">›</span>
                     </label>

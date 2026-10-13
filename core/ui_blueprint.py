@@ -792,6 +792,7 @@ def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) ->
                 "requirement_group_id": group.requirement_group_id,
                 "label": group.label,
                 "effective_quantity": int(group.effective_quantity),
+                "primary_requirement_id": int(group.primary_requirement_id) if group.primary_requirement_id is not None else None,
                 "requirements": [
                     {
                         "dietary_type_id": int(requirement.dietary_type_id),
