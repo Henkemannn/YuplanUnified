@@ -75,6 +75,15 @@ def _is_dev_db_path(db_path: str) -> bool:
         return False
 
 
+def _is_protected_pilot_db_path(db_path: str) -> bool:
+    try:
+        norm = os.path.normcase(os.path.normpath(os.path.abspath(db_path)))
+        marker = os.path.normcase(os.path.join("instance", "yuplan_mvp.db"))
+        return norm.endswith(marker)
+    except Exception:
+        return False
+
+
 def _normalize_url(url: str) -> str:
     # Normalize postgres schemes to ensure SQLAlchemy uses psycopg v3
     if url.startswith("postgres://"):
@@ -194,6 +203,8 @@ def create_all() -> (
     log.info("create_all: start")
     if has_app_context() and bool(current_app.config.get("TESTING")):
         db_path = _sqlite_db_path(_engine)
+        if db_path and _is_protected_pilot_db_path(db_path):
+            raise RuntimeError("Refusing to run TESTING destructive operations on protected pilot database")
         if db_path and _is_dev_db_path(db_path):
             raise RuntimeError("Refusing to run TESTING destructive operations on dev.db")
         log.warning("create_all: TESTING -> drop_all enabled")

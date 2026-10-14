@@ -42,7 +42,7 @@ from .auth import (
     ensure_dev_sync_superuser_from_env,
 )
 from .config import Config
-from .db import get_session, init_engine, sqlite_file_path_from_url
+from .db import get_session, init_engine, sqlite_file_path_from_url, _is_protected_pilot_db_path
 from .diet_api import bp as diet_api_bp
 from .errors import APIError, register_error_handlers as register_domain_handlers
 from .export_api import bp as export_bp
@@ -161,6 +161,9 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
 
     if testing_flag and not (app.config.get("JWT_SECRET") or "").strip():
         app.config["JWT_SECRET"] = "test-jwt-secret-0123456789abcdef0123456789abcdef"
+
+    if testing_flag and sqlite_file and _is_protected_pilot_db_path(sqlite_file):
+        raise RuntimeError("Refusing to start TESTING app against protected pilot database")
 
     if is_pilot_or_prod:
         jwt_secret = (app.config.get("JWT_SECRET") or "").strip()
