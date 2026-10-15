@@ -885,6 +885,27 @@ def test_page2_uses_meal_scoped_route_identity(app_session):
     assert 'role="tablist"' in html
 
 
+def test_page2_accepts_explicit_option_id_without_changing_lunch_behavior(app_session):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+        sess["user_id"] = 1
+        sess["role"] = "admin"
+    service_date, site_id, dept_a, dept_b, dept_c, group_a, group_b, group_c, row_ids = _seed_common_page2_data(
+        app_session,
+        site_name="Explicit Route Target Site",
+        include_third_destination=True,
+    )
+    _seed_page2_choices(site_id, service_date, dept_a, dept_b)
+    rv = client.get(_page2_path(site_id, service_date) + "&option_id=" + row_ids["alt1"], headers=_headers())
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert "Explicit Route Target Site" in html
+    assert "Alt 1" in html
+    assert "Alt 2" in html
+    assert "Tisdag 8 september" in html
+
+
 def test_template_does_not_use_fixed_alt_fields_and_page1_remains_untouched():
     page2_tpl = Path("templates/ui/kitchen_product_planera_page2.html").read_text(encoding="utf-8")
     page1_tpl = Path("templates/ui/kitchen_product_shell_preview.html").read_text(encoding="utf-8")

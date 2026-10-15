@@ -26,7 +26,7 @@ from .planning_option_review import (
     REVIEW_STATE_WITH_DEVIATIONS,
 )
 from .planera_product2_menu_vm import Product2MealOptionsError, build_product2_meal_options_vm
-from .planera_product2_page2_context import Product2Page2ContextError, build_product2_page2_planning_context
+from .planera_product2_page2_context import Product2Page2ContextError, build_product2_page2_planning_context, resolve_product2_page2_target
 from .planera_product2_page3_vm import Product2Page3VmError, build_product2_page3_vm
 from .department_requirement_group_weekday_overrides_repo import DepartmentRequirementGroupWeekdayOverridesRepo
 from datetime import date as _date
@@ -930,7 +930,8 @@ def kitchen_planering_product2_day():
     site_id = (request.args.get("site_id") or "").strip()
     date_raw = (request.args.get("date") or "").strip()
     meal = (request.args.get("meal") or "").strip().lower()
-    if not site_id or not date_raw or meal != "lunch":
+    option_id = (request.args.get("option_id") or "").strip()
+    if not site_id or not date_raw:
         return abort(404)
     try:
         service_date = _date.fromisoformat(date_raw)
@@ -948,6 +949,21 @@ def kitchen_planering_product2_day():
         if int(row[0]) != int(tenant_id):
             return abort(404)
     except Exception:
+        return abort(404)
+
+    if option_id:
+        try:
+            resolve_product2_page2_target(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                service_date=service_date,
+                option_id=option_id,
+                meal=meal or None,
+            )
+        except Product2Page2ContextError:
+            return abort(404)
+
+    if meal != "lunch":
         return abort(404)
 
     try:

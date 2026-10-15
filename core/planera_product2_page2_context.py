@@ -28,6 +28,23 @@ class Product2Page2PublicationIdentity:
 
 
 @dataclass(frozen=True, slots=True)
+class Product2Page2PlanningTargetVM:
+    tenant_id: int
+    site_id: str
+    service_date: str
+    builder_menu_id: str
+    builder_menu_version: int
+    builder_menu_row_id: str
+    composition_id: str | None
+    meal: str
+    variant_type: str
+    text: str
+    day: str
+    selection_group_id: str | None = None
+    display_label: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Product2Page2RequirementVM:
     dietary_type_id: int
     requirement_key: str | None
@@ -121,6 +138,74 @@ def _build_publication_identity(publication) -> Product2Page2PublicationIdentity
     return Product2Page2PublicationIdentity(
         builder_menu_id=str(publication.builder_menu_id),
         builder_menu_version=int(publication.builder_menu_version),
+    )
+
+
+def resolve_product2_page2_target(
+    *,
+    tenant_id,
+    site_id,
+    service_date,
+    option_id,
+    meal: str | None = None,
+) -> Product2Page2PlanningTargetVM:
+    normalized_tenant_id = _normalize_tenant_id(tenant_id)
+    normalized_site_id = _normalize_site_id(site_id)
+    normalized_service_date = _normalize_service_date(service_date)
+    normalized_option_id = str(option_id or "").strip()
+    if not normalized_option_id:
+        raise Product2Page2ContextError("option_id_missing")
+    normalized_meal = str(meal or "").strip().lower() or None
+    year, week, _weekday = normalized_service_date.isocalendar()
+
+    publication_service = CommunBuilderPublicationService()
+    publication = publication_service.get_publication_for_week(
+        tenant_id=normalized_tenant_id,
+        site_id=normalized_site_id,
+        year=year,
+        week=week,
+    )
+    if publication is None:
+        raise Product2Page2ContextError("publication_missing")
+
+    publication_identity = _build_publication_identity(publication)
+    outcome = get_shadow_projection_reader().get_projection_for_pinned_menu(
+        tenant_id=normalized_tenant_id,
+        site_id=normalized_site_id,
+        year=year,
+        week=week,
+        builder_menu_id=publication_identity.builder_menu_id,
+        builder_menu_version=publication_identity.builder_menu_version,
+    )
+    if outcome.status != "ok" or outcome.projection is None:
+        raise Product2Page2ContextError(f"publication_projection_invalid:{outcome.error or outcome.status}")
+    if any(bool(row.error) for row in outcome.projection.rows):
+        raise Product2Page2ContextError("publication_projection_invalid:row_error")
+
+    matching_rows = [row for row in outcome.projection.rows if str(row.builder_menu_row_id) == normalized_option_id]
+    if len(matching_rows) != 1:
+        raise Product2Page2ContextError(f"target_not_published:{normalized_option_id}")
+
+    row = matching_rows[0]
+    if str(row.day).strip().lower() != _day_name_for_service_date(normalized_service_date):
+        raise Product2Page2ContextError(f"target_day_mismatch:{normalized_option_id}")
+    if normalized_meal is not None and str(row.meal).strip().lower() != normalized_meal:
+        raise Product2Page2ContextError(f"target_meal_mismatch:{normalized_option_id}")
+
+    return Product2Page2PlanningTargetVM(
+        tenant_id=normalized_tenant_id,
+        site_id=normalized_site_id,
+        service_date=normalized_service_date.isoformat(),
+        builder_menu_id=str(outcome.projection.builder_menu_id),
+        builder_menu_version=int(outcome.projection.builder_menu_version),
+        builder_menu_row_id=str(row.builder_menu_row_id),
+        composition_id=str(row.composition_id) if row.composition_id is not None else None,
+        meal=str(row.meal),
+        variant_type=str(row.variant_type),
+        text=str(row.text),
+        day=str(row.day),
+        selection_group_id=str(row.selection_group_id) if row.selection_group_id is not None else None,
+        display_label=None,
     )
 
 
@@ -305,8 +390,10 @@ __all__ = [
     "Product2Page2ContextError",
     "Product2Page2DestinationVM",
     "Product2Page2PlanningContext",
+    "Product2Page2PlanningTargetVM",
     "Product2Page2PublicationIdentity",
     "Product2Page2RequirementGroupVM",
     "Product2Page2RequirementVM",
     "build_product2_page2_planning_context",
+    "resolve_product2_page2_target",
 ]

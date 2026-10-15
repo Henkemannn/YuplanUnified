@@ -29,6 +29,7 @@ from core.department_requirement_group_weekday_overrides_repo import DepartmentR
 from core.planera_product2_page2_context import (
     Product2Page2ContextError,
     build_product2_page2_planning_context,
+    resolve_product2_page2_target,
 )
 from core.planera_v2.day_context_resolver import resolve_kommun_day_business_context
 from core.ui_blueprint import _apply_builder_reader_weekview_overview
@@ -658,3 +659,141 @@ def test_three_published_options_remain_collection_shaped(app_session) -> None:
         assert [option.variant_type for option in context.options] == ["main", "alt1", "alt2"]
         assert not hasattr(context, "alt1_quantity")
         assert not hasattr(context, "alt2_quantity")
+
+
+@pytest.mark.parametrize(
+    ("option_id", "meal", "expected_variant_type", "expected_meal", "expected_text"),
+    [
+        ("row-alt1", "lunch", "alt1", "lunch", "Köttbullar med potatismos"),
+        ("row-alt2", "lunch", "alt2", "lunch", "Fiskeboller med hvitsaus og råkostsalat"),
+        ("row-dessert", "lunch", "dessert", "lunch", "Glassbomb"),
+        ("row-dinner", "dinner", "main", "dinner", "Kalkun med rosenkål, waldorf salat og fløtesaus"),
+    ],
+)
+def test_explicit_target_resolution_returns_exact_row(app_session, option_id: str, meal: str, expected_variant_type: str, expected_meal: str, expected_text: str) -> None:
+    with app_session.app_context():
+        site_id = f"site-page2-explicit-target-{uuid.uuid4()}"
+        _seed_site(app_session=app_session, site_id=site_id)
+        service_date = date(2026, 10, 12)
+        year, week, _weekday = service_date.isocalendar()
+        _seed_publication(
+            app_session=app_session,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-page2-explicit",
+            builder_menu_version=1,
+            day=_builder_day_name(service_date),
+            meal_rows=[
+                ("row-alt1", "Köttbullar med potatismos", 10, "lunch_alt1", "monday"),
+                ("row-alt2", "Fiskeboller med hvitsaus og råkostsalat", 20, "lunch_alt2", "monday"),
+                ("row-dessert", "Glassbomb", 30, "lunch_dessert", "monday"),
+                ("row-dinner", "Kalkun med rosenkål, waldorf salat og fløtesaus", 40, "dinner_main", "monday"),
+                ("row-tuesday-alt1", "Tuesday Alt 1 Dish", 10, "lunch_alt1", "tuesday"),
+            ],
+        )
+        outcome = get_shadow_projection_reader().get_projection_for_builder_menu(
+            tenant_id=1,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-page2-explicit",
+            builder_menu_version=1,
+        )
+        assert outcome.status == "ok"
+        assert outcome.projection is not None
+        row_ids = {
+            (str(row.day), str(row.meal), str(row.variant_type), str(row.text)): str(row.builder_menu_row_id)
+            for row in outcome.projection.rows
+        }
+        option_key = {
+            "row-alt1": ("monday", "lunch", "alt1", "Köttbullar med potatismos"),
+            "row-alt2": ("monday", "lunch", "alt2", "Fiskeboller med hvitsaus og råkostsalat"),
+            "row-dessert": ("monday", "lunch", "dessert", "Glassbomb"),
+            "row-dinner": ("monday", "dinner", "main", "Kalkun med rosenkål, waldorf salat og fløtesaus"),
+        }[option_id]
+
+        target = resolve_product2_page2_target(
+            tenant_id=1,
+            site_id=site_id,
+            service_date=service_date,
+            option_id=row_ids[option_key],
+            meal=meal,
+        )
+
+        assert target.tenant_id == 1
+        assert target.site_id == site_id
+        assert target.service_date == service_date.isoformat()
+        assert target.builder_menu_id == "builder-menu-page2-explicit"
+        assert target.builder_menu_version == 1
+        assert target.builder_menu_row_id == row_ids[option_key]
+        assert target.meal == expected_meal
+        assert target.variant_type == expected_variant_type
+        assert target.text == expected_text
+        assert target.day == "monday"
+        assert target.composition_id is not None
+
+
+@pytest.mark.parametrize(
+    ("option_id", "meal", "error_template"),
+    [
+        ("missing-option", "lunch", "target_not_published:{option_id}"),
+        ("row-tuesday-alt1", "lunch", "target_day_mismatch:{option_id}"),
+        ("row-dinner", "lunch", "target_meal_mismatch:{option_id}"),
+        ("row-dessert", "dinner", "target_meal_mismatch:{option_id}"),
+        ("Glassbomb", "lunch", "target_not_published:{option_id}"),
+    ],
+)
+def test_explicit_target_resolution_fails_closed(app_session, option_id: str, meal: str, error_template: str) -> None:
+    with app_session.app_context():
+        site_id = f"site-page2-explicit-target-fail-{uuid.uuid4()}"
+        _seed_site(app_session=app_session, site_id=site_id)
+        service_date = date(2026, 10, 12)
+        year, week, _weekday = service_date.isocalendar()
+        _seed_publication(
+            app_session=app_session,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-page2-explicit-fail",
+            builder_menu_version=1,
+            day=_builder_day_name(service_date),
+            meal_rows=[
+                ("row-alt1", "Köttbullar med potatismos", 10, "lunch_alt1", "monday"),
+                ("row-alt2", "Fiskeboller med hvitsaus og råkostsalat", 20, "lunch_alt2", "monday"),
+                ("row-dessert", "Glassbomb", 30, "lunch_dessert", "monday"),
+                ("row-dinner", "Kalkun med rosenkål, waldorf salat og fløtesaus", 40, "dinner_main", "monday"),
+                ("row-tuesday-alt1", "Tuesday Alt 1 Dish", 10, "lunch_alt1", "tuesday"),
+            ],
+        )
+        outcome = get_shadow_projection_reader().get_projection_for_builder_menu(
+            tenant_id=1,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-page2-explicit-fail",
+            builder_menu_version=1,
+        )
+        assert outcome.status == "ok"
+        assert outcome.projection is not None
+        row_ids = {
+            (str(row.day), str(row.meal), str(row.variant_type), str(row.text)): str(row.builder_menu_row_id)
+            for row in outcome.projection.rows
+        }
+        option_key_map = {
+            "row-tuesday-alt1": ("tuesday", "lunch", "alt1", "Tuesday Alt 1 Dish"),
+            "row-dinner": ("monday", "dinner", "main", "Kalkun med rosenkål, waldorf salat og fløtesaus"),
+            "row-dessert": ("monday", "lunch", "dessert", "Glassbomb"),
+        }
+        if option_id in option_key_map:
+            option_id = row_ids[option_key_map[option_id]]
+        expected_error = error_template.format(option_id=option_id)
+
+        with pytest.raises(Product2Page2ContextError, match=expected_error):
+            resolve_product2_page2_target(
+                tenant_id=1,
+                site_id=site_id,
+                service_date=service_date,
+                option_id=option_id,
+                meal=meal,
+            )
