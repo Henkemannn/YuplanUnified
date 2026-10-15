@@ -1,153 +1,123 @@
-<!DOCTYPE html>
-<html lang="sv" data-theme="light">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="application-name" content="Yuplan" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="Yuplan" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)" />
-  <title>{% block page_title %}Kök – Shell preview{% endblock %}</title>
-  {% set icon_version = asset_version|default('icon-20260310') %}
-  <link rel="manifest" href="/manifest.webmanifest?v={{ icon_version }}">
-  <link rel="icon" href="/favicon.ico?v={{ icon_version }}">
-  <link rel="shortcut icon" href="/favicon.ico?v={{ icon_version }}">
-  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png?v={{ icon_version }}" sizes="180x180">
-  <link rel="mask-icon" href="/static/safari-pinned-tab.svg?v={{ icon_version }}" color="#111827">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/kitchen_product_shell.css') }}" />
+{% extends "ui/_layout/app_shell_base.html" %}
+
+{% block page_title %}Planera{% endblock %}
+
+{% block head_extra %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/planera_product2_page1.css') }}" />
-  <script src="{{ url_for('static', filename='js/kitchen_product_shell.js') }}" defer></script>
-</head>
-<body class="yp-product-body">
+{% endblock %}
+
+{% block content %}
   {% set page1 = vm.page1|default({}) %}
   {% set page1_menu = page1.menu|default({}) %}
   {% set page1_menu_status = page1_menu.status|default('no_publication') %}
   {% set page1_lunch = page1_menu.lunch|default(none) %}
   {% set page1_lunch_secondary_texts = ['Potatismos · Gräddsås', 'Äggsås · Kokt potatis'] %}
-  <div class="yp-product-shell">
-    <div class="yp-product-app" id="yp-product-app" data-theme="light" data-screen="start">
-      <header class="yp-product-topbar" aria-label="YUPLAN APP SHELL — LOCKED">
-        <div class="yp-product-topbar-brand">
-          <img class="yp-product-topbar-brand__mark" src="{{ url_for('static', filename='brand/v1/logo/yuplan-mark-primary.svg') }}" alt="Yuplan" />
-          <div class="yp-product-topbar-brand__copy">
-            <strong>Yuplan</strong>
-            <span>· Planera</span>
+  <div class="app-page planera-page1">
+    <section class="app-shell__page-header planera-page1__header">
+      <div>
+        <h1 class="app-shell__title">Planera</h1>
+        <p class="app-shell__subtitle">{{ page1.selected_date_label }}</p>
+      </div>
+      {% if vm.site_display_name %}
+        <span class="app-shell__badge">{{ vm.site_display_name }}</span>
+      {% endif %}
+    </section>
+
+    <div class="planera-page1__stack">
+      <article class="app-shell__card planera-page1__card planera-page1__week-card">
+        <div class="app-shell__card-header planera-page1__card-head">
+          <div>
+            <h2 class="app-shell__card-title">Vecka {{ page1.week }}</h2>
+            <p class="app-shell__card-text">Välj dag för att planera lunch.</p>
           </div>
         </div>
-        <div class="yp-product-status-strip" aria-label="Progress and context">
-          <div class="yp-product-status-date sr-only" id="productStatusDay">{{ page1.selected_date_label }}</div>
-          <div class="yp-product-status-avatar" aria-hidden="true">HJ</div>
-          <button class="yp-product-theme-toggle" id="ypProductThemeToggle" type="button" aria-pressed="false" aria-label="Växla till dark mode" data-theme-toggle>
-            <span data-theme-icon>🌙</span>
-          </button>
+
+        <div class="planera-page1__weekbar" role="toolbar" aria-label="Veckoväljare">
+          <a class="planera-page1__weekbar-arrow" href="{{ page1.prev_url|e }}" aria-label="Föregående vecka">‹</a>
+          <span class="planera-page1__weekbar-label">Vecka {{ page1.week }}</span>
+          {% for day in page1.week_days %}
+          <a class="planera-page1__weekday{% if day.is_selected %} is-current{% endif %}{% if day.is_today %} is-today{% endif %}" href="{{ day.url|e }}"{% if day.is_selected %} aria-current="date"{% endif %}>
+            <span>{{ day.short_label }}</span>
+            <strong>{{ day.day_number }}</strong>
+          </a>
+          {% endfor %}
+          <a class="planera-page1__weekbar-arrow" href="{{ page1.next_url|e }}" aria-label="Nästa vecka">›</a>
         </div>
-      </header>
+      </article>
 
-      <main class="yp-product-panel">
-        <div class="yp-product-panel-inner">
-          <section class="yp-planera-page1" aria-labelledby="yp-planera-page1-title">
-            <div class="yp-planera-page1-layout">
-              <aside class="yp-planera-page1-sidebar" aria-label="Yuplan navigation">
-                <div class="yp-planera-page1-sidebar__context">
-                  <strong>{{ vm.site_display_name }}</strong>
-                  <span>Kommun</span>
-                </div>
-                <nav class="yp-planera-page1-sidebar__nav" aria-label="Visuell navigering">
-                  <button class="yp-planera-page1-sidebar__item" type="button">Översikt</button>
-                  <button class="yp-planera-page1-sidebar__item is-active" type="button" aria-current="page">Planera</button>
-                  <button class="yp-planera-page1-sidebar__item" type="button">Meny</button>
-                  <button class="yp-planera-page1-sidebar__item" type="button">Veckovy</button>
-                  <button class="yp-planera-page1-sidebar__item" type="button">Rapporter</button>
-                </nav>
-                <div class="yp-planera-page1-sidebar__bottom">
-                  <button class="yp-planera-page1-sidebar__settings" type="button">Inställningar</button>
-                </div>
-              </aside>
+      <article class="app-shell__card planera-page1__card planera-page1__lunch-card">
+        <div class="app-shell__card-header planera-page1__card-head">
+          <div>
+            <h2 class="app-shell__card-title">Lunch</h2>
+            {% if page1_menu_status == 'ok' and page1_lunch and page1_lunch.options %}
+              <p class="app-shell__card-text">{{ page1_lunch.options|length }} val</p>
+            {% else %}
+              <p class="app-shell__card-text">Ingen publicerad lunchmeny</p>
+            {% endif %}
+          </div>
+          {% if page1_menu_status == 'ok' and page1_lunch and page1_lunch.options %}
+            <span class="app-shell__badge">{{ page1_lunch.options|length }} val</span>
+          {% endif %}
+        </div>
 
-              <div class="yp-planera-page1-main">
-                <div class="yp-planera-page1-head">
-                  <h1 class="yp-planera-page1-title" id="yp-planera-page1-title">{{ page1.selected_date_label }}</h1>
-                </div>
+        <div class="planera-page1__lunch-options">
+          {% if page1_menu_status == 'ok' and page1_lunch and page1_lunch.options %}
+            {% for option in page1_lunch.options %}
+            <article class="planera-page1__option{% if loop.first %} is-active{% endif %}">
+              <div class="planera-page1__option-kicker">{{ option.display_label|upper }}</div>
+              <div class="planera-page1__option-title">{{ option.display_title }}</div>
+              <div class="planera-page1__option-text">{% if loop.index0 < page1_lunch_secondary_texts|length %}{{ page1_lunch_secondary_texts[loop.index0] }}{% endif %}</div>
+            </article>
+            {% if not loop.last %}
+            <div class="planera-page1__option-divider" aria-hidden="true"></div>
+            {% endif %}
+            {% endfor %}
+          {% else %}
+          <article class="planera-page1__option is-active planera-page1__option--empty">
+            <div class="planera-page1__option-kicker">Lunch</div>
+            <div class="planera-page1__option-title">Ingen publicerad lunchmeny</div>
+            <div class="planera-page1__option-text"></div>
+          </article>
+          {% endif %}
+        </div>
 
-                <div class="yp-planera-page1-weekbar" role="toolbar" aria-label="Veckoväljare">
-                  <a class="yp-planera-page1-weekbar__arrow" href="{{ page1.prev_url|e }}" aria-label="Föregående vecka">‹</a>
-                  <span class="yp-planera-page1-weeklabel">Vecka {{ page1.week }}</span>
-                  {% for day in page1.week_days %}
-                  <button class="yp-planera-page1-weekday{% if day.is_selected %} is-current{% endif %}{% if day.is_today %} is-today{% endif %}" type="button"{% if day.is_selected %} aria-current="date"{% endif %}>
-                    <span>{{ day.short_label }}</span><strong>{{ day.day_number }}</strong>
-                  </button>
-                  {% endfor %}
-                  <a class="yp-planera-page1-weekbar__arrow" href="{{ page1.next_url|e }}" aria-label="Nästa vecka">›</a>
-                </div>
+        <div class="planera-page1__cta-row">
+          {% if page1_menu_status == 'ok' and page1.selected_date_iso %}
+          <a
+            class="app-shell__btn app-shell__btn--primary planera-page1__cta"
+            href="{{ url_for('ui.kitchen_planering_product2_day', ui='product2', site_id=page1.site_id, date=page1.selected_date_iso, meal='lunch') }}"
+          >Planera lunch →</a>
+          {% else %}
+          <div class="planera-page1__cta-wrap planera-page1__cta-wrap--disabled">
+            <button class="app-shell__btn app-shell__btn--primary planera-page1__cta" type="button" disabled aria-disabled="true">Planera lunch</button>
+            <div class="planera-page1__cta-help">Publicera lunchmenyn för att börja planera.</div>
+          </div>
+          {% endif %}
+        </div>
+      </article>
 
-                <section class="yp-planera-page1-lunch" aria-label="Lunch">
-                  <div class="yp-planera-page1-lunch__head">
-                    <div class="yp-planera-page1-lunch__kicker">Lunch</div>
-                    <div class="yp-planera-page1-lunch__meta">18 mottagande enheter · 273 portioner</div>
-                  </div>
+      <article class="app-shell__card planera-page1__card planera-page1__later-card">
+        <div class="app-shell__card-header planera-page1__card-head">
+          <div>
+            <h2 class="app-shell__card-title">Senare idag</h2>
+            <p class="app-shell__card-text">Kvällsmat och dessert från dagens meny.</p>
+          </div>
+        </div>
 
-                  <div class="yp-planera-page1-lunch__options">
-                    {% if page1_menu_status == 'ok' and page1_lunch and page1_lunch.options %}
-                      {% for option in page1_lunch.options %}
-                      <article class="yp-planera-page1-option{% if loop.first %} is-active{% endif %}">
-                        <div class="yp-planera-page1-option__kicker">{{ option.display_label|upper }}</div>
-                        <div class="yp-planera-page1-option__title">{{ option.display_title }}</div>
-                        <div class="yp-planera-page1-option__text">{% if loop.index0 < page1_lunch_secondary_texts|length %}{{ page1_lunch_secondary_texts[loop.index0] }}{% endif %}</div>
-                      </article>
-                      {% if not loop.last %}
-                      <div class="yp-planera-page1-divider" aria-hidden="true"></div>
-                      {% endif %}
-                      {% endfor %}
-                    {% else %}
-                    <article class="yp-planera-page1-option is-active yp-planera-page1-option--empty">
-                      <div class="yp-planera-page1-option__kicker">Lunch</div>
-                      <div class="yp-planera-page1-option__title">Ingen publicerad lunchmeny</div>
-                      <div class="yp-planera-page1-option__text"></div>
-                    </article>
-                    {% endif %}
-                  </div>
-
-                  <div class="yp-planera-page1-lunch__footer">
-                      {% if page1_menu_status == 'ok' and page1.selected_date_iso %}
-                      <a
-                        class="yp-planera-page1-cta"
-                        href="{{ url_for('ui.kitchen_planering_product2_day', ui='product2', site_id=page1.site_id, date=page1.selected_date_iso, meal='lunch') }}"
-                      >Planera lunch →</a>
-                      {% else %}
-                      <div class="yp-planera-page1-cta-wrap yp-planera-page1-cta-wrap--disabled">
-                        <button class="yp-planera-page1-cta" type="button" disabled aria-disabled="true">Planera lunch</button>
-                        <div class="yp-planera-page1-cta-help">Publicera lunchmenyn för att börja planera.</div>
-                      </div>
-                      {% endif %}
-                  </div>
-                </section>
-
-                <section class="yp-planera-page1-secondary" aria-label="Senare idag">
-                  <button class="yp-planera-page1-row" type="button">
-                    <span class="yp-planera-page1-row__label">KVÄLL</span>
-                    <span class="yp-planera-page1-row__value">Köttfärssoppa</span>
-                    <span class="yp-planera-page1-row__chev">›</span>
-                  </button>
-                  <button class="yp-planera-page1-row" type="button">
-                    <span class="yp-planera-page1-row__label">DESSERT</span>
-                    <span class="yp-planera-page1-row__value">Äppelpaj</span>
-                    <span class="yp-planera-page1-row__chev">›</span>
-                  </button>
-                  <button class="yp-planera-page1-row" type="button">
-                    <span class="yp-planera-page1-row__label">TILLÄGG</span>
-                    <span class="yp-planera-page1-row__value">Sallad · Mos · Övriga tillval</span>
-                    <span class="yp-planera-page1-row__chev">›</span>
-                  </button>
-                </section>
-              </div>
+        <div class="planera-page1__later-list" aria-label="Senare idag">
+          {% set later_today = page1.later_today|default([]) %}
+          {% if later_today %}
+            {% for item in later_today %}
+            <div class="planera-page1__later-row" role="group" aria-label="{{ item.label }}">
+              <span class="planera-page1__later-label">{{ item.label|upper }}</span>
+              <span class="planera-page1__later-value">{{ item.title }}</span>
             </div>
-          </section>
+            {% endfor %}
+          {% else %}
+            <p class="planera-page1__later-empty">Inga publicerade senare måltider.</p>
+          {% endif %}
         </div>
-      </main>
+      </article>
     </div>
   </div>
-</body>
-</html>
+{% endblock %}

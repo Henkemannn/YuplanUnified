@@ -581,6 +581,14 @@ def _build_product2_page1_vm(*, site_id: str, year: int, week: int, selected_day
                 "date_iso": day_date.isoformat(),
                 "is_selected": index == day_index,
                 "is_today": day_date == today,
+                "url": url_for(
+                    "ui.kitchen_planering_v1",
+                    ui="product2",
+                    site_id=site_id,
+                    year=int(year),
+                    week=int(week),
+                    day=index,
+                ),
             }
         )
 
@@ -646,7 +654,7 @@ def _build_product2_page1_menu_vm(*, tenant_id: int, site_id: str, year: int, we
         raise RuntimeError("product2_menu_projection_unavailable") from exc
 
     if outcome.status == "no_publication" or outcome.projection is None:
-        return {"status": "no_publication", "lunch": None}
+        return {"status": "no_publication", "lunch": None, "later_today": []}
     if outcome.status != "ok":
         raise RuntimeError("product2_menu_projection_unavailable")
 
@@ -659,7 +667,46 @@ def _build_product2_page1_menu_vm(*, tenant_id: int, site_id: str, year: int, we
     except Product2MealOptionsError as exc:
         raise RuntimeError("product2_menu_contract_error") from exc
 
-    return {"status": "ok", "lunch": lunch_vm}
+    def _unique_projection_row(*, meal: str, variant_type: str):
+        matches = [
+            row
+            for row in outcome.projection.rows
+            if str(row.day) == projection_day and str(row.meal) == meal and str(row.variant_type) == variant_type
+        ]
+        if len(matches) > 1:
+            raise RuntimeError("product2_menu_contract_error")
+        return matches[0] if matches else None
+
+    later_today: list[dict[str, object]] = []
+    dinner_row = _unique_projection_row(meal="dinner", variant_type="main")
+    if dinner_row is not None:
+        dinner_title = str(dinner_row.text or "").strip()
+        if not dinner_title:
+            raise RuntimeError("product2_menu_contract_error")
+        later_today.append(
+            {
+                "label": "Kvällsmat",
+                "meal": "dinner",
+                "variant_type": "main",
+                "title": dinner_title,
+            }
+        )
+
+    dessert_row = _unique_projection_row(meal="lunch", variant_type="dessert")
+    if dessert_row is not None:
+        dessert_title = str(dessert_row.text or "").strip()
+        if not dessert_title:
+            raise RuntimeError("product2_menu_contract_error")
+        later_today.append(
+            {
+                "label": "Dessert",
+                "meal": "dessert",
+                "variant_type": "dessert",
+                "title": dessert_title,
+            }
+        )
+
+    return {"status": "ok", "lunch": lunch_vm, "later_today": later_today}
 
 
 _PRODUCT2_PAGE2_WEEKDAY_NAMES = (
@@ -3648,11 +3695,11 @@ def kitchen_planering_v1():
                 week=week,
                 selected_day=int(page1_vm.get("selected_day") if isinstance(page1_vm.get("selected_day"), int) else 0),
             )
+            page1_vm["later_today"] = list((page1_vm.get("menu") or {}).get("later_today") or [])
         except Exception:
             return abort(500)
 
         vm = {
-            "shell_variant": "kitchen_product",
             "site_display_name": str(row[1] or "").strip(),
             "shell_tenant_label": "Kommun",
             "nav_context": "kitchen",
