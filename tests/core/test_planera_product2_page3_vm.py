@@ -336,6 +336,7 @@ def test_build_product2_page3_vm_completion_targets_use_refs_and_keep_aggregatio
                 Product2Page2RequirementVM(dietary_type_id=1, requirement_key="timbal", name="Timbal", semantics="atomic"),
                 Product2Page2RequirementVM(dietary_type_id=2, requirement_key="laktosfri", name="Laktosfri", semantics="atomic"),
             ),
+            primary_requirement_id=1,
         )
         requirement_group_b = Product2Page2RequirementGroupVM(
             requirement_group_id="group-b",
@@ -346,6 +347,7 @@ def test_build_product2_page3_vm_completion_targets_use_refs_and_keep_aggregatio
                 Product2Page2RequirementVM(dietary_type_id=1, requirement_key="timbal", name="Timbal", semantics="atomic"),
                 Product2Page2RequirementVM(dietary_type_id=2, requirement_key="laktosfri", name="Laktosfri", semantics="atomic"),
             ),
+            primary_requirement_id=1,
         )
         zero_group = Product2Page2RequirementGroupVM(
             requirement_group_id="group-zero",
@@ -432,8 +434,9 @@ def test_build_product2_page3_vm_completion_targets_use_refs_and_keep_aggregatio
 
     vm = build_product2_page3_vm(tenant_id=1, site_id="site-1", service_date="2026-09-08", meal="lunch")
 
-    assert vm.special_production_groups[0].label == "Timbal + Laktosfri"
+    assert vm.special_production_groups[0].label == "Timbal"
     assert vm.special_production_groups[0].quantity == 3
+    assert vm.special_production_groups[0].modifier_labels == ("Laktosfri",)
     assert [dish.quantity for dish in vm.special_production_groups[0].dishes] == [3]
 
     completion_targets = {target.requirement_group_id: target for target in vm.completion_targets}
@@ -448,6 +451,299 @@ def test_build_product2_page3_vm_completion_targets_use_refs_and_keep_aggregatio
     assert completion_targets["group-b"].quantity == 2
     assert "group-zero" not in completion_targets
     assert "group-unused" not in completion_targets
+
+
+def test_build_product2_page3_vm_aggregates_primary_buckets_without_merging_targets(monkeypatch):
+    def _page2_context(**_kwargs):
+        option_a = Product2MealOptionVM(
+            option_id="option-a",
+            variant_type="alt1",
+            display_label="Alt 1",
+            sort_order=10,
+            display_title="Timbal",
+            composition_id="comp-a",
+            resolved=True,
+        )
+        option_b = Product2MealOptionVM(
+            option_id="option-b",
+            variant_type="alt2",
+            display_label="Alt 2",
+            sort_order=20,
+            display_title="Grovpaté",
+            composition_id="comp-b",
+            resolved=True,
+        )
+        option_c = Product2MealOptionVM(
+            option_id="option-c",
+            variant_type="dessert",
+            display_label="Dessert",
+            sort_order=30,
+            display_title="Vegetarisk",
+            composition_id="comp-c",
+            resolved=True,
+        )
+        option_d = Product2MealOptionVM(
+            option_id="option-d",
+            variant_type="dinner",
+            display_label="Kvällsmat",
+            sort_order=40,
+            display_title="Timbal kväll",
+            composition_id="comp-d",
+            resolved=True,
+        )
+        destination_a = Product2Page2DestinationVM(
+            destination_id="dept-a",
+            display_name="Avdelning A",
+            baseline_quantity=18,
+            selected_option_id="option-a",
+            choice_source="explicit",
+        )
+        destination_b = Product2Page2DestinationVM(
+            destination_id="dept-b",
+            display_name="Avdelning B",
+            baseline_quantity=12,
+            selected_option_id="option-b",
+            choice_source="explicit",
+        )
+        destination_c = Product2Page2DestinationVM(
+            destination_id="dept-c",
+            display_name="Avdelning C",
+            baseline_quantity=8,
+            selected_option_id="option-c",
+            choice_source="explicit",
+        )
+        destination_d = Product2Page2DestinationVM(
+            destination_id="dept-d",
+            display_name="Avdelning D",
+            baseline_quantity=14,
+            selected_option_id="option-d",
+            choice_source="explicit",
+        )
+        requirement_groups = (
+            Product2Page2RequirementGroupVM(
+                requirement_group_id="group-a-plain",
+                destination_id="dept-a",
+                label="Timbal",
+                effective_quantity=3,
+                requirements=(
+                    Product2Page2RequirementVM(dietary_type_id=1, requirement_key="timbal", name="Timbal", semantics="atomic"),
+                ),
+                primary_requirement_id=1,
+            ),
+            Product2Page2RequirementGroupVM(
+                requirement_group_id="group-a-gluten",
+                destination_id="dept-a",
+                label="Timbal + Glutenfri",
+                effective_quantity=1,
+                requirements=(
+                    Product2Page2RequirementVM(dietary_type_id=1, requirement_key="timbal", name="Timbal", semantics="atomic"),
+                    Product2Page2RequirementVM(dietary_type_id=2, requirement_key="glutenfri", name="Glutenfri", semantics="atomic"),
+                ),
+                primary_requirement_id=1,
+            ),
+            Product2Page2RequirementGroupVM(
+                requirement_group_id="group-a-laktos",
+                destination_id="dept-a",
+                label="Timbal + Laktosfri",
+                effective_quantity=2,
+                requirements=(
+                    Product2Page2RequirementVM(dietary_type_id=1, requirement_key="timbal", name="Timbal", semantics="atomic"),
+                    Product2Page2RequirementVM(dietary_type_id=3, requirement_key="laktosfri", name="Laktosfri", semantics="atomic"),
+                ),
+                primary_requirement_id=1,
+            ),
+            Product2Page2RequirementGroupVM(
+                requirement_group_id="group-b-plain",
+                destination_id="dept-b",
+                label="Grovpaté",
+                effective_quantity=2,
+                requirements=(
+                    Product2Page2RequirementVM(dietary_type_id=4, requirement_key="grovpate", name="Grovpaté", semantics="atomic"),
+                ),
+                primary_requirement_id=4,
+            ),
+            Product2Page2RequirementGroupVM(
+                requirement_group_id="group-b-laktos",
+                destination_id="dept-b",
+                label="Grovpaté + Laktosfri",
+                effective_quantity=1,
+                requirements=(
+                    Product2Page2RequirementVM(dietary_type_id=4, requirement_key="grovpate", name="Grovpaté", semantics="atomic"),
+                    Product2Page2RequirementVM(dietary_type_id=3, requirement_key="laktosfri", name="Laktosfri", semantics="atomic"),
+                ),
+                primary_requirement_id=4,
+            ),
+            Product2Page2RequirementGroupVM(
+                requirement_group_id="group-c-veg",
+                destination_id="dept-c",
+                label="Vegetarisk + Äggfri",
+                effective_quantity=1,
+                requirements=(
+                    Product2Page2RequirementVM(dietary_type_id=5, requirement_key="vegetarisk", name="Vegetarisk", semantics="atomic"),
+                    Product2Page2RequirementVM(dietary_type_id=6, requirement_key="aggfri", name="Äggfri", semantics="atomic"),
+                ),
+                primary_requirement_id=5,
+            ),
+            Product2Page2RequirementGroupVM(
+                requirement_group_id="group-d-plain",
+                destination_id="dept-d",
+                label="Timbal",
+                effective_quantity=5,
+                requirements=(
+                    Product2Page2RequirementVM(dietary_type_id=1, requirement_key="timbal", name="Timbal", semantics="atomic"),
+                ),
+                primary_requirement_id=1,
+            ),
+        )
+        return Product2Page2PlanningContext(
+            site_id="site-1",
+            service_date="2026-09-08",
+            meal="lunch",
+            status="ok",
+            publication_identity=Product2Page2PublicationIdentity(builder_menu_id="menu-1", builder_menu_version=1),
+            options=(option_a, option_b, option_c, option_d),
+            destinations=(destination_a, destination_b, destination_c, destination_d),
+            requirement_groups=requirement_groups,
+        )
+
+    def _plan_result(*, total: int, per_combination: dict[str, int], destination_id: str) -> PlanResult:
+        return PlanResult(
+            totals=Totals(baseline_total=total + 10, deviation_total=total, normal_total=10),
+            per_combination=per_combination,
+            per_unit={destination_id: 10},
+            per_unit_breakdown={
+                destination_id: UnitBreakdown(
+                    baseline_total=total + 10,
+                    deviation_total=total,
+                    normal_total=10,
+                    per_combination=per_combination,
+                    per_form={"special": total},
+                )
+            },
+            warnings=[],
+        )
+
+    def _meal_result():
+        return KommunMealOrchestrationResult(
+            tenant_id=1,
+            site_id="site-1",
+            service_date="2026-09-08",
+            meal="lunch",
+            publication_identity=None,
+            options=(
+                KommunMealOptionResult(
+                    option_id="option-a",
+                    display_title="Timbal",
+                    assigned_destination_ids=("dept-a",),
+                    assigned_destination_count=1,
+                    has_demand=True,
+                    requires_review=True,
+                    review_state="ready",
+                    review_is_stale=False,
+                    blockers=(),
+                    planning_slice=None,
+                    plan_result=_plan_result(
+                        total=6,
+                        per_combination={
+                            "special__timbal": 3,
+                            "special__timbal__glutenfri": 1,
+                            "special__timbal__laktosfri": 2,
+                        },
+                        destination_id="dept-a",
+                    ),
+                    acceptance_issues=(),
+                ),
+                KommunMealOptionResult(
+                    option_id="option-b",
+                    display_title="Grovpaté",
+                    assigned_destination_ids=("dept-b",),
+                    assigned_destination_count=1,
+                    has_demand=True,
+                    requires_review=True,
+                    review_state="ready",
+                    review_is_stale=False,
+                    blockers=(),
+                    planning_slice=None,
+                    plan_result=_plan_result(
+                        total=3,
+                        per_combination={
+                            "special__grovpate": 2,
+                            "special__grovpate__laktosfri": 1,
+                        },
+                        destination_id="dept-b",
+                    ),
+                    acceptance_issues=(),
+                ),
+                KommunMealOptionResult(
+                    option_id="option-c",
+                    display_title="Vegetarisk",
+                    assigned_destination_ids=("dept-c",),
+                    assigned_destination_count=1,
+                    has_demand=True,
+                    requires_review=True,
+                    review_state="ready",
+                    review_is_stale=False,
+                    blockers=(),
+                    planning_slice=None,
+                    plan_result=_plan_result(
+                        total=1,
+                        per_combination={"special__vegetarisk__aggfri": 1},
+                        destination_id="dept-c",
+                    ),
+                    acceptance_issues=(),
+                ),
+                KommunMealOptionResult(
+                    option_id="option-d",
+                    display_title="Timbal kväll",
+                    assigned_destination_ids=("dept-d",),
+                    assigned_destination_count=1,
+                    has_demand=True,
+                    requires_review=True,
+                    review_state="ready",
+                    review_is_stale=False,
+                    blockers=(),
+                    planning_slice=None,
+                    plan_result=_plan_result(
+                        total=5,
+                        per_combination={"special__timbal": 5},
+                        destination_id="dept-d",
+                    ),
+                    acceptance_issues=(),
+                ),
+            ),
+            unassigned_destinations=(),
+            blockers=(),
+            ready=True,
+        )
+
+    monkeypatch.setattr("core.planera_product2_page3_vm._load_site_name", lambda **_: "Avdelningarnas kök")
+    monkeypatch.setattr("core.planera_product2_page3_vm.build_product2_page2_planning_context", _page2_context)
+    monkeypatch.setattr("core.planera_product2_page3_vm.run_kommun_meal_orchestration", lambda **_: _meal_result())
+
+    vm = build_product2_page3_vm(tenant_id=1, site_id="site-1", service_date="2026-09-08", meal="lunch")
+
+    assert [group.label for group in vm.special_production_groups] == ["Timbal", "Grovpaté", "Vegetarisk", "Timbal"]
+    timbal_groups = [group for group in vm.special_production_groups if group.label == "Timbal"]
+    assert len(timbal_groups) == 2
+    assert sorted(group.quantity for group in timbal_groups) == [5, 6]
+    assert any(group.modifier_labels == ("Glutenfri", "Laktosfri") for group in timbal_groups)
+    assert any(group.modifier_labels == () for group in timbal_groups)
+    assert any(group.combination_key.startswith("option-a::") for group in timbal_groups)
+    assert any(group.combination_key.startswith("option-d::") for group in timbal_groups)
+
+    grovpate = next(group for group in vm.special_production_groups if group.label == "Grovpaté")
+    assert grovpate.quantity == 3
+    assert grovpate.modifier_labels == ("Laktosfri",)
+    assert [dish.quantity for dish in grovpate.dishes] == [2, 1]
+
+    vegetarian = next(group for group in vm.special_production_groups if group.label == "Vegetarisk")
+    assert vegetarian.quantity == 1
+    assert vegetarian.modifier_labels == ("Äggfri",)
+
+    destination_a_rows = next(destination.rows for destination in vm.special_destination_groups if destination.destination_id == "dept-a")
+    assert [row.quantity for row in destination_a_rows] == [3, 2, 1]
+    assert [row.label for row in destination_a_rows] == ["Timbal", "Timbal", "Timbal"]
+    assert [row.modifier_labels for row in destination_a_rows] == [(), ("Laktosfri",), ("Glutenfri",)]
 
 
 @pytest.mark.parametrize(
@@ -982,12 +1278,15 @@ def test_build_product2_page3_vm_special_production_and_destination_views_group_
 
     vm = build_product2_page3_vm(tenant_id=1, site_id="site-1", service_date="2026-09-08", meal="lunch")
 
-    assert vm.special_production_groups[0].label == "Timbal"
-    assert vm.special_production_groups[0].quantity == 3
+    assert [group.label for group in vm.special_production_groups] == ["Timbal", "Timbal"]
+    assert [group.quantity for group in vm.special_production_groups] == [2, 1]
+    assert [group.combination_key for group in vm.special_production_groups] == ["option-1::timbal", "option-2::timbal"]
     assert vm.special_production_groups[0].modifier_labels == ("Glutenfri",)
     assert vm.special_production_groups[0].unresolved_primary is False
-    assert [dish.display_title for dish in vm.special_production_groups[0].dishes] == ["Vardagsgryta med rotfrukter", "Ugnsbakad fisk med dill"]
-    assert [dish.quantity for dish in vm.special_production_groups[0].dishes] == [2, 1]
+    assert [dish.display_title for dish in vm.special_production_groups[0].dishes] == ["Vardagsgryta med rotfrukter"]
+    assert [dish.quantity for dish in vm.special_production_groups[0].dishes] == [2]
+    assert [dish.display_title for dish in vm.special_production_groups[1].dishes] == ["Ugnsbakad fisk med dill"]
+    assert [dish.quantity for dish in vm.special_production_groups[1].dishes] == [1]
 
     assert vm.special_destination_groups[0].display_name == "Avdelning 16"
     assert vm.special_destination_groups[0].rows[0].label == "Timbal"

@@ -603,6 +603,83 @@ def test_page3_route_preserves_explicit_option_id(app_session, monkeypatch):
     assert captured["option_id"] == "opt-dinner"
 
 
+def test_page3_route_renders_primary_bucket_aggregation_in_production_view(app_session, monkeypatch):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+
+    site, _ = SitesRepo().create_site(name="Page3 Primary Bucket Site", tenant_id=1)
+    vm = replace(
+        _page3_vm_hierarchy(view="special", special_view="production"),
+        special_production_groups=(
+            Product2Page3SpecialProductionGroupVM(
+                combination_key="option-a::timbal",
+                label="Timbal",
+                quantity=6,
+                dishes=(
+                    Product2Page3SpecialDishVM(
+                        option_id="option-a",
+                        display_title="Timbal",
+                        quantity=3,
+                        department_quantities=(
+                            Product2Page3DepartmentQuantityVM(destination_id="dept-a", display_name="Avdelning A", quantity=3),
+                        ),
+                    ),
+                    Product2Page3SpecialDishVM(
+                        option_id="option-a",
+                        display_title="Timbal + Glutenfri",
+                        quantity=1,
+                        department_quantities=(
+                            Product2Page3DepartmentQuantityVM(destination_id="dept-a", display_name="Avdelning A", quantity=1),
+                        ),
+                    ),
+                    Product2Page3SpecialDishVM(
+                        option_id="option-a",
+                        display_title="Timbal + Laktosfri",
+                        quantity=2,
+                        department_quantities=(
+                            Product2Page3DepartmentQuantityVM(destination_id="dept-a", display_name="Avdelning A", quantity=2),
+                        ),
+                    ),
+                ),
+                modifier_labels=("Glutenfri", "Laktosfri"),
+                unresolved_primary=False,
+            ),
+            Product2Page3SpecialProductionGroupVM(
+                combination_key="option-d::timbal",
+                label="Timbal",
+                quantity=5,
+                dishes=(
+                    Product2Page3SpecialDishVM(
+                        option_id="option-d",
+                        display_title="Timbal kväll",
+                        quantity=5,
+                        department_quantities=(
+                            Product2Page3DepartmentQuantityVM(destination_id="dept-d", display_name="Avdelning D", quantity=5),
+                        ),
+                    ),
+                ),
+                modifier_labels=(),
+                unresolved_primary=False,
+            ),
+        ),
+    )
+    monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: vm)
+
+    rv = client.get(
+        f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=special&special_view=production",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert html.count('data-page3-special-group="option-a::timbal"') == 1
+    assert "6 portioner" in html
+    assert "5 portioner" in html
+    assert "Glutenfri" in html
+    assert "Laktosfri" in html
+
+
 def test_page3_route_renders_xor_special_views_for_production_and_department(app_session, monkeypatch):
     client = app_session.test_client()
     with client.session_transaction() as sess:

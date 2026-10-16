@@ -345,6 +345,7 @@ def _combo_label_from_key(key: str, requirement_name_map: dict[str, str]) -> str
 
 @dataclass(frozen=True, slots=True)
 class _RequirementGroupDisplay:
+    primary_key: str | None
     label: str
     modifier_labels: tuple[str, ...]
     unresolved_primary: bool
@@ -367,6 +368,7 @@ def _build_requirement_group_display_lookup(
             continue
 
         key_set = frozenset(requirement_keys)
+        primary_key: str | None = None
         primary_label: str | None = None
         modifier_labels: tuple[str, ...] = ()
         unresolved_primary = True
@@ -390,12 +392,14 @@ def _build_requirement_group_display_lookup(
 
         if primary_label is None:
             primary_label = _combo_label_from_key(f"special__{'__'.join(requirement_keys)}", requirement_name_map)
+            primary_key = None
             modifier_labels = ()
             unresolved_primary = True
 
         existing = lookup.get(key_set)
         if existing is None:
             lookup[key_set] = _RequirementGroupDisplay(
+                primary_key=primary_key,
                 label=primary_label,
                 modifier_labels=modifier_labels,
                 unresolved_primary=unresolved_primary,
@@ -403,13 +407,15 @@ def _build_requirement_group_display_lookup(
             continue
         if existing.unresolved_primary or unresolved_primary:
             lookup[key_set] = _RequirementGroupDisplay(
+                primary_key=None,
                 label=_combo_label_from_key(f"special__{'__'.join(requirement_keys)}", requirement_name_map),
                 modifier_labels=(),
                 unresolved_primary=True,
             )
             continue
-        if existing.label != primary_label or existing.modifier_labels != modifier_labels:
+        if existing.primary_key != primary_key or existing.label != primary_label or existing.modifier_labels != modifier_labels:
             lookup[key_set] = _RequirementGroupDisplay(
+                primary_key=None,
                 label=_combo_label_from_key(f"special__{'__'.join(requirement_keys)}", requirement_name_map),
                 modifier_labels=(),
                 unresolved_primary=True,
@@ -541,8 +547,8 @@ def _build_special_production_groups(
     requirement_group_display_lookup: dict[frozenset[str], _RequirementGroupDisplay],
 ) -> tuple[Product2Page3SpecialProductionGroupVM, ...]:
     option_results = {option.option_id: option for option in options}
-    grouped: dict[str, dict[str, object]] = {}
-    group_order: list[str] = []
+    grouped: dict[tuple[str, str], dict[str, object]] = {}
+    group_order: list[tuple[str, str]] = []
     option_order = {str(context_option.option_id): index for index, context_option in enumerate(context_options)}
 
     for context_option in context_options:
@@ -558,34 +564,44 @@ def _build_special_production_groups(
                 label = _combo_label_from_key(combination_key, requirement_name_map)
                 modifier_labels: tuple[str, ...] = ()
                 unresolved_primary = True
+                bucket_key = combination_key
             else:
                 label = display.label
                 modifier_labels = display.modifier_labels
                 unresolved_primary = display.unresolved_primary
-            group = grouped.get(combination_key)
+                bucket_key = display.primary_key if display.primary_key is not None and not display.unresolved_primary else combination_key
+            grouped_key = (str(option_result.option_id), str(bucket_key))
+            group = grouped.get(grouped_key)
             if group is None:
                 group = {
+                    "group_key": f"{option_result.option_id}::{bucket_key}",
+                    "option_id": option_result.option_id,
                     "combination_key": combination_key,
                     "label": label,
-                    "modifier_labels": modifier_labels,
+                    "modifier_labels": [],
                     "unresolved_primary": unresolved_primary,
                     "quantity": 0,
                     "dishes": {},
                 }
-                grouped[combination_key] = group
-                group_order.append(combination_key)
+                grouped[grouped_key] = group
+                group_order.append(grouped_key)
+            if modifier_labels:
+                labels = group["modifier_labels"]  # type: ignore[assignment]
+                for modifier_label in modifier_labels:
+                    if modifier_label not in labels:
+                        labels.append(modifier_label)
             group["quantity"] = int(group["quantity"]) + int(quantity)
             dishes: dict[str, dict[str, object]] = group["dishes"]  # type: ignore[assignment]
-            dish = dishes.get(option_result.option_id)
+            dish = dishes.get(combination_key)
             if dish is None:
                 dish = {
                     "option_id": option_result.option_id,
+                    "combination_key": combination_key,
                     "display_title": option_result.display_title,
                     "quantity": 0,
                     "department_quantities": [],
-                    "order": option_order.get(option_result.option_id, 0),
                 }
-                dishes[option_result.option_id] = dish
+                dishes[combination_key] = dish
             dish["quantity"] = int(dish["quantity"]) + int(quantity)
             department_quantities = _department_rows_for_combination(
                 option_result=option_result,
@@ -597,11 +613,19 @@ def _build_special_production_groups(
             dish["department_quantities"] = existing_rows
 
     groups: list[Product2Page3SpecialProductionGroupVM] = []
-    for combination_key in sorted(group_order, key=lambda key: (-(int(grouped[key]["quantity"])), str(grouped[key]["label"]))):
-        group = grouped[combination_key]
+    for grouped_key in sorted(
+        group_order,
+        key=lambda key: (
+            int(option_order.get(str(key[0]), 0)),
+            -(int(grouped[key]["quantity"])),
+            str(grouped[key]["label"]),
+            str(grouped[key]["group_key"]),
+        ),
+    ):
+        group = grouped[grouped_key]
         dishes_map: dict[str, dict[str, object]] = group["dishes"]  # type: ignore[assignment]
         dishes: list[Product2Page3SpecialDishVM] = []
-        for dish in sorted(dishes_map.values(), key=lambda item: (int(item.get("order", 0)), str(item.get("display_title", "")))):
+        for dish in sorted(dishes_map.values(), key=lambda item: (str(item.get("combination_key", "")), str(item.get("display_title", "")))):
             rows = tuple(dish.get("department_quantities") or ())
             dishes.append(
                 Product2Page3SpecialDishVM(
@@ -613,7 +637,7 @@ def _build_special_production_groups(
             )
         groups.append(
             Product2Page3SpecialProductionGroupVM(
-                combination_key=str(group["combination_key"]),
+                combination_key=str(group["group_key"]),
                 label=str(group["label"]),
                 quantity=int(group["quantity"]),
                 dishes=tuple(dishes),
