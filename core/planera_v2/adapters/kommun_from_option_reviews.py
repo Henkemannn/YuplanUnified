@@ -6,11 +6,12 @@ from datetime import date as _date, datetime as _datetime
 from typing import Any, NoReturn
 
 from ...planning_option_review import ADAPTATION_REQUIRED, NO_ADAPTATION_REQUIRED, PlanningOptionReviewService
-from ...planera_product2_page2_context import (
+from ..product2_context_bridge import (
     Product2Page2ContextError,
-    Product2Page2DestinationVM,
-    Product2Page2RequirementGroupVM,
-    build_product2_page2_planning_context,
+    Product2Page2DestinationLike,
+    Product2Page2PlanningContextLike,
+    Product2Page2RequirementGroupLike,
+    build_product2_page2_target_planning_context,
 )
 from ..domain import Deviation, PlanningSlice, UnitInput
 
@@ -29,11 +30,11 @@ class _OptionReviewScope:
     service_date: _date
     meal_key: str
     option_id: str
-    context: Any
+    context: Product2Page2PlanningContextLike
     review_state: Any
     publication_identity: Any
-    assigned_destinations: tuple[Product2Page2DestinationVM, ...]
-    relevant_groups: tuple[Product2Page2RequirementGroupVM, ...]
+    assigned_destinations: tuple[Product2Page2DestinationLike, ...]
+    relevant_groups: tuple[Product2Page2RequirementGroupLike, ...]
 
 
 def _fail(code: str, message: str) -> NoReturn:
@@ -110,11 +111,12 @@ def _build_scope(
     option_id: str,
 ) -> _OptionReviewScope:
     try:
-        context = build_product2_page2_planning_context(
+        context = build_product2_page2_target_planning_context(
             tenant_id=tenant_id,
             site_id=site_id,
             service_date=service_date,
             meal=meal_key,
+            option_id=option_id,
         )
     except Exception as exc:  # pragma: no cover - defensive adapter boundary
         raise KommunOptionReviewPlanningError(getattr(exc, "code", str(exc)), str(exc)) from exc
@@ -171,8 +173,8 @@ def _build_planning_slice(
     context: dict[str, Any] | None,
     scope: _OptionReviewScope,
 ) -> PlanningSlice:
-    current_groups_by_key: dict[tuple[str, str], Product2Page2RequirementGroupVM] = {}
-    current_groups_by_destination: dict[str, list[Product2Page2RequirementGroupVM]] = {
+    current_groups_by_key: dict[tuple[str, str], Product2Page2RequirementGroupLike] = {}
+    current_groups_by_destination: dict[str, list[Product2Page2RequirementGroupLike]] = {
         destination.destination_id: [] for destination in scope.assigned_destinations
     }
     for group in scope.relevant_groups:

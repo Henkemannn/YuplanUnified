@@ -13,6 +13,7 @@ from core.planera_product2_page2_context import (
     Product2Page2RequirementGroupVM,
     Product2Page2RequirementVM,
     build_product2_page2_planning_context,
+    build_product2_page2_target_planning_context,
 )
 from core.planera_product2_page3_vm import Product2Page3VmError, build_product2_page3_vm
 from core.planera_v2.domain import PlanResult, PlanningSlice, Totals, UnitBreakdown
@@ -180,6 +181,132 @@ def test_build_product2_page3_vm_uses_orchestration_numbers_and_page2_metadata(m
     assert [row.display_name for row in vm.options[0].normal_department_rows] == ["Avdelning A"]
     assert vm.options[0].special_cohorts[0].label == "Vegetariskt"
     assert vm.options[0].special_cohorts[0].department_quantities[0].quantity == 3
+
+
+def test_build_product2_page3_vm_preserves_explicit_option_identity(monkeypatch):
+    target_option = Product2MealOptionVM(
+        option_id="opt-dinner",
+        variant_type="dinner",
+        display_label="Kvällsmat",
+        sort_order=10,
+        display_title="Kalkun med rosenkål",
+        composition_id="comp-dinner",
+        resolved=True,
+    )
+    destination = Product2Page2DestinationVM(
+        destination_id="dept-a",
+        display_name="Avdelning A",
+        baseline_quantity=10,
+        selected_option_id="opt-dinner",
+        choice_source="explicit",
+    )
+    requirement_group = Product2Page2RequirementGroupVM(
+        requirement_group_id="group-dinner",
+        destination_id="dept-a",
+        label="Timbal",
+        effective_quantity=2,
+        requirements=(
+            Product2Page2RequirementVM(
+                dietary_type_id=1,
+                requirement_key="timbal",
+                name="Timbal",
+                semantics="atomic",
+            ),
+        ),
+    )
+    page2_context = Product2Page2PlanningContext(
+        site_id="site-1",
+        service_date="2026-09-08",
+        meal="dinner",
+        status="ok",
+        publication_identity=Product2Page2PublicationIdentity(builder_menu_id="menu-1", builder_menu_version=1),
+        options=(target_option,),
+        destinations=(destination,),
+        requirement_groups=(requirement_group,),
+        target_option_id="opt-dinner",
+        target_display_label="Kvällsmat",
+        target_display_title="Kalkun med rosenkål",
+        has_target_demand=True,
+        unresolved_destination_count=0,
+    )
+    plan_result = PlanResult(
+        totals=Totals(baseline_total=10, deviation_total=2, normal_total=8),
+        per_combination={"special__timbal": 2},
+        per_unit={"dept-a": 8},
+        per_unit_breakdown={
+            "dept-a": UnitBreakdown(
+                baseline_total=10,
+                deviation_total=2,
+                normal_total=8,
+                per_combination={"special__timbal": 2},
+                per_form={"special": 2},
+            )
+        },
+        warnings=[],
+    )
+    meal_result = KommunMealOrchestrationResult(
+        tenant_id=1,
+        site_id="site-1",
+        service_date="2026-09-08",
+        meal="dinner",
+        publication_identity=page2_context.publication_identity,
+        options=(
+            KommunMealOptionResult(
+                option_id="opt-dinner",
+                display_title="Kalkun med rosenkål",
+                assigned_destination_ids=("dept-a",),
+                assigned_destination_count=1,
+                has_demand=True,
+                requires_review=True,
+                review_state="REVIEWED_NO_DEVIATIONS",
+                review_is_stale=False,
+                blockers=(),
+                planning_slice=PlanningSlice(
+                    baseline=10,
+                    units=(),
+                    deviations=(),
+                    context={"kind": "explicit_target"},
+                    warnings=(),
+                    compatibility_status="resolved",
+                ),
+                plan_result=plan_result,
+                acceptance_issues=(),
+            ),
+        ),
+        unassigned_destinations=(),
+        blockers=(),
+        ready=True,
+    )
+
+    monkeypatch.setattr("core.planera_product2_page3_vm._load_site_name", lambda **_: "Avdelningarnas kök")
+    monkeypatch.setattr("core.planera_product2_page3_vm.build_product2_page2_target_planning_context", lambda **_: page2_context)
+
+    called: dict[str, object] = {}
+
+    def _run_kommun_meal_orchestration(**kwargs):
+        called["meal"] = kwargs["meal"]
+        called["option_id"] = kwargs["option_id"]
+        return meal_result
+
+    monkeypatch.setattr("core.planera_product2_page3_vm.run_kommun_meal_orchestration", _run_kommun_meal_orchestration)
+
+    vm = build_product2_page3_vm(
+        tenant_id=1,
+        site_id="site-1",
+        service_date="2026-09-08",
+        meal="dinner",
+        option_id="opt-dinner",
+    )
+
+    assert called["meal"] == "dinner"
+    assert called["option_id"] == "opt-dinner"
+    assert vm.meal == "dinner"
+    assert "meal=dinner" in vm.page2_url
+    assert "option_id=opt-dinner" in vm.page2_url
+    assert "meal=dinner" in vm.navigation_urls["overview"]
+    assert "option_id=opt-dinner" in vm.navigation_urls["overview"]
+    assert vm.options[0].option_id == "opt-dinner"
+    assert vm.options[0].display_title == "Kalkun med rosenkål"
 
 
 def test_build_product2_page3_vm_completion_targets_use_refs_and_keep_aggregation(monkeypatch):

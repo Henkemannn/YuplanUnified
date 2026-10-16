@@ -1001,6 +1001,8 @@ def test_page2_accepts_explicit_option_id_without_changing_lunch_behavior(app_se
     html = rv.get_data(as_text=True)
     assert "Explicit Route Target Site" in html
     assert "Tisdag 8 september" in html
+    assert "/ui/kitchen/planering/day/production?ui=product2" in html
+    assert f'data-page2-target-option-id="{row_ids["alt1"]}"' in html
 
 
 def test_template_does_not_use_fixed_alt_fields_and_page1_remains_untouched():

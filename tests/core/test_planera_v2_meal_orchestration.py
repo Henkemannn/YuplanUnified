@@ -34,7 +34,7 @@ from core.department_requirement_group_repo import DepartmentRequirementGroupsRe
 from core.menu import InMemoryCompositionAliasRepository, MenuService
 from core.planera_product2_page2_context import build_product2_page2_planning_context
 from core.planera_v2.acceptance import ProductionAcceptanceResult, validate_plan_request_for_production
-from core.planera_v2.domain import Deviation, PlanRequest, PlanningSlice, UnitInput
+from core.planera_v2.domain import Deviation, PlanRequest, PlanResult, PlanningSlice, Totals, UnitBreakdown, UnitInput
 from core.planera_v2.engine import compute_plan
 from core.planera_v2.meal_orchestration import (
     KommunMealDestinationResult,
@@ -254,6 +254,7 @@ class _SyntheticContext:
     publication_identity: object | None
     options: tuple[_SyntheticOption, ...]
     destinations: tuple[_SyntheticDestination, ...]
+    unresolved_destination_count: int = 0
 
 
 def _synthetic_context(
@@ -261,12 +262,14 @@ def _synthetic_context(
     options: tuple[_SyntheticOption, ...],
     destinations: tuple[_SyntheticDestination, ...],
     status: str = "ok",
+    unresolved_destination_count: int = 0,
 ) -> _SyntheticContext:
     return _SyntheticContext(
         status=status,
         publication_identity=object() if status == "ok" else None,
         options=options,
         destinations=destinations,
+        unresolved_destination_count=unresolved_destination_count,
     )
 
 
@@ -427,6 +430,127 @@ def test_public_api_and_result_model_contract() -> None:
 def test_rejects_unsupported_meal() -> None:
     with pytest.raises(KommunMealOrchestrationError, match="meal_unsupported"):
         run_kommun_meal_orchestration(tenant_id=1, site_id="site", service_date=date(2026, 1, 1), meal="breakfast")
+
+
+@pytest.mark.parametrize(
+    ("meal", "option_id", "display_title"),
+    [
+        ("lunch", "opt-alt1", "Köttbullar med potatismos"),
+        ("lunch", "opt-alt2", "Fiskboller med hvitsaus og råkostsalat"),
+        ("lunch", "opt-dessert", "Glassbomb"),
+        ("dinner", "opt-dinner", "Kalkun med rosenkål"),
+    ],
+)
+def test_explicit_target_orchestration_produces_ready_plan(monkeypatch: pytest.MonkeyPatch, meal: str, option_id: str, display_title: str) -> None:
+    context = _synthetic_context(
+        options=(_SyntheticOption(option_id=option_id, display_title=display_title),),
+        destinations=(
+            _SyntheticDestination(
+                destination_id="dept-1",
+                display_name="Avdelning 1",
+                baseline_quantity=18,
+                selected_option_id=option_id,
+                choice_source="explicit",
+            ),
+        ),
+    )
+
+    class _ReviewService:
+        def get_option_review_state(self, **kwargs: object) -> _StubReviewState:
+            assert kwargs["meal"] == meal
+            assert kwargs["option_id"] == option_id
+            return _StubReviewState(review_state=REVIEW_STATE_NO_DEVIATIONS)
+
+    def _slice_builder(**kwargs: object) -> PlanningSlice:
+        assert kwargs["meal_key"] == meal
+        assert kwargs["option_id"] == option_id
+        return PlanningSlice(
+            baseline=18,
+            units=(UnitInput(unit_id="dept-1", baseline_total=18),),
+            deviations=(Deviation(form="special", category_keys=["veg"], quantity=3, unit_id="dept-1"),),
+            context={"kind": "explicit_target", "meal": meal, "option_id": option_id},
+        )
+
+    def _accept(request: PlanRequest, *, expected_unit_ids=None) -> ProductionAcceptanceResult:
+        assert expected_unit_ids == ("dept-1",)
+        return ProductionAcceptanceResult(accepted=True, issues=())
+
+    def _compute(request: PlanRequest) -> PlanResult:
+        return PlanResult(
+            totals=Totals(baseline_total=18, deviation_total=3, normal_total=15),
+            per_combination={"special__veg": 3},
+            per_unit={"dept-1": 15},
+            per_unit_breakdown={
+                "dept-1": UnitBreakdown(
+                    baseline_total=18,
+                    deviation_total=3,
+                    normal_total=15,
+                    per_combination={"special__veg": 3},
+                    per_form={"special": 3},
+                )
+            },
+            warnings=[],
+        )
+
+    monkeypatch.setattr("core.planera_v2.meal_orchestration.build_product2_page2_target_planning_context", lambda **kwargs: context)
+    monkeypatch.setattr("core.planera_v2.meal_orchestration.PlanningOptionReviewService", lambda: _ReviewService())
+    monkeypatch.setattr("core.planera_v2.meal_orchestration.build_planning_slice_from_option_review", _slice_builder)
+    monkeypatch.setattr("core.planera_v2.meal_orchestration.validate_plan_request_for_production", _accept)
+    monkeypatch.setattr("core.planera_v2.meal_orchestration.compute_plan", _compute)
+
+    result = run_kommun_meal_orchestration(tenant_id=1, site_id="site", service_date=date(2026, 1, 1), meal=meal, option_id=option_id)
+
+    assert result.meal == meal
+    assert result.ready is True
+    assert result.blockers == ()
+    assert result.options[0].option_id == option_id
+    assert result.options[0].display_title == display_title
+    assert result.options[0].plan_result is not None
+    assert result.options[0].planning_slice is not None
+
+
+def test_explicit_target_unresolved_blocks_production(monkeypatch: pytest.MonkeyPatch) -> None:
+    context = _synthetic_context(
+        options=(_SyntheticOption(option_id="opt-dinner", display_title="Kalkun med rosenkål"),),
+        destinations=(
+            _SyntheticDestination(
+                destination_id="dept-1",
+                display_name="Avdelning 1",
+                baseline_quantity=18,
+                selected_option_id="opt-dinner",
+                choice_source="explicit",
+            ),
+        ),
+        unresolved_destination_count=1,
+    )
+
+    class _ReviewService:
+        def get_option_review_state(self, **_: object) -> _StubReviewState:
+            return _StubReviewState(review_state=REVIEW_STATE_NO_DEVIATIONS)
+
+    def _boom(*_: object, **__: object) -> object:
+        raise AssertionError("adapter/engine should not run when target demand is unresolved")
+
+    monkeypatch.setattr("core.planera_v2.meal_orchestration.build_product2_page2_target_planning_context", lambda **kwargs: context)
+    monkeypatch.setattr("core.planera_v2.meal_orchestration.PlanningOptionReviewService", lambda: _ReviewService())
+    monkeypatch.setattr("core.planera_v2.meal_orchestration.build_planning_slice_from_option_review", _boom)
+    monkeypatch.setattr("core.planera_v2.meal_orchestration.validate_plan_request_for_production", _boom)
+    monkeypatch.setattr("core.planera_v2.meal_orchestration.compute_plan", _boom)
+
+    result = run_kommun_meal_orchestration(
+        tenant_id=1,
+        site_id="site",
+        service_date=date(2026, 1, 1),
+        meal="dinner",
+        option_id="opt-dinner",
+    )
+
+    option = result.options[0]
+    assert result.ready is False
+    assert result.blockers == ("INVALID_OPTION_PLAN",)
+    assert option.blockers == ("INVALID_OPTION_PLAN",)
+    assert option.plan_result is None
+
 
 
 def test_zero_demand_option_is_bypassed_and_does_not_block_ready_meal(monkeypatch: pytest.MonkeyPatch) -> None:

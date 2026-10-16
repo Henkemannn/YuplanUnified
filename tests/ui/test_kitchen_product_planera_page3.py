@@ -578,6 +578,31 @@ def test_page3_route_supports_canonical_view_params(app_session, monkeypatch):
     assert "Packlista" in special.get_data(as_text=True)
 
 
+def test_page3_route_preserves_explicit_option_id(app_session, monkeypatch):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+
+    site, _ = SitesRepo().create_site(name="Page3 Explicit Option Site", tenant_id=1)
+    captured: dict[str, object] = {}
+
+    def _stub_page3_vm(**kwargs):
+        captured["meal"] = kwargs.get("meal")
+        captured["option_id"] = kwargs.get("option_id")
+        return _page3_vm()
+
+    monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", _stub_page3_vm)
+
+    rv = client.get(
+        f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=dinner&option_id=opt-dinner",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+
+    assert rv.status_code == 200
+    assert captured["meal"] == "dinner"
+    assert captured["option_id"] == "opt-dinner"
+
+
 def test_page3_route_renders_xor_special_views_for_production_and_department(app_session, monkeypatch):
     client = app_session.test_client()
     with client.session_transaction() as sess:

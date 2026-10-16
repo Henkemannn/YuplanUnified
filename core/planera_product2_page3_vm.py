@@ -6,7 +6,11 @@ from datetime import date as _date
 from sqlalchemy import text
 
 from .db import get_session, get_site_tenant
-from .planera_product2_page2_context import Product2Page2PlanningContext, build_product2_page2_planning_context
+from .planera_product2_page2_context import (
+    Product2Page2PlanningContext,
+    build_product2_page2_planning_context,
+    build_product2_page2_target_planning_context,
+)
 from .planera_v2.meal_orchestration import (
     KommunMealDestinationResult,
     KommunMealOptionResult,
@@ -195,7 +199,7 @@ def _normalize_service_date(value: object) -> _date:
 
 def _normalize_meal(value: object) -> str:
     meal = str(value or "").strip().lower()
-    if meal != "lunch":
+    if meal not in {"lunch", "dinner"}:
         raise Product2Page3VmError("meal_unsupported")
     return meal
 
@@ -869,6 +873,7 @@ def build_product2_page3_vm(
     site_id,
     service_date,
     meal,
+    option_id: str | None = None,
     view: str | None = None,
     special_view: str | None = None,
 ) -> Product2Page3VM:
@@ -884,17 +889,29 @@ def build_product2_page3_vm(
         normalized_special_view = "production"
 
     site_name = _load_site_name(tenant_id=normalized_tenant_id, site_id=normalized_site_id)
-    page2_context = build_product2_page2_planning_context(
-        tenant_id=normalized_tenant_id,
-        site_id=normalized_site_id,
-        service_date=normalized_service_date,
-        meal=normalized_meal,
-    )
+    if option_id:
+        page2_context = build_product2_page2_target_planning_context(
+            tenant_id=normalized_tenant_id,
+            site_id=normalized_site_id,
+            service_date=normalized_service_date,
+            meal=normalized_meal,
+            option_id=option_id,
+        )
+    else:
+        if normalized_meal != "lunch":
+            raise Product2Page3VmError("meal_unsupported")
+        page2_context = build_product2_page2_planning_context(
+            tenant_id=normalized_tenant_id,
+            site_id=normalized_site_id,
+            service_date=normalized_service_date,
+            meal=normalized_meal,
+        )
     meal_result = run_kommun_meal_orchestration(
         tenant_id=normalized_tenant_id,
         site_id=normalized_site_id,
         service_date=normalized_service_date,
         meal=normalized_meal,
+        option_id=option_id,
     )
 
     requirement_name_map = _build_requirement_name_map(page2_context)
@@ -949,6 +966,15 @@ def build_product2_page3_vm(
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={normalized_site_id}"
         f"&date={normalized_service_date.isoformat()}&meal={normalized_meal}"
     )
+    if option_id:
+        base_url = f"{base_url}&option_id={option_id}"
+    selected_option_id = str(getattr(page2_context, "target_option_id", "") or "").strip()
+    page2_url = (
+        f"/ui/kitchen/planering/day?ui=product2&site_id={normalized_site_id}"
+        f"&date={normalized_service_date.isoformat()}&meal={normalized_meal}"
+    )
+    if selected_option_id:
+        page2_url = f"{page2_url}&option_id={selected_option_id}"
     navigation_urls = {
         "overview": f"{base_url}&view=overview",
         "normal": f"{base_url}&view=normal",
@@ -995,7 +1021,7 @@ def build_product2_page3_vm(
         normal_matrix=normal_matrix,
         special_production_groups=special_production_groups,
         special_destination_groups=special_destination_groups,
-        page2_url=f"/ui/kitchen/planering/day?ui=product2&site_id={normalized_site_id}&date={normalized_service_date.isoformat()}&meal={normalized_meal}",
+        page2_url=page2_url,
         navigation_urls=navigation_urls,
         special_navigation_urls=special_navigation_urls,
         publication_identity=meal_result.publication_identity,

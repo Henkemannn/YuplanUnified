@@ -213,7 +213,7 @@
                   <button class="yp-planera-page2-review-reset" type="button" data-page2-review-reset hidden>Återställ</button>
                   <a
                     class="yp-planera-page2-production-link"
-                    href="{{ url_for('ui.kitchen_planering_product2_day_production', ui='product2', site_id=vm.site_id, date=vm.service_date, meal=vm.meal) }}"
+                    href="{{ url_for('ui.kitchen_planering_product2_day_production', ui='product2', site_id=vm.site_id, date=vm.service_date, meal=vm.meal, option_id=vm.target_option_id) if vm.target_option_id else url_for('ui.kitchen_planering_product2_day_production', ui='product2', site_id=vm.site_id, date=vm.service_date, meal=vm.meal) }}"
                   >Visa produktionsunderlag</a>
                 </div>
                 {% else %}

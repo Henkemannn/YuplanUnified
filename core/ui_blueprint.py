@@ -1036,9 +1036,12 @@ def kitchen_planering_product2_day_production():
     site_id = (request.args.get("site_id") or "").strip()
     date_raw = (request.args.get("date") or "").strip()
     meal = (request.args.get("meal") or "").strip().lower()
+    option_id = (request.args.get("option_id") or "").strip()
     view = (request.args.get("view") or "overview").strip().lower()
     special_view = (request.args.get("special_view") or "production").strip().lower()
-    if not site_id or not date_raw or meal != "lunch":
+    if not site_id or not date_raw or not meal:
+        return abort(404)
+    if not option_id and meal != "lunch":
         return abort(404)
     try:
         service_date = _date.fromisoformat(date_raw)
@@ -1064,6 +1067,7 @@ def kitchen_planering_product2_day_production():
             site_id=site_id,
             service_date=service_date,
             meal=meal,
+            option_id=option_id or None,
             view=view,
             special_view=special_view,
         )

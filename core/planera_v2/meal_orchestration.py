@@ -4,12 +4,6 @@ from dataclasses import dataclass
 from datetime import date as _date
 from typing import Literal
 
-from ..planera_product2_page2_context import (
-    Product2Page2DestinationVM,
-    Product2Page2PlanningContext,
-    Product2Page2PublicationIdentity,
-    build_product2_page2_planning_context,
-)
 from ..planning_option_review import (
     REVIEW_STATE_NO_DEVIATIONS,
     REVIEW_STATE_UNREVIEWED,
@@ -24,6 +18,13 @@ from .adapters.kommun_from_option_reviews import (
 )
 from .domain import PlanResult, PlanningSlice
 from .engine import compute_plan
+from .product2_context_bridge import (
+    Product2Page2DestinationLike,
+    Product2Page2PlanningContextLike,
+    Product2Page2PublicationIdentityLike,
+    build_product2_page2_planning_context,
+    build_product2_page2_target_planning_context,
+)
 
 
 MealBlockerCode = Literal[
@@ -79,7 +80,7 @@ class KommunMealOrchestrationResult:
     site_id: str
     service_date: str
     meal: str
-    publication_identity: Product2Page2PublicationIdentity | None
+    publication_identity: Product2Page2PublicationIdentityLike | None
     options: tuple[KommunMealOptionResult, ...]
     unassigned_destinations: tuple[KommunMealDestinationResult, ...]
     blockers: tuple[MealBlockerCode, ...]
@@ -116,8 +117,8 @@ def _normalize_meal(value: object) -> str:
     meal = str(value or "").strip().lower()
     if not meal:
         raise KommunMealOrchestrationError("meal_missing", "meal is missing")
-    if meal != "lunch":
-        raise KommunMealOrchestrationError("meal_unsupported", "only lunch is supported")
+    if meal not in {"lunch", "dinner"}:
+        raise KommunMealOrchestrationError("meal_unsupported", "only lunch and dinner are supported")
     return meal
 
 
@@ -130,7 +131,7 @@ def _ordered_blockers(*blocker_groups: tuple[MealBlockerCode, ...]) -> tuple[Mea
     return tuple(ordered)
 
 
-def _destination_result(destination: Product2Page2DestinationVM) -> KommunMealDestinationResult:
+def _destination_result(destination: Product2Page2DestinationLike) -> KommunMealDestinationResult:
     return KommunMealDestinationResult(
         destination_id=str(destination.destination_id),
         display_name=str(destination.display_name),
@@ -142,9 +143,9 @@ def _destination_result(destination: Product2Page2DestinationVM) -> KommunMealDe
 
 def _assigned_destinations_for_option(
     *,
-    context: Product2Page2PlanningContext,
+    context: Product2Page2PlanningContextLike,
     option_id: str,
-) -> tuple[Product2Page2DestinationVM, ...]:
+) -> tuple[Product2Page2DestinationLike, ...]:
     return tuple(
         destination
         for destination in context.destinations
@@ -227,7 +228,7 @@ def _build_empty_or_invalid_result(
     site_id: str,
     service_date: _date,
     meal: str,
-    context: Product2Page2PlanningContext,
+    context: Product2Page2PlanningContextLike,
     meal_blockers: tuple[MealBlockerCode, ...],
 ) -> KommunMealOrchestrationResult:
     unassigned_destinations = tuple(
@@ -262,7 +263,7 @@ def _build_option_result(
     service_date: _date,
     meal: str,
     option,
-    context: Product2Page2PlanningContext,
+    context: Product2Page2PlanningContextLike,
     review_service: PlanningOptionReviewService,
     blockers: set[MealBlockerCode],
 ) -> KommunMealOptionResult:
@@ -309,6 +310,17 @@ def _build_option_result(
             blocker="UNREVIEWED_OPTIONS",
         )
     if review_state.review_state not in {REVIEW_STATE_NO_DEVIATIONS, REVIEW_STATE_WITH_DEVIATIONS}:
+        blockers.add("INVALID_OPTION_PLAN")
+        return _invalid_option_result(
+            option=option,
+            assigned_destination_ids=assigned_destination_ids,
+            review_state=review_state.review_state,
+            review_is_stale=review_state.review_is_stale,
+            blocker="INVALID_OPTION_PLAN",
+        )
+
+    unresolved_destination_count = int(getattr(context, "unresolved_destination_count", 0) or 0)
+    if unresolved_destination_count > 0:
         blockers.add("INVALID_OPTION_PLAN")
         return _invalid_option_result(
             option=option,
@@ -367,6 +379,7 @@ def run_kommun_meal_orchestration(
     site_id,
     service_date,
     meal: str = "lunch",
+    option_id: str | None = None,
 ) -> KommunMealOrchestrationResult:
     normalized_tenant_id = _normalize_tenant_id(tenant_id)
     normalized_site_id = _normalize_site_id(site_id)
@@ -374,13 +387,26 @@ def run_kommun_meal_orchestration(
     normalized_meal = _normalize_meal(meal)
 
     try:
-        context = build_product2_page2_planning_context(
-            tenant_id=normalized_tenant_id,
-            site_id=normalized_site_id,
-            service_date=normalized_service_date,
-            meal=normalized_meal,
-        )
+        if option_id:
+            context = build_product2_page2_target_planning_context(
+                tenant_id=normalized_tenant_id,
+                site_id=normalized_site_id,
+                service_date=normalized_service_date,
+                meal=normalized_meal,
+                option_id=option_id,
+            )
+        else:
+            if normalized_meal != "lunch":
+                raise KommunMealOrchestrationError("meal_unsupported", "only lunch is supported without an explicit target")
+            context = build_product2_page2_planning_context(
+                tenant_id=normalized_tenant_id,
+                site_id=normalized_site_id,
+                service_date=normalized_service_date,
+                meal=normalized_meal,
+            )
     except Exception as exc:
+        if isinstance(exc, KommunMealOrchestrationError):
+            raise
         raise KommunMealOrchestrationError("context_error", str(exc)) from exc
 
     if context.publication_identity is None or context.status != "ok":
