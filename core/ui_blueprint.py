@@ -26,7 +26,12 @@ from .planning_option_review import (
     REVIEW_STATE_WITH_DEVIATIONS,
 )
 from .planera_product2_menu_vm import Product2MealOptionsError, build_product2_meal_options_vm
-from .planera_product2_page2_context import Product2Page2ContextError, build_product2_page2_planning_context, resolve_product2_page2_target
+from .planera_product2_page2_context import (
+    Product2Page2ContextError,
+    build_product2_page2_planning_context,
+    build_product2_page2_target_planning_context,
+    resolve_product2_page2_target,
+)
 from .planera_product2_page3_vm import Product2Page3VmError, build_product2_page3_vm
 from .department_requirement_group_weekday_overrides_repo import DepartmentRequirementGroupWeekdayOverridesRepo
 from datetime import date as _date
@@ -784,16 +789,23 @@ def _serialize_option_review_state(state) -> dict[str, object]:
 def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) -> dict[str, object]:
     review_service = PlanningOptionReviewService()
     review_by_option_id: dict[str, dict[str, object]] = {}
+    reviewable_variant_types = {"alt1", "alt2", "dessert", "dinner", "main"}
+    target_option_id = str(getattr(context, "target_option_id", "") or "").strip()
     for option in context.options:
-        try:
-            review_state = review_service.get_option_review_state(
-                tenant_id=int(context.tenant_id) if hasattr(context, "tenant_id") else int(session.get("tenant_id") or 0),
-                site_id=str(context.site_id),
-                service_date=service_date,
-                meal=str(context.meal),
-                option_id=str(option.option_id),
-            )
-        except PlanningOptionReviewError:
+        variant_type = str(option.variant_type)
+        option_id = str(option.option_id)
+        if variant_type in reviewable_variant_types and (variant_type != "main" or target_option_id == option_id):
+            try:
+                review_state = review_service.get_option_review_state(
+                    tenant_id=int(context.tenant_id) if hasattr(context, "tenant_id") else int(session.get("tenant_id") or 0),
+                    site_id=str(context.site_id),
+                    service_date=service_date,
+                    meal=str(context.meal),
+                    option_id=option_id,
+                )
+            except PlanningOptionReviewError:
+                review_state = None
+        else:
             review_state = None
         if review_state is not None:
             review_by_option_id[str(option.option_id)] = _serialize_option_review_state(review_state)
@@ -856,7 +868,13 @@ def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) ->
     for destination in context.destinations:
         selected_option = options_by_id.get(str(destination.selected_option_id or "")) if destination.selected_option_id else None
         if selected_option is None:
-            selected_label = "Inget explicit menyval"
+            demand_state = str(getattr(destination, "target_demand_state", "") or "")
+            if demand_state == "unresolved":
+                selected_label = "Underlag saknas"
+            elif demand_state == "resolved_zero":
+                selected_label = "Deltar inte i detta mål"
+            else:
+                selected_label = "Inget explicit menyval"
             review_vm = None
         else:
             selected_label = f"{selected_option['display_label']} · {selected_option['display_title']}"
@@ -882,6 +900,9 @@ def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) ->
                 "baseline_quantity": int(destination.baseline_quantity),
                 "selected_option_id": destination.selected_option_id,
                 "choice_source": destination.choice_source,
+                "target_demand_state": getattr(destination, "target_demand_state", None),
+                "target_demand_quantity": getattr(destination, "target_demand_quantity", None),
+                "target_demand_unresolved_reason": getattr(destination, "target_demand_unresolved_reason", None),
                 "selected_label": selected_label,
                 "requirement_groups": requirement_groups,
                 "review_state": review_vm["review_state"] if review_vm is not None else REVIEW_STATE_UNREVIEWED,
@@ -904,6 +925,11 @@ def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) ->
         "options": options,
         "destinations": destinations,
         "has_requirement_groups": any(bool(dest.get("requirement_groups")) for dest in destinations),
+        "target_option_id": getattr(context, "target_option_id", None),
+        "target_display_label": getattr(context, "target_display_label", None),
+        "target_display_title": getattr(context, "target_display_title", None),
+        "has_target_demand": bool(getattr(context, "has_target_demand", False)),
+        "unresolved_destination_count": int(getattr(context, "unresolved_destination_count", 0) or 0),
     }
 
 
@@ -960,21 +986,27 @@ def kitchen_planering_product2_day():
                 option_id=option_id,
                 meal=meal or None,
             )
+            context = build_product2_page2_target_planning_context(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                service_date=service_date,
+                meal=meal or None,
+                option_id=option_id,
+            )
         except Product2Page2ContextError:
             return abort(404)
-
-    if meal != "lunch":
-        return abort(404)
-
-    try:
-        context = build_product2_page2_planning_context(
-            tenant_id=tenant_id,
-            site_id=site_id,
-            service_date=service_date,
-            meal=meal,
-        )
-    except Product2Page2ContextError:
-        return abort(404)
+    else:
+        if meal != "lunch":
+            return abort(404)
+        try:
+            context = build_product2_page2_planning_context(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                service_date=service_date,
+                meal=meal,
+            )
+        except Product2Page2ContextError:
+            return abort(404)
 
     vm = _build_product2_page2_vm(
         context=context,
@@ -1061,7 +1093,7 @@ def kitchen_planering_product2_day_review():
     meal = str((data.get("meal") or "").strip().lower())
     option_id = str((data.get("option_id") or "").strip())
     decisions = data.get("decisions") or []
-    if not site_id or not date_raw or meal != "lunch" or not option_id:
+    if not site_id or not date_raw or not meal or not option_id:
         return jsonify({"error": "bad_request", "message": "Missing site_id/service_date/meal/option_id"}), 400
     try:
         service_date = _date.fromisoformat(date_raw)

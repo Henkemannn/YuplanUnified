@@ -14,7 +14,7 @@ from .planera_product2_page2_context import (
     Product2Page2PlanningContext,
     Product2Page2PublicationIdentity,
     Product2Page2RequirementGroupVM,
-    build_product2_page2_planning_context,
+    build_product2_page2_target_planning_context,
 )
 
 
@@ -105,7 +105,7 @@ def _normalize_service_date(value: object) -> _date:
 
 def _normalize_meal(value: object) -> str:
     meal = str(value or "").strip().lower()
-    if meal != "lunch":
+    if meal not in {"lunch", "dinner"}:
         raise PlanningOptionReviewError("meal_unsupported")
     return meal
 
@@ -239,12 +239,13 @@ class PlanningOptionReviewService:
         PlanningOptionReview.__table__.create(bind=bind, checkfirst=True)
         PlanningOptionReviewDecision.__table__.create(bind=bind, checkfirst=True)
 
-    def _load_context(self, *, tenant_id: int, site_id: str, service_date: _date, meal: str) -> Product2Page2PlanningContext:
-        return build_product2_page2_planning_context(
+    def _load_context(self, *, tenant_id: int, site_id: str, service_date: _date, meal: str, option_id: str) -> Product2Page2PlanningContext:
+        return build_product2_page2_target_planning_context(
             tenant_id=tenant_id,
             site_id=site_id,
             service_date=service_date,
             meal=meal,
+            option_id=option_id,
         )
 
     def _resolve_scope(self, *, context: Product2Page2PlanningContext, option_id: str) -> _ResolvedOptionScope:
@@ -456,6 +457,7 @@ class PlanningOptionReviewService:
             site_id=normalized_site_id,
             service_date=normalized_service_date,
             meal=normalized_meal,
+            option_id=normalized_option_id,
         )
         scope = self._resolve_scope(context=context, option_id=normalized_option_id)
         if scope.publication_identity is None or scope.option_id is None:
@@ -584,6 +586,7 @@ class PlanningOptionReviewService:
             site_id=normalized_site_id,
             service_date=normalized_service_date,
             meal=normalized_meal,
+            option_id=normalized_option_id,
         )
         scope = self._resolve_scope(context=context, option_id=normalized_option_id)
         basis = self._build_basis(

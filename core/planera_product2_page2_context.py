@@ -13,6 +13,10 @@ from .planera_product2_menu_vm import (
     Product2MealOptionsError,
     build_product2_meal_options_vm,
 )
+from .planera_v2.adapters.kommun_target_demand import (
+    KommunTargetDemandResult,
+    resolve_kommun_target_demand,
+)
 from .planera_v2.day_context_resolver import resolve_kommun_day_business_context
 from .department_menu_choice_repo import MenuChoiceRepo
 
@@ -69,6 +73,9 @@ class Product2Page2DestinationVM:
     baseline_quantity: int
     selected_option_id: str | None
     choice_source: str
+    target_demand_state: str | None = None
+    target_demand_quantity: int | None = None
+    target_demand_unresolved_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +88,11 @@ class Product2Page2PlanningContext:
     options: tuple[Product2MealOptionVM, ...]
     destinations: tuple[Product2Page2DestinationVM, ...]
     requirement_groups: tuple[Product2Page2RequirementGroupVM, ...]
+    target_option_id: str | None = None
+    target_display_label: str | None = None
+    target_display_title: str | None = None
+    has_target_demand: bool = False
+    unresolved_destination_count: int = 0
 
 
 _MEAL_DAY_NAMES = (
@@ -138,6 +150,42 @@ def _build_publication_identity(publication) -> Product2Page2PublicationIdentity
     return Product2Page2PublicationIdentity(
         builder_menu_id=str(publication.builder_menu_id),
         builder_menu_version=int(publication.builder_menu_version),
+    )
+
+
+def _build_target_option_vm(target: Product2Page2PlanningTargetVM) -> Product2MealOptionVM:
+    display_label = str(target.display_label or "").strip() or str(target.variant_type).strip().capitalize()
+    return Product2MealOptionVM(
+        option_id=str(target.builder_menu_row_id),
+        variant_type=str(target.variant_type),
+        display_label=display_label,
+        sort_order=0,
+        display_title=str(target.text),
+        composition_id=str(target.composition_id) if target.composition_id is not None else None,
+        resolved=True,
+        source_error=None,
+    )
+
+
+def _build_demand_destination_vm(
+    *,
+    destination,
+    demand: KommunTargetDemandResult,
+) -> Product2Page2DestinationVM:
+    demand_row = next((row for row in demand.destination_demands if str(row.destination_id) == str(destination.department_id)), None)
+    if demand_row is None:
+        raise Product2Page2ContextError(f"target_demand_missing:{destination.department_id}")
+    selected_option_id = demand.builder_menu_row_id if demand_row.resolution_state == "resolved_positive" else None
+    choice_source = demand_row.resolution_state
+    return Product2Page2DestinationVM(
+        destination_id=str(destination.department_id),
+        display_name=str(destination.department_name or destination.department_id),
+        baseline_quantity=int(demand_row.baseline_quantity),
+        selected_option_id=selected_option_id,
+        choice_source=choice_source,
+        target_demand_state=str(demand_row.resolution_state),
+        target_demand_quantity=int(demand_row.resolved_quantity) if demand_row.resolved_quantity is not None else None,
+        target_demand_unresolved_reason=str(demand_row.unresolved_reason) if demand_row.unresolved_reason is not None else None,
     )
 
 
@@ -386,6 +434,86 @@ def build_product2_page2_planning_context(
     )
 
 
+def build_product2_page2_target_planning_context(
+    *,
+    tenant_id,
+    site_id,
+    service_date,
+    meal,
+    option_id,
+) -> Product2Page2PlanningContext:
+    normalized_tenant_id = _normalize_tenant_id(tenant_id)
+    normalized_site_id = _normalize_site_id(site_id)
+    normalized_service_date = _normalize_service_date(service_date)
+    year, week, _weekday = normalized_service_date.isocalendar()
+
+    target = resolve_product2_page2_target(
+        tenant_id=normalized_tenant_id,
+        site_id=normalized_site_id,
+        service_date=normalized_service_date,
+        option_id=option_id,
+        meal=meal,
+    )
+    meal_for_context = str(target.meal).strip().lower()
+
+    day_context = resolve_kommun_day_business_context(
+        tenant_id=normalized_tenant_id,
+        site_id=normalized_site_id,
+        service_date=normalized_service_date,
+        meal_labels={"lunch": "Lunch", "dinner": "Dinner"},
+    )
+    demand = resolve_kommun_target_demand(context=day_context, target=target)
+
+    publication_service = CommunBuilderPublicationService()
+    publication = publication_service.get_publication_for_week(
+        tenant_id=normalized_tenant_id,
+        site_id=normalized_site_id,
+        year=year,
+        week=week,
+    )
+    publication_identity = None
+    if publication is not None:
+        publication_identity = _build_publication_identity(publication)
+
+    target_option = _build_target_option_vm(target)
+    destination_rows: list[Product2Page2DestinationVM] = []
+    participating_destinations: dict[str, Product2Page2DestinationVM] = {}
+    unresolved_destination_count = 0
+    for department in day_context.departments:
+        demand_row = next((row for row in demand.destination_demands if str(row.destination_id) == str(department.department_id)), None)
+        if demand_row is None:
+            raise Product2Page2ContextError(f"target_demand_missing:{department.department_id}")
+        destination_vm = _build_demand_destination_vm(destination=department, demand=demand)
+        destination_rows.append(destination_vm)
+        if destination_vm.target_demand_state == "resolved_positive":
+            participating_destinations[destination_vm.destination_id] = destination_vm
+        elif destination_vm.target_demand_state == "unresolved":
+            unresolved_destination_count += 1
+
+    requirement_groups = _build_requirement_groups(
+        tenant_id=normalized_tenant_id,
+        service_date=normalized_service_date,
+        meal=meal_for_context,
+        destination_by_id=participating_destinations,
+    )
+
+    return Product2Page2PlanningContext(
+        site_id=normalized_site_id,
+        service_date=normalized_service_date.isoformat(),
+        meal=meal_for_context,
+        status="ok",
+        publication_identity=publication_identity,
+        options=(target_option,),
+        destinations=tuple(destination_rows),
+        requirement_groups=requirement_groups,
+        target_option_id=target_option.option_id,
+        target_display_label=target_option.display_label,
+        target_display_title=target_option.display_title,
+        has_target_demand=True,
+        unresolved_destination_count=unresolved_destination_count,
+    )
+
+
 __all__ = [
     "Product2Page2ContextError",
     "Product2Page2DestinationVM",
@@ -395,5 +523,6 @@ __all__ = [
     "Product2Page2RequirementGroupVM",
     "Product2Page2RequirementVM",
     "build_product2_page2_planning_context",
+    "build_product2_page2_target_planning_context",
     "resolve_product2_page2_target",
 ]

@@ -42,7 +42,10 @@ from core.planning_option_review import (
     build_option_review_basis_payload,
     compute_option_review_basis_hash,
 )
-from core.planera_product2_page2_context import build_product2_page2_planning_context
+from core.planera_product2_page2_context import (
+    build_product2_page2_planning_context,
+    build_product2_page2_target_planning_context,
+)
 
 
 @dataclass
@@ -140,6 +143,7 @@ def _build_publication_snapshot(
     day: str,
     builder_menu_id: str,
     builder_menu_version: int,
+    extra_rows: list[tuple[str, str, str, int]] | None = None,
 ) -> dict:
     menu_context_flow, composition_service = _build_builder_menu_context_flow()
     current_app.extensions["builder_menu_context_flow"] = menu_context_flow
@@ -167,6 +171,16 @@ def _build_publication_snapshot(
         composition_id="comp-alt2",
         sort_order=20,
     )
+    for index, (extra_day, meal_slot, composition_name, sort_order) in enumerate(extra_rows or [], start=3):
+        composition_id = f"comp-{builder_menu_id}-{index}"
+        composition_service.create_composition(composition_id=composition_id, composition_name=composition_name)
+        menu_context_flow.add_composition_menu_row(
+            menu_id=builder_menu_id,
+            day=extra_day,
+            meal_slot=meal_slot,
+            composition_id=composition_id,
+            sort_order=sort_order,
+        )
     outcome = get_shadow_projection_reader().get_projection_for_builder_menu(
         tenant_id=tenant_id,
         site_id=site_id,
@@ -215,11 +229,18 @@ def _build_publication_snapshot(
         source="manual",
         projection_snapshot_json=__import__("json").dumps(snapshot, ensure_ascii=False, separators=(",", ":")),
     )
-    return {
-        str(row.variant_type): str(row.builder_menu_row_id)
-        for row in outcome.projection.rows
-        if str(row.day) == day and str(row.meal) == "lunch"
-    }
+    result: dict[str, str] = {}
+    for row in outcome.projection.rows:
+        key = str(row.variant_type).strip()
+        if not key:
+            continue
+        row_id = str(row.builder_menu_row_id)
+        result.setdefault(key, row_id)
+        if str(row.meal) == "dinner":
+            result.setdefault("main", row_id)
+            result.setdefault("dinner", row_id)
+            result.setdefault("dinner_alt1", row_id)
+    return result
 
 
 def _seed_scenario(
@@ -430,6 +451,76 @@ def test_zero_relevant_groups_can_complete(app_session) -> None:
     assert state.review_is_stale is False
     assert state.relevant_group_count == 0
     assert state.decision_count == 0
+
+
+def test_explicit_target_context_and_dinner_review_use_exact_target_identity(app_session) -> None:
+    service_date = date(2026, 10, 12)
+    year, week, _weekday = service_date.isocalendar()
+    site_id = f"explicit-target-{uuid.uuid4()}"
+    with app_session.app_context():
+        _seed_site(site_id)
+        dept_a = _seed_department(site_id, "Avdelning A", resident_count=18)
+        dept_b = _seed_department(site_id, "Avdelning B", resident_count=12)
+        req_a = _seed_requirement(site_id, "Glutenfri", f"req_gluten_{uuid.uuid4().hex[:8]}")
+        req_b = _seed_requirement(site_id, "Timbal", f"req_timbal_{uuid.uuid4().hex[:8]}")
+        group_a = _seed_group(dept_a["id"], [req_a], quantity=9, label="Glutenfri")
+        group_b = _seed_group(dept_b["id"], [req_b], quantity=8, label="Timbal")
+
+        option_ids = _build_publication_snapshot(
+            tenant_id=1,
+            site_id=site_id,
+            year=year,
+            week=week,
+            day="monday",
+            builder_menu_id=f"builder-menu-{uuid.uuid4().hex[:8]}",
+            builder_menu_version=1,
+            extra_rows=[
+                ("monday", "lunch_dessert", "Glassbomb", 30),
+                ("monday", "dinner_alt1", "Kalkun med rosenkål", 40),
+            ],
+        )
+
+        dessert_context = build_product2_page2_target_planning_context(
+            tenant_id=1,
+            site_id=site_id,
+            service_date=service_date,
+            meal="lunch",
+            option_id=option_ids["dessert"],
+        )
+        assert dessert_context.target_option_id == option_ids["dessert"]
+        assert dessert_context.target_display_title == "Glassbomb"
+        assert dessert_context.options[0].option_id == option_ids["dessert"]
+        assert dessert_context.options[0].variant_type == "dessert"
+        assert dessert_context.options[0].display_title == "Glassbomb"
+        assert dessert_context.meal == "lunch"
+
+        state = _service().save_option_review(
+            tenant_id=1,
+            site_id=site_id,
+            service_date=service_date,
+            meal="dinner",
+            option_id=option_ids["main"],
+            decisions=[
+                _decision(dept_a["id"], group_a["id"], NO_ADAPTATION_REQUIRED),
+                _decision(dept_b["id"], group_b["id"], NO_ADAPTATION_REQUIRED),
+            ],
+            reviewed_by_user_id=1,
+        )
+
+        assert state.review_state == REVIEW_STATE_NO_DEVIATIONS
+        assert state.review_is_stale is False
+        assert state.relevant_group_count == 2
+
+        reopened_state = _service().get_option_review_state(
+            tenant_id=1,
+            site_id=site_id,
+            service_date=service_date,
+            meal="dinner",
+            option_id=option_ids["main"],
+        )
+        assert reopened_state.review_state == REVIEW_STATE_NO_DEVIATIONS
+        assert reopened_state.review_is_stale is False
+        assert reopened_state.review_id == state.review_id
 
 
 def test_other_option_groups_are_rejected(app_session) -> None:

@@ -265,11 +265,18 @@ def _seed_publication(
             source="manual",
             projection_snapshot_json=json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")),
         )
-        return {
-            str(row.variant_type): str(row.builder_menu_row_id)
-            for row in outcome.projection.rows
-            if str(row.day) == "tuesday" and str(row.meal) == "lunch" and str(row.variant_type)
-        }
+        result: dict[str, str] = {}
+        for row in outcome.projection.rows:
+            key = str(row.variant_type).strip()
+            if not key:
+                continue
+            row_id = str(row.builder_menu_row_id)
+            result.setdefault(key, row_id)
+            if str(row.meal) == "dinner":
+                result.setdefault("main", row_id)
+                result.setdefault("dinner", row_id)
+                result.setdefault("dinner_alt1", row_id)
+        return result
 
 
 def _seed_common_page2_data(
@@ -447,6 +454,46 @@ def _seed_page2_primary_id_contract_data(app, *, site_name: str) -> dict[str, ob
     }
 
 
+def _seed_explicit_target_page2_data(
+    app,
+    *,
+    site_name: str,
+    include_groups: bool = True,
+) -> tuple[date, str, dict, dict, dict, dict, dict[str, str]]:
+    service_date = date(2026, 10, 12)
+    year, week, weekday = service_date.isocalendar()
+    site_id = _seed_site(app, site_name=site_name)
+    dept_a = _seed_department(site_id=site_id, name="Avdelning A", resident_count=18)
+    dept_b = _seed_department(site_id=site_id, name="Avdelning B", resident_count=12)
+    dept_c = _seed_department(site_id=site_id, name="Avdelning C", resident_count=16)
+    group_a = None
+    group_b = None
+
+    if include_groups:
+        req_a = _seed_requirement(site_id, "Glutenfri", f"req_gluten_{uuid.uuid4().hex[:8]}")
+        req_b = _seed_requirement(site_id, "Timbal", f"req_timbal_{uuid.uuid4().hex[:8]}")
+        group_a = _seed_group(department_id=dept_a["id"], requirement_ids=[req_a], quantity=9, label="Glutenfri")
+        group_b = _seed_group(department_id=dept_b["id"], requirement_ids=[req_b], quantity=8, label="Timbal")
+
+    row_ids = _seed_publication(
+        app,
+        site_id=site_id,
+        year=year,
+        week=week,
+        builder_menu_id=f"builder-menu-{uuid.uuid4().hex[:8]}",
+        rows=[
+            ("monday", "lunch_alt1", "Köttbullar med potatismos", 10),
+            ("monday", "lunch_alt2", "Fiskeboller med hvitsaus og råkostsalat", 20),
+            ("monday", "lunch_dessert", "Glassbomb", 30),
+            ("monday", "dinner_alt1", "Kalkun med rosenkål", 40),
+        ],
+    )
+    MenuChoiceRepo().set_choice(tenant_id=1, site_id=site_id, department_id=dept_a["id"], year=year, week=week, weekday=weekday, selected_alt="alt1")
+    MenuChoiceRepo().set_choice(tenant_id=1, site_id=site_id, department_id=dept_b["id"], year=year, week=week, weekday=weekday, selected_alt="alt2")
+    MenuChoiceRepo().set_choice(tenant_id=1, site_id=site_id, department_id=dept_c["id"], year=year, week=week, weekday=weekday, selected_alt="alt1")
+    return service_date, site_id, dept_a, dept_b, group_a, group_b, row_ids
+
+
 def test_route_requires_kitchen_roles(client_admin, app_session):
     service_date, site_id, *_rest = _seed_common_page2_data(app_session, site_name="Role Site")
     rv = client_admin.get(_page2_path(site_id, service_date), headers=_headers("viewer"))
@@ -485,6 +532,58 @@ def test_invalid_date_and_unsupported_meal_fail_closed(app_session):
     bad_meal = client.get(_page2_path(site_id, service_date, meal="dinner"), headers=_headers())
     assert bad_date.status_code == 404
     assert bad_meal.status_code == 404
+
+
+def test_explicit_target_route_renders_dinner_target(app_session):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+    service_date, site_id, dept_a, dept_b, group_a, group_b, row_ids = _seed_explicit_target_page2_data(app_session, site_name="Explicit Dinner Site")
+    from core.planning_option_review import NO_ADAPTATION_REQUIRED, PlanningOptionReviewService
+
+    PlanningOptionReviewService().save_option_review(
+        tenant_id=1,
+        site_id=site_id,
+        service_date=service_date,
+        meal="dinner",
+        option_id=row_ids["main"],
+        decisions=[
+            {"destination_id": dept_a["id"], "requirement_group_id": group_a["id"], "decision": NO_ADAPTATION_REQUIRED},
+            {"destination_id": dept_b["id"], "requirement_group_id": group_b["id"], "decision": NO_ADAPTATION_REQUIRED},
+        ],
+        reviewed_by_user_id=1,
+    )
+
+    rv = client.get(
+        _page2_path(site_id, service_date, meal="dinner") + f"&option_id={row_ids['main']}",
+        headers=_headers(),
+    )
+
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "Kalkun med rosenkål" in body
+    assert "Ändra granskning" in body
+
+
+def test_explicit_target_route_hides_review_controls_without_groups(app_session):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+    service_date, site_id, _dept_a, _dept_b, _group_a, _group_b, row_ids = _seed_explicit_target_page2_data(
+        app_session,
+        site_name="Explicit Zero Site",
+        include_groups=False,
+    )
+
+    rv = client.get(
+        _page2_path(site_id, service_date, meal="lunch") + f"&option_id={row_ids['dessert']}",
+        headers=_headers(),
+    )
+
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "Det här målet kräver ingen granskning ännu." in body
+    assert "data-page2-review-submit" not in body
 
 
 def test_two_options_render_titles_and_destination_labels(app_session):
@@ -901,8 +1000,6 @@ def test_page2_accepts_explicit_option_id_without_changing_lunch_behavior(app_se
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
     assert "Explicit Route Target Site" in html
-    assert "Alt 1" in html
-    assert "Alt 2" in html
     assert "Tisdag 8 september" in html
 
 

@@ -50,9 +50,14 @@
   {% set status = vm.status|default('no_publication') %}
   {% set options = vm.options|default([]) %}
   {% set destinations = vm.destinations|default([]) %}
+  {% if vm.has_target_demand|default(false) %}
+  {% set unresolved_destinations = destinations|selectattr('target_demand_state', 'equalto', 'unresolved')|list %}
+  {% set unassigned_destinations = unresolved_destinations %}
+  {% else %}
   {% set unassigned_destinations = destinations|selectattr('selected_option_id', 'equalto', none)|list %}
+  {% endif %}
   <div class="yp-product-shell">
-    <div class="yp-product-app" id="yp-product-app" data-theme="light" data-screen="start" data-page2-review-endpoint="{{ url_for('ui.kitchen_planering_product2_day_review') }}" data-page2-site-id="{{ vm.site_id }}" data-page2-service-date="{{ vm.service_date }}" data-page2-meal="{{ vm.meal }}">
+    <div class="yp-product-app" id="yp-product-app" data-theme="light" data-screen="start" data-page2-review-endpoint="{{ url_for('ui.kitchen_planering_product2_day_review') }}" data-page2-site-id="{{ vm.site_id }}" data-page2-service-date="{{ vm.service_date }}" data-page2-meal="{{ vm.meal }}" {% if vm.target_option_id %}data-page2-target-option-id="{{ vm.target_option_id }}"{% endif %}>
       <header class="yp-product-topbar" aria-label="YUPLAN APP SHELL — LOCKED">
         <div class="yp-product-topbar-brand">
           <img class="yp-product-topbar-brand__mark" src="{{ url_for('static', filename='brand/v1/logo/yuplan-mark-primary.svg') }}" alt="Yuplan" />
@@ -107,6 +112,16 @@
             {% endif %}
 
             {% if unassigned_destinations %}
+            {% if vm.has_target_demand|default(false) %}
+            <details class="yp-planera-page2-unassigned">
+              <summary>{{ unassigned_destinations|length }} avdelning{{ 'ar' if unassigned_destinations|length != 1 else '' }} saknar underlag</summary>
+              <div class="yp-planera-page2-unassigned__body">
+                {% for destination in unassigned_destinations %}
+                <div class="yp-planera-page2-unassigned__item">{{ destination.display_name }}</div>
+                {% endfor %}
+              </div>
+            </details>
+            {% else %}
             <details class="yp-planera-page2-unassigned">
               <summary>{{ unassigned_destinations|length }} avdelning{{ 'ar' if unassigned_destinations|length != 1 else '' }} saknar menyval</summary>
               <div class="yp-planera-page2-unassigned__body">
@@ -115,6 +130,7 @@
                 {% endfor %}
               </div>
             </details>
+            {% endif %}
             {% endif %}
 
             <div class="yp-planera-page2-panels">
@@ -191,6 +207,7 @@
                   {% endif %}
                 </section>
 
+                {% if review_groups.has_groups or not vm.has_target_demand|default(false) %}
                 <div class="yp-planera-page2-review-actions">
                   <button class="yp-planera-page2-review-submit" type="button" data-page2-review-submit>{{ option.review_cta_label }}</button>
                   <button class="yp-planera-page2-review-reset" type="button" data-page2-review-reset hidden>Återställ</button>
@@ -199,6 +216,9 @@
                     href="{{ url_for('ui.kitchen_planering_product2_day_production', ui='product2', site_id=vm.site_id, date=vm.service_date, meal=vm.meal) }}"
                   >Visa produktionsunderlag</a>
                 </div>
+                {% else %}
+                <p class="yp-planera-page2-empty__text">Det här målet kräver ingen granskning ännu.</p>
+                {% endif %}
                 <p class="yp-planera-page2-review-feedback" data-page2-review-feedback hidden></p>
 
                 <p class="yp-planera-page2-review-switch-note" data-page2-review-switch-note hidden>Spara eller återställ ändringarna först.</p>
