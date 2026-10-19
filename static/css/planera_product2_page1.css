@@ -29,8 +29,8 @@
   gap: 10px;
   padding: 10px;
   border-radius: 18px;
-  border: 1px solid rgba(3, 85, 144, 0.12);
-  background: linear-gradient(180deg, rgba(247, 251, 251, 0.96), rgba(239, 247, 248, 0.98));
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
   overflow: auto;
   scrollbar-width: none;
 }
@@ -43,9 +43,9 @@
 .planera-page1__weekday {
   min-height: 44px;
   border-radius: 14px;
-  border: 1px solid rgba(3, 85, 144, 0.12);
-  background: rgba(255, 255, 255, 0.82);
-  color: var(--planera-ink);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -62,13 +62,24 @@
   min-height: 44px;
   padding: 0 14px;
   border-radius: 14px;
-  border: 1px solid rgba(3, 85, 144, 0.12);
-  background: rgba(255, 255, 255, 0.74);
-  color: var(--planera-accent);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--accent);
   font-weight: 800;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
+}
+
+.planera-page1__weekpicker {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.planera-page1__weekpicker-select {
+  cursor: pointer;
+  font: inherit;
 }
 
 .planera-page1__weekday {
@@ -76,24 +87,24 @@
   padding: 0 12px;
   flex-direction: column;
   gap: 2px;
-  color: var(--planera-muted);
+  color: var(--muted);
   font-weight: 650;
   text-align: center;
 }
 
 .planera-page1__weekday strong {
-  color: var(--planera-ink);
+  color: var(--text);
   font-size: 0.98rem;
 }
 
 .planera-page1__weekday.is-current {
-  border-color: rgba(2, 174, 195, 0.28);
-  background: rgba(2, 174, 195, 0.10);
-  color: var(--planera-accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .planera-page1__weekday.is-current strong {
-  color: var(--planera-accent);
+  color: var(--accent);
 }
 
 .planera-page1__weekday.is-today::after {
@@ -101,8 +112,27 @@
   margin-top: 1px;
   font-size: 0.62rem;
   letter-spacing: 0.10em;
-  color: var(--planera-accent);
+  color: var(--accent);
   font-weight: 800;
+}
+
+.planera-page1__weekbar-arrow:hover,
+.planera-page1__weekbar-arrow:focus-visible,
+.planera-page1__weekday:hover,
+.planera-page1__weekday:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(2, 174, 195, 0.22);
+  outline: none;
+}
+
+.app-shell--dark .planera-page1__weekbar-arrow,
+.app-shell--dark .planera-page1__weekday,
+.app-shell--dark .planera-page1__weekday strong {
+  color: var(--yp-shell-text);
+}
+
+.app-shell--dark .planera-page1__weekbar-label {
+  color: var(--yp-shell-text);
 }
 
 .planera-page1__lunch-options {
@@ -144,13 +174,63 @@
   font-size: 0.9rem;
 }
 
-.planera-page1__cta-row {
+.planera-page1__target-list {
   display: grid;
-  justify-content: end;
-  gap: 8px;
 }
 
-.planera-page1__cta-wrap {
+.planera-page1__target-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 9.5rem) minmax(0, 1fr) max-content;
+  column-gap: 12px;
+  row-gap: 4px;
+  align-items: start;
+  min-height: 48px;
+  width: 100%;
+  padding: 12px 0;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  background: transparent;
+  text-align: left;
+  text-decoration: none;
+  color: inherit;
+}
+
+.planera-page1__target-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.planera-page1__target-label {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.15;
+}
+
+.planera-page1__target-value {
+  color: var(--text);
+  font-weight: 700;
+  min-width: 0;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.planera-page1__target-chevron {
+  color: var(--accent);
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.planera-page1__target-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.planera-page1__cta-row {
   display: grid;
   justify-items: end;
   gap: 6px;
@@ -159,49 +239,6 @@
 .planera-page1__cta-help {
   color: var(--planera-muted);
   font-size: 0.84rem;
-}
-
-.planera-page1__later-list {
-  display: grid;
-}
-
-.planera-page1__later-row {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr) max-content;
-  gap: 14px;
-  align-items: center;
-  min-height: 44px;
-  width: 100%;
-  padding: 10px 0;
-  border: 0;
-  border-top: 1px solid rgba(3, 85, 144, 0.10);
-  background: transparent;
-  text-align: left;
-}
-
-.planera-page1__later-row:first-child {
-  border-top: 0;
-  padding-top: 0;
-}
-
-.planera-page1__later-label {
-  color: var(--planera-muted);
-  font-size: 0.82rem;
-  font-weight: 850;
-  letter-spacing: 0.12em;
-  width: 68px;
-}
-
-.planera-page1__later-value {
-  color: var(--planera-ink);
-  font-weight: 700;
-  min-width: 0;
-}
-
-.planera-page1__later-empty {
-  margin: 0;
-  color: var(--planera-muted);
-  font-size: 0.9rem;
 }
 
 @media (min-width: 960px) {

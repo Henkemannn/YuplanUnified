@@ -39,6 +39,12 @@ class _FixedTodayWednesday(_date):
         return cls(2026, 10, 14)
 
 
+class _FixedTodayIsoBoundary(_date):
+    @classmethod
+    def today(cls):
+        return cls(2027, 1, 4)
+
+
 def _headers(role: str = "admin", tenant_id: str | None = "1") -> dict[str, str]:
     headers = {"X-User-Role": role}
     if tenant_id is not None:
@@ -307,6 +313,21 @@ def _weekbar_href(html: str, label: str) -> str:
     return match.group(1)
 
 
+def _weekpicker_entry(html: str, label: str):
+    escaped_label = re.escape(label)
+    match = re.search(
+        rf'<option([^>]*)value="([^"]*)"([^>]*)>\s*{escaped_label}\s*</option>',
+        html,
+        flags=re.S,
+    )
+    assert match, f"missing {label} week picker entry"
+    attrs = f"{match.group(1)}{match.group(3)}"
+    href = match.group(2) or None
+    disabled = "disabled" in attrs
+    current = "selected" in attrs
+    return {"tag": "option", "href": href, "disabled": disabled, "current": current}
+
+
 def _weekday_href(html: str, label: str) -> str:
     match = re.search(
         rf'<a class="([^"]*planera-page1__weekday[^"]*)" href="([^"]+)"(?: aria-current="date")?>\s*<span>{re.escape(label)}</span>\s*<strong>(\d+)</strong>\s*</a>',
@@ -315,6 +336,16 @@ def _weekday_href(html: str, label: str) -> str:
     )
     assert match, f"missing {label} weekday link"
     return match.group(2)
+
+
+def _target_href(html: str, label: str, title: str) -> str:
+    match = re.search(
+        rf'<a class="planera-page1__target-row" href="([^"]+)">\s*<span class="planera-page1__target-label">{re.escape(label.upper())}</span>\s*<span class="planera-page1__target-value">{re.escape(title)}</span>',
+        html,
+        flags=re.S,
+    )
+    assert match, f"missing {label} target link"
+    return match.group(1)
 
 
 def test_kitchen_planering_v1_remains_default(client_admin):
@@ -339,8 +370,7 @@ def test_kitchen_planering_product2_renders_shell_preview_only(client_admin):
     assert "planera-page1" in html
     assert "planera-page1__stack" in html
     assert "planera-page1__weekbar" in html
-    assert "planera-page1__lunch-card" in html
-    assert "planera-page1__later-card" in html
+    assert "planera-page1__targets-card" in html
     assert "app-shell__page-header" in html
     assert "css/kitchen_product_shell.css" not in html
     assert "css/planera_product2_page1.css" in html
@@ -351,19 +381,18 @@ def test_kitchen_planering_product2_renders_shell_preview_only(client_admin):
     assert "YUPLAN APP SHELL — LOCKED" not in html
     assert "Skärgårdsköket" in html
     assert "app-shell__brand-text" in html
-    assert "Ingen publicerad lunchmeny" in html
+    assert "Dagens publicerade mål" in html
+    assert "Inga publicerade mål för vald dag" in html
     assert "Fläskkarré" not in html
     assert "Kokt torsk" not in html
-    assert "Inga publicerade senare måltider." in html
     assert "Köttfärssoppa" not in html
     assert "Äppelpaj" not in html
     assert "Sallad · Mos · Övriga tillval" not in html
     assert "TILLÄGG" not in html
-    assert '<button class="planera-page1__later-row"' not in html
-    assert "planera-page1__later-chev" not in html
-    assert "Planera lunch" in html
-    assert "Planera lunch →" not in html
     assert 'href="/ui/kitchen/planering/day' not in html
+    assert "planera-page1__targets-card" in html
+    assert "planera-page1__target-list" in html
+    assert "planera-page1__target-row" not in html
     assert html.index('class="app-shell__page-header planera-page1__header"') < html.index('class="planera-page1__stack"')
     assert html.index('class="planera-page1__stack"') < html.index('class="planera-page1__weekbar"')
     assert "product-shell-preview-marker" not in html
@@ -376,10 +405,11 @@ def test_kitchen_planering_product2_renders_shell_preview_only(client_admin):
     assert 'class="app-shell__brand-copy"' in html or 'class="app-shell__brand"' in html
     assert "planera-day-product2" not in html
     assert "Välj dag och måltid" not in html
+    assert "Välj dag för att se dagens publicerade mål." in html
     assert "Probe site" not in html
 
 
-def test_kitchen_planering_product2_published_lunch_cta_links_to_page2_with_selected_day(client_admin):
+def test_kitchen_planering_product2_published_targets_link_to_page2_with_selected_day(client_admin):
     site_id = _seed_site(client_admin.application, site_name="CTA Site")
     _seed_product2_publication(
         client_admin.application,
@@ -393,8 +423,8 @@ def test_kitchen_planering_product2_published_lunch_cta_links_to_page2_with_sele
     html_tuesday = _product2_html(client_admin, site_id, query="&year=2026&week=40&day=1")
     html_wednesday = _product2_html(client_admin, site_id, query="&year=2026&week=40&day=2")
 
-    tuesday_href = next(href for href in re.findall(r'href="([^"]+)"', html_tuesday) if "/ui/kitchen/planering/day" in href)
-    wednesday_href = next(href for href in re.findall(r'href="([^"]+)"', html_wednesday) if "/ui/kitchen/planering/day" in href)
+    tuesday_href = _target_href(html_tuesday, "ALT 1", "Publicerad rätt A")
+    wednesday_href = _target_href(html_wednesday, "DESSERT", "Glassbomb")
 
     tuesday_url = urlparse(tuesday_href)
     tuesday_qs = parse_qs(tuesday_url.query)
@@ -411,10 +441,8 @@ def test_kitchen_planering_product2_published_lunch_cta_links_to_page2_with_sele
     assert wednesday_qs.get("date") == [_date.fromisocalendar(2026, 40, 3).isoformat()]
     assert tuesday_qs.get("meal") == ["lunch"]
     assert wednesday_qs.get("meal") == ["lunch"]
-    assert "option_id" not in tuesday_qs
-    assert "option_id" not in wednesday_qs
-    assert "alt1" not in tuesday_href and "alt2" not in tuesday_href
-    assert "alt1" not in wednesday_href and "alt2" not in wednesday_href
+    assert tuesday_qs.get("option_id") == ["detail-2"]
+    assert wednesday_qs.get("option_id") == ["detail-8"]
 
 
 def test_kitchen_planering_product2_without_day_defaults_to_todays_weekday_when_current_week(client_admin, monkeypatch):
@@ -438,7 +466,7 @@ def test_kitchen_planering_product2_without_day_defaults_to_todays_weekday_when_
     assert html.index("Mån") > html.index("Ons")
     assert "day=2" in _weekday_href(html, "Ons")
     assert _weekday_href(html, "Mån").endswith("day=0")
-    assert "Planera lunch" in html
+    assert "Dagens publicerade mål" in html
 
 
 def test_kitchen_planering_product2_weekday_controls_navigate_and_preserve_context(client_admin, monkeypatch):
@@ -482,14 +510,10 @@ def test_kitchen_planering_product2_no_publication_keeps_non_link_cta(client_adm
 
     html = _product2_html(client_admin, site_id, query="&year=2026&week=40&day=1")
 
-    assert "Ingen publicerad lunchmeny" in html
-    assert "Publicera lunchmenyn för att börja planera." in html
-    assert ">Planera lunch<" in html
+    assert "Inga publicerade mål för vald dag" in html
     assert 'href="/ui/kitchen/planering/day' not in html
-    assert 'planera-page1__cta' in html
-    assert 'type="button" disabled aria-disabled="true"' in html
-    assert '<a class="planera-page1__cta"' not in html
-    assert 'planera-page1__cta-help' in html
+    assert 'planera-page1__target-row' not in html
+    assert 'planera-page1__target-empty' in html
 
 
 def test_kitchen_planering_product2_no_publication_does_not_offer_active_page2_cta(client_admin):
@@ -498,8 +522,8 @@ def test_kitchen_planering_product2_no_publication_does_not_offer_active_page2_c
     html = _product2_html(client_admin, site_id, query="&year=2026&week=40&day=1")
 
     assert 'href="/ui/kitchen/planering/day' not in html
-    assert 'ui=product2' not in html or 'class="planera-page1__cta" href=' not in html
-    assert 'disabled aria-disabled="true"' in html
+    assert 'ui=product2' not in html or 'class="planera-page1__target-row" href=' not in html
+    assert 'planera-page1__target-empty' in html
 
 
 def test_kitchen_planering_product2_published_lunch_renders_publication_titles(client_admin):
@@ -515,6 +539,7 @@ def test_kitchen_planering_product2_published_lunch_renders_publication_titles(c
 
     html = _product2_html(client_admin, site_id, query="&year=2026&week=40&day=1")
 
+    assert "Dagens publicerade mål" in html
     assert "Publicerad rätt A" in html
     assert "Publicerad rätt B" in html
     assert "Fläskkarré" not in html
@@ -569,7 +594,7 @@ def test_kitchen_planering_product2_three_option_lunch_renders_collection(client
     assert "Publicerad rätt B" in html
     assert "Publicerad rätt C" in html
     assert html.index("Publicerad rätt A") < html.index("Publicerad rätt B") < html.index("Publicerad rätt C")
-    assert html.count("planera-page1__option") >= 3
+    assert html.count("planera-page1__target-row") == 5
 
 
 def test_kitchen_planering_product2_unresolved_free_text_renders_exactly(client_admin):
@@ -689,6 +714,100 @@ def test_kitchen_planering_product2_weekbar_hrefs_preserve_product2_context(clie
     assert "onclick=\"location.href" not in html
 
 
+def test_kitchen_planering_product2_week_selector_compact_availability(client_admin, monkeypatch):
+    monkeypatch.setattr("core.ui_blueprint._date", _FixedTodayWednesday)
+    site_id = _seed_site(client_admin.application, site_name="Week Selector Site")
+    _seed_product2_publication(
+        client_admin.application,
+        site_id=site_id,
+        year=2026,
+        week=40,
+        builder_menu_id="builder-menu-week-40",
+        builder_menu_version=1,
+    )
+    _seed_product2_publication(
+        client_admin.application,
+        site_id=site_id,
+        year=2026,
+        week=42,
+        builder_menu_id="builder-menu-week-42",
+        builder_menu_version=1,
+    )
+
+    html = _product2_html(client_admin, site_id, query="&year=2026&week=42")
+
+    assert '<div class="planera-page1__weekpicker">' in html
+    assert "<details" not in html
+    assert "Details" not in html
+    assert re.search(r'<select[^>]*class="[^"]*planera-page1__weekpicker-select[^"]*"', html)
+    assert 'aria-label="Vecka"' in html
+
+    week40 = _weekpicker_entry(html, "Vecka 40")
+    week41 = _weekpicker_entry(html, "Vecka 41")
+    week42 = _weekpicker_entry(html, "Vecka 42")
+    week43 = _weekpicker_entry(html, "Vecka 43")
+
+    assert week40["tag"] == "option"
+    assert week40["href"] is not None and "ui=product2" in week40["href"]
+    assert "year=2026" in week40["href"] and "week=40" in week40["href"]
+
+    assert week41["tag"] == "option"
+    assert week41["disabled"] is True
+
+    assert week42["tag"] == "option"
+    assert week42["current"] is True
+    assert "week=42" in (week42["href"] or "")
+
+    assert week43["tag"] == "option"
+    assert week43["disabled"] is True
+
+
+def test_kitchen_planering_product2_week_selector_has_native_change_wiring():
+    app_shell_js = Path("static/js/app_shell.js").read_text(encoding="utf-8")
+
+    assert "planera-page1__weekpicker-select" in app_shell_js
+    assert "window.location.assign(value)" in app_shell_js
+    assert "planera-page1__weekpicker-trigger" not in app_shell_js
+    assert "panel.hidden" not in app_shell_js
+
+
+def test_kitchen_planering_product2_week_selector_handles_iso_year_boundary(client_admin, monkeypatch):
+    monkeypatch.setattr("core.ui_blueprint._date", _FixedTodayIsoBoundary)
+    site_id = _seed_site(client_admin.application, site_name="Boundary Selector Site")
+    _seed_product2_publication(
+        client_admin.application,
+        site_id=site_id,
+        year=2026,
+        week=52,
+        builder_menu_id="builder-menu-boundary-52",
+        builder_menu_version=1,
+    )
+    _seed_product2_publication(
+        client_admin.application,
+        site_id=site_id,
+        year=2027,
+        week=1,
+        builder_menu_id="builder-menu-boundary-1",
+        builder_menu_version=1,
+    )
+
+    html = _product2_html(client_admin, site_id, query="&year=2027&week=1")
+
+    week52 = _weekpicker_entry(html, "Vecka 52")
+    week1 = _weekpicker_entry(html, "Vecka 1")
+    week2 = _weekpicker_entry(html, "Vecka 2")
+
+    assert week52["tag"] == "option"
+    assert "year=2026" in (week52["href"] or "")
+    assert "week=52" in (week52["href"] or "")
+    assert week1["tag"] == "option"
+    assert week1["current"] is True
+    assert "year=2027" in (week1["href"] or "")
+    assert "week=1" in (week1["href"] or "")
+    assert week2["tag"] == "option"
+    assert week2["disabled"] is True
+
+
 def test_kitchen_planering_product2_missing_tenant_fails_closed(client_admin):
     site_id = _seed_site(client_admin.application, site_name="Tenant Guard Site")
     fresh_client = client_admin.application.test_client()
@@ -726,6 +845,23 @@ def test_kitchen_planering_product2_published_menu_seam_uses_projection(client_a
     assert [option.display_title for option in lunch.options] == ["Publicerad rätt A", "Publicerad rätt B"]
     assert [option.sort_order for option in lunch.options] == [10, 20]
     assert [option.variant_type for option in lunch.options] == ["alt1", "alt2"]
+    assert [target["option_id"] for target in vm["targets"]] == ["detail-2", "detail-3", "detail-6", "detail-7"]
+    assert [target["meal"] for target in vm["targets"]] == ["lunch", "lunch", "lunch", "dinner"]
+    assert [target["display_label"] for target in vm["targets"]] == ["Alt 1", "Alt 2", "Dessert", "Kvällsmat"]
+    target_url_1 = urlparse(str(vm["targets"][0]["target_url"]))
+    target_url_2 = urlparse(str(vm["targets"][1]["target_url"]))
+    assert target_url_1.path == "/ui/kitchen/planering/day"
+    assert target_url_2.path == "/ui/kitchen/planering/day"
+    assert parse_qs(target_url_1.query).get("ui") == ["product2"]
+    assert parse_qs(target_url_2.query).get("ui") == ["product2"]
+    assert parse_qs(target_url_1.query).get("site_id") == [site_id]
+    assert parse_qs(target_url_2.query).get("site_id") == [site_id]
+    assert parse_qs(target_url_1.query).get("date") == ["2026-09-29"]
+    assert parse_qs(target_url_2.query).get("date") == ["2026-09-29"]
+    assert parse_qs(target_url_1.query).get("meal") == ["lunch"]
+    assert parse_qs(target_url_2.query).get("meal") == ["lunch"]
+    assert parse_qs(target_url_1.query).get("option_id") == ["detail-2"]
+    assert parse_qs(target_url_2.query).get("option_id") == ["detail-3"]
     assert vm["later_today"] == [
         {"label": "Kvällsmat", "meal": "dinner", "variant_type": "main", "title": "Fiskekake med grønnkålslaw med eple"},
         {"label": "Dessert", "meal": "dessert", "variant_type": "dessert", "title": "Glassbomb"},
@@ -758,9 +894,9 @@ def test_kitchen_planering_product2_later_today_tracks_publication_truth(client_
         assert "Äppelpaj" not in html
         assert "Sallad · Mos · Övriga tillval" not in html
         assert "TILLÄGG" not in html
-        assert '<button class="planera-page1__later-row"' not in html
-        assert "planera-page1__later-chev" not in html
-        assert html.count("planera-page1__later-row") == 2
+        assert "Senare idag" not in html
+        assert "planera-page1__target-row" in html
+        assert html.count("planera-page1__target-row") >= 1
 
 
 def test_kitchen_planering_product2_sunday_lunch_only_renders_single_option(client_admin):
@@ -785,16 +921,14 @@ def test_kitchen_planering_product2_sunday_lunch_only_renders_single_option(clie
 
     html = _product2_html(client_admin, site_id, query="&year=2026&week=42&day=6")
     assert "Söndagsrätt" in html
-    assert html.count("planera-page1__option-kicker") == 1
+    assert html.count("planera-page1__target-row") == 3
     assert "ALT 1" in html
     assert "Alt 2" not in html
     assert "Fransk kyllingsuppe" in html
     assert "Glassbomb" in html
-    assert "TILLÄGG" not in html
     assert "Köttfärssoppa" not in html
     assert "Äppelpaj" not in html
-    assert '<button class="planera-page1__later-row"' not in html
-    assert "planera-page1__later-chev" not in html
+    assert "Senare idag" not in html
 
 
 def test_kitchen_planering_product2_no_publication_does_not_fall_back_to_legacy(client_admin):
@@ -945,7 +1079,9 @@ def test_product2_page_css_is_page_only():
         ".planera-page1",
         ".planera-page1__stack",
         ".planera-page1__weekbar",
-        ".planera-page1__lunch-options",
-        ".planera-page1__later-list",
+        ".planera-page1__weekpicker",
+        ".planera-page1__weekpicker-select",
+        ".planera-page1__target-list",
+        ".planera-page1__target-row",
     ]:
         assert selector in css

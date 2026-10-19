@@ -218,7 +218,23 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   };
 
+  const initProduct2WeekSelect = () => {
+    root.querySelectorAll(".planera-page1__weekpicker-select").forEach((select) => {
+      select.addEventListener("change", () => {
+        const value = select.value || "";
+        if (!value) {
+          return;
+        }
+        if (select.selectedOptions && select.selectedOptions.length > 0 && select.selectedOptions[0].disabled) {
+          return;
+        }
+        window.location.assign(value);
+      });
+    });
+  };
+
   initWeekPicker();
+  initProduct2WeekSelect();
 
   document.addEventListener("click", (event) => {
     const target = event.target;

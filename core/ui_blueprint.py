@@ -672,46 +672,155 @@ def _build_product2_page1_menu_vm(*, tenant_id: int, site_id: str, year: int, we
     except Product2MealOptionsError as exc:
         raise RuntimeError("product2_menu_contract_error") from exc
 
-    def _unique_projection_row(*, meal: str, variant_type: str):
-        matches = [
-            row
-            for row in outcome.projection.rows
-            if str(row.day) == projection_day and str(row.meal) == meal and str(row.variant_type) == variant_type
-        ]
-        if len(matches) > 1:
+    try:
+        selected_date_iso = _date.fromisocalendar(int(year), int(week), int(selected_day) + 1).isoformat()
+    except Exception as exc:
+        raise RuntimeError("product2_menu_contract_error") from exc
+
+    lunch_by_option_id = {str(option.option_id): option for option in lunch_vm.options}
+    selected_rows = [
+        row
+        for row in outcome.projection.rows
+        if str(row.day) == projection_day
+    ]
+    selected_rows = sorted(selected_rows, key=lambda row: (int(row.sort_order), str(row.builder_menu_row_id)))
+
+    def _target_url(*, meal: str, option_id: str) -> str:
+        return (
+            "/ui/kitchen/planering/day"
+            f"?ui=product2&site_id={site_id}&date={selected_date_iso}&meal={meal}&option_id={option_id}"
+        )
+
+    targets: list[dict[str, object]] = []
+    seen_option_ids: set[str] = set()
+
+    for row in selected_rows:
+        variant_type = str(row.variant_type or "").strip().lower()
+        option_id = str(row.builder_menu_row_id or "").strip()
+        if not option_id:
             raise RuntimeError("product2_menu_contract_error")
-        return matches[0] if matches else None
+        if variant_type == "unresolved_variant":
+            raise RuntimeError("product2_menu_contract_error")
+
+        if str(row.meal) == "lunch" and variant_type != "dessert":
+            option = lunch_by_option_id.get(option_id)
+            if option is None:
+                raise RuntimeError("product2_menu_contract_error")
+            title = str(option.display_title or "").strip()
+            if not title:
+                raise RuntimeError("product2_menu_contract_error")
+            target = {
+                "option_id": option_id,
+                "meal": "lunch",
+                "variant_type": option.variant_type,
+                "display_label": option.display_label,
+                "display_title": title,
+                "sort_order": int(option.sort_order),
+                "resolved": bool(option.resolved),
+                "target_url": _target_url(meal="lunch", option_id=option_id),
+            }
+        elif str(row.meal) == "lunch" and variant_type == "dessert":
+            title = str(row.text or "").strip()
+            if not title:
+                raise RuntimeError("product2_menu_contract_error")
+            target = {
+                "option_id": option_id,
+                "meal": "lunch",
+                "variant_type": "dessert",
+                "display_label": "Dessert",
+                "display_title": title,
+                "sort_order": int(row.sort_order),
+                "resolved": bool(row.resolved),
+                "target_url": _target_url(meal="lunch", option_id=option_id),
+            }
+        elif str(row.meal) == "dinner":
+            title = str(row.text or "").strip()
+            if not title:
+                raise RuntimeError("product2_menu_contract_error")
+            target = {
+                "option_id": option_id,
+                "meal": "dinner",
+                "variant_type": variant_type or "main",
+                "display_label": "Kvällsmat",
+                "display_title": title,
+                "sort_order": int(row.sort_order),
+                "resolved": bool(row.resolved),
+                "target_url": _target_url(meal="dinner", option_id=option_id),
+            }
+        else:
+            raise RuntimeError("product2_menu_contract_error")
+
+        if option_id in seen_option_ids:
+            raise RuntimeError("product2_menu_contract_error")
+        seen_option_ids.add(option_id)
+        targets.append(target)
 
     later_today: list[dict[str, object]] = []
-    dinner_row = _unique_projection_row(meal="dinner", variant_type="main")
-    if dinner_row is not None:
-        dinner_title = str(dinner_row.text or "").strip()
-        if not dinner_title:
-            raise RuntimeError("product2_menu_contract_error")
-        later_today.append(
+    for label, meal_name in (("Kvällsmat", "dinner"), ("Dessert", "dessert")):
+        match = next((target for target in targets if target["display_label"] == label), None)
+        if match is not None:
+            later_today.append(
+                {
+                    "label": label,
+                    "meal": meal_name,
+                    "variant_type": match["variant_type"],
+                    "title": match["display_title"],
+                }
+            )
+
+    return {"status": "ok", "lunch": lunch_vm, "targets": tuple(targets), "later_today": later_today}
+
+
+def _build_product2_week_selector_vm(*, tenant_id: int, site_id: str, year: int, week: int) -> dict[str, object]:
+    try:
+        selected_monday = _date.fromisocalendar(int(year), int(week), 1)
+    except Exception as exc:
+        raise RuntimeError("product2_week_selector_contract_error") from exc
+
+    week_options: list[dict[str, object]] = []
+    try:
+        from .commun_builder_projection import get_shadow_projection_reader
+        projection_reader = get_shadow_projection_reader()
+    except Exception as exc:
+        raise RuntimeError("product2_week_selector_projection_unavailable") from exc
+
+    for offset in (-2, -1, 0, 1):
+        candidate_date = selected_monday + timedelta(weeks=offset)
+        candidate_iso = candidate_date.isocalendar()
+        candidate_year = int(candidate_iso[0])
+        candidate_week = int(candidate_iso[1])
+        available = False
+        try:
+            outcome = projection_reader.get_projection(
+                tenant_id=int(tenant_id),
+                site_id=str(site_id),
+                year=candidate_year,
+                week=candidate_week,
+            )
+            if outcome.status == "ok" and outcome.projection is not None:
+                available = any(
+                    bool(row.resolved)
+                    and str(row.variant_type or "").strip().lower() != "unresolved_variant"
+                    for row in outcome.projection.rows
+                )
+        except Exception:
+            available = False
+        week_options.append(
             {
-                "label": "Kvällsmat",
-                "meal": "dinner",
-                "variant_type": "main",
-                "title": dinner_title,
+                "year": candidate_year,
+                "week": candidate_week,
+                "label": f"Vecka {candidate_week}",
+                "available": available,
+                "selected": candidate_year == int(year) and candidate_week == int(week),
+                "url": (
+                    f"/ui/kitchen/planering?ui=product2&site_id={site_id}&year={candidate_year}&week={candidate_week}"
+                    if available
+                    else None
+                ),
             }
         )
 
-    dessert_row = _unique_projection_row(meal="lunch", variant_type="dessert")
-    if dessert_row is not None:
-        dessert_title = str(dessert_row.text or "").strip()
-        if not dessert_title:
-            raise RuntimeError("product2_menu_contract_error")
-        later_today.append(
-            {
-                "label": "Dessert",
-                "meal": "dessert",
-                "variant_type": "dessert",
-                "title": dessert_title,
-            }
-        )
-
-    return {"status": "ok", "lunch": lunch_vm, "later_today": later_today}
+    return {"options": tuple(week_options)}
 
 
 _PRODUCT2_PAGE2_WEEKDAY_NAMES = (
@@ -3748,6 +3857,12 @@ def kitchen_planering_v1():
                 selected_day=int(page1_vm.get("selected_day") if isinstance(page1_vm.get("selected_day"), int) else 0),
             )
             page1_vm["later_today"] = list((page1_vm.get("menu") or {}).get("later_today") or [])
+            page1_vm["week_selector"] = _build_product2_week_selector_vm(
+                tenant_id=int(current_tenant_id),
+                site_id=site_id,
+                year=year,
+                week=week,
+            )
         except Exception:
             return abort(500)
 
