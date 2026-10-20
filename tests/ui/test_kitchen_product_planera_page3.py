@@ -152,7 +152,8 @@ def _page3_vm() -> Product2Page3VM:
         normal_matrix=normal_matrix,
         special_production_groups=special_production_groups,
         special_destination_groups=special_destination_groups,
-        page2_url="/ui/kitchen/planering/day?ui=product2&site_id=site-1&date=2026-09-08&meal=lunch",
+        page1_url="/ui/kitchen/planering?ui=product2&site_id=site-1&year=2026&week=37&day=1",
+        page2_url="/ui/kitchen/planering/day?ui=product2&site_id=site-1&date=2026-09-08&meal=lunch&option_id=option-1",
         navigation_urls={
             "overview": "/ui/kitchen/planering/day/production?ui=product2&site_id=site-1&date=2026-09-08&meal=lunch&view=overview",
             "normal": "/ui/kitchen/planering/day/production?ui=product2&site_id=site-1&date=2026-09-08&meal=lunch&view=normal",
@@ -388,7 +389,8 @@ def _page3_vm_hierarchy(*, view: str = "overview", special_view: str = "producti
         normal_matrix=normal_matrix,
         special_production_groups=special_production_groups,
         special_destination_groups=special_destination_groups,
-        page2_url="/ui/kitchen/planering/day?ui=product2&site_id=site-1&date=2026-09-08&meal=lunch",
+        page1_url="/ui/kitchen/planering?ui=product2&site_id=site-1&year=2026&week=37&day=1",
+        page2_url="/ui/kitchen/planering/day?ui=product2&site_id=site-1&date=2026-09-08&meal=lunch&option_id=option-1",
         navigation_urls={
             "overview": "/ui/kitchen/planering/day/production?ui=product2&site_id=site-1&date=2026-09-08&meal=lunch&view=overview",
             "normal": "/ui/kitchen/planering/day/production?ui=product2&site_id=site-1&date=2026-09-08&meal=lunch&view=normal",
@@ -426,10 +428,13 @@ def test_page3_route_renders_production_underlag(app_session, monkeypatch):
     assert "Översikt" in html
     assert "Normalkost" in html
     assert "Specialkost" in html
-    assert "Granska underlag" in html
+    assert 'data-testid="app-shell"' in html
+    assert 'app-shell__nav-item--active" href="/ui/kitchen/planering"' in html
+    assert "← Granska anpassningar" in html
+    assert "Dagens mål" not in html
+    assert 'href="/ui/kitchen/planering/day?ui=product2&amp;site_id=site-1&amp;date=2026-09-08&amp;meal=lunch&amp;option_id=' in html
     assert 'data-theme-toggle' in html
-    assert 'id="ypProductThemeToggle"' in html
-    assert 'kitchen_product_shell.js' in html
+    assert 'class="app-shell__theme-toggle"' in html
     assert 'planera_product2_page3.js' in html
     assert 'style="' not in html
     assert 'data-page3-view-link' in html
@@ -440,6 +445,7 @@ def test_page3_route_renders_production_underlag(app_session, monkeypatch):
     assert 'data-page3-meal=' in html
     assert 'data-page3-year=' in html
     assert 'data-page3-week=' in html
+    assert 'href="/ui/kitchen/planering/day?ui=product2&amp;site_id=site-1&amp;date=2026-09-08&amp;meal=lunch&amp;option_id=' in html
 
 
 def test_page3_route_renders_completion_button_for_ready_targets(app_session, monkeypatch):

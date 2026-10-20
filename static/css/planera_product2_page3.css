@@ -1,3 +1,32 @@
+/* The app shell owns the viewport; this page owns only its content. */
+.yp-product-shell {
+  width: 100%;
+  min-height: 0;
+  overflow: visible;
+  background: transparent;
+}
+
+#yp-product-app {
+  width: 100%;
+  max-width: none;
+  min-height: 0;
+  display: block;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.yp-product-panel {
+  align-self: start;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.yp-product-panel-inner {
+  padding: 0;
+}
+
 .yp-planera-page3-shell {
   display: grid;
   gap: 16px;
@@ -5,7 +34,7 @@
   margin: 0 auto;
 }
 
-#yp-product-app {
+.app-shell #yp-product-app {
   --page3-matrix-department-width: 12rem;
   --page3-matrix-dish-width: 11.25rem;
   --page3-menu-pill-bg: rgba(255, 255, 255, 0.72);
@@ -17,10 +46,6 @@
   --page3-modifier-pill-bg: rgba(94, 62, 164, 0.14);
   --page3-modifier-pill-border: rgba(94, 62, 164, 0.26);
   --page3-modifier-pill-text: #5e3ea4;
-  --page2-page-bg:
-    radial-gradient(circle at top left, rgba(0, 174, 184, 0.22), transparent 30%),
-    radial-gradient(circle at top right, rgba(2, 174, 195, 0.14), transparent 26%),
-    linear-gradient(180deg, #eaf7f8 0%, #f5fbfb 100%);
   --page2-surface: rgba(255, 255, 255, 0.82);
   --page2-surface-strong: rgba(255, 255, 255, 0.94);
   --page2-surface-soft: rgba(255, 255, 255, 0.68);
@@ -36,11 +61,7 @@
   --page2-shadow-soft: 0 12px 28px rgba(7, 20, 38, 0.06);
 }
 
-#yp-product-app[data-theme="dark"] {
-  --page2-page-bg:
-    radial-gradient(circle at top left, rgba(2, 174, 195, 0.08), transparent 30%),
-    radial-gradient(circle at top right, rgba(2, 174, 195, 0.06), transparent 26%),
-    linear-gradient(180deg, #071426 0%, #0a1727 48%, #081420 100%);
+.app-shell--dark #yp-product-app {
   --page2-surface: rgba(10, 28, 47, 0.72);
   --page2-surface-strong: rgba(11, 31, 52, 0.92);
   --page2-surface-soft: rgba(9, 26, 44, 0.68);
@@ -57,14 +78,6 @@
   --page3-menu-pill-quiet-bg: rgba(255, 255, 255, 0.03);
   --page3-menu-pill-quiet-border: rgba(223, 247, 250, 0.14);
   --page3-menu-pill-quiet-text: rgba(238, 248, 248, 0.72);
-}
-
-.yp-product-panel {
-  align-self: start;
-}
-
-.yp-product-panel-inner {
-  padding: 16px 18px 22px;
 }
 
 .yp-planera-page3-tabs {
@@ -339,6 +352,14 @@
   flex-wrap: wrap;
 }
 
+.yp-planera-page3-hero__links {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
 .yp-planera-page3-hero__heading {
   display: grid;
   gap: 2px;
@@ -404,11 +425,11 @@
   color: #06634a;
 }
 
-#yp-product-app[data-theme="dark"] .yp-planera-page3-completion-button {
+.app-shell--dark #yp-product-app .yp-planera-page3-completion-button {
   color: #eaf7f8;
 }
 
-#yp-product-app[data-theme="dark"] .yp-planera-page3-completion-button.is-success {
+.app-shell--dark #yp-product-app .yp-planera-page3-completion-button.is-success {
   border-color: rgba(94, 214, 176, 0.32);
   background: linear-gradient(180deg, rgba(94, 214, 176, 0.18), rgba(94, 214, 176, 0.1));
   color: #c6f5e1;
@@ -425,7 +446,7 @@
   color: #06634a;
 }
 
-#yp-product-app[data-theme="dark"] .yp-planera-page3-completion-feedback.is-success {
+.app-shell--dark #yp-product-app .yp-planera-page3-completion-feedback.is-success {
   color: #c6f5e1;
 }
 
@@ -433,7 +454,7 @@
   color: #8d2d2d;
 }
 
-#yp-product-app[data-theme="dark"] .yp-planera-page3-completion-feedback.is-error {
+.app-shell--dark #yp-product-app .yp-planera-page3-completion-feedback.is-error {
   color: #ffb8b8;
 }
 
@@ -599,6 +620,10 @@
   font-weight: 800;
 }
 
+.yp-planera-page3-backlink--secondary {
+  color: var(--page2-muted);
+}
+
 .yp-planera-page3-status-pill {
   display: inline-flex;
   align-items: center;
@@ -628,7 +653,7 @@
   color: #8a4b00;
 }
 
-#yp-product-app[data-theme="dark"] .yp-planera-page3-status-pill.is-blocked {
+.app-shell--dark #yp-product-app .yp-planera-page3-status-pill.is-blocked {
   border-color: rgba(255, 182, 79, 0.26);
   color: #ffd39a;
 }

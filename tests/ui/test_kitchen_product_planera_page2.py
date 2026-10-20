@@ -620,28 +620,24 @@ def test_two_options_render_titles_and_destination_labels(app_session):
     rv = client.get(_page2_path(site_id, service_date), headers=_headers())
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
-    assert "PLANERA DAGEN" in html
+    assert 'data-testid="app-shell"' in html
+    assert 'app-shell__nav-item--active" href="/ui/kitchen/planering"' in html
+    assert "PLANERA DAGEN" not in html
     assert "Tisdag 8 september" in html
-    assert "LUNCH" in html
+    assert "Lunch" in html
     assert 'role="tablist"' in html
     assert html.count('data-page2-option-tab') == 2
     assert html.count('data-page2-option-panel') == 2
-    assert "2 val" in html
+    assert "2 val" not in html
     assert "Alt 1" in html
     assert "Fläskkarré" in html
     assert "Alt 2" in html
     assert "Kokt torsk" in html
-    assert "Avdelning A" in html
-    assert "Avdelning B" in html
-    assert "Avdelning C" in html
-    assert "Vilka kan inte äta den här rätten som den är?" in html
-    assert "LUNCH · ALT 1" in html
-    assert "KOSTBEHOV" in html
-    assert "Avdelning A" in html
-    assert "Avdelning B" in html
+    assert "Vilka avvikelser kräver anpassning?" in html
+    assert "LUNCH · ALT 1" not in html
+    assert "KOSTBEHOV" not in html
     assert "Glutenfri" in html
     assert "Timbal" in html
-    assert "Äggfri" not in html
     assert "1 avdelning saknar menyval" in html
     assert "3 menyval" not in html
     assert "Dagens planering" not in html
@@ -651,8 +647,11 @@ def test_two_options_render_titles_and_destination_labels(app_session):
     assert "1 st" not in html
     assert "destination saknar menyval" not in html
     assert "Inga relevanta kostbehov för den här rätten ännu." not in html
-    assert "Visa produktionsunderlag" in html
-    assert "/ui/kitchen/planering/day/production?ui=product2" in html
+    expected_page1_url = f"/ui/kitchen/planering?ui=product2&site_id={site_id}&year={service_date.isocalendar()[0]}&week={service_date.isocalendar()[1]}&day={service_date.isocalendar()[2] - 1}"
+    assert "← Till planeringen" in html
+    assert f'href="{expected_page1_url.replace("&", "&amp;")}"' in html
+    assert 'data-page2-production-url="' in html
+    assert "Visa produktionsunderlag" not in html
 
 
 def test_composite_requirement_identity_renders_primary_first(app_session):
@@ -660,14 +659,42 @@ def test_composite_requirement_identity_renders_primary_first(app_session):
     with client.session_transaction() as sess:
         sess["tenant_id"] = 1
     data = _seed_page2_composite_identity_data(app_session, site_name="Composite Identity Site")
+    from core.db import get_session
+
+    def _requirements_for(group_id: str) -> list[int]:
+        db = get_session()
+        try:
+            rows = db.execute(
+                text(
+                    "SELECT dietary_type_id FROM department_requirement_group_requirements WHERE group_id = :group_id ORDER BY dietary_type_id ASC"
+                ),
+                {"group_id": group_id},
+            ).fetchall()
+            return [int(row[0]) for row in rows]
+        finally:
+            db.close()
+
+    atomic_requirement_ids = _requirements_for(data["atomic_group"]["id"])
+    composite_requirement_ids = _requirements_for(data["composite_timbal_glutenfri"]["id"])
+    duplicate_atomic = _seed_group(
+        department_id=data["dept_composite"]["id"],
+        requirement_ids=atomic_requirement_ids,
+        quantity=1,
+        label="Timbal duplicate",
+    )
+    duplicate_composite = _seed_group(
+        department_id=data["dept_vegetarian"]["id"],
+        requirement_ids=composite_requirement_ids,
+        quantity=1,
+        label="Timbal",
+    )
+
     context = build_product2_page2_planning_context(
         tenant_id=1,
         site_id=data["site_id"],
         service_date=data["service_date"],
         meal="lunch",
     )
-    ctx_group = next(group for group in context.requirement_groups if group.requirement_group_id == data["composite_timbal_glutenfri"]["id"])
-    vm = None
     with client.session_transaction() as sess:
         sess["tenant_id"] = 1
     with app_session.test_request_context(_page2_path(data["site_id"], data["service_date"])):
@@ -675,28 +702,32 @@ def test_composite_requirement_identity_renders_primary_first(app_session):
 
         flask_session["tenant_id"] = 1
         vm = _build_product2_page2_vm(context=context, site_name="Composite Identity Site", service_date=data["service_date"])
-    dest_vm = next(dest for dest in vm["destinations"] if dest["destination_id"] == data["dept_atomic"]["id"])
-    group_vm = next(group for group in dest_vm["requirement_groups"] if group["requirement_group_id"] == data["composite_timbal_glutenfri"]["id"])
-    assert group_vm["primary_requirement_id"] == ctx_group.primary_requirement_id
+
+    review_groups = vm["options"][0]["review_groups"]
+    assert len(review_groups) == 4
+    assert next(group for group in review_groups if group["display_label"] == "Timbal")["members"]
+    assert len(next(group for group in review_groups if group["display_label"] == "Timbal")["members"]) == 2
+    assert len(next(group for group in review_groups if group["display_label"] == "Timbal + Glutenfri")["members"]) == 2
+    assert len(next(group for group in review_groups if group["display_label"] == "Grovpaté + Laktosfri")["members"]) == 1
+    assert len(next(group for group in review_groups if group["display_label"] == "Vegetarisk + Äggfri")["members"]) == 1
     rv = client.get(_page2_path(data["site_id"], data["service_date"]), headers=_headers())
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
 
-    assert 'data-page2-review-group-id="' + data["atomic_group"]["id"] + '"' in html
-    assert 'data-page2-review-group-id="' + data["composite_timbal_glutenfri"]["id"] + '"' in html
-    assert 'data-page2-review-group-id="' + data["composite_grovpate_laktosfri"]["id"] + '"' in html
-    assert 'data-page2-review-group-id="' + data["composite_vegetarisk_aggfri"]["id"] + '"' in html
-
-    assert 'data-page2-review-destination-id="' + data["dept_atomic"]["id"] + '"' in html
-    assert 'data-page2-review-destination-id="' + data["dept_composite"]["id"] + '"' in html
-    assert 'data-page2-review-destination-id="' + data["dept_vegetarian"]["id"] + '"' in html
-
+    assert 'data-page2-review-members=' in html
+    assert html.count('data-page2-review-members=') == 4
     assert '<span class="yp-planera-page2-review-row__label">Timbal</span>' in html
-    assert html.count('Timbal + Glutenfri') == 1
-    assert html.count('Grovpaté + Laktosfri') == 1
-    assert html.count('Vegetarisk + Äggfri') == 1
-    assert '<span class="yp-planera-page2-review-row__quantity">2</span>' in html
-    assert '<span class="yp-planera-page2-review-row__quantity">1</span>' in html
+    assert html.count('<span class="yp-planera-page2-review-row__label">Timbal</span>') == 1
+    assert html.count('<span class="yp-planera-page2-review-row__label">Timbal + Glutenfri</span>') == 1
+    assert html.count('<span class="yp-planera-page2-review-row__label">Grovpaté + Laktosfri</span>') == 1
+    assert html.count('<span class="yp-planera-page2-review-row__label">Vegetarisk + Äggfri</span>') == 1
+    assert "Avdelning A" not in html
+    assert "Avdelning B" not in html
+    assert "Avdelning C" not in html
+    assert "2 avdelningar" not in html
+    assert "1 avdelning" not in html
+    assert "yp-planera-page2-review-row__quantity" not in html
+    assert "yp-planera-page2-review-row__chevron" not in html
     assert 'data-page2-review-checkbox' in html
     assert 'data-page2-review-initial="0"' in html
 
@@ -710,15 +741,15 @@ def test_reversed_member_order_still_renders_primary_first(app_session):
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
 
-    assert 'data-page2-review-group-id="' + data["composite_timbal_glutenfri"]["id"] + '"' in html
-    assert 'data-page2-review-group-id="' + data["composite_grovpate_laktosfri"]["id"] + '"' in html
-    assert 'data-page2-review-group-id="' + data["composite_vegetarisk_aggfri"]["id"] + '"' in html
-    assert html.count('Timbal + Glutenfri') == 1
-    assert html.count('Grovpaté + Laktosfri') == 1
-    assert html.count('Vegetarisk + Äggfri') == 1
-    assert '<span class="yp-planera-page2-review-row__label">Timbal</span>' in html
-    assert 'Grovpat' in html
-    assert 'Vegetarisk' in html
+    assert html.count('<span class="yp-planera-page2-review-row__label">Timbal</span>') == 1
+    assert html.count('<span class="yp-planera-page2-review-row__label">Timbal + Glutenfri</span>') == 1
+    assert html.count('<span class="yp-planera-page2-review-row__label">Grovpaté + Laktosfri</span>') == 1
+    assert html.count('<span class="yp-planera-page2-review-row__label">Vegetarisk + Äggfri</span>') == 1
+    assert "Avdelning A" not in html
+    assert "Avdelning B" not in html
+    assert "Avdelning C" not in html
+    assert "yp-planera-page2-review-row__quantity" not in html
+    assert "yp-planera-page2-review-row__chevron" not in html
 
 
 def test_three_options_render_collection_shape(app_session):
@@ -743,7 +774,7 @@ def test_three_options_render_collection_shape(app_session):
     assert html.count('data-page2-option-tab') == 3
     assert html.count('role="tabpanel"') == 3
 
-    assert "3 val" in html
+    assert "3 val" not in html
 
 def test_missing_choice_renders_neutral_label(app_session):
     client = app_session.test_client()
@@ -771,7 +802,7 @@ def test_missing_choice_renders_neutral_label(app_session):
     assert "Avdelning B" in html
     assert "Avdelning C" in html
     assert "3 avdelningar saknar menyval" in html
-    assert "KOSTBEHOV" in html
+    assert "KOSTBEHOV" not in html
     assert "Planeringsunderlag" not in html
     assert "Dagens planering" not in html
     assert "Tilldelade destinationer" not in html
@@ -790,7 +821,7 @@ def test_no_publication_renders_empty_state_and_not_work_area(app_session):
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
     assert "Ingen publicerad lunchmeny" in html
-    assert "PLANERA DAGEN" in html
+    assert "PLANERA DAGEN" not in html
     assert "role=\"tablist\"" not in html
     assert 'data-page2-option-tab' not in html
     assert 'role="tabpanel"' not in html
@@ -817,7 +848,7 @@ def test_no_review_or_checkbox_text_exists(app_session):
     assert "Tilldelade destinationer" not in html
     assert "För tilldelade destinationer" not in html
     assert "Dagens planering" not in html
-    assert "KOSTBEHOV" in html
+    assert "KOSTBEHOV" not in html
     assert "AVDELNINGAR" not in html
     assert "1 st" not in html
 
@@ -833,9 +864,9 @@ def test_unreviewed_option_renders_review_controls(app_session):
     rv = client.get(_page2_path(site_id, service_date), headers=_headers())
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
-    assert "Vilka kan inte äta den här rätten som den är?" in html
-    assert "Markera de kostbehov som kräver en anpassning." in html
-    assert "Alla kan äta rätten som den är →" in html
+    assert "Vilka avvikelser kräver anpassning?" in html
+    assert "Markera de kostbehov som kräver en anpassning." not in html
+    assert "Ingen anpassning behövs" in html
     assert 'data-page2-review-checkbox' in html
     assert 'data-page2-review-submit' in html
 
@@ -863,6 +894,9 @@ def test_reviewed_no_deviations_renders_current_state(app_session):
     html = rv.get_data(as_text=True)
     assert rv.status_code == 200
     assert "Granskad" in html
+    assert "Visa produktionsunderlag →" in html
+    assert "Ändra granskning" in html
+    assert 'data-page2-production-url="' in html
     assert 'data-page2-review-checkbox' in html
     assert 'checked' not in html or html.count('checked') >= 0
 
@@ -890,6 +924,8 @@ def test_reviewed_with_deviations_renders_checked_groups(app_session):
     html = rv.get_data(as_text=True)
     assert rv.status_code == 200
     assert "Granskad" in html
+    assert "Visa produktionsunderlag →" in html
+    assert "Ändra granskning" in html
     assert 'data-page2-review-checkbox' in html
     assert 'checked' in html
 
@@ -935,7 +971,7 @@ def test_zero_requirement_option_still_has_completion_cta(app_session):
     rv = client.get(_page2_path(site_id, service_date), headers=_headers())
     html = rv.get_data(as_text=True)
     assert rv.status_code == 200
-    assert "Alla kan äta rätten som den är →" in html
+    assert "Ingen anpassning behövs" in html
     assert "Inga relevanta kostbehov för den här rätten ännu." in html
 
 
@@ -978,9 +1014,9 @@ def test_page2_uses_meal_scoped_route_identity(app_session):
     rv = client.get(_page2_path(site_id, service_date), headers=_headers())
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
-    assert "Route Identity Site" in html
+    assert 'data-testid="app-shell"' in html
     assert "Tisdag 8 september" in html
-    assert "LUNCH" in html
+    assert "Lunch" in html
     assert 'role="tablist"' in html
 
 
@@ -999,9 +1035,10 @@ def test_page2_accepts_explicit_option_id_without_changing_lunch_behavior(app_se
     rv = client.get(_page2_path(site_id, service_date) + "&option_id=" + row_ids["alt1"], headers=_headers())
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
-    assert "Explicit Route Target Site" in html
+    assert 'data-testid="app-shell"' in html
     assert "Tisdag 8 september" in html
-    assert "/ui/kitchen/planering/day/production?ui=product2" in html
+    assert 'data-page2-production-url="' in html
+    assert "Visa produktionsunderlag" not in html
     assert f'data-page2-target-option-id="{row_ids["alt1"]}"' in html
 
 

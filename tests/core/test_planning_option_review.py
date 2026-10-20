@@ -40,6 +40,7 @@ from core.planning_option_review import (
     REVIEW_STATE_UNREVIEWED,
     REVIEW_STATE_WITH_DEVIATIONS,
     build_option_review_basis_payload,
+    build_review_display_groups,
     compute_option_review_basis_hash,
 )
 from core.planera_product2_page2_context import (
@@ -132,6 +133,20 @@ def _seed_requirement(site_id: str, name: str, requirement_key: str) -> int:
 
 def _seed_group(department_id: str, requirement_ids: list[int], *, quantity: int, label: str) -> dict:
     return DepartmentRequirementGroupsRepo().create_group(department_id, quantity, requirement_ids, label=label)
+
+
+def _group_requirement_ids(group_id: str) -> list[int]:
+    db = get_session()
+    try:
+        rows = db.execute(
+            text(
+                "SELECT dietary_type_id FROM department_requirement_group_requirements WHERE group_id = :group_id ORDER BY dietary_type_id ASC"
+            ),
+            {"group_id": group_id},
+        ).fetchall()
+        return [int(row[0]) for row in rows]
+    finally:
+        db.close()
 
 
 def _build_publication_snapshot(
@@ -451,6 +466,31 @@ def test_zero_relevant_groups_can_complete(app_session) -> None:
     assert state.review_is_stale is False
     assert state.relevant_group_count == 0
     assert state.decision_count == 0
+
+
+def test_review_display_groups_collapse_semantic_duplicates(app_session) -> None:
+    scenario = _seed_scenario(app_session)
+    req_a = _group_requirement_ids(scenario.group_a["id"])
+    req_b = _group_requirement_ids(scenario.group_b["id"])
+    duplicate_atomic = _seed_group(scenario.dept_b["id"], req_a, quantity=1, label="Group A duplicate")
+    duplicate_composite_a = _seed_group(scenario.dept_a["id"], req_a + req_b, quantity=1, label="Group A + B")
+    duplicate_composite_b = _seed_group(scenario.dept_b["id"], req_a + req_b, quantity=1, label="Group A + B")
+
+    context = build_product2_page2_planning_context(
+        tenant_id=1,
+        site_id=scenario.site_id,
+        service_date=scenario.service_date,
+        meal="lunch",
+    )
+    rows, has_inconsistent_state = build_review_display_groups(
+        requirement_groups=context.requirement_groups,
+        decisions=(),
+    )
+
+    assert has_inconsistent_state is False
+    assert len(rows) == 4
+    assert sorted(len(row["members"]) for row in rows) == [1, 1, 2, 2]
+    assert len({row["requirement_ids"] for row in rows}) == 4
 
 
 def test_explicit_target_context_and_dinner_review_use_exact_target_identity(app_session) -> None:

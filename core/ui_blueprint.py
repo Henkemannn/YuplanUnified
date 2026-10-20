@@ -18,12 +18,12 @@ from .meal_registration_repo import MealRegistrationRepo
 from .department_requirement_group_week_grid_adapter import build_week_grid_specialkost_rows
 from .department_requirement_group_repo import DepartmentRequirementGroupsRepo
 from .planning_option_review import (
-    ADAPTATION_REQUIRED,
     PlanningOptionReviewError,
     PlanningOptionReviewService,
     REVIEW_STATE_NO_DEVIATIONS,
     REVIEW_STATE_UNREVIEWED,
     REVIEW_STATE_WITH_DEVIATIONS,
+    build_review_display_groups,
 )
 from .planera_product2_menu_vm import Product2MealOptionsError, build_product2_meal_options_vm
 from .planera_product2_page2_context import (
@@ -853,6 +853,14 @@ def _format_product2_page2_date_label(service_date: _date) -> str:
     return f"{_PRODUCT2_PAGE2_WEEKDAY_NAMES[service_date.weekday()]} {service_date.day} {_PRODUCT2_PAGE2_MONTH_NAMES[service_date.month - 1]}"
 
 
+def _build_product2_page1_url(*, site_id: str, service_date: _date) -> str:
+    service_year, service_week, service_day = service_date.isocalendar()
+    return (
+        f"/ui/kitchen/planering?ui=product2&site_id={site_id}"
+        f"&year={int(service_year)}&week={int(service_week)}&day={int(service_day) - 1}"
+    )
+
+
 def _serialize_option_review_state(state) -> dict[str, object]:
     decision_map = {
         f"{decision.destination_id}::{decision.requirement_group_id}": str(decision.decision)
@@ -865,7 +873,7 @@ def _serialize_option_review_state(state) -> dict[str, object]:
     if state.review_is_stale:
         banner_message = "Underlaget har ändrats – granska igen."
         status_label = None
-        cta_label = "Alla kan äta rätten som den är →"
+        cta_label = "Ingen anpassning behövs"
     elif is_current:
         banner_message = None
         status_label = "Granskad"
@@ -873,7 +881,7 @@ def _serialize_option_review_state(state) -> dict[str, object]:
     else:
         banner_message = None
         status_label = None
-        cta_label = "Alla kan äta rätten som den är →"
+        cta_label = "Ingen anpassning behövs"
     return {
         "review_id": int(state.review_id) if state.review_id is not None else None,
         "review_state": str(state.review_state),
@@ -898,6 +906,7 @@ def _serialize_option_review_state(state) -> dict[str, object]:
 def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) -> dict[str, object]:
     review_service = PlanningOptionReviewService()
     review_by_option_id: dict[str, dict[str, object]] = {}
+    review_state_by_option_id: dict[str, object] = {}
     reviewable_variant_types = {"alt1", "alt2", "dessert", "dinner", "main"}
     target_option_id = str(getattr(context, "target_option_id", "") or "").strip()
     for option in context.options:
@@ -916,27 +925,32 @@ def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) ->
                 review_state = None
         else:
             review_state = None
+        review_state_by_option_id[str(option.option_id)] = review_state
         if review_state is not None:
             review_by_option_id[str(option.option_id)] = _serialize_option_review_state(review_state)
 
     options = []
     options_by_id: dict[str, dict[str, object]] = {}
     for option in context.options:
-        review_vm = review_by_option_id.get(str(option.option_id), _serialize_option_review_state(type("_Empty", (), {
-            "review_id": None,
-            "review_state": REVIEW_STATE_UNREVIEWED,
-            "review_is_stale": False,
-            "review_basis_hash": None,
-            "current_basis_hash": None,
-            "reviewed_by_user_id": None,
-            "reviewed_at": None,
-            "completed_at": None,
-            "relevant_group_count": 0,
-            "decision_count": 0,
-            "no_adaptation_count": 0,
-            "adaptation_count": 0,
-            "decisions": (),
-        })()))
+        review_state = review_state_by_option_id.get(str(option.option_id))
+        if review_state is not None:
+            review_vm = review_by_option_id.get(str(option.option_id), {})
+        else:
+            review_vm = _serialize_option_review_state(type("_Empty", (), {
+                "review_id": None,
+                "review_state": REVIEW_STATE_UNREVIEWED,
+                "review_is_stale": False,
+                "review_basis_hash": None,
+                "current_basis_hash": None,
+                "reviewed_by_user_id": None,
+                "reviewed_at": None,
+                "completed_at": None,
+                "relevant_group_count": 0,
+                "decision_count": 0,
+                "no_adaptation_count": 0,
+                "adaptation_count": 0,
+                "decisions": (),
+            })())
         option_vm = {
             "option_id": option.option_id,
             "display_label": option.display_label,
@@ -953,26 +967,6 @@ def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) ->
         options.append(option_vm)
         options_by_id[str(option.option_id)] = option_vm
 
-    requirement_groups_by_destination: dict[str, list[dict[str, object]]] = {}
-    for group in context.requirement_groups:
-        requirement_groups_by_destination.setdefault(group.destination_id, []).append(
-            {
-                "requirement_group_id": group.requirement_group_id,
-                "label": group.label,
-                "effective_quantity": int(group.effective_quantity),
-                "primary_requirement_id": int(group.primary_requirement_id) if group.primary_requirement_id is not None else None,
-                "requirements": [
-                    {
-                        "dietary_type_id": int(requirement.dietary_type_id),
-                        "requirement_key": requirement.requirement_key,
-                        "name": requirement.name,
-                        "semantics": requirement.semantics,
-                    }
-                    for requirement in group.requirements
-                ],
-            }
-        )
-
     destinations = []
     for destination in context.destinations:
         selected_option = options_by_id.get(str(destination.selected_option_id or "")) if destination.selected_option_id else None
@@ -984,24 +978,8 @@ def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) ->
                 selected_label = "Deltar inte i detta mål"
             else:
                 selected_label = "Inget explicit menyval"
-            review_vm = None
         else:
             selected_label = f"{selected_option['display_label']} · {selected_option['display_title']}"
-            review_vm = review_by_option_id.get(str(destination.selected_option_id or ""))
-        requirement_groups = []
-        for group in requirement_groups_by_destination.get(destination.destination_id, []):
-            group_vm = dict(group)
-            decision_key = f"{destination.destination_id}::{group_vm['requirement_group_id']}"
-            decision_value = None
-            if review_vm is not None:
-                decision_value = review_vm["decision_map"].get(decision_key)
-            group_vm["review_decision"] = decision_value
-            group_vm["review_checked"] = bool(
-                review_vm is not None
-                and not bool(review_vm["review_is_stale"])
-                and decision_value == ADAPTATION_REQUIRED
-            )
-            requirement_groups.append(group_vm)
         destinations.append(
             {
                 "destination_id": destination.destination_id,
@@ -1013,19 +991,56 @@ def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) ->
                 "target_demand_quantity": getattr(destination, "target_demand_quantity", None),
                 "target_demand_unresolved_reason": getattr(destination, "target_demand_unresolved_reason", None),
                 "selected_label": selected_label,
-                "requirement_groups": requirement_groups,
-                "review_state": review_vm["review_state"] if review_vm is not None else REVIEW_STATE_UNREVIEWED,
-                "review_is_stale": bool(review_vm["review_is_stale"]) if review_vm is not None else False,
-                "review_status_label": review_vm["status_label"] if review_vm is not None else None,
-                "review_banner_message": review_vm["banner_message"] if review_vm is not None else None,
-                "review_cta_label": review_vm["cta_label"] if review_vm is not None else "Alla kan äta rätten som den är →",
             }
         )
+    has_target_demand = bool(getattr(context, "has_target_demand", False))
+    has_positive_participants = any(
+        (
+            destination.get("target_demand_state") == "resolved_positive"
+            if has_target_demand
+            else destination.get("selected_option_id") is not None
+        )
+        for destination in destinations
+    )
+    unresolved_destinations = tuple(
+        destination
+        for destination in destinations
+        if (
+            destination.get("target_demand_state") == "unresolved"
+            if has_target_demand
+            else destination.get("selected_option_id") is None
+        )
+    )
+
+    for option in options:
+        option_destinations = [destination for destination in destinations if str(destination.get("selected_option_id") or "") == str(option["option_id"])]
+        exact_requirement_groups: list[Product2Page2RequirementGroupVM] = []
+        for destination in context.destinations:
+            if str(destination.selected_option_id or "") != str(option["option_id"]):
+                continue
+            for group in context.requirement_groups:
+                if str(group.destination_id) == str(destination.destination_id):
+                    exact_requirement_groups.append(group)
+        review_rows, has_inconsistent_state = build_review_display_groups(
+            requirement_groups=exact_requirement_groups,
+            decisions=getattr(review_state_by_option_id.get(str(option["option_id"])), "decisions", ()) or (),
+            review_present=review_state is not None,
+        )
+        if has_inconsistent_state:
+            option["review_is_stale"] = True
+            option["review_status_label"] = None
+            option["review_banner_message"] = "Underlaget har ändrats – granska igen."
+            option["review_cta_label"] = "Ingen anpassning behövs"
+            option["review_is_current"] = False
+        option["review_groups"] = review_rows
 
     return {
         "status": context.status,
         "site_id": context.site_id,
         "site_name": site_name,
+        "site_display_name": site_name,
+        "shell_tenant_label": "Kommun",
+        "nav_context": "kitchen",
         "service_date": context.service_date,
         "service_date_label": _format_product2_page2_date_label(service_date),
         "meal": context.meal,
@@ -1037,8 +1052,11 @@ def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) ->
         "target_option_id": getattr(context, "target_option_id", None),
         "target_display_label": getattr(context, "target_display_label", None),
         "target_display_title": getattr(context, "target_display_title", None),
-        "has_target_demand": bool(getattr(context, "has_target_demand", False)),
-        "unresolved_destination_count": int(getattr(context, "unresolved_destination_count", 0) or 0),
+        "has_target_demand": has_target_demand,
+        "has_positive_participants": has_positive_participants,
+        "unresolved_destinations": unresolved_destinations,
+        "unresolved_destination_count": len(unresolved_destinations),
+        "page1_url": _build_product2_page1_url(site_id=str(context.site_id), service_date=service_date),
     }
 
 

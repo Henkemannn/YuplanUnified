@@ -1,96 +1,36 @@
-<!DOCTYPE html>
-<html lang="sv" data-theme="light">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="application-name" content="Yuplan" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="Yuplan" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)" />
-  <meta name="csrf-token" content="{{ csrf_meta_token() }}" />
-  <title>{% block page_title %}Kök – Planera dag{% endblock %}</title>
-  {% set icon_version = asset_version|default('icon-20260310') %}
-  <link rel="manifest" href="/manifest.webmanifest?v={{ icon_version }}">
-  <link rel="icon" href="/favicon.ico?v={{ icon_version }}">
-  <link rel="shortcut icon" href="/favicon.ico?v={{ icon_version }}">
-  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png?v={{ icon_version }}" sizes="180x180">
-  <link rel="mask-icon" href="/static/safari-pinned-tab.svg?v={{ icon_version }}" color="#111827">
+{% extends "ui/_layout/app_shell_base.html" %}
+
+{% block page_title %}Planera{% endblock %}
+
+{% block head_extra %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/kitchen_product_shell.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/planera_product2_page2.css') }}" />
-  <script src="{{ url_for('static', filename='js/kitchen_product_shell.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/planera_product2_page2.js') }}" defer></script>
-</head>
-<body class="yp-product-body">
-  {%- macro render_requirement_identity(group) -%}
-  {%- set primary_requirement_id = group.primary_requirement_id|default('', true)|string -%}
-  {%- set identity = namespace(primary=None, secondaries=[]) -%}
-  {%- for requirement in group.requirements|default([]) -%}
-  {%- set requirement_id = requirement.dietary_type_id|string -%}
-  {%- if primary_requirement_id and requirement_id == primary_requirement_id and identity.primary is none -%}
-  {%- set identity.primary = requirement.name -%}
-  {%- endif -%}
-  {%- endfor -%}
-  {%- if identity.primary is none -%}
-  {%- set identity.primary = group.label|default('', true) -%}
-  {%- endif -%}
-  {%- for requirement in group.requirements|default([]) -%}
-  {%- if requirement.name and requirement.name != identity.primary -%}
-  {%- set identity.secondaries = identity.secondaries + [requirement.name] -%}
-  {%- endif -%}
-  {%- endfor -%}
-  {%- if identity.primary -%}
-  {{- ([identity.primary] + identity.secondaries)|join(' + ') -}}
-  {%- else -%}
-  {{- group.label -}}
-  {%- endif -%}
-  {%- endmacro -%}
+{% endblock %}
+
+{% block content %}
   {% set status = vm.status|default('no_publication') %}
   {% set options = vm.options|default([]) %}
   {% set destinations = vm.destinations|default([]) %}
-  {% if vm.has_target_demand|default(false) %}
-  {% set unresolved_destinations = destinations|selectattr('target_demand_state', 'equalto', 'unresolved')|list %}
-  {% set unassigned_destinations = unresolved_destinations %}
-  {% else %}
-  {% set unassigned_destinations = destinations|selectattr('selected_option_id', 'equalto', none)|list %}
-  {% endif %}
+  {% set production_url = url_for('ui.kitchen_planering_product2_day_production', ui='product2', site_id=vm.site_id, date=vm.service_date, meal=vm.meal, option_id=vm.target_option_id) if vm.target_option_id else url_for('ui.kitchen_planering_product2_day_production', ui='product2', site_id=vm.site_id, date=vm.service_date, meal=vm.meal) %}
   <div class="yp-product-shell">
-    <div class="yp-product-app" id="yp-product-app" data-theme="light" data-screen="start" data-page2-review-endpoint="{{ url_for('ui.kitchen_planering_product2_day_review') }}" data-page2-site-id="{{ vm.site_id }}" data-page2-service-date="{{ vm.service_date }}" data-page2-meal="{{ vm.meal }}" {% if vm.target_option_id %}data-page2-target-option-id="{{ vm.target_option_id }}"{% endif %}>
-      <header class="yp-product-topbar" aria-label="YUPLAN APP SHELL — LOCKED">
-        <div class="yp-product-topbar-brand">
-          <img class="yp-product-topbar-brand__mark" src="{{ url_for('static', filename='brand/v1/logo/yuplan-mark-primary.svg') }}" alt="Yuplan" />
-          <div class="yp-product-topbar-brand__copy">
-            <strong>Yuplan</strong>
-            <span>· Planera</span>
-          </div>
-        </div>
-        <div class="yp-product-status-strip" aria-label="Progress and context">
-          <div class="yp-product-status-date sr-only" id="productStatusDay">{{ vm.service_date_label }}</div>
-          <div class="yp-product-status-avatar" aria-hidden="true">HJ</div>
-          <button class="yp-product-theme-toggle" id="ypProductThemeToggle" type="button" aria-pressed="false" aria-label="Växla till dark mode" data-theme-toggle>
-            <span data-theme-icon>🌙</span>
-          </button>
-        </div>
-      </header>
-
-      <main class="yp-product-panel">
+    <div class="yp-product-app" id="yp-product-app" data-theme="light" data-screen="start" data-page2-review-endpoint="{{ url_for('ui.kitchen_planering_product2_day_review') }}" data-page2-production-url="{{ production_url }}" data-page2-site-id="{{ vm.site_id }}" data-page2-service-date="{{ vm.service_date }}" data-page2-meal="{{ vm.meal }}" {% if vm.target_option_id %}data-page2-target-option-id="{{ vm.target_option_id }}"{% endif %}>
+      <div class="yp-product-panel">
         <div class="yp-product-panel-inner yp-planera-page2-panel-inner">
           <section class="yp-planera-page2-shell" aria-labelledby="yp-planera-page2-title">
             <header class="yp-planera-page2-hero">
-              <p class="yp-planera-page2-hero__kicker">PLANERA DAGEN</p>
               <h1 class="yp-planera-page2-hero__title" id="yp-planera-page2-title">{{ vm.service_date_label }}</h1>
-              <p class="yp-planera-page2-hero__site">{{ vm.site_name }}</p>
+              <p class="yp-planera-page2-hero__context">{{ vm.meal_label }}</p>
             </header>
+
+            <div class="yp-planera-page2-hero__nav">
+              <a class="yp-planera-page2-backlink" href="{{ vm.page1_url }}">← Till planeringen</a>
+            </div>
 
             {% if status != 'no_publication' %}
             {% if options %}
-            <section class="yp-planera-page2-selector" aria-labelledby="yp-planera-page2-selector-title">
-              <div class="yp-planera-page2-selector__head">
-                <h2 class="yp-planera-page2-selector__title" id="yp-planera-page2-selector-title">{{ vm.meal_label|upper }}</h2>
-                <span class="yp-planera-page2-selector__meta">{{ options|length }} val</span>
-              </div>
+            {% if options|length > 1 %}
+            <section class="yp-planera-page2-selector" aria-label="Publika menyval">
               <div class="yp-planera-page2-selector__tabs" role="tablist" aria-label="Publika menyval för lunch">
                 {% for option in options %}
                 <button
@@ -110,33 +50,21 @@
               </div>
             </section>
             {% endif %}
-
-            {% if unassigned_destinations %}
-            {% if vm.has_target_demand|default(false) %}
-            <details class="yp-planera-page2-unassigned">
-              <summary>{{ unassigned_destinations|length }} avdelning{{ 'ar' if unassigned_destinations|length != 1 else '' }} saknar underlag</summary>
-              <div class="yp-planera-page2-unassigned__body">
-                {% for destination in unassigned_destinations %}
-                <div class="yp-planera-page2-unassigned__item">{{ destination.display_name }}</div>
-                {% endfor %}
-              </div>
-            </details>
-            {% else %}
-            <details class="yp-planera-page2-unassigned">
-              <summary>{{ unassigned_destinations|length }} avdelning{{ 'ar' if unassigned_destinations|length != 1 else '' }} saknar menyval</summary>
-              <div class="yp-planera-page2-unassigned__body">
-                {% for destination in unassigned_destinations %}
-                <div class="yp-planera-page2-unassigned__item">{{ destination.display_name }}</div>
-                {% endfor %}
-              </div>
-            </details>
             {% endif %}
+
+            {% if vm.unresolved_destinations|default([]) %}
+            <details class="yp-planera-page2-unassigned">
+              <summary>{{ vm.unresolved_destinations|length }} avdelning{{ 'ar' if vm.unresolved_destinations|length != 1 else '' }} saknar menyval</summary>
+              <div class="yp-planera-page2-unassigned__body">
+                {% for destination in vm.unresolved_destinations %}
+                <div class="yp-planera-page2-unassigned__item">{{ destination.display_name }}</div>
+                {% endfor %}
+              </div>
+            </details>
             {% endif %}
 
             <div class="yp-planera-page2-panels">
               {% for option in options %}
-              {% set option_destinations = destinations|selectattr('selected_option_id', 'equalto', option.option_id)|list %}
-              {% set destination_count = option_destinations|length %}
               <section
                 class="yp-planera-page2-panel{% if loop.first %} is-active{% endif %}"
                 id="yp-planera-page2-panel-{{ loop.index }}"
@@ -148,74 +76,55 @@
                 data-page2-review-state="{{ option.review_state }}"
                 data-page2-review-stale="{{ 'true' if option.review_is_stale else 'false' }}"
               >
-                <div class="yp-planera-page2-panel__kicker">{{ vm.meal_label|upper }} · {{ option.display_label|upper }}</div>
                 <h2 class="yp-planera-page2-panel__title">{{ option.display_title }}</h2>
-                <p class="yp-planera-page2-panel__question">Vilka kan inte äta den här rätten som den är?</p>
-                <p class="yp-planera-page2-panel__instruction">Markera de kostbehov som kräver en anpassning.</p>
+                <p class="yp-planera-page2-panel__question">Vilka avvikelser kräver anpassning?</p>
 
                 <div class="yp-planera-page2-review-banner{% if option.review_is_stale %} is-warning{% elif option.review_status_label %} is-positive{% endif %}" data-page2-review-banner{% if not option.review_banner_message and not option.review_status_label %} hidden{% endif %}>
                   <span data-page2-review-status>{% if option.review_banner_message %}{{ option.review_banner_message }}{% elif option.review_status_label %}{{ option.review_status_label }}{% endif %}</span>
                 </div>
 
-                {% if destination_count == 1 %}
-                {% set primary_destination = option_destinations[0] %}
-                <div class="yp-planera-page2-destination-context">{{ primary_destination.display_name }} · {{ primary_destination.baseline_quantity }}</div>
-                {% elif destination_count > 1 %}
-                <div class="yp-planera-page2-destination-context">{{ destination_count }} avdelningar</div>
-                {% endif %}
-
                 <section class="yp-planera-page2-panel__section" aria-labelledby="yp-planera-page2-panel-{{ loop.index }}-requirements">
-                  <div class="yp-planera-page2-panel__section-head">
-                    <h3 id="yp-planera-page2-panel-{{ loop.index }}-requirements">KOSTBEHOV</h3>
-                  </div>
-                  {% set review_groups = namespace(has_groups=false) %}
-                  {% for destination in option_destinations %}
-                  {% if destination.requirement_groups|default([]) %}
-                  {% set review_groups.has_groups = true %}
-                  {% endif %}
-                  {% endfor %}
-                  {% if review_groups.has_groups %}
+                  {% set review_groups = option.review_groups|default([]) %}
+                  {% if review_groups %}
                   <div class="yp-planera-page2-requirement-list">
-                    {% for destination in option_destinations %}
-                    {% set destination_groups = destination.requirement_groups|default([]) %}
-                    {% if destination_groups %}
-                    {% if option_destinations|length > 1 %}
-                    <div class="yp-planera-page2-requirement-context">{{ destination.display_name }}</div>
-                    {% endif %}
-                    {% for group in destination_groups %}
+                    {% for group in review_groups %}
                     <label class="yp-planera-page2-review-row" data-page2-review-row>
                       <input
                         class="yp-planera-page2-review-row__input"
                         type="checkbox"
                         data-page2-review-checkbox
-                        data-page2-review-destination-id="{{ destination.destination_id }}"
-                        data-page2-review-group-id="{{ group.requirement_group_id }}"
+                        data-page2-review-members='{{ group.members|tojson }}'
                         data-page2-review-initial="{{ '1' if group.review_checked else '0' }}"
+                        {% if group.review_is_mixed %}data-page2-review-mixed="true"{% endif %}
                         {% if group.review_checked %}checked{% endif %}
                       />
                       <span class="yp-planera-page2-review-row__mark" aria-hidden="true"></span>
-                      <span class="yp-planera-page2-review-row__label">{{ render_requirement_identity(group) }}</span>
-                      <span class="yp-planera-page2-review-row__quantity">{{ group.effective_quantity }}</span>
-                      <span class="yp-planera-page2-review-row__chevron" aria-hidden="true">›</span>
+                      <span class="yp-planera-page2-review-row__label">{{ group.display_label }}</span>
                     </label>
                     {% endfor %}
-                    {% endif %}
-                    {% endfor %}
                   </div>
+                  {% elif vm.has_target_demand|default(false) and vm.unresolved_destination_count|default(0) > 0 and not vm.has_positive_participants|default(false) %}
+                  <p class="yp-planera-page2-empty__title">Kan inte granskas ännu</p>
+                  <p class="yp-planera-page2-empty__text">{{ vm.unresolved_destination_count }} avdelning{{ 'ar' if vm.unresolved_destination_count != 1 else '' }} saknar menyval.</p>
+                  {% elif vm.has_target_demand|default(false) and not vm.has_positive_participants|default(false) %}
+                  <p class="yp-planera-page2-empty__text">Ingen beställning för det här målet.</p>
                   {% else %}
                   <p class="yp-planera-page2-empty__text">Inga relevanta kostbehov för den här rätten ännu.</p>
                   {% endif %}
                 </section>
 
-                {% if review_groups.has_groups or not vm.has_target_demand|default(false) %}
-                <div class="yp-planera-page2-review-actions">
-                  <button class="yp-planera-page2-review-submit" type="button" data-page2-review-submit>{{ option.review_cta_label }}</button>
+                {% if review_groups or not vm.has_target_demand|default(false) %}
+                <div class="yp-planera-page2-review-actions{% if option.review_is_current %} is-reviewed{% endif %}">
+                  {% if option.review_is_current %}
+                  <a class="yp-planera-page2-review-submit" href="{{ production_url }}" data-page2-production-link>Visa produktionsunderlag →</a>
+                  <button class="yp-planera-page2-review-edit" type="button" data-page2-review-edit>Ändra granskning</button>
+                  {% endif %}
+                  <button class="yp-planera-page2-review-submit{% if option.review_is_current %} is-edit-submit{% endif %}" type="button" data-page2-review-submit{% if option.review_is_current %} hidden{% endif %}>{{ "Spara och visa produktionsunderlag →" if option.review_is_current or option.review_is_stale or review_groups else option.review_cta_label }}</button>
+                  <button class="yp-planera-page2-review-no-adaptation" type="button" data-page2-review-no-adaptation>Ingen anpassning behövs →</button>
                   <button class="yp-planera-page2-review-reset" type="button" data-page2-review-reset hidden>Återställ</button>
-                  <a
-                    class="yp-planera-page2-production-link"
-                    href="{{ url_for('ui.kitchen_planering_product2_day_production', ui='product2', site_id=vm.site_id, date=vm.service_date, meal=vm.meal, option_id=vm.target_option_id) if vm.target_option_id else url_for('ui.kitchen_planering_product2_day_production', ui='product2', site_id=vm.site_id, date=vm.service_date, meal=vm.meal) }}"
-                  >Visa produktionsunderlag</a>
                 </div>
+                {% elif vm.has_target_demand|default(false) and vm.unresolved_destination_count|default(0) > 0 and not vm.has_positive_participants|default(false) %}
+                <p class="yp-planera-page2-empty__text">Granskning blir möjlig när alla menyval är klara.</p>
                 {% else %}
                 <p class="yp-planera-page2-empty__text">Det här målet kräver ingen granskning ännu.</p>
                 {% endif %}
@@ -233,8 +142,7 @@
             {% endif %}
           </section>
         </div>
-      </main>
+      </div>
     </div>
   </div>
-</body>
-</html>
+{% endblock %}

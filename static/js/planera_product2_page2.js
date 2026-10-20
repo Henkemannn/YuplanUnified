@@ -8,11 +8,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const panels = new Map(
     Array.from(root.querySelectorAll("[data-page2-option-panel]")).map((panel) => [panel.id, panel]),
   );
-  if (!tabs.length || !panels.size) {
+  if (!panels.size) {
     return;
   }
 
   const reviewEndpoint = root.dataset.page2ReviewEndpoint || "/ui/kitchen/planering/day/review";
+  const productionUrl = root.dataset.page2ProductionUrl || "";
   const siteId = root.dataset.page2SiteId || "";
   const serviceDate = root.dataset.page2ServiceDate || "";
   const meal = root.dataset.page2Meal || "lunch";
@@ -41,15 +42,43 @@ document.addEventListener("DOMContentLoaded", () => {
       return panelStateById.get(panel.id);
     }
 
+    const parseMembers = (input) => {
+      const raw = input.dataset.page2ReviewMembers || "";
+      if (!raw) {
+        const destinationId = input.dataset.page2ReviewDestinationId || "";
+        const requirementGroupId = input.dataset.page2ReviewGroupId || "";
+        if (!destinationId || !requirementGroupId) {
+          return [];
+        }
+        return [{
+          destination_id: destinationId,
+          requirement_group_id: requirementGroupId,
+        }];
+      }
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (_error) {
+        return [];
+      }
+    };
+
     const controls = Array.from(panel.querySelectorAll("[data-page2-review-checkbox]")).map((input) => ({
       input,
       initialChecked: input.getAttribute("data-page2-review-initial") === "1" || input.checked,
+      mixed: input.getAttribute("data-page2-review-mixed") === "true",
+      members: parseMembers(input),
     }));
     const submitButton = panel.querySelector("[data-page2-review-submit]");
     const resetButton = panel.querySelector("[data-page2-review-reset]");
     const feedback = panel.querySelector("[data-page2-review-feedback]");
     const banner = panel.querySelector("[data-page2-review-banner]");
     const status = panel.querySelector("[data-page2-review-status]");
+    const editButton = panel.querySelector("[data-page2-review-edit]");
+    const noAdaptationButton = panel.querySelector("[data-page2-review-no-adaptation]");
+    const currentReview = !panel.dataset.page2ReviewStale &&
+      (panel.dataset.page2ReviewState === "REVIEWED_NO_DEVIATIONS" ||
+        panel.dataset.page2ReviewState === "REVIEWED_WITH_DEVIATIONS");
     const state = {
       panel,
       optionId,
@@ -63,6 +92,22 @@ document.addEventListener("DOMContentLoaded", () => {
       status,
       dirty: false,
       saving: false,
+      editing: !currentReview,
+    };
+
+    const syncEditability = () => {
+      state.controls.forEach((control) => {
+        control.input.disabled = currentReview && !state.editing;
+      });
+      if (editButton) {
+        editButton.hidden = !currentReview || state.editing;
+      }
+      if (noAdaptationButton) {
+        noAdaptationButton.hidden = currentReview && !state.editing;
+      }
+      if (state.submitButton) {
+        state.submitButton.hidden = currentReview && !state.editing;
+      }
     };
 
     const syncDirty = () => {
@@ -79,6 +124,7 @@ document.addEventListener("DOMContentLoaded", () => {
         switchNote.textContent = "";
       }
       refreshSubmitLabel(state);
+      syncEditability();
     };
 
     const refreshStatus = () => {
@@ -108,12 +154,9 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       const checkedCount = currentState.controls.filter((control) => control.input.checked).length;
       const hasControls = currentState.controls.length > 0;
-      const currentReview = !currentState.reviewIsStale && (currentState.reviewState === "REVIEWED_NO_DEVIATIONS" || currentState.reviewState === "REVIEWED_WITH_DEVIATIONS");
-      let label = "Alla kan äta rätten som den är →";
+      let label = "Ingen anpassning behövs";
       if (hasControls && checkedCount > 0) {
-        label = currentState.dirty || !currentReview ? "Bekräfta anpassningar →" : "Ändra granskning";
-      } else if (currentReview && hasControls) {
-        label = "Ändra granskning";
+        label = "Spara och visa produktionsunderlag →";
       }
       currentState.submitButton.textContent = label;
       currentState.submitButton.disabled = currentState.saving;
@@ -126,10 +169,53 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     controls.forEach((control) => {
+      control.input.indeterminate = control.mixed && !control.input.checked;
       control.input.addEventListener("change", () => {
+        control.input.indeterminate = false;
         syncState();
       });
     });
+
+    if (editButton) {
+      editButton.addEventListener("click", () => {
+        state.editing = true;
+        state.controls.forEach((control) => {
+          control.input.disabled = false;
+        });
+        if (editButton) {
+          editButton.hidden = true;
+        }
+        if (noAdaptationButton) {
+          noAdaptationButton.hidden = false;
+        }
+        if (state.submitButton) {
+          state.submitButton.hidden = false;
+        }
+        syncPanelActiveState(state);
+      });
+    }
+
+    if (noAdaptationButton) {
+      noAdaptationButton.addEventListener("click", () => {
+        state.editing = true;
+        state.controls.forEach((control) => {
+          control.input.checked = false;
+          control.input.indeterminate = false;
+          control.input.disabled = false;
+        });
+        if (editButton) {
+          editButton.hidden = true;
+        }
+        if (noAdaptationButton) {
+          noAdaptationButton.hidden = false;
+        }
+        if (state.submitButton) {
+          state.submitButton.hidden = false;
+        }
+        syncPanelActiveState(state);
+        void saveReview(state);
+      });
+    }
 
     if (resetButton) {
       resetButton.addEventListener("click", () => {
@@ -172,12 +258,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     const checkedCount = state.controls.filter((control) => control.input.checked).length;
     const hasControls = state.controls.length > 0;
-    const currentReview = !state.reviewIsStale && (state.reviewState === "REVIEWED_NO_DEVIATIONS" || state.reviewState === "REVIEWED_WITH_DEVIATIONS");
-    let label = "Alla kan äta rätten som den är →";
+    let label = "Ingen anpassning behövs";
     if (hasControls && checkedCount > 0) {
-      label = state.dirty || !currentReview ? "Bekräfta anpassningar →" : "Ändra granskning";
-    } else if (currentReview && hasControls) {
-      label = "Ändra granskning";
+      label = "Spara och visa produktionsunderlag →";
     }
     state.submitButton.textContent = label;
     state.submitButton.disabled = state.saving;
@@ -206,11 +289,21 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     refreshSubmitLabel(state);
 
-    const decisions = state.controls.map((control) => ({
-      destination_id: control.input.dataset.page2ReviewDestinationId || "",
-      requirement_group_id: control.input.dataset.page2ReviewGroupId || "",
-      decision: control.input.checked ? "ADAPTATION_REQUIRED" : "NO_ADAPTATION_REQUIRED",
-    }));
+    const decisions = state.controls.reduce((accumulator, control) => {
+      const members = control.members && control.members.length ? control.members : [{
+        destination_id: control.input.dataset.page2ReviewDestinationId || "",
+        requirement_group_id: control.input.dataset.page2ReviewGroupId || "",
+      }];
+      const decision = control.input.checked ? "ADAPTATION_REQUIRED" : "NO_ADAPTATION_REQUIRED";
+      members.forEach((member) => {
+        accumulator.push({
+          destination_id: member.destination_id || "",
+          requirement_group_id: member.requirement_group_id || "",
+          decision,
+        });
+      });
+      return accumulator;
+    }, []);
 
     try {
       const response = await fetch(reviewEndpoint, {
@@ -247,6 +340,10 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       syncPanelActiveState(state);
       refreshStateBanner(state, review);
+      if (productionUrl) {
+        window.location.assign(productionUrl);
+        return;
+      }
       setTimeout(() => {
         if (state.feedback && state.feedback.textContent === "Sparat") {
           state.feedback.hidden = true;
@@ -372,5 +469,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const initialTab = tabs.find((tab) => tab.getAttribute("aria-selected") === "true") || tabs[0];
   if (initialTab) {
     activateTab(initialTab);
+  } else {
+    const initialPanel = panels.values().next().value;
+    initialPanel.hidden = false;
+    initialPanel.classList.add("is-active");
+    activePanelId = initialPanel.id;
+    syncPanelActiveState(getPanelState(initialPanel));
   }
 });

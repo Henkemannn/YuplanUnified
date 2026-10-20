@@ -5,13 +5,28 @@
   box-sizing: border-box;
 }
 
-html,
-body {
-  min-height: 100%;
+/* The app shell owns the viewport; this page owns only its content. */
+.yp-product-shell {
+  width: 100%;
+  min-height: 0;
+  overflow: visible;
+  background: transparent;
 }
 
-body.yp-product-body {
+#yp-product-app {
+  width: 100%;
+  max-width: none;
+  min-height: 0;
+  display: block;
   margin: 0;
+  padding: 0;
+  background: transparent;
+  position: static;
+  isolation: auto;
+}
+
+#yp-product-app::before {
+  display: none;
 }
 
 #yp-product-app {
@@ -32,24 +47,10 @@ body.yp-product-body {
   --page2-active-line: rgba(2, 174, 195, 0.32);
   --page2-shadow: 0 22px 58px rgba(7, 20, 38, 0.09);
   --page2-shadow-soft: 0 12px 28px rgba(7, 20, 38, 0.05);
-  min-height: 100vh;
-  grid-template-rows: max-content max-content;
-  position: relative;
-  isolation: isolate;
-  background: transparent;
   color: var(--page2-ink);
 }
 
-#yp-product-app::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background: var(--page2-page-bg);
-}
-
-#yp-product-app[data-theme="dark"] {
+.app-shell--dark #yp-product-app {
   --page2-page-bg:
     radial-gradient(circle at top left, rgba(2, 174, 195, 0.08), transparent 30%),
     radial-gradient(circle at top right, rgba(2, 174, 195, 0.06), transparent 26%),
@@ -77,7 +78,7 @@ body.yp-product-body {
   align-self: start;
 }
 
-#yp-product-app[data-theme="dark"] .yp-product-panel {
+.app-shell--dark #yp-product-app .yp-product-panel {
   background: linear-gradient(180deg, rgba(11, 31, 52, 0.88), rgba(9, 24, 41, 0.84));
   border: 1px solid rgba(2, 174, 195, 0.10);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.22);
@@ -116,15 +117,48 @@ body.yp-product-body {
 
 .yp-planera-page2-hero__title {
   margin: 0;
-  font-size: clamp(2.2rem, 2.2vw + 1rem, 3.3rem);
-  line-height: 0.96;
-  letter-spacing: -0.065em;
+  font-size: clamp(1.45rem, 1.3vw + 1rem, 2rem);
+  line-height: 1.1;
+  letter-spacing: -0.035em;
 }
 
-.yp-planera-page2-hero__site {
+.yp-planera-page2-hero__context {
   margin: 0;
   color: var(--page2-muted);
-  font-size: 0.92rem;
+  font-size: 0.86rem;
+  font-weight: 750;
+}
+
+.yp-planera-page2-hero__nav {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.yp-planera-page2-backlink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0.3rem 0.1rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--page2-accent-strong);
+  text-decoration: none;
+  font-weight: 800;
+}
+
+.yp-planera-page2-backlink:hover,
+.yp-planera-page2-backlink:focus-visible {
+  border-color: var(--page2-line-strong);
+}
+
+.yp-planera-page2-backlink:focus-visible {
+  outline: 2px solid var(--page2-accent);
+  outline-offset: 2px;
 }
 
 .yp-planera-page2-selector {
@@ -186,13 +220,13 @@ body.yp-product-body {
   transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
 
-#yp-product-app[data-theme="light"] .yp-planera-page2-selector__tab:not(.is-active) {
+.app-shell:not(.app-shell--dark) #yp-product-app .yp-planera-page2-selector__tab:not(.is-active) {
   border-color: rgba(15, 23, 42, 0.10);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 255, 0.96));
   color: var(--page2-ink);
 }
 
-#yp-product-app[data-theme="light"] .yp-planera-page2-selector__tab:not(.is-active):hover {
+.app-shell:not(.app-shell--dark) #yp-product-app .yp-planera-page2-selector__tab:not(.is-active):hover {
   border-color: rgba(15, 23, 42, 0.16);
   background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(247, 250, 253, 0.98));
 }
@@ -213,11 +247,11 @@ body.yp-product-body {
   box-shadow: inset 0 0 0 1px rgba(2, 174, 195, 0.08), var(--page2-shadow-soft);
 }
 
-#yp-product-app[data-theme="dark"] .yp-planera-page2-selector__tab {
+.app-shell--dark #yp-product-app .yp-planera-page2-selector__tab {
   background: rgba(9, 26, 44, 0.66);
 }
 
-#yp-product-app[data-theme="dark"] .yp-planera-page2-selector__tab.is-active {
+.app-shell--dark #yp-product-app .yp-planera-page2-selector__tab.is-active {
   background: linear-gradient(180deg, rgba(12, 39, 62, 0.96), rgba(9, 26, 44, 0.90));
 }
 
@@ -287,7 +321,7 @@ body.yp-product-body {
   box-shadow: none;
 }
 
-#yp-product-app[data-theme="dark"] .yp-planera-page2-panel {
+.app-shell--dark #yp-product-app .yp-planera-page2-panel {
   border: 1px solid rgba(2, 174, 195, 0.08);
   border-left: 0;
   border-right: 0;
@@ -325,11 +359,12 @@ body.yp-product-body {
 .yp-planera-page2-review-banner {
   display: grid;
   gap: 0;
-  padding: 0;
+  padding: 4px 8px;
   margin: 0;
-  border-radius: 14px;
-  border: 1px solid transparent;
-  background: rgba(2, 174, 195, 0.08);
+  border-radius: 6px;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
   color: var(--page2-ink);
   font-size: 0.92rem;
   font-weight: 700;
@@ -340,13 +375,13 @@ body.yp-product-body {
 }
 
 .yp-planera-page2-review-banner.is-positive {
-  border-color: rgba(2, 174, 195, 0.18);
-  background: rgba(2, 174, 195, 0.10);
+  border-left-color: rgba(2, 174, 195, 0.48);
+  background: rgba(2, 174, 195, 0.06);
 }
 
 .yp-planera-page2-review-banner.is-warning {
-  border-color: rgba(218, 138, 0, 0.22);
-  background: rgba(218, 138, 0, 0.10);
+  border-left-color: rgba(218, 138, 0, 0.72);
+  background: rgba(218, 138, 0, 0.06);
 }
 
 .yp-planera-page2-review-actions {
@@ -502,8 +537,8 @@ body.yp-product-body {
   border-bottom: 0;
 }
 
-#yp-product-app[data-theme="dark"] .yp-planera-page2-destination-row,
-#yp-product-app[data-theme="dark"] .yp-planera-page2-requirement-row {
+.app-shell--dark #yp-product-app .yp-planera-page2-destination-row,
+.app-shell--dark #yp-product-app .yp-planera-page2-requirement-row {
   border-bottom-color: rgba(2, 174, 195, 0.14);
 }
 
@@ -540,7 +575,7 @@ body.yp-product-body {
   border-bottom: 0;
 }
 
-#yp-product-app[data-theme="dark"] .yp-planera-page2-review-row {
+.app-shell--dark #yp-product-app .yp-planera-page2-review-row {
   border-bottom-color: rgba(2, 174, 195, 0.14);
 }
 
@@ -586,7 +621,7 @@ body.yp-product-body {
   line-height: 1;
 }
 
-#yp-product-app[data-theme="dark"] .yp-planera-page2-review-row__chevron {
+.app-shell--dark #yp-product-app .yp-planera-page2-review-row__chevron {
   color: var(--page2-accent);
 }
 
@@ -618,7 +653,7 @@ body.yp-product-body {
   text-align: right;
 }
 
-#yp-product-app[data-theme="dark"] .yp-planera-page2-requirement-row span {
+.app-shell--dark #yp-product-app .yp-planera-page2-requirement-row span {
   color: var(--page2-accent);
 }
 

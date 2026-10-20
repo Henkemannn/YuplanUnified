@@ -152,6 +152,7 @@ class Product2Page3VM:
     ready_label: str
     blockers: tuple[str, ...]
     blocker_messages: tuple[str, ...]
+    page1_url: str
     page2_url: str
     publication_identity: object | None
     options: tuple[Product2Page3OptionVM, ...]
@@ -258,6 +259,14 @@ def _format_service_date_compact_label(service_date: _date) -> str:
     }
     weekday = service_date.weekday()
     return f"{day_names.get(weekday, '')} {service_date.day} {month_names.get(service_date.month, '')}".strip()
+
+
+def _build_product2_page1_url(*, site_id: str, service_date: _date) -> str:
+    service_year, service_week, service_day = service_date.isocalendar()
+    return (
+        f"/ui/kitchen/planering?ui=product2&site_id={site_id}"
+        f"&year={int(service_year)}&week={int(service_week)}&day={int(service_day) - 1}"
+    )
 
 
 def _load_site_name(*, tenant_id: int, site_id: str) -> str:
@@ -986,6 +995,7 @@ def build_product2_page3_vm(
         requirement_group_display_lookup=requirement_group_display_lookup,
     )
 
+    page1_url = _build_product2_page1_url(site_id=normalized_site_id, service_date=normalized_service_date)
     base_url = (
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={normalized_site_id}"
         f"&date={normalized_service_date.isoformat()}&meal={normalized_meal}"
@@ -1045,6 +1055,7 @@ def build_product2_page3_vm(
         normal_matrix=normal_matrix,
         special_production_groups=special_production_groups,
         special_destination_groups=special_destination_groups,
+        page1_url=page1_url,
         page2_url=page2_url,
         navigation_urls=navigation_urls,
         special_navigation_urls=special_navigation_urls,

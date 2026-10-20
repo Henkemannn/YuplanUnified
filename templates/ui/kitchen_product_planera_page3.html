@@ -1,33 +1,17 @@
-<!DOCTYPE html>
-<html lang="sv" data-theme="light">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="application-name" content="Yuplan" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="Yuplan" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)" />
-  <title>{% block page_title %}Kök – Produktionsunderlag{% endblock %}</title>
-  {% set icon_version = asset_version|default('icon-20260310') %}
-  <link rel="manifest" href="/manifest.webmanifest?v={{ icon_version }}">
-  <link rel="icon" href="/favicon.ico?v={{ icon_version }}">
-  <link rel="shortcut icon" href="/favicon.ico?v={{ icon_version }}">
-  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png?v={{ icon_version }}" sizes="180x180">
-  <link rel="mask-icon" href="/static/safari-pinned-tab.svg?v={{ icon_version }}" color="#111827">
+{% extends "ui/_layout/app_shell_base.html" %}
+
+{% block page_title %}Produktionsunderlag{% endblock %}
+
+{% block head_extra %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/kitchen_product_shell.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/planera_product2_page3.css') }}" />
-  <script src="{{ url_for('static', filename='js/kitchen_product_shell.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/planera_product2_page3.js') }}" defer></script>
-</head>
-<body class="yp-product-body">
-  <div class="yp-product-shell">
+{% endblock %}
+
+{% block content %}
     <div
       class="yp-product-app"
       id="yp-product-app"
-      data-theme="light"
       data-screen="production-underlag"
       data-page3-site-id="{{ vm.site_id }}"
       data-page3-service-date="{{ vm.service_date }}"
@@ -36,24 +20,7 @@
       data-page3-week="{{ service_week }}"
       data-page3-completion-target-departments='{{ completion_department_ids | tojson }}'
     >
-      <header class="yp-product-topbar" aria-label="YUPLAN APP SHELL — LOCKED">
-        <div class="yp-product-topbar-brand">
-          <img class="yp-product-topbar-brand__mark" src="{{ url_for('static', filename='brand/v1/logo/yuplan-mark-primary.svg') }}" alt="Yuplan" />
-          <div class="yp-product-topbar-brand__copy">
-            <strong>Yuplan</strong>
-            <span>· Planera</span>
-          </div>
-        </div>
-        <div class="yp-product-status-strip" aria-label="Progress and context">
-          <div class="yp-product-status-date sr-only" id="productStatusDay">{{ vm.service_date_label }}</div>
-          <div class="yp-product-status-avatar" aria-hidden="true">HJ</div>
-          <button class="yp-product-theme-toggle" id="ypProductThemeToggle" type="button" aria-pressed="false" aria-label="Växla till dark mode" data-theme-toggle>
-            <span data-theme-icon>🌙</span>
-          </button>
-        </div>
-      </header>
-
-      <main class="yp-product-panel">
+      <div class="yp-product-panel">
         <div class="yp-product-panel-inner">
           <section class="yp-planera-page3-shell" aria-labelledby="yp-planera-page3-title">
             <header class="yp-planera-page3-hero">
@@ -61,7 +28,9 @@
                 <div class="yp-planera-page3-hero__heading">
                   <h1 class="yp-planera-page3-title" id="yp-planera-page3-title">Produktionsunderlag</h1>
                 </div>
-                <a class="yp-planera-page3-backlink" href="{{ vm.page2_url }}">Granska underlag</a>
+                <div class="yp-planera-page3-hero__links" aria-label="Navigering">
+                  <a class="yp-planera-page3-backlink" href="{{ vm.page2_url }}">← Granska anpassningar</a>
+                </div>
               </div>
               <div class="yp-planera-page3-context" aria-label="Produktionskontext">
                 <div class="yp-planera-page3-date-control" aria-label="Datum">
@@ -292,8 +261,6 @@
             </div>
           </section>
         </div>
-      </main>
+      </div>
     </div>
-  </div>
-</body>
-</html>
+{% endblock %}

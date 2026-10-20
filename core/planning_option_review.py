@@ -77,6 +77,42 @@ class _ResolvedOptionScope:
     relevant_groups: tuple[Product2Page2RequirementGroupVM, ...]
 
 
+def _review_group_signature(group: Product2Page2RequirementGroupVM) -> tuple[int, tuple[int, ...]]:
+    requirement_ids = tuple(
+        sorted(
+            int(requirement.dietary_type_id)
+            for requirement in group.requirements
+            if int(requirement.dietary_type_id) > 0
+        )
+    )
+    primary_requirement_id = int(group.primary_requirement_id) if group.primary_requirement_id is not None else 0
+    return primary_requirement_id, requirement_ids
+
+
+def _review_group_display_label(group: Product2Page2RequirementGroupVM) -> str:
+    requirements_by_id = {
+        int(requirement.dietary_type_id): str(requirement.name or "").strip()
+        for requirement in group.requirements
+        if int(requirement.dietary_type_id) > 0
+    }
+    primary_requirement_id = int(group.primary_requirement_id) if group.primary_requirement_id is not None else None
+    primary_label = ""
+    if primary_requirement_id is not None:
+        primary_label = requirements_by_id.get(primary_requirement_id, "").strip()
+    if not primary_label:
+        primary_label = str(group.label or "").strip()
+    secondary_labels = [
+        label
+        for requirement_id, label in requirements_by_id.items()
+        if requirement_id != primary_requirement_id and label and label != primary_label
+    ]
+    if primary_label:
+        return " + ".join([primary_label] + secondary_labels)
+    if secondary_labels:
+        return " + ".join(secondary_labels)
+    return str(group.label or "").strip()
+
+
 def _normalize_tenant_id(value: object) -> int:
     tenant_id = int(value)
     if tenant_id <= 0:
@@ -224,6 +260,62 @@ def build_option_review_basis_payload(
         "assigned_destination_ids": assigned_destination_ids,
         "relevant_groups": grouped_requirements,
     }
+
+
+def build_review_display_groups(
+    *,
+    requirement_groups: Iterable[Product2Page2RequirementGroupVM],
+    decisions: Iterable[PlanningOptionReviewDecisionState],
+    review_present: bool = False,
+) -> tuple[tuple[dict[str, Any], ...], bool]:
+    decision_map = {
+        f"{decision.destination_id}::{decision.requirement_group_id}": str(decision.decision)
+        for decision in decisions
+    }
+    grouped: dict[tuple[int, tuple[int, ...]], dict[str, Any]] = {}
+    for group in requirement_groups:
+        signature = _review_group_signature(group)
+        entry = grouped.get(signature)
+        if entry is None:
+            entry = {
+                "display_label": _review_group_display_label(group),
+                "primary_requirement_id": int(group.primary_requirement_id) if group.primary_requirement_id is not None else None,
+                "requirement_ids": signature[1],
+                "members": [],
+            }
+            grouped[signature] = entry
+        entry["members"].append(
+            {
+                "destination_id": str(group.destination_id),
+                "requirement_group_id": str(group.requirement_group_id),
+                "decision": decision_map.get(f"{group.destination_id}::{group.requirement_group_id}"),
+            }
+        )
+
+    rows: list[dict[str, Any]] = []
+    has_inconsistent_state = False
+    for entry in grouped.values():
+        member_decisions = [str(member.get("decision")) if member.get("decision") is not None else None for member in entry["members"]]
+        if review_present:
+            all_present = all(decision is not None for decision in member_decisions)
+            all_same = all_present and len(set(member_decisions)) == 1
+            review_is_mixed = not all_same
+            review_checked = bool(all_same and member_decisions and member_decisions[0] == ADAPTATION_REQUIRED)
+        else:
+            review_is_mixed = False
+            review_checked = False
+        has_inconsistent_state = has_inconsistent_state or review_is_mixed
+        rows.append(
+            {
+                "display_label": entry["display_label"],
+                "primary_requirement_id": entry["primary_requirement_id"],
+                "requirement_ids": entry["requirement_ids"],
+                "members": tuple(entry["members"]),
+                "review_checked": review_checked,
+                "review_is_mixed": review_is_mixed,
+            }
+        )
+    return tuple(rows), has_inconsistent_state
 
 
 def compute_option_review_basis_hash(payload: dict[str, Any]) -> str:
@@ -621,6 +713,7 @@ __all__ = [
     "PlanningOptionReviewDecisionInput",
     "PlanningOptionReviewDecisionState",
     "PlanningOptionReviewError",
+    "build_review_display_groups",
     "PlanningOptionReviewService",
     "PlanningOptionReviewState",
     "REVIEW_STATE_NO_DEVIATIONS",
