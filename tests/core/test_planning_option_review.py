@@ -35,6 +35,7 @@ from core.planning_option_review import (
     ADAPTATION_REQUIRED,
     NO_ADAPTATION_REQUIRED,
     PlanningOptionReviewError,
+    PlanningOptionReviewDecisionState,
     PlanningOptionReviewService,
     REVIEW_STATE_NO_DEVIATIONS,
     REVIEW_STATE_UNREVIEWED,
@@ -491,6 +492,44 @@ def test_review_display_groups_collapse_semantic_duplicates(app_session) -> None
     assert len(rows) == 4
     assert sorted(len(row["members"]) for row in rows) == [1, 1, 2, 2]
     assert len({row["requirement_ids"] for row in rows}) == 4
+
+
+def test_mixed_semantic_decisions_require_binary_rereview(app_session) -> None:
+    scenario = _seed_scenario(app_session)
+    duplicate_atomic = _seed_group(
+        scenario.dept_b["id"],
+        _group_requirement_ids(scenario.group_a["id"]),
+        quantity=1,
+        label="Group A duplicate",
+    )
+    context = build_product2_page2_planning_context(
+        tenant_id=1,
+        site_id=scenario.site_id,
+        service_date=scenario.service_date,
+        meal="lunch",
+    )
+    rows, has_inconsistent_state = build_review_display_groups(
+        requirement_groups=context.requirement_groups,
+        decisions=(
+            PlanningOptionReviewDecisionState(
+                destination_id=scenario.dept_a["id"],
+                requirement_group_id=scenario.group_a["id"],
+                decision=NO_ADAPTATION_REQUIRED,
+            ),
+            PlanningOptionReviewDecisionState(
+                destination_id=scenario.dept_b["id"],
+                requirement_group_id=duplicate_atomic["id"],
+                decision=ADAPTATION_REQUIRED,
+            ),
+        ),
+        review_present=True,
+    )
+
+    req_a = tuple(sorted(_group_requirement_ids(scenario.group_a["id"])))
+    mixed_row = next(row for row in rows if len(row["members"]) == 2 and row["requirement_ids"] == req_a)
+    assert has_inconsistent_state is True
+    assert mixed_row["review_is_mixed"] is True
+    assert mixed_row["review_checked"] is False
 
 
 def test_explicit_target_context_and_dinner_review_use_exact_target_identity(app_session) -> None:

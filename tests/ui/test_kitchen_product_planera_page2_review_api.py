@@ -334,6 +334,16 @@ def test_review_write_mixed_checkboxes_saves_complete_decision_set(client_admin,
     payload = resp.get_json()
     assert payload["review"]["review_state"] == "REVIEWED_WITH_DEVIATIONS"
     assert payload["review"]["decision_count"] == 2
+    reloaded = PlanningOptionReviewService().get_option_review_state(
+        tenant_id=1,
+        site_id=site_id,
+        service_date=service_date,
+        meal="lunch",
+        option_id=option_ids["alt1"],
+    )
+    assert reloaded.review_is_stale is False
+    assert reloaded.review_state == "REVIEWED_WITH_DEVIATIONS"
+    assert reloaded.review_basis_hash == reloaded.current_basis_hash
 
 
 def test_review_write_zero_requirements_accepts_empty_review(client_admin, app_session):

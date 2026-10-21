@@ -562,7 +562,7 @@ def test_explicit_target_route_renders_dinner_target(app_session):
     assert rv.status_code == 200
     body = rv.get_data(as_text=True)
     assert "Kalkun med rosenkål" in body
-    assert "Ändra granskning" in body
+    assert "Ändra" in body
 
 
 def test_explicit_target_route_hides_review_controls_without_groups(app_session):
@@ -582,8 +582,8 @@ def test_explicit_target_route_hides_review_controls_without_groups(app_session)
 
     assert rv.status_code == 200
     body = rv.get_data(as_text=True)
-    assert "Det här målet kräver ingen granskning ännu." in body
-    assert "data-page2-review-submit" not in body
+    assert "Spara och visa produktionsunderlag →" in body
+    assert "data-page2-primary-action" in body
 
 
 def test_two_options_render_titles_and_destination_labels(app_session):
@@ -851,6 +851,11 @@ def test_no_review_or_checkbox_text_exists(app_session):
     assert "KOSTBEHOV" not in html
     assert "AVDELNINGAR" not in html
     assert "1 st" not in html
+    assert "Än så länge har ingen avdelning valt " in html
+    assert "3 avdelningar saknar menyval." in html
+    assert "Kan inte granskas ännu" not in html
+    assert "Granskning blir möjlig när alla menyval är klara" not in html
+    assert 'data-page2-review-checkbox' not in html
 
 
 def test_unreviewed_option_renders_review_controls(app_session):
@@ -866,9 +871,14 @@ def test_unreviewed_option_renders_review_controls(app_session):
     html = rv.get_data(as_text=True)
     assert "Vilka avvikelser kräver anpassning?" in html
     assert "Markera de kostbehov som kräver en anpassning." not in html
-    assert "Ingen anpassning behövs" in html
+    assert "Spara och visa produktionsunderlag →" in html
+    assert "Ingen anpassning behövs" not in html
     assert 'data-page2-review-checkbox' in html
-    assert 'data-page2-review-submit' in html
+    assert 'data-page2-primary-action' in html
+    assert "1 avdelning saknar menyval" in html
+    assert "Visar endast avvikelser från avdelningar som valt den här rätten." in html
+    assert "Kan inte granskas ännu" not in html
+    assert "Granskning blir möjlig när alla menyval är klara" not in html
 
 
 def test_reviewed_no_deviations_renders_current_state(app_session):
@@ -895,10 +905,25 @@ def test_reviewed_no_deviations_renders_current_state(app_session):
     assert rv.status_code == 200
     assert "Granskad" in html
     assert "Visa produktionsunderlag →" in html
-    assert "Ändra granskning" in html
+    assert "Ändra" in html
     assert 'data-page2-production-url="' in html
+    assert 'data-page2-primary-action' in html
+    assert 'data-page2-production-link' not in html
+    assert 'data-page2-review-submit' not in html
     assert 'data-page2-review-checkbox' in html
     assert 'checked' not in html or html.count('checked') >= 0
+
+    targeted = client.get(
+        _page2_path(site_id, service_date) + f"&option_id={row_ids['alt1']}",
+        headers=_headers(),
+    )
+    targeted_html = targeted.get_data(as_text=True)
+    assert targeted.status_code == 200
+    assert 'data-page2-review-state="REVIEWED_NO_DEVIATIONS"' in targeted_html
+    assert 'data-page2-review-stale="false"' in targeted_html
+    assert 'data-page2-primary-action' in targeted_html
+    assert "Visa produktionsunderlag →" in targeted_html
+    assert 'class="yp-planera-page2-panel is-active"' in targeted_html
 
 
 def test_reviewed_with_deviations_renders_checked_groups(app_session):
@@ -925,7 +950,11 @@ def test_reviewed_with_deviations_renders_checked_groups(app_session):
     assert rv.status_code == 200
     assert "Granskad" in html
     assert "Visa produktionsunderlag →" in html
-    assert "Ändra granskning" in html
+    assert "Ändra" in html
+    assert 'data-page2-primary-action' in html
+    assert 'data-page2-production-link' not in html
+    assert 'data-page2-review-submit' not in html
+    assert "yp-button-primary" in html
     assert 'data-page2-review-checkbox' in html
     assert 'checked' in html
 
@@ -971,7 +1000,10 @@ def test_zero_requirement_option_still_has_completion_cta(app_session):
     rv = client.get(_page2_path(site_id, service_date), headers=_headers())
     html = rv.get_data(as_text=True)
     assert rv.status_code == 200
-    assert "Ingen anpassning behövs" in html
+    assert "Spara och visa produktionsunderlag →" in html
+    assert "Ingen anpassning behövs" not in html
+    assert "data-page2-production-link" not in html
+    assert 'data-page2-primary-action' in html
     assert "Inga relevanta kostbehov för den här rätten ännu." in html
 
 
@@ -1047,6 +1079,7 @@ def test_template_does_not_use_fixed_alt_fields_and_page1_remains_untouched():
     page1_tpl = Path("templates/ui/kitchen_product_shell_preview.html").read_text(encoding="utf-8")
     page1_css = Path("static/css/planera_product2_page1.css").read_text(encoding="utf-8")
     page2_css = Path("static/css/planera_product2_page2.css").read_text(encoding="utf-8")
+    page2_js = Path("static/js/planera_product2_page2.js").read_text(encoding="utf-8")
 
     assert "lunch_alt1" not in page2_tpl
     assert "lunch_alt2" not in page2_tpl
@@ -1055,3 +1088,14 @@ def test_template_does_not_use_fixed_alt_fields_and_page1_remains_untouched():
     assert "planera_product2_page2.css" not in page1_tpl
     assert "yp-planera-page2" not in page1_css
     assert "yp-planera-page2" in page2_css
+    assert page2_tpl.count("data-page2-primary-action") == 1
+    assert "data-page2-review-submit" not in page2_tpl
+    assert "data-page2-production-link" not in page2_tpl
+    assert "data-page2-review-mixed" not in page2_tpl
+    assert "indeterminate" not in page2_js
+    assert 'const reviewIsStale = panel.dataset.page2ReviewStale === "true";' in page2_js
+    assert "const currentReview = !reviewIsStale &&" in page2_js
+    assert "reviewIsStale," in page2_js
+    assert "const currentReview = !panel.dataset.page2ReviewStale &&" not in page2_js
+    assert "background: var(--page2-accent)" not in page2_css
+    assert "color: #071426" not in page2_css

@@ -66,26 +66,25 @@ document.addEventListener("DOMContentLoaded", () => {
     const controls = Array.from(panel.querySelectorAll("[data-page2-review-checkbox]")).map((input) => ({
       input,
       initialChecked: input.getAttribute("data-page2-review-initial") === "1" || input.checked,
-      mixed: input.getAttribute("data-page2-review-mixed") === "true",
       members: parseMembers(input),
     }));
-    const submitButton = panel.querySelector("[data-page2-review-submit]");
+    const primaryAction = panel.querySelector("[data-page2-primary-action]");
     const resetButton = panel.querySelector("[data-page2-review-reset]");
     const feedback = panel.querySelector("[data-page2-review-feedback]");
     const banner = panel.querySelector("[data-page2-review-banner]");
     const status = panel.querySelector("[data-page2-review-status]");
     const editButton = panel.querySelector("[data-page2-review-edit]");
-    const noAdaptationButton = panel.querySelector("[data-page2-review-no-adaptation]");
-    const currentReview = !panel.dataset.page2ReviewStale &&
+    const reviewIsStale = panel.dataset.page2ReviewStale === "true";
+    const currentReview = !reviewIsStale &&
       (panel.dataset.page2ReviewState === "REVIEWED_NO_DEVIATIONS" ||
         panel.dataset.page2ReviewState === "REVIEWED_WITH_DEVIATIONS");
     const state = {
       panel,
       optionId,
       reviewState: panel.dataset.page2ReviewState || "UNREVIEWED",
-      reviewIsStale: panel.dataset.page2ReviewStale === "true",
+      reviewIsStale,
       controls,
-      submitButton,
+      primaryAction,
       resetButton,
       feedback,
       banner,
@@ -102,12 +101,6 @@ document.addEventListener("DOMContentLoaded", () => {
       if (editButton) {
         editButton.hidden = !currentReview || state.editing;
       }
-      if (noAdaptationButton) {
-        noAdaptationButton.hidden = currentReview && !state.editing;
-      }
-      if (state.submitButton) {
-        state.submitButton.hidden = currentReview && !state.editing;
-      }
     };
 
     const syncDirty = () => {
@@ -123,8 +116,8 @@ document.addEventListener("DOMContentLoaded", () => {
         switchNote.hidden = true;
         switchNote.textContent = "";
       }
-      refreshSubmitLabel(state);
       syncEditability();
+      refreshPrimaryAction(state);
     };
 
     const refreshStatus = () => {
@@ -148,30 +141,27 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     };
 
-    const refreshSubmitLabel = (currentState) => {
-      if (!currentState.submitButton) {
+    const refreshPrimaryAction = (currentState) => {
+      if (!currentState.primaryAction) {
         return;
       }
-      const checkedCount = currentState.controls.filter((control) => control.input.checked).length;
-      const hasControls = currentState.controls.length > 0;
-      let label = "Ingen anpassning behövs";
-      if (hasControls && checkedCount > 0) {
-        label = "Spara och visa produktionsunderlag →";
-      }
-      currentState.submitButton.textContent = label;
-      currentState.submitButton.disabled = currentState.saving;
+      const currentReview = !currentState.reviewIsStale &&
+        (currentState.reviewState === "REVIEWED_NO_DEVIATIONS" ||
+          currentState.reviewState === "REVIEWED_WITH_DEVIATIONS");
+      currentState.primaryAction.textContent = currentReview && !currentState.editing
+        ? "Visa produktionsunderlag →"
+        : "Spara och visa produktionsunderlag →";
+      currentState.primaryAction.disabled = currentState.saving;
     };
 
     const syncState = () => {
       syncDirty();
       refreshStatus();
-      refreshSubmitLabel(state);
+      refreshPrimaryAction(state);
     };
 
     controls.forEach((control) => {
-      control.input.indeterminate = control.mixed && !control.input.checked;
       control.input.addEventListener("change", () => {
-        control.input.indeterminate = false;
         syncState();
       });
     });
@@ -185,35 +175,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (editButton) {
           editButton.hidden = true;
         }
-        if (noAdaptationButton) {
-          noAdaptationButton.hidden = false;
-        }
-        if (state.submitButton) {
-          state.submitButton.hidden = false;
-        }
         syncPanelActiveState(state);
-      });
-    }
-
-    if (noAdaptationButton) {
-      noAdaptationButton.addEventListener("click", () => {
-        state.editing = true;
-        state.controls.forEach((control) => {
-          control.input.checked = false;
-          control.input.indeterminate = false;
-          control.input.disabled = false;
-        });
-        if (editButton) {
-          editButton.hidden = true;
-        }
-        if (noAdaptationButton) {
-          noAdaptationButton.hidden = false;
-        }
-        if (state.submitButton) {
-          state.submitButton.hidden = false;
-        }
-        syncPanelActiveState(state);
-        void saveReview(state);
       });
     }
 
@@ -226,8 +188,15 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    if (submitButton) {
-      submitButton.addEventListener("click", () => {
+    if (primaryAction) {
+      primaryAction.addEventListener("click", () => {
+        const currentReview = !state.reviewIsStale &&
+          (state.reviewState === "REVIEWED_NO_DEVIATIONS" ||
+            state.reviewState === "REVIEWED_WITH_DEVIATIONS");
+        if (currentReview && !state.editing) {
+          window.location.assign(primaryAction.dataset.page2ProductionUrl || productionUrl);
+          return;
+        }
         void saveReview(state);
       });
     }
@@ -252,18 +221,17 @@ document.addEventListener("DOMContentLoaded", () => {
     switchNote.textContent = message || "";
   };
 
-  const refreshSubmitLabel = (state) => {
-    if (!state.submitButton) {
+  const refreshPrimaryAction = (state) => {
+    if (!state.primaryAction) {
       return;
     }
-    const checkedCount = state.controls.filter((control) => control.input.checked).length;
-    const hasControls = state.controls.length > 0;
-    let label = "Ingen anpassning behövs";
-    if (hasControls && checkedCount > 0) {
-      label = "Spara och visa produktionsunderlag →";
-    }
-    state.submitButton.textContent = label;
-    state.submitButton.disabled = state.saving;
+    const currentReview = !state.reviewIsStale &&
+      (state.reviewState === "REVIEWED_NO_DEVIATIONS" ||
+        state.reviewState === "REVIEWED_WITH_DEVIATIONS");
+    state.primaryAction.textContent = currentReview && !state.editing
+      ? "Visa produktionsunderlag →"
+      : "Spara och visa produktionsunderlag →";
+    state.primaryAction.disabled = state.saving;
   };
 
   const syncPanelActiveState = (state) => {
@@ -273,7 +241,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (state.feedback && !state.saving) {
       state.feedback.hidden = !state.feedback.textContent;
     }
-    refreshSubmitLabel(state);
+    refreshPrimaryAction(state);
   };
 
   const saveReview = async (state) => {
@@ -287,7 +255,7 @@ document.addEventListener("DOMContentLoaded", () => {
       state.feedback.textContent = "Sparar...";
       state.feedback.classList.remove("is-error", "is-success");
     }
-    refreshSubmitLabel(state);
+    refreshPrimaryAction(state);
 
     const decisions = state.controls.reduce((accumulator, control) => {
       const members = control.members && control.members.length ? control.members : [{
@@ -358,7 +326,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     } finally {
       state.saving = false;
-      refreshSubmitLabel(state);
+      refreshPrimaryAction(state);
     }
   };
 

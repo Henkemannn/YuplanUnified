@@ -34,13 +34,13 @@
               <div class="yp-planera-page2-selector__tabs" role="tablist" aria-label="Publika menyval för lunch">
                 {% for option in options %}
                 <button
-                  class="yp-planera-page2-selector__tab{% if loop.first %} is-active{% endif %}"
+                  class="yp-planera-page2-selector__tab{% if loop.first or (vm.target_option_id and option.option_id|string == vm.target_option_id|string) %} is-active{% endif %}"
                   type="button"
                   role="tab"
                   id="yp-planera-page2-tab-{{ loop.index }}"
                   aria-controls="yp-planera-page2-panel-{{ loop.index }}"
-                  aria-selected="{{ 'true' if loop.first else 'false' }}"
-                  {% if not loop.first %}tabindex="-1"{% endif %}
+                  aria-selected="{{ 'true' if loop.first or (vm.target_option_id and option.option_id|string == vm.target_option_id|string) else 'false' }}"
+                  {% if not (loop.first or (vm.target_option_id and option.option_id|string == vm.target_option_id|string)) %}tabindex="-1"{% endif %}
                   data-page2-option-tab
                 >
                   <span class="yp-planera-page2-selector__tab-kicker">{{ option.display_label }}</span>
@@ -66,11 +66,11 @@
             <div class="yp-planera-page2-panels">
               {% for option in options %}
               <section
-                class="yp-planera-page2-panel{% if loop.first %} is-active{% endif %}"
+                class="yp-planera-page2-panel{% if loop.first or (vm.target_option_id and option.option_id|string == vm.target_option_id|string) %} is-active{% endif %}"
                 id="yp-planera-page2-panel-{{ loop.index }}"
                 role="tabpanel"
                 aria-labelledby="yp-planera-page2-tab-{{ loop.index }}"
-                {% if not loop.first %}hidden{% endif %}
+                {% if not (loop.first or (vm.target_option_id and option.option_id|string == vm.target_option_id|string)) %}hidden{% endif %}
                 data-page2-option-panel
                 data-page2-option-id="{{ option.option_id }}"
                 data-page2-review-state="{{ option.review_state }}"
@@ -86,6 +86,9 @@
                 <section class="yp-planera-page2-panel__section" aria-labelledby="yp-planera-page2-panel-{{ loop.index }}-requirements">
                   {% set review_groups = option.review_groups|default([]) %}
                   {% if review_groups %}
+                  {% if vm.unresolved_destination_count|default(0) > 0 %}
+                  <p class="yp-planera-page2-empty__text">Visar endast avvikelser från avdelningar som valt den här rätten.</p>
+                  {% endif %}
                   <div class="yp-planera-page2-requirement-list">
                     {% for group in review_groups %}
                     <label class="yp-planera-page2-review-row" data-page2-review-row>
@@ -95,7 +98,6 @@
                         data-page2-review-checkbox
                         data-page2-review-members='{{ group.members|tojson }}'
                         data-page2-review-initial="{{ '1' if group.review_checked else '0' }}"
-                        {% if group.review_is_mixed %}data-page2-review-mixed="true"{% endif %}
                         {% if group.review_checked %}checked{% endif %}
                       />
                       <span class="yp-planera-page2-review-row__mark" aria-hidden="true"></span>
@@ -103,28 +105,26 @@
                     </label>
                     {% endfor %}
                   </div>
-                  {% elif vm.has_target_demand|default(false) and vm.unresolved_destination_count|default(0) > 0 and not vm.has_positive_participants|default(false) %}
-                  <p class="yp-planera-page2-empty__title">Kan inte granskas ännu</p>
+                  {% elif not vm.has_positive_participants|default(false) %}
+                  {% if vm.unresolved_destination_count|default(0) > 0 %}
+                  <p class="yp-planera-page2-empty__title">Än så länge har ingen avdelning valt {{ option.display_title }} idag.</p>
                   <p class="yp-planera-page2-empty__text">{{ vm.unresolved_destination_count }} avdelning{{ 'ar' if vm.unresolved_destination_count != 1 else '' }} saknar menyval.</p>
-                  {% elif vm.has_target_demand|default(false) and not vm.has_positive_participants|default(false) %}
-                  <p class="yp-planera-page2-empty__text">Ingen beställning för det här målet.</p>
+                  {% else %}
+                  <p class="yp-planera-page2-empty__text">Ingen avdelning har valt {{ option.display_title }} idag.</p>
+                  {% endif %}
                   {% else %}
                   <p class="yp-planera-page2-empty__text">Inga relevanta kostbehov för den här rätten ännu.</p>
                   {% endif %}
                 </section>
 
-                {% if review_groups or not vm.has_target_demand|default(false) %}
+                {% if review_groups or vm.has_positive_participants|default(false) or not vm.has_target_demand|default(false) %}
                 <div class="yp-planera-page2-review-actions{% if option.review_is_current %} is-reviewed{% endif %}">
                   {% if option.review_is_current %}
-                  <a class="yp-planera-page2-review-submit" href="{{ production_url }}" data-page2-production-link>Visa produktionsunderlag →</a>
-                  <button class="yp-planera-page2-review-edit" type="button" data-page2-review-edit>Ändra granskning</button>
+                  <button class="yp-button yp-button-secondary yp-planera-page2-review-edit" type="button" data-page2-review-edit>Ändra</button>
                   {% endif %}
-                  <button class="yp-planera-page2-review-submit{% if option.review_is_current %} is-edit-submit{% endif %}" type="button" data-page2-review-submit{% if option.review_is_current %} hidden{% endif %}>{{ "Spara och visa produktionsunderlag →" if option.review_is_current or option.review_is_stale or review_groups else option.review_cta_label }}</button>
-                  <button class="yp-planera-page2-review-no-adaptation" type="button" data-page2-review-no-adaptation>Ingen anpassning behövs →</button>
-                  <button class="yp-planera-page2-review-reset" type="button" data-page2-review-reset hidden>Återställ</button>
+                  <button class="yp-button yp-button-primary yp-planera-page2-primary-action" type="button" data-page2-primary-action data-page2-production-url="{{ production_url }}">{% if option.review_is_current %}Visa produktionsunderlag →{% else %}Spara och visa produktionsunderlag →{% endif %}</button>
+                  <button class="yp-button yp-button-secondary yp-planera-page2-review-reset" type="button" data-page2-review-reset hidden>Återställ</button>
                 </div>
-                {% elif vm.has_target_demand|default(false) and vm.unresolved_destination_count|default(0) > 0 and not vm.has_positive_participants|default(false) %}
-                <p class="yp-planera-page2-empty__text">Granskning blir möjlig när alla menyval är klara.</p>
                 {% else %}
                 <p class="yp-planera-page2-empty__text">Det här målet kräver ingen granskning ännu.</p>
                 {% endif %}
