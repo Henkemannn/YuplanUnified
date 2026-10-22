@@ -1026,6 +1026,7 @@ def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) ->
             decisions=getattr(review_state_by_option_id.get(str(option["option_id"])), "decisions", ()) or (),
             review_present=review_state is not None,
         )
+        review_rows = _order_product2_page2_review_groups(review_rows)
         if has_inconsistent_state:
             option["review_is_stale"] = True
             option["review_status_label"] = None
@@ -1058,6 +1059,54 @@ def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) ->
         "unresolved_destination_count": len(unresolved_destinations),
         "page1_url": _build_product2_page1_url(site_id=str(context.site_id), service_date=service_date),
     }
+
+
+def _order_product2_page2_review_groups(review_groups: tuple[dict[str, object], ...]) -> tuple[dict[str, object], ...]:
+    """Add presentation metadata and order canonical parent/subgroup rows."""
+    def requirement_key(group: dict[str, object]) -> tuple[int, ...]:
+        return tuple(int(requirement_id) for requirement_id in group.get("requirement_ids", ()) or ())
+
+    def member_key(group: dict[str, object]) -> tuple[tuple[str, str], ...]:
+        return tuple(
+            (str(member.get("destination_id") or ""), str(member.get("requirement_group_id") or ""))
+            for member in group.get("members", ()) or ()
+        )
+
+    enriched: list[dict[str, object]] = []
+    for group in review_groups:
+        primary_id = group.get("primary_requirement_id")
+        requirement_ids = requirement_key(group)
+        is_parent = primary_id is not None and requirement_ids == (int(primary_id),)
+        enriched.append({**group, "_is_parent": is_parent})
+
+    parent_ids = {
+        int(group["primary_requirement_id"])
+        for group in enriched
+        if group["_is_parent"] and group.get("primary_requirement_id") is not None
+    }
+    for group in enriched:
+        primary_id = group.get("primary_requirement_id")
+        group["is_parent"] = bool(group["_is_parent"])
+        group["is_subgroup"] = bool(
+            primary_id is not None
+            and int(primary_id) in parent_ids
+            and not group["_is_parent"]
+        )
+
+    def sort_key(group: dict[str, object]) -> tuple[object, ...]:
+        primary_id = group.get("primary_requirement_id")
+        return (
+            0 if primary_id is not None else 1,
+            int(primary_id) if primary_id is not None else 0,
+            0 if group["_is_parent"] else 1,
+            requirement_key(group),
+            member_key(group),
+        )
+
+    return tuple(
+        {key: value for key, value in group.items() if key != "_is_parent"}
+        for group in sorted(enriched, key=sort_key)
+    )
 
 
 KITCHEN_UI_ROLES = ("kitchen", "cook", "admin", "superuser")

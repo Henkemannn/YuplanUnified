@@ -93,13 +93,15 @@
                   {% endif %}
                   <div class="yp-planera-page2-requirement-list">
                     {% for group in review_groups %}
-                    <label class="yp-planera-page2-review-row" data-page2-review-row>
+                    <label class="yp-planera-page2-review-row{% if group.is_subgroup %} is-subgroup{% endif %}" data-page2-review-row>
                       <input
                         class="yp-planera-page2-review-row__input"
                         type="checkbox"
                         data-page2-review-checkbox
                         data-page2-review-members='{{ group.members|tojson }}'
                         data-page2-review-initial="{{ '1' if group.review_checked else '0' }}"
+                        data-page2-review-primary-requirement-id="{{ group.primary_requirement_id or '' }}"
+                        data-page2-review-is-parent="{{ 'true' if group.is_parent else 'false' }}"
                         {% if group.review_checked %}checked{% endif %}
                       />
                       <span class="yp-planera-page2-review-row__mark" aria-hidden="true"></span>

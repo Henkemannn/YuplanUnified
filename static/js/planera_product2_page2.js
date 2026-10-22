@@ -67,6 +67,8 @@ document.addEventListener("DOMContentLoaded", () => {
       input,
       initialChecked: input.getAttribute("data-page2-review-initial") === "1" || input.checked,
       members: parseMembers(input),
+      primaryRequirementId: input.dataset.page2ReviewPrimaryRequirementId || "",
+      isParent: input.dataset.page2ReviewIsParent === "true",
     }));
     const primaryAction = panel.querySelector("[data-page2-primary-action]");
     const resetButton = panel.querySelector("[data-page2-review-reset]");
@@ -162,6 +164,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
     controls.forEach((control) => {
       control.input.addEventListener("change", () => {
+        if (control.isParent && control.primaryRequirementId) {
+          controls.forEach((childControl) => {
+            if (
+              childControl !== control &&
+              !childControl.isParent &&
+              childControl.primaryRequirementId === control.primaryRequirementId
+            ) {
+              childControl.input.checked = control.input.checked;
+            }
+          });
+        }
         syncState();
       });
     });

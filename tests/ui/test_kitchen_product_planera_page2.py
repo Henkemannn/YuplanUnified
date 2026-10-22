@@ -29,7 +29,7 @@ from core.department_requirement_group_repo import DepartmentRequirementGroupsRe
 from core.department_requirement_group_service_overrides_repo import DepartmentRequirementGroupServiceOverridesRepo
 from core.menu import InMemoryCompositionAliasRepository, MenuService
 from core.planera_product2_page2_context import build_product2_page2_planning_context
-from core.ui_blueprint import _build_product2_page2_vm
+from core.ui_blueprint import _build_product2_page2_vm, _order_product2_page2_review_groups
 
 
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
@@ -752,6 +752,60 @@ def test_reversed_member_order_still_renders_primary_first(app_session):
     assert "yp-planera-page2-review-row__chevron" not in html
 
 
+def test_page2_review_presentation_orders_parent_children_and_none_safely(app_session):
+    parent = {
+        "display_label": "Parent",
+        "primary_requirement_id": 10,
+        "requirement_ids": (10,),
+        "members": ({"destination_id": "d1", "requirement_group_id": "g1"},),
+    }
+    child = {
+        "display_label": "Parent + Child",
+        "primary_requirement_id": 10,
+        "requirement_ids": (10, 20),
+        "members": ({"destination_id": "d2", "requirement_group_id": "g2"},),
+    }
+    no_parent_child = {
+        "display_label": "Composite only",
+        "primary_requirement_id": 30,
+        "requirement_ids": (30, 40),
+        "members": ({"destination_id": "d3", "requirement_group_id": "g3"},),
+    }
+    no_primary = {
+        "display_label": "No primary",
+        "primary_requirement_id": None,
+        "requirement_ids": (50, 60),
+        "members": ({"destination_id": "d4", "requirement_group_id": "g4"},),
+    }
+
+    ordered = _order_product2_page2_review_groups((child, no_primary, no_parent_child, parent))
+    assert [group["display_label"] for group in ordered] == [
+        "Parent",
+        "Parent + Child",
+        "Composite only",
+        "No primary",
+    ]
+    assert ordered[0]["is_parent"] is True
+    assert ordered[1]["is_subgroup"] is True
+    assert ordered[2]["is_subgroup"] is False
+    assert ordered[3]["primary_requirement_id"] is None
+
+    reversed_order = _order_product2_page2_review_groups((no_primary, parent, no_parent_child, child))
+    assert [group["display_label"] for group in reversed_order] == [
+        "Parent",
+        "Parent + Child",
+        "Composite only",
+        "No primary",
+    ]
+    assert [group["members"] for group in ordered] == [group["members"] for group in reversed_order]
+
+    with app_session.app_context():
+        rendered = app_session.jinja_env.from_string(
+            "{% for group in groups %}{{ group.display_label }}|{{ 'subgroup' if group.is_subgroup else 'row' }};{% endfor %}"
+        ).render(groups=ordered)
+    assert rendered == "Parent|row;Parent + Child|subgroup;Composite only|row;No primary|row;"
+
+
 def test_three_options_render_collection_shape(app_session):
     client = app_session.test_client()
     with client.session_transaction() as sess:
@@ -1092,7 +1146,14 @@ def test_template_does_not_use_fixed_alt_fields_and_page1_remains_untouched():
     assert "data-page2-review-submit" not in page2_tpl
     assert "data-page2-production-link" not in page2_tpl
     assert "data-page2-review-mixed" not in page2_tpl
+    assert "data-page2-review-primary-requirement-id" in page2_tpl
+    assert "data-page2-review-is-parent" in page2_tpl
     assert "indeterminate" not in page2_js
+    assert "control.isParent && control.primaryRequirementId" in page2_js
+    assert "childControl.primaryRequirementId === control.primaryRequirementId" in page2_js
+    assert "childControl.input.checked = control.input.checked" in page2_js
+    assert "childControl.input.dispatchEvent" not in page2_js
+    assert ".yp-planera-page2-review-row.is-subgroup" in page2_css
     assert 'const reviewIsStale = panel.dataset.page2ReviewStale === "true";' in page2_js
     assert "const currentReview = !reviewIsStale &&" in page2_js
     assert "reviewIsStale," in page2_js

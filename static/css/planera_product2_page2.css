@@ -559,6 +559,10 @@
   cursor: pointer;
 }
 
+.yp-planera-page2-review-row.is-subgroup {
+  padding-left: 28px;
+}
+
 .yp-planera-page2-review-row:last-child {
   border-bottom: 0;
 }
@@ -705,6 +709,10 @@
     align-items: flex-start;
     flex-wrap: wrap;
     gap: 6px 12px;
+  }
+
+  .yp-planera-page2-review-row.is-subgroup {
+    padding-left: 20px;
   }
 
   .yp-planera-page2-panel__section-head,
