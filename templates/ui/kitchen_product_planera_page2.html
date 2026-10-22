@@ -19,13 +19,14 @@
         <div class="yp-product-panel-inner yp-planera-page2-panel-inner">
           <section class="yp-planera-page2-shell" aria-labelledby="yp-planera-page2-title">
             <header class="yp-planera-page2-hero">
-              <h1 class="yp-planera-page2-hero__title" id="yp-planera-page2-title">{{ vm.service_date_label }}</h1>
-              <p class="yp-planera-page2-hero__context">{{ vm.meal_label }}</p>
+              <div class="yp-planera-page2-hero__topline">
+                <a class="yp-planera-page2-backlink" href="{{ vm.page1_url }}">← Till planeringen</a>
+                <div class="yp-planera-page2-hero__service">
+                  <h1 class="yp-planera-page2-hero__title" id="yp-planera-page2-title">{{ vm.service_date_label }}</h1>
+                  <p class="yp-planera-page2-hero__context">{{ vm.meal_label }}</p>
+                </div>
+              </div>
             </header>
-
-            <div class="yp-planera-page2-hero__nav">
-              <a class="yp-planera-page2-backlink" href="{{ vm.page1_url }}">← Till planeringen</a>
-            </div>
 
             {% if status != 'no_publication' %}
             {% if options %}
@@ -76,12 +77,13 @@
                 data-page2-review-state="{{ option.review_state }}"
                 data-page2-review-stale="{{ 'true' if option.review_is_stale else 'false' }}"
               >
-                <h2 class="yp-planera-page2-panel__title">{{ option.display_title }}</h2>
-                <p class="yp-planera-page2-panel__question">Vilka avvikelser kräver anpassning?</p>
-
-                <div class="yp-planera-page2-review-banner{% if option.review_is_stale %} is-warning{% elif option.review_status_label %} is-positive{% endif %}" data-page2-review-banner{% if not option.review_banner_message and not option.review_status_label %} hidden{% endif %}>
-                  <span data-page2-review-status>{% if option.review_banner_message %}{{ option.review_banner_message }}{% elif option.review_status_label %}{{ option.review_status_label }}{% endif %}</span>
+                <div class="yp-planera-page2-panel__identity">
+                  <h2 class="yp-planera-page2-panel__title">{{ option.display_title }}</h2>
+                  <div class="yp-planera-page2-review-banner{% if option.review_is_stale %} is-warning{% elif option.review_status_label %} is-positive{% endif %}" data-page2-review-banner{% if not option.review_banner_message and not option.review_status_label %} hidden{% endif %}>
+                    <span data-page2-review-status>{% if option.review_banner_message %}{{ option.review_banner_message }}{% elif option.review_status_label %}{{ option.review_status_label }}{% endif %}</span>
+                  </div>
                 </div>
+                <p class="yp-planera-page2-panel__question">Vilka avvikelser kräver anpassning?</p>
 
                 <section class="yp-planera-page2-panel__section" aria-labelledby="yp-planera-page2-panel-{{ loop.index }}-requirements">
                   {% set review_groups = option.review_groups|default([]) %}

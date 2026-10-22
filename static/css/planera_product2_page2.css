@@ -100,15 +100,32 @@
 
 .yp-planera-page2-shell {
   display: grid;
-  gap: 12px;
+  gap: 9px;
   min-width: 0;
 }
 
 .yp-planera-page2-hero {
   display: grid;
-  gap: 4px;
+  gap: 0;
   min-width: 0;
-  padding: 2px 2px 2px;
+  padding: 0 2px;
+}
+
+.yp-planera-page2-hero__topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+}
+
+.yp-planera-page2-hero__service {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  color: var(--page2-muted);
 }
 
 .yp-planera-page2-hero__kicker {
@@ -122,31 +139,31 @@
 
 .yp-planera-page2-hero__title {
   margin: 0;
-  font-size: clamp(1.45rem, 1.3vw + 1rem, 2rem);
-  line-height: 1.1;
-  letter-spacing: -0.035em;
+  color: var(--page2-muted);
+  font-size: 0.8rem;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  font-weight: 700;
 }
 
 .yp-planera-page2-hero__context {
   margin: 0;
   color: var(--page2-muted);
-  font-size: 0.86rem;
-  font-weight: 750;
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
-.yp-planera-page2-hero__nav {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 12px;
-  margin-top: 2px;
+.yp-planera-page2-hero__context::before {
+  content: "·";
+  margin-right: 8px;
+  color: var(--page2-muted);
 }
 
 .yp-planera-page2-backlink {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
+  min-height: 30px;
   padding: 0.3rem 0.1rem;
   border: 0;
   border-radius: 0;
@@ -317,21 +334,19 @@
 
 .yp-planera-page2-panel {
   display: grid;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
-  padding: 14px 0 2px;
-  border-radius: 0;
-  border: 0;
-  background: linear-gradient(180deg, var(--page2-surface-strong), var(--page2-surface));
-  box-shadow: none;
+  padding: 16px 18px 18px;
+  border-radius: 16px;
+  border: 1px solid var(--page2-line);
+  background: var(--page2-surface-strong);
+  box-shadow: var(--page2-shadow-soft);
 }
 
 .app-shell--dark #yp-product-app .yp-planera-page2-panel {
-  border: 1px solid rgba(2, 174, 195, 0.08);
-  border-left: 0;
-  border-right: 0;
-  background: linear-gradient(180deg, rgba(13, 36, 58, 0.94), rgba(10, 28, 47, 0.88));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), 0 10px 24px rgba(0, 0, 0, 0.12);
+  border-color: rgba(2, 174, 195, 0.12);
+  background: rgba(10, 28, 47, 0.82);
+  box-shadow: var(--page2-shadow-soft);
 }
 
 .yp-planera-page2-panel[hidden] {
@@ -348,9 +363,18 @@
 
 .yp-planera-page2-panel__title {
   margin: 0;
-  font-size: clamp(1.5rem, 0.8vw + 1.1rem, 2rem);
-  line-height: 1.1;
-  letter-spacing: -0.035em;
+  font-size: clamp(1.25rem, 0.45vw + 1rem, 1.6rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-weight: 750;
+}
+
+.yp-planera-page2-panel__identity {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
 }
 
 .yp-planera-page2-panel__instruction {
@@ -374,6 +398,7 @@
   color: var(--page2-ink);
   font-size: 0.78rem;
   font-weight: 700;
+  flex: 0 0 auto;
 }
 
 .yp-planera-page2-review-banner[hidden] {
@@ -382,12 +407,12 @@
 
 .yp-planera-page2-review-banner.is-positive {
   border-left-color: rgba(2, 174, 195, 0.48);
-  background: rgba(2, 174, 195, 0.06);
+  background: rgba(2, 174, 195, 0.04);
 }
 
 .yp-planera-page2-review-banner.is-warning {
   border-left-color: rgba(218, 138, 0, 0.72);
-  background: rgba(218, 138, 0, 0.06);
+  background: rgba(218, 138, 0, 0.04);
 }
 
 .yp-planera-page2-review-actions {
@@ -443,16 +468,16 @@
 .yp-planera-page2-panel__question {
   margin: 0;
   color: var(--page2-ink);
-  font-size: 0.98rem;
+  font-size: 0.92rem;
   font-weight: 720;
-  line-height: 1.42;
+  line-height: 1.35;
 }
 
 .yp-planera-page2-panel__section {
   display: grid;
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(2, 174, 195, 0.10);
+  gap: 10px;
+  width: min(100%, 720px);
+  padding: 2px 0 0;
 }
 
 .yp-planera-page2-panel__section-head {
@@ -485,7 +510,7 @@
 }
 
 .yp-planera-page2-requirement-list {
-  width: min(100%, 720px);
+  width: 100%;
   justify-self: start;
 }
 
@@ -496,19 +521,13 @@
   justify-content: space-between;
   gap: 14px;
   min-width: 0;
-  padding: 0 0 6px;
-  border-bottom: 1px solid rgba(2, 174, 195, 0.10);
-}
-
-.yp-planera-page2-destination-row:last-child,
-.yp-planera-page2-requirement-row:last-child {
-  padding-bottom: 0;
+  padding: 8px 0;
   border-bottom: 0;
 }
 
 .app-shell--dark #yp-product-app .yp-planera-page2-destination-row,
 .app-shell--dark #yp-product-app .yp-planera-page2-requirement-row {
-  border-bottom-color: rgba(2, 174, 195, 0.14);
+  border-bottom: 0;
 }
 
 .yp-planera-page2-destination-row__name,
@@ -532,20 +551,20 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
-  padding: 0 0 8px;
-  border-bottom: 1px solid rgba(2, 174, 195, 0.10);
+  min-height: 48px;
+  padding: 8px 4px;
+  border-bottom: 1px solid rgba(2, 174, 195, 0.08);
   cursor: pointer;
 }
 
 .yp-planera-page2-review-row:last-child {
-  padding-bottom: 0;
   border-bottom: 0;
 }
 
 .app-shell--dark #yp-product-app .yp-planera-page2-review-row {
-  border-bottom-color: rgba(2, 174, 195, 0.14);
+  border-bottom-color: rgba(2, 174, 195, 0.12);
 }
 
 .yp-planera-page2-review-row__input {
@@ -570,7 +589,7 @@
   min-width: 0;
   color: var(--page2-ink);
   font-size: 0.96rem;
-  font-weight: 720;
+  font-weight: 600;
   line-height: 1.2;
 }
 
@@ -652,25 +671,40 @@
   }
 
   .yp-planera-page2-panel {
-    padding: 12px 0 0;
+    padding: 14px 16px 16px;
   }
 }
 
 @media (max-width: 780px) {
+  .yp-planera-page2-hero__topline {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .yp-planera-page2-hero__service {
+    margin-left: auto;
+  }
+
   .yp-planera-page2-selector__tabs {
     grid-template-columns: 1fr;
   }
 
   .yp-planera-page2-shell {
-    gap: 12px;
+    gap: 9px;
   }
 
   .yp-planera-page2-hero__title {
-    font-size: clamp(2.05rem, 9vw, 2.7rem);
+    font-size: 0.78rem;
   }
 
   .yp-planera-page2-panel__title {
-    font-size: clamp(1.8rem, 8vw, 2.3rem);
+    font-size: clamp(1.25rem, 6vw, 1.6rem);
+  }
+
+  .yp-planera-page2-panel__identity {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 6px 12px;
   }
 
   .yp-planera-page2-panel__section-head,
