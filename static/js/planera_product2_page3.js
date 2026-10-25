@@ -119,6 +119,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const siteId = (root.getAttribute("data-page3-site-id") || "").trim();
   const serviceDate = (root.getAttribute("data-page3-service-date") || "").trim();
   const meal = (root.getAttribute("data-page3-meal") || "").trim().toLowerCase();
+  const optionId = (root.getAttribute("data-page3-option-id") || "").trim();
   const isoYear = Number.parseInt(root.getAttribute("data-page3-year") || "0", 10);
   const isoWeek = Number.parseInt(root.getAttribute("data-page3-week") || "0", 10);
 
@@ -204,6 +205,7 @@ document.addEventListener("DOMContentLoaded", () => {
         site_id: siteId,
         service_date: serviceDate,
         meal,
+        ...(optionId ? { option_id: optionId } : {}),
         marked: true,
         expected_etags: expectedEtags,
       }),

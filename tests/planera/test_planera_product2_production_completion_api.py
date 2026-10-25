@@ -154,12 +154,13 @@ def _seed_weekview_registration_marker(department_id: str, year: int, week: int)
 
 
 def _make_vm(captured: dict[str, object], *, site_id: str, service_date: date, meal: str, ready: bool, blockers: tuple[str, ...], targets: tuple[Product2Page3CompletionTargetVM, ...]):
-    def _builder(*, tenant_id, site_id: str, service_date: date, meal: str, view=None, special_view=None):
+    def _builder(*, tenant_id, site_id: str, service_date: date, meal: str, option_id=None, view=None, special_view=None):
         captured["args"] = {
             "tenant_id": tenant_id,
             "site_id": site_id,
             "service_date": service_date.isoformat(),
             "meal": meal,
+            "option_id": option_id,
             "view": view,
             "special_view": special_view,
         }
@@ -537,6 +538,58 @@ def test_product2_production_completion_rejects_when_page_is_not_ready(app_sessi
     assert DepartmentRequirementGroupCompletionRepo().get(group_b, service_date, "lunch") is None
 
 
+def test_product2_production_completion_allows_known_targets_with_only_unassigned_blocker(app_session, client_admin, monkeypatch):
+    app = app_session
+    _enable_planera_feature(app)
+    client = client_admin
+
+    with app.app_context():
+        seeded = _seed_site_with_two_departments(app)
+
+    site_id = seeded["site_id"]
+    dept_a = seeded["dept_a"]
+    dept_b = seeded["dept_b"]
+    group_a = seeded["group_a"]
+    group_b = seeded["group_b"]
+    year = 2026
+    week = 39
+    service_date = date.fromisocalendar(year, week, 1)
+
+    with app.app_context():
+        _seed_weekview_version(1, dept_a, year, week, 0)
+        _seed_weekview_version(1, dept_b, year, week, 0)
+
+    targets = (
+        Product2Page3CompletionTargetVM(requirement_group_id=group_a, destination_id=dept_a, service_date=service_date.isoformat(), meal="lunch", quantity=1),
+        Product2Page3CompletionTargetVM(requirement_group_id=group_b, destination_id=dept_b, service_date=service_date.isoformat(), meal="lunch", quantity=1),
+    )
+    monkeypatch.setattr(
+        "core.planera_api.build_product2_page3_vm",
+        _make_vm({}, site_id=site_id, service_date=service_date, meal="lunch", ready=False, blockers=("UNASSIGNED_DESTINATIONS",), targets=targets),
+    )
+
+    _login(client, site_id=site_id, role="cook")
+    response = client.post(
+        "/api/planera/product2/production-completion",
+        json={
+            "site_id": site_id,
+            "service_date": service_date.isoformat(),
+            "meal": "lunch",
+            "marked": True,
+            "expected_etags": {
+                dept_a: _current_etag(dept_a, year, week, site_id),
+                dept_b: _current_etag(dept_b, year, week, site_id),
+            },
+        },
+        headers={**_csrf_headers(client), "X-User-Role": "cook", "X-Tenant-Id": "1"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["marked"] is True
+    assert DepartmentRequirementGroupCompletionRepo().get(group_a, service_date, "lunch") is not None
+    assert DepartmentRequirementGroupCompletionRepo().get(group_b, service_date, "lunch") is not None
+
+
 def test_product2_production_completion_rejects_no_completion_targets(app_session, client_admin, monkeypatch):
     app = app_session
     _enable_planera_feature(app)
@@ -859,12 +912,16 @@ def test_product2_production_completion_captures_deterministic_separate_targets(
 
     site_id = seeded["site_id"]
     dept_a = seeded["dept_a"]
+    dept_b = seeded["dept_b"]
+    group_a = seeded["group_a"]
+    group_b = seeded["group_b"]
     year = 2026
     week = 39
     service_date = date.fromisocalendar(year, week, 1)
 
     with app.app_context():
         _seed_weekview_version(1, dept_a, year, week, 0)
+        _seed_weekview_version(1, dept_b, year, week, 0)
 
     known_group_ids = (
         "2b4a2844-5b18-42cd-895f-d3d20358fe9e",
@@ -872,8 +929,8 @@ def test_product2_production_completion_captures_deterministic_separate_targets(
     )
     target_log: dict[str, object] = {}
 
-    def _fake_vm(*, tenant_id, site_id: str, service_date: date, meal: str, view=None, special_view=None):
-        target_log["vm"] = (tenant_id, site_id, service_date.isoformat(), meal)
+    def _fake_vm(*, tenant_id, site_id: str, service_date: date, meal: str, option_id=None, view=None, special_view=None):
+        target_log["vm"] = (tenant_id, site_id, service_date.isoformat(), meal, option_id)
         return SimpleNamespace(
             ready=True,
             blockers=(),
@@ -902,6 +959,7 @@ def test_product2_production_completion_captures_deterministic_separate_targets(
             "site_id": site_id,
             "service_date": service_date.isoformat(),
             "meal": "lunch",
+            "option_id": "target-option",
             "marked": True,
             "expected_etags": {dept_a: _current_etag(dept_a, year, week, site_id)},
             "completion_targets": ["client-cannot-control-identity"],
@@ -914,8 +972,10 @@ def test_product2_production_completion_captures_deterministic_separate_targets(
     )
     assert response.status_code == 200
     body = response.get_json()
+    assert target_log["vm"] == (1, site_id, service_date.isoformat(), "lunch", "target-option")
     assert body["target_count"] == 2
     assert [target.group_id for target in captured["targets"]] == list(known_group_ids)
     assert all(target.department_id == dept_a for target in captured["targets"])
     assert captured["marked"] is True
     assert captured["expected_base_versions"] == {dept_a: 0}
+    assert DepartmentRequirementGroupCompletionRepo().get(group_b, service_date, "lunch") is None

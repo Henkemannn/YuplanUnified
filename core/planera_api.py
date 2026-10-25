@@ -664,6 +664,7 @@ def post_planera_product2_production_completion():
     expected_etags_raw = payload.get("expected_etags")
     view = payload.get("view")
     special_view = payload.get("special_view")
+    option_id = str(payload.get("option_id") or "").strip() or None
 
     if not site_id or not service_date_raw or meal not in ("lunch", "dinner"):
         return bad_request("invalid_parameters")
@@ -686,25 +687,29 @@ def post_planera_product2_production_completion():
             site_id=site_id,
             service_date=service_date,
             meal=meal,
+            option_id=option_id,
             view=view,
             special_view=special_view,
         )
     except Product2Page3VmError:
         return not_found("site_or_department_not_found")
 
-    if not bool(getattr(vm, "ready", False)):
+    completion_targets = tuple(getattr(vm, "completion_targets", ()) or ())
+    ready = bool(getattr(vm, "ready", False))
+    blockers = tuple(getattr(vm, "blockers", ()) or ())
+    partial_completion_allowed = blockers == ("UNASSIGNED_DESTINATIONS",)
+    if not ready and not partial_completion_allowed:
         resp = jsonify(
             {
                 "type": "about:blank",
                 "title": "production_not_ready",
                 "ready": False,
                 "blockers": list(getattr(vm, "blockers", ()) or ()),
-                "target_count": len(tuple(getattr(vm, "completion_targets", ()) or ())),
+                "target_count": len(completion_targets),
             }
         )
         return resp, 409
 
-    completion_targets = tuple(getattr(vm, "completion_targets", ()) or ())
     target_department_ids = sorted({str(target.destination_id) for target in completion_targets})
     if not completion_targets:
         return (

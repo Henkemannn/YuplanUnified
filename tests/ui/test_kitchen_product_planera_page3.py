@@ -477,14 +477,15 @@ def test_page3_route_renders_completion_button_for_ready_targets(app_session, mo
     assert 'data-page3-completion-button' in html
 
 
-def test_page3_route_hides_completion_button_when_not_ready(app_session, monkeypatch):
+def test_page3_route_renders_partial_completion_button_for_unassigned_only(app_session, monkeypatch):
     client = app_session.test_client()
     with client.session_transaction() as sess:
         sess["tenant_id"] = 1
 
     site, _ = SitesRepo().create_site(name="Page3 Completion Blocked Site", tenant_id=1)
     vm = replace(
-        _page3_vm_hierarchy(ready=False, blocker_messages=("Produktion saknar beslut",)),
+        _page3_vm_hierarchy(ready=False, blocker_messages=("1 avdelning saknar menyval · underlaget kan ändras.",)),
+        completion_allowed=True,
         completion_targets=(
             Product2Page3CompletionTargetVM(requirement_group_id="group-a", destination_id="dept-a", service_date="2026-09-08", meal="lunch", quantity=1),
         ),
@@ -498,8 +499,8 @@ def test_page3_route_hides_completion_button_when_not_ready(app_session, monkeyp
 
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
-    assert 'data-page3-completion-button' not in html
-    assert 'Markera som gjorda i veckolistan' not in html
+    assert 'data-page3-completion-button' in html
+    assert 'Markera som gjorda i veckolistan' in html
 
 
 def test_page3_route_hides_completion_button_when_no_completion_targets(app_session, monkeypatch):

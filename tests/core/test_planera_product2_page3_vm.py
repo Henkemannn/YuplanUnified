@@ -18,6 +18,7 @@ from core.planera_product2_page2_context import (
 from core.planera_product2_page3_vm import Product2Page3VmError, build_product2_page3_vm
 from core.planera_v2.domain import PlanResult, PlanningSlice, Totals, UnitBreakdown
 from core.planera_v2.meal_orchestration import (
+    KommunMealDestinationResult,
     KommunMealOptionResult,
     KommunMealOrchestrationResult,
 )
@@ -1850,7 +1851,9 @@ def test_build_product2_page3_vm_unassigned_destinations_stay_unallocated(monkey
 
     vm = build_product2_page3_vm(tenant_id=1, site_id="site-1", service_date="2026-09-08", meal="lunch")
 
-    assert vm.blocker_messages == ("Följande avdelningar saknar menyval",)
+    assert vm.blocker_messages == ("1 avdelning saknar menyval · underlaget kan ändras.",)
+    assert vm.ready_label == "Preliminärt underlag"
+    assert vm.is_partial is True
     assert vm.unassigned_destinations[0].display_name == "Avdelning C"
     assert vm.unassigned_destinations[0].baseline_quantity == 4
     assert vm.options[0].normal_total == 15
@@ -1890,6 +1893,13 @@ def test_build_product2_page3_vm_partially_blocked_meal_keeps_ready_option_visib
             selected_option_id="option-blocked",
             choice_source="explicit",
         )
+        destination_unresolved = Product2Page2DestinationVM(
+            destination_id="dept-unresolved",
+            display_name="Avdelning C",
+            baseline_quantity=9,
+            selected_option_id=None,
+            choice_source="unresolved",
+        )
         requirement_group = Product2Page2RequirementGroupVM(
             requirement_group_id="group-veg",
             destination_id="dept-ready",
@@ -1911,7 +1921,7 @@ def test_build_product2_page3_vm_partially_blocked_meal_keeps_ready_option_visib
             status="ok",
             publication_identity=Product2Page2PublicationIdentity(builder_menu_id="menu-1", builder_menu_version=1),
             options=(option_ready, option_blocked),
-            destinations=(destination_ready, destination_blocked),
+            destinations=(destination_ready, destination_blocked, destination_unresolved),
             requirement_groups=(requirement_group,),
         )
 
@@ -1971,8 +1981,16 @@ def test_build_product2_page3_vm_partially_blocked_meal_keeps_ready_option_visib
                     acceptance_issues=(),
                 ),
             ),
-            unassigned_destinations=(),
-            blockers=("UNREVIEWED_OPTIONS",),
+            unassigned_destinations=(
+                KommunMealDestinationResult(
+                    destination_id="dept-unresolved",
+                    display_name="Avdelning C",
+                    baseline_quantity=9,
+                    selected_option_id=None,
+                    choice_source="unresolved",
+                ),
+            ),
+            blockers=("UNASSIGNED_DESTINATIONS", "UNREVIEWED_OPTIONS"),
             ready=False,
         ),
     )
@@ -1987,6 +2005,9 @@ def test_build_product2_page3_vm_partially_blocked_meal_keeps_ready_option_visib
     assert blocked_option.baseline_total is None
     assert blocked_option.normal_total is None
     assert blocked_option.special_total is None
+    assert vm.ready is False
+    assert vm.is_partial is True
+    assert vm.ready_label == "Underlag behöver granskas"
 
 
 def test_build_product2_page3_vm_rejects_non_lunch(monkeypatch):

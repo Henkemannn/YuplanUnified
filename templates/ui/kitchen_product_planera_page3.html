@@ -18,6 +18,7 @@
       data-page3-meal="{{ vm.meal }}"
       data-page3-year="{{ service_year }}"
       data-page3-week="{{ service_week }}"
+      data-page3-option-id="{{ vm.target_option_id or '' }}"
       data-page3-completion-target-departments='{{ completion_department_ids | tojson }}'
     >
       <div class="yp-product-panel">
@@ -43,7 +44,7 @@
                   <span class="yp-planera-page3-status-pill {% if vm.ready %}is-ready{% else %}is-blocked{% endif %}" aria-label="{{ vm.ready_label }}" title="{{ vm.ready_label }}">{{ vm.ready_label }}</span>
                 </div>
               </div>
-              {% if vm.ready and completion_department_ids %}
+              {% if (vm.completion_allowed or vm.ready) and completion_department_ids %}
               <div class="yp-planera-page3-action-row" data-page3-completion-shell>
                 <button
                   class="yp-planera-page3-completion-button"
@@ -76,7 +77,7 @@
             <div class="yp-planera-page3-panels">
               <section class="yp-planera-page3-section yp-planera-page3-section--overview" data-page3-panel="overview" {% if vm.view != 'overview' %}hidden{% endif %}>
                 <div class="yp-planera-page3-section__head">
-                  <h2 class="yp-planera-page3-section__title" id="yp-planera-page3-overview-title">Dagens produktion</h2>
+                  <h2 class="yp-planera-page3-section__title" id="yp-planera-page3-overview-title">Dagens produktion{% if vm.is_partial %} · kända mängder{% endif %}</h2>
                 </div>
                 {% if vm.overview_options %}
                 {% set overview_totals = namespace(baseline=0, normal=0, special=0) %}
@@ -85,9 +86,9 @@
                     <thead>
                       <tr>
                         <th scope="col">Menyval</th>
-                        <th scope="col">Totalt</th>
-                        <th scope="col">Normalkost</th>
-                        <th scope="col">Specialkost</th>
+                        <th scope="col">{{ "Känt totalt" if vm.is_partial else "Totalt" }}</th>
+                        <th scope="col">{{ "Känd normalkost" if vm.is_partial else "Normalkost" }}</th>
+                        <th scope="col">{{ "Känd specialkost" if vm.is_partial else "Specialkost" }}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -110,7 +111,7 @@
                     </tbody>
                     <tfoot>
                       <tr>
-                        <th scope="row">Totalt</th>
+                        <th scope="row">{{ "Kända totalt" if vm.is_partial else "Totalt" }}</th>
                         <th>{{ overview_totals.baseline }}</th>
                         <th>{{ overview_totals.normal }}</th>
                         <th>{{ overview_totals.special }}</th>
@@ -125,7 +126,7 @@
 
               <section class="yp-planera-page3-section yp-planera-page3-section--matrix" aria-labelledby="yp-planera-page3-normal-title" data-page3-panel="normal" {% if vm.view != 'normal' %}hidden{% endif %}>
                 <div class="yp-planera-page3-section__head">
-                  <h2 class="yp-planera-page3-section__title" id="yp-planera-page3-normal-title">Normalkost</h2>
+                  <h2 class="yp-planera-page3-section__title" id="yp-planera-page3-normal-title">Normalkost{% if vm.is_partial %} · kända mängder{% endif %}</h2>
                 </div>
                 {% if vm.normal_matrix and vm.normal_matrix.columns %}
                 <div class="yp-planera-page3-table-wrap">
@@ -136,7 +137,7 @@
                         {% for column in vm.normal_matrix.columns %}
                         <th>
                           <span class="yp-planera-page3-matrix-column-title">{{ column.display_title }}</span>
-                          <span class="yp-planera-page3-matrix-column-total">{{ column.display_total }} portioner</span>
+                          <span class="yp-planera-page3-matrix-column-total">{{ column.display_total }} {{ "kända " if vm.is_partial else "" }}portioner</span>
                         </th>
                         {% endfor %}
                       </tr>
@@ -153,7 +154,7 @@
                     </tbody>
                     <tfoot>
                       <tr>
-                        <th class="is-sticky" scope="row">TOTALT</th>
+                        <th class="is-sticky" scope="row">{{ "KÄNDA TOTALER" if vm.is_partial else "TOTALT" }}</th>
                         {% for total in vm.normal_matrix.totals %}
                         <th>{{ total.display_total }}</th>
                         {% endfor %}

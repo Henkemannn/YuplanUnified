@@ -167,6 +167,9 @@ class Product2Page3VM:
     navigation_urls: dict[str, str] = field(default_factory=dict)
     special_navigation_urls: dict[str, str] = field(default_factory=dict)
     service_date_compact_label: str = ""
+    is_partial: bool = False
+    completion_allowed: bool = False
+    target_option_id: str | None = None
 
 
 def _normalize_tenant_id(value: object) -> int:
@@ -1027,8 +1030,14 @@ def build_product2_page3_vm(
         unassigned_destinations.append(mapped)
 
     blocker_messages = []
-    if "UNASSIGNED_DESTINATIONS" in meal_result.blockers and unassigned_destinations:
-        blocker_messages.append("Följande avdelningar saknar menyval")
+    if "UNASSIGNED_DESTINATIONS" in meal_result.blockers:
+        count = len(unassigned_destinations)
+        if count == 1:
+            blocker_messages.append("1 avdelning saknar menyval · underlaget kan ändras.")
+        elif count > 1:
+            blocker_messages.append(f"{count} avdelningar saknar menyval · underlaget kan ändras.")
+        else:
+            blocker_messages.append("Avdelningar saknar menyval · underlaget kan ändras.")
     if "UNREVIEWED_OPTIONS" in meal_result.blockers:
         blocker_messages.append("Granskning krävs för att slutföra produktionsunderlaget")
     if "STALE_REVIEWS" in meal_result.blockers:
@@ -1046,7 +1055,13 @@ def build_product2_page3_vm(
         meal=normalized_meal,
         meal_label="Lunch" if normalized_meal == "lunch" else normalized_meal.capitalize(),
         ready=bool(meal_result.ready),
-        ready_label="Underlag granskat" if meal_result.ready else "Underlag behöver granskas",
+        ready_label=(
+            "Underlag granskat"
+            if meal_result.ready
+            else "Preliminärt underlag"
+            if meal_result.blockers == ("UNASSIGNED_DESTINATIONS",)
+            else "Underlag behöver granskas"
+        ),
         blockers=meal_result.blockers,
         blocker_messages=tuple(blocker_messages),
         view=normalized_view,
@@ -1063,6 +1078,11 @@ def build_product2_page3_vm(
         options=tuple(options),
         unassigned_destinations=tuple(unassigned_destinations),
         completion_targets=completion_targets,
+        is_partial=not meal_result.ready,
+        completion_allowed=bool(completion_targets) and (
+            meal_result.ready or meal_result.blockers == ("UNASSIGNED_DESTINATIONS",)
+        ),
+        target_option_id=selected_option_id or None,
     )
 
 

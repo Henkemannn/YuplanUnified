@@ -246,6 +246,7 @@ class _SyntheticDestination:
     baseline_quantity: int
     selected_option_id: str | None
     choice_source: str
+    target_demand_state: str | None = None
 
 
 @dataclass(frozen=True)
@@ -255,6 +256,7 @@ class _SyntheticContext:
     options: tuple[_SyntheticOption, ...]
     destinations: tuple[_SyntheticDestination, ...]
     unresolved_destination_count: int = 0
+    has_target_demand: bool = False
 
 
 def _synthetic_context(
@@ -263,6 +265,7 @@ def _synthetic_context(
     destinations: tuple[_SyntheticDestination, ...],
     status: str = "ok",
     unresolved_destination_count: int = 0,
+    has_target_demand: bool = False,
 ) -> _SyntheticContext:
     return _SyntheticContext(
         status=status,
@@ -270,6 +273,7 @@ def _synthetic_context(
         options=options,
         destinations=destinations,
         unresolved_destination_count=unresolved_destination_count,
+        has_target_demand=has_target_demand,
     )
 
 
@@ -509,7 +513,7 @@ def test_explicit_target_orchestration_produces_ready_plan(monkeypatch: pytest.M
     assert result.options[0].planning_slice is not None
 
 
-def test_explicit_target_unresolved_blocks_production(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_explicit_target_unresolved_keeps_known_production_but_blocks_finality(monkeypatch: pytest.MonkeyPatch) -> None:
     context = _synthetic_context(
         options=(_SyntheticOption(option_id="opt-dinner", display_title="Kalkun med rosenkål"),),
         destinations=(
@@ -519,23 +523,67 @@ def test_explicit_target_unresolved_blocks_production(monkeypatch: pytest.Monkey
                 baseline_quantity=18,
                 selected_option_id="opt-dinner",
                 choice_source="explicit",
+                target_demand_state="resolved_positive",
+            ),
+            _SyntheticDestination(
+                destination_id="dept-zero",
+                display_name="Avdelning 0",
+                baseline_quantity=9,
+                selected_option_id=None,
+                choice_source="resolved_zero",
+                target_demand_state="resolved_zero",
+            ),
+            _SyntheticDestination(
+                destination_id="dept-unresolved",
+                display_name="Avdelning ?",
+                baseline_quantity=7,
+                selected_option_id=None,
+                choice_source="unresolved",
+                target_demand_state="unresolved",
             ),
         ),
         unresolved_destination_count=1,
+        has_target_demand=True,
     )
 
     class _ReviewService:
         def get_option_review_state(self, **_: object) -> _StubReviewState:
             return _StubReviewState(review_state=REVIEW_STATE_NO_DEVIATIONS)
 
-    def _boom(*_: object, **__: object) -> object:
-        raise AssertionError("adapter/engine should not run when target demand is unresolved")
+    def _slice_builder(**_: object) -> PlanningSlice:
+        return PlanningSlice(
+            baseline=18,
+            units=(UnitInput(unit_id="dept-1", baseline_total=18),),
+            deviations=(),
+            context={"kind": "explicit_target", "option_id": "opt-dinner"},
+        )
+
+    def _accept(request: PlanRequest, *, expected_unit_ids=None) -> ProductionAcceptanceResult:
+        assert expected_unit_ids == ("dept-1",)
+        return ProductionAcceptanceResult(accepted=True, issues=())
+
+    def _compute(request: PlanRequest) -> PlanResult:
+        return PlanResult(
+            totals=Totals(baseline_total=18, deviation_total=0, normal_total=18),
+            per_combination={},
+            per_unit={"dept-1": 18},
+            per_unit_breakdown={
+                "dept-1": UnitBreakdown(
+                    baseline_total=18,
+                    deviation_total=0,
+                    normal_total=18,
+                    per_combination={},
+                    per_form={},
+                )
+            },
+            warnings=[],
+        )
 
     monkeypatch.setattr("core.planera_v2.meal_orchestration.build_product2_page2_target_planning_context", lambda **kwargs: context)
     monkeypatch.setattr("core.planera_v2.meal_orchestration.PlanningOptionReviewService", lambda: _ReviewService())
-    monkeypatch.setattr("core.planera_v2.meal_orchestration.build_planning_slice_from_option_review", _boom)
-    monkeypatch.setattr("core.planera_v2.meal_orchestration.validate_plan_request_for_production", _boom)
-    monkeypatch.setattr("core.planera_v2.meal_orchestration.compute_plan", _boom)
+    monkeypatch.setattr("core.planera_v2.meal_orchestration.build_planning_slice_from_option_review", _slice_builder)
+    monkeypatch.setattr("core.planera_v2.meal_orchestration.validate_plan_request_for_production", _accept)
+    monkeypatch.setattr("core.planera_v2.meal_orchestration.compute_plan", _compute)
 
     result = run_kommun_meal_orchestration(
         tenant_id=1,
@@ -547,9 +595,44 @@ def test_explicit_target_unresolved_blocks_production(monkeypatch: pytest.Monkey
 
     option = result.options[0]
     assert result.ready is False
-    assert result.blockers == ("INVALID_OPTION_PLAN",)
-    assert option.blockers == ("INVALID_OPTION_PLAN",)
-    assert option.plan_result is None
+    assert result.blockers == ("UNASSIGNED_DESTINATIONS",)
+    assert option.blockers == ()
+    assert option.plan_result is not None
+    assert option.plan_result.totals.baseline_total == 18
+    assert [destination.destination_id for destination in result.unassigned_destinations] == ["dept-unresolved"]
+
+
+def test_explicit_target_resolved_zero_does_not_create_demand_or_block(monkeypatch: pytest.MonkeyPatch) -> None:
+    context = _synthetic_context(
+        options=(_SyntheticOption(option_id="opt-dinner", display_title="Kalkun med rosenkål"),),
+        destinations=(
+            _SyntheticDestination(
+                destination_id="dept-zero",
+                display_name="Avdelning 0",
+                baseline_quantity=9,
+                selected_option_id=None,
+                choice_source="resolved_zero",
+                target_demand_state="resolved_zero",
+            ),
+        ),
+        has_target_demand=True,
+    )
+
+    monkeypatch.setattr("core.planera_v2.meal_orchestration.build_product2_page2_target_planning_context", lambda **_: context)
+
+    result = run_kommun_meal_orchestration(
+        tenant_id=1,
+        site_id="site",
+        service_date=date(2026, 1, 1),
+        meal="dinner",
+        option_id="opt-dinner",
+    )
+
+    assert result.ready is True
+    assert result.blockers == ()
+    assert result.unassigned_destinations == ()
+    assert result.options[0].has_demand is False
+    assert result.options[0].plan_result is None
 
 
 

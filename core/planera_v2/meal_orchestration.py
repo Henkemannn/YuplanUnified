@@ -141,6 +141,12 @@ def _destination_result(destination: Product2Page2DestinationLike) -> KommunMeal
     )
 
 
+def _is_unresolved_destination(*, context: Product2Page2PlanningContextLike, destination) -> bool:
+    if bool(getattr(context, "has_target_demand", False)):
+        return getattr(destination, "target_demand_state", None) == "unresolved"
+    return destination.selected_option_id is None
+
+
 def _assigned_destinations_for_option(
     *,
     context: Product2Page2PlanningContextLike,
@@ -234,7 +240,7 @@ def _build_empty_or_invalid_result(
     unassigned_destinations = tuple(
         _destination_result(destination)
         for destination in context.destinations
-        if destination.selected_option_id is None
+        if _is_unresolved_destination(context=context, destination=destination)
     )
     return KommunMealOrchestrationResult(
         tenant_id=tenant_id,
@@ -310,17 +316,6 @@ def _build_option_result(
             blocker="UNREVIEWED_OPTIONS",
         )
     if review_state.review_state not in {REVIEW_STATE_NO_DEVIATIONS, REVIEW_STATE_WITH_DEVIATIONS}:
-        blockers.add("INVALID_OPTION_PLAN")
-        return _invalid_option_result(
-            option=option,
-            assigned_destination_ids=assigned_destination_ids,
-            review_state=review_state.review_state,
-            review_is_stale=review_state.review_is_stale,
-            blocker="INVALID_OPTION_PLAN",
-        )
-
-    unresolved_destination_count = int(getattr(context, "unresolved_destination_count", 0) or 0)
-    if unresolved_destination_count > 0:
         blockers.add("INVALID_OPTION_PLAN")
         return _invalid_option_result(
             option=option,
@@ -411,7 +406,7 @@ def run_kommun_meal_orchestration(
 
     if context.publication_identity is None or context.status != "ok":
         meal_blockers: tuple[MealBlockerCode, ...] = ("INVALID_OPTION_PLAN",)
-        if any(destination.selected_option_id is None for destination in context.destinations):
+        if any(_is_unresolved_destination(context=context, destination=destination) for destination in context.destinations):
             meal_blockers = _ordered_blockers(("UNASSIGNED_DESTINATIONS",), meal_blockers)
         return _build_empty_or_invalid_result(
             tenant_id=normalized_tenant_id,
@@ -444,9 +439,9 @@ def run_kommun_meal_orchestration(
     unassigned_destinations = tuple(
         _destination_result(destination)
         for destination in context.destinations
-        if destination.selected_option_id is None
+        if _is_unresolved_destination(context=context, destination=destination)
     )
-    if unassigned_destinations:
+    if unassigned_destinations or int(getattr(context, "unresolved_destination_count", 0) or 0) > 0:
         meal_blockers.add("UNASSIGNED_DESTINATIONS")
 
     ordered_blockers = _ordered_blockers(tuple(meal_blockers))
