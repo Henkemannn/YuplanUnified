@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+from dataclasses import replace
 
 import pytest
 
@@ -173,6 +174,7 @@ def test_build_product2_page3_vm_uses_orchestration_numbers_and_page2_metadata(m
 
     assert vm.site_name == "Avdelningarnas kök"
     assert vm.ready is True
+    assert vm.meal_label == "Lunch"
     assert vm.ready_label == "Underlag granskat"
     assert vm.page2_url == "/ui/kitchen/planering/day?ui=product2&site_id=site-1&date=2026-09-08&meal=lunch"
     assert vm.options[0].display_label == "Alt 1"
@@ -302,12 +304,45 @@ def test_build_product2_page3_vm_preserves_explicit_option_identity(monkeypatch)
     assert called["meal"] == "dinner"
     assert called["option_id"] == "opt-dinner"
     assert vm.meal == "dinner"
+    assert vm.meal_label == "Kvällsmat"
     assert "meal=dinner" in vm.page2_url
     assert "option_id=opt-dinner" in vm.page2_url
     assert "meal=dinner" in vm.navigation_urls["overview"]
     assert "option_id=opt-dinner" in vm.navigation_urls["overview"]
     assert vm.options[0].option_id == "opt-dinner"
     assert vm.options[0].display_title == "Kalkun med rosenkål"
+
+
+def test_build_product2_page3_vm_labels_targeted_dessert_and_disables_completion(monkeypatch):
+    base_context = _context()
+    dessert_option = replace(base_context.options[0], variant_type="dessert", display_label="Dessert")
+    page2_context = replace(
+        base_context,
+        options=(dessert_option,),
+        target_option_id="option-1",
+        target_display_label="Dessert",
+        target_display_title="Frukt",
+        has_target_demand=True,
+    )
+
+    monkeypatch.setattr("core.planera_product2_page3_vm._load_site_name", lambda **_: "Avdelningarnas kök")
+    monkeypatch.setattr(
+        "core.planera_product2_page3_vm.build_product2_page2_target_planning_context",
+        lambda **_: page2_context,
+    )
+    monkeypatch.setattr("core.planera_product2_page3_vm.run_kommun_meal_orchestration", lambda **_: _meal_result())
+
+    vm = build_product2_page3_vm(
+        tenant_id=1,
+        site_id="site-1",
+        service_date="2026-09-08",
+        meal="lunch",
+        option_id="option-1",
+    )
+
+    assert vm.meal_label == "Dessert"
+    assert vm.target_variant_type == "dessert"
+    assert vm.completion_allowed is False
 
 
 def test_build_product2_page3_vm_completion_targets_use_refs_and_keep_aggregation(monkeypatch):

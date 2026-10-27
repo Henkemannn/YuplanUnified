@@ -44,7 +44,7 @@
                   <span class="yp-planera-page3-status-pill {% if vm.ready %}is-ready{% else %}is-blocked{% endif %}" aria-label="{{ vm.ready_label }}" title="{{ vm.ready_label }}">{{ vm.ready_label }}</span>
                 </div>
               </div>
-              {% if (vm.completion_allowed or vm.ready) and completion_department_ids %}
+              {% if vm.completion_allowed and completion_department_ids %}
               <div class="yp-planera-page3-action-row" data-page3-completion-shell>
                 <button
                   class="yp-planera-page3-completion-button"

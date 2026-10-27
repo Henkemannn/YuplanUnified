@@ -556,7 +556,7 @@
 
 .yp-planera-page3-table--matrix tfoot th {
   background: var(--page2-active-bg);
-  color: #071426;
+  color: var(--page2-ink);
 }
 
 .yp-planera-page3-matrix-column-title {
@@ -730,7 +730,7 @@
 .yp-planera-page3-table tfoot tr th,
 .yp-planera-page3-table tfoot tr td {
   background: var(--page2-active-bg);
-  color: #071426;
+  color: var(--page2-ink);
 }
 
 .yp-planera-page3-table td:last-child,

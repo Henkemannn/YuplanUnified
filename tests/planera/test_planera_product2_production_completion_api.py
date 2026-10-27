@@ -173,6 +173,62 @@ def _make_vm(captured: dict[str, object], *, site_id: str, service_date: date, m
     return _builder
 
 
+def test_product2_dessert_completion_rejects_before_weekview_mutation(app_session, client_admin, monkeypatch):
+    app = app_session
+    _enable_planera_feature(app)
+    with app.app_context():
+        seeded = _seed_site_with_two_departments(app)
+
+    site_id = seeded["site_id"]
+    department_id = seeded["dept_a"]
+    service_date = date(2026, 9, 8)
+    year, week, _ = service_date.isocalendar()
+    with app.app_context():
+        _seed_weekview_version(1, department_id, year, week, 0)
+
+    target = Product2Page3CompletionTargetVM(
+        requirement_group_id=seeded["group_a"],
+        destination_id=department_id,
+        service_date=service_date.isoformat(),
+        meal="lunch",
+        quantity=1,
+    )
+    monkeypatch.setattr(
+        "core.planera_api.build_product2_page3_vm",
+        lambda **_: SimpleNamespace(
+            ready=True,
+            blockers=(),
+            completion_targets=(target,),
+            target_variant_type="dessert",
+        ),
+    )
+
+    _login(client_admin, site_id=site_id, role="cook")
+    initial_version = WeekviewRepo().get_version(1, year, week, department_id)
+    initial_completion = DepartmentRequirementGroupCompletionRepo().get(
+        seeded["group_a"], service_date, "lunch"
+    )
+
+    for marked in (True, False):
+        response = client_admin.post(
+            "/api/planera/product2/production-completion",
+            json={
+                "site_id": site_id,
+                "service_date": service_date.isoformat(),
+                "meal": "lunch",
+                "marked": marked,
+                "option_id": "dessert-row",
+            },
+            headers={**_csrf_headers(client_admin), "X-User-Role": "cook", "X-Tenant-Id": "1"},
+        )
+        assert response.status_code == 409
+        assert response.get_json()["detail"] == "dessert_completion_unsupported"
+        assert WeekviewRepo().get_version(1, year, week, department_id) == initial_version
+        assert DepartmentRequirementGroupCompletionRepo().get(
+            seeded["group_a"], service_date, "lunch"
+        ) == initial_completion
+
+
 def test_product2_production_completion_marks_and_clears_targets(app_session, client_admin, monkeypatch):
     app = app_session
     _enable_planera_feature(app)

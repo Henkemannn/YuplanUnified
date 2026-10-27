@@ -462,6 +462,7 @@ def test_page3_route_renders_completion_button_for_ready_targets(app_session, mo
             Product2Page3CompletionTargetVM(requirement_group_id="group-b", destination_id="dept-b", service_date="2026-09-08", meal="lunch", quantity=1),
             Product2Page3CompletionTargetVM(requirement_group_id="group-c", destination_id="dept-a", service_date="2026-09-08", meal="lunch", quantity=2),
         ),
+        completion_allowed=True,
     )
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: vm)
 
@@ -501,6 +502,40 @@ def test_page3_route_renders_partial_completion_button_for_unassigned_only(app_s
     html = rv.get_data(as_text=True)
     assert 'data-page3-completion-button' in html
     assert 'Markera som gjorda i veckolistan' in html
+
+
+def test_page3_route_labels_dessert_and_hides_completion_when_ready(app_session, monkeypatch):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+
+    site, _ = SitesRepo().create_site(name="Page3 Dessert Site", tenant_id=1)
+    vm = replace(
+        _page3_vm_hierarchy(),
+        meal_label="Dessert",
+        target_variant_type="dessert",
+        completion_allowed=False,
+        completion_targets=(
+            Product2Page3CompletionTargetVM(
+                requirement_group_id="group-a",
+                destination_id="dept-a",
+                service_date="2026-09-08",
+                meal="lunch",
+                quantity=1,
+            ),
+        ),
+    )
+    monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: vm)
+
+    rv = client.get(
+        f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&option_id=dessert-row",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert "· Dessert" in html
+    assert 'data-page3-completion-button' not in html
 
 
 def test_page3_route_hides_completion_button_when_no_completion_targets(app_session, monkeypatch):

@@ -170,6 +170,7 @@ class Product2Page3VM:
     is_partial: bool = False
     completion_allowed: bool = False
     target_option_id: str | None = None
+    target_variant_type: str | None = None
 
 
 def _normalize_tenant_id(value: object) -> int:
@@ -955,6 +956,19 @@ def build_product2_page3_vm(
     destination_map = _build_destination_name_map(page2_context)
     requirement_group_destination_map = _build_requirement_group_destination_map(page2_context)
     option_result_by_id = {option.option_id: option for option in meal_result.options}
+    target_variant_type = None
+    if option_id:
+        target_option = next(
+            (
+                context_option
+                for context_option in page2_context.options
+                if str(context_option.option_id) == str(page2_context.target_option_id or option_id)
+            ),
+            None,
+        )
+        if target_option is None:
+            raise Product2Page3VmError(f"missing_target_option:{option_id}")
+        target_variant_type = str(target_option.variant_type or "").strip().lower() or None
     options: list[Product2Page3OptionVM] = []
 
     for context_option in page2_context.options:
@@ -1053,7 +1067,13 @@ def build_product2_page3_vm(
         service_date_label=_format_service_date_label(normalized_service_date),
         service_date_compact_label=_format_service_date_compact_label(normalized_service_date),
         meal=normalized_meal,
-        meal_label="Lunch" if normalized_meal == "lunch" else normalized_meal.capitalize(),
+        meal_label=(
+            "Dessert"
+            if target_variant_type == "dessert"
+            else "Kvällsmat"
+            if normalized_meal == "dinner"
+            else "Lunch"
+        ),
         ready=bool(meal_result.ready),
         ready_label=(
             "Underlag granskat"
@@ -1081,8 +1101,9 @@ def build_product2_page3_vm(
         is_partial=not meal_result.ready,
         completion_allowed=bool(completion_targets) and (
             meal_result.ready or meal_result.blockers == ("UNASSIGNED_DESTINATIONS",)
-        ),
+        ) and target_variant_type != "dessert",
         target_option_id=selected_option_id or None,
+        target_variant_type=target_variant_type,
     )
 
 

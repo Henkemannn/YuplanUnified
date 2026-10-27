@@ -694,6 +694,20 @@ def post_planera_product2_production_completion():
     except Product2Page3VmError:
         return not_found("site_or_department_not_found")
 
+    if str(getattr(vm, "target_variant_type", "") or "").strip().lower() == "dessert":
+        return (
+            jsonify(
+                {
+                    "type": "about:blank",
+                    "title": "production_completion_unsupported",
+                    "detail": "dessert_completion_unsupported",
+                    "ok": False,
+                    "marked": marked,
+                }
+            ),
+            409,
+        )
+
     completion_targets = tuple(getattr(vm, "completion_targets", ()) or ())
     ready = bool(getattr(vm, "ready", False))
     blockers = tuple(getattr(vm, "blockers", ()) or ())
