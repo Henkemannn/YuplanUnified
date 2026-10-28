@@ -72,6 +72,7 @@ class Product2Page3SpecialDishVM:
     display_title: str
     quantity: int
     department_quantities: tuple[Product2Page3DepartmentQuantityVM, ...]
+    display_label: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +90,7 @@ class Product2Page3SpecialDestinationDishVM:
     option_id: str
     display_title: str
     quantity: int
+    display_label: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -560,9 +562,13 @@ def _build_special_production_groups(
     requirement_group_display_lookup: dict[frozenset[str], _RequirementGroupDisplay],
 ) -> tuple[Product2Page3SpecialProductionGroupVM, ...]:
     option_results = {option.option_id: option for option in options}
-    grouped: dict[tuple[str, str], dict[str, object]] = {}
-    group_order: list[tuple[str, str]] = []
+    grouped: dict[str, dict[str, object]] = {}
+    group_order: list[str] = []
     option_order = {str(context_option.option_id): index for index, context_option in enumerate(context_options)}
+    option_labels = {
+        str(context_option.option_id): str(getattr(context_option, "display_label", "")).strip()
+        for context_option in context_options
+    }
 
     for context_option in context_options:
         option_result = option_results.get(str(context_option.option_id))
@@ -577,18 +583,15 @@ def _build_special_production_groups(
                 label = _combo_label_from_key(combination_key, requirement_name_map)
                 modifier_labels: tuple[str, ...] = ()
                 unresolved_primary = True
-                bucket_key = combination_key
             else:
-                label = display.label
+                label = _combo_label_from_key(combination_key, requirement_name_map)
                 modifier_labels = display.modifier_labels
                 unresolved_primary = display.unresolved_primary
-                bucket_key = display.primary_key if display.primary_key is not None and not display.unresolved_primary else combination_key
-            grouped_key = (str(option_result.option_id), str(bucket_key))
+            grouped_key = str(combination_key)
             group = grouped.get(grouped_key)
             if group is None:
                 group = {
-                    "group_key": f"{option_result.option_id}::{bucket_key}",
-                    "option_id": option_result.option_id,
+                    "group_key": combination_key,
                     "combination_key": combination_key,
                     "label": label,
                     "modifier_labels": [],
@@ -605,16 +608,18 @@ def _build_special_production_groups(
                         labels.append(modifier_label)
             group["quantity"] = int(group["quantity"]) + int(quantity)
             dishes: dict[str, dict[str, object]] = group["dishes"]  # type: ignore[assignment]
-            dish = dishes.get(combination_key)
+            dish_key = f"{option_result.option_id}::{combination_key}"
+            dish = dishes.get(dish_key)
             if dish is None:
                 dish = {
                     "option_id": option_result.option_id,
                     "combination_key": combination_key,
                     "display_title": option_result.display_title,
+                    "display_label": option_labels.get(str(option_result.option_id), ""),
                     "quantity": 0,
                     "department_quantities": [],
                 }
-                dishes[combination_key] = dish
+                dishes[dish_key] = dish
             dish["quantity"] = int(dish["quantity"]) + int(quantity)
             department_quantities = _department_rows_for_combination(
                 option_result=option_result,
@@ -629,7 +634,10 @@ def _build_special_production_groups(
     for grouped_key in sorted(
         group_order,
         key=lambda key: (
-            int(option_order.get(str(key[0]), 0)),
+            min(
+                option_order.get(str(dish.get("option_id", "")), 0)
+                for dish in (grouped[key]["dishes"] or {}).values()
+            ),
             -(int(grouped[key]["quantity"])),
             str(grouped[key]["label"]),
             str(grouped[key]["group_key"]),
@@ -638,7 +646,13 @@ def _build_special_production_groups(
         group = grouped[grouped_key]
         dishes_map: dict[str, dict[str, object]] = group["dishes"]  # type: ignore[assignment]
         dishes: list[Product2Page3SpecialDishVM] = []
-        for dish in sorted(dishes_map.values(), key=lambda item: (str(item.get("combination_key", "")), str(item.get("display_title", "")))):
+        for dish in sorted(
+            dishes_map.values(),
+            key=lambda item: (
+                int(option_order.get(str(item.get("option_id", "")), 0)),
+                str(item.get("display_title", "")),
+            ),
+        ):
             rows = tuple(dish.get("department_quantities") or ())
             dishes.append(
                 Product2Page3SpecialDishVM(
@@ -646,6 +660,7 @@ def _build_special_production_groups(
                     display_title=str(dish.get("display_title", "")),
                     quantity=int(dish.get("quantity", 0)),
                     department_quantities=rows,
+                    display_label=str(dish.get("display_label", "")),
                 )
             )
         groups.append(
@@ -702,7 +717,7 @@ def _build_special_destination_groups(
                     modifier_labels: tuple[str, ...] = ()
                     unresolved_primary = True
                 else:
-                    label = display.label
+                    label = _combo_label_from_key(combination_key, requirement_name_map)
                     modifier_labels = display.modifier_labels
                     unresolved_primary = display.unresolved_primary
                 row = rows_map.get(combination_key)
@@ -747,6 +762,7 @@ def _build_special_destination_groups(
                         option_id=str(dish.get("option_id", "")),
                         display_title=str(dish.get("display_title", "")),
                         quantity=int(dish.get("quantity", 0)),
+                        display_label=str(dish.get("display_label", "")),
                     )
                 )
             rows.append(

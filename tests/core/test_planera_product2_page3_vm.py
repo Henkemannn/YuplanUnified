@@ -470,7 +470,7 @@ def test_build_product2_page3_vm_completion_targets_use_refs_and_keep_aggregatio
 
     vm = build_product2_page3_vm(tenant_id=1, site_id="site-1", service_date="2026-09-08", meal="lunch")
 
-    assert vm.special_production_groups[0].label == "Timbal"
+    assert vm.special_production_groups[0].label == "Timbal + Laktosfri"
     assert vm.special_production_groups[0].quantity == 3
     assert vm.special_production_groups[0].modifier_labels == ("Laktosfri",)
     assert [dish.quantity for dish in vm.special_production_groups[0].dishes] == [3]
@@ -758,27 +758,34 @@ def test_build_product2_page3_vm_aggregates_primary_buckets_without_merging_targ
 
     vm = build_product2_page3_vm(tenant_id=1, site_id="site-1", service_date="2026-09-08", meal="lunch")
 
-    assert [group.label for group in vm.special_production_groups] == ["Timbal", "Grovpaté", "Vegetarisk", "Timbal"]
+    assert [(group.label, group.quantity) for group in vm.special_production_groups] == [
+        ("Timbal", 8),
+        ("Timbal + Laktosfri", 2),
+        ("Timbal + Glutenfri", 1),
+        ("Grovpaté", 2),
+        ("Grovpaté + Laktosfri", 1),
+        ("Vegetarisk + Äggfri", 1),
+    ]
     timbal_groups = [group for group in vm.special_production_groups if group.label == "Timbal"]
-    assert len(timbal_groups) == 2
-    assert sorted(group.quantity for group in timbal_groups) == [5, 6]
-    assert any(group.modifier_labels == ("Glutenfri", "Laktosfri") for group in timbal_groups)
-    assert any(group.modifier_labels == () for group in timbal_groups)
-    assert any(group.combination_key.startswith("option-a::") for group in timbal_groups)
-    assert any(group.combination_key.startswith("option-d::") for group in timbal_groups)
+    assert len(timbal_groups) == 1
+    assert timbal_groups[0].combination_key == "special__timbal"
+    assert [dish.option_id for dish in timbal_groups[0].dishes] == ["option-a", "option-d"]
+    assert [dish.quantity for dish in timbal_groups[0].dishes] == [3, 5]
+    assert [dish.display_label for dish in timbal_groups[0].dishes] == ["Alt 1", "Kvällsmat"]
 
     grovpate = next(group for group in vm.special_production_groups if group.label == "Grovpaté")
-    assert grovpate.quantity == 3
-    assert grovpate.modifier_labels == ("Laktosfri",)
-    assert [dish.quantity for dish in grovpate.dishes] == [2, 1]
+    assert grovpate.quantity == 2
+    assert grovpate.modifier_labels == ()
+    assert [dish.quantity for dish in grovpate.dishes] == [2]
+    assert grovpate.dishes[0].display_label == "Alt 2"
 
-    vegetarian = next(group for group in vm.special_production_groups if group.label == "Vegetarisk")
+    vegetarian = next(group for group in vm.special_production_groups if group.label == "Vegetarisk + Äggfri")
     assert vegetarian.quantity == 1
     assert vegetarian.modifier_labels == ("Äggfri",)
 
     destination_a_rows = next(destination.rows for destination in vm.special_destination_groups if destination.destination_id == "dept-a")
     assert [row.quantity for row in destination_a_rows] == [3, 2, 1]
-    assert [row.label for row in destination_a_rows] == ["Timbal", "Timbal", "Timbal"]
+    assert [row.label for row in destination_a_rows] == ["Timbal", "Timbal + Laktosfri", "Timbal + Glutenfri"]
     assert [row.modifier_labels for row in destination_a_rows] == [(), ("Laktosfri",), ("Glutenfri",)]
 
 
@@ -1314,25 +1321,27 @@ def test_build_product2_page3_vm_special_production_and_destination_views_group_
 
     vm = build_product2_page3_vm(tenant_id=1, site_id="site-1", service_date="2026-09-08", meal="lunch")
 
-    assert [group.label for group in vm.special_production_groups] == ["Timbal", "Timbal"]
-    assert [group.quantity for group in vm.special_production_groups] == [2, 1]
-    assert [group.combination_key for group in vm.special_production_groups] == ["option-1::timbal", "option-2::timbal"]
+    assert [group.label for group in vm.special_production_groups] == ["Timbal + Glutenfri"]
+    assert [group.quantity for group in vm.special_production_groups] == [3]
+    assert [group.combination_key for group in vm.special_production_groups] == ["special__timbal__glutenfri"]
     assert vm.special_production_groups[0].modifier_labels == ("Glutenfri",)
     assert vm.special_production_groups[0].unresolved_primary is False
-    assert [dish.display_title for dish in vm.special_production_groups[0].dishes] == ["Vardagsgryta med rotfrukter"]
-    assert [dish.quantity for dish in vm.special_production_groups[0].dishes] == [2]
-    assert [dish.display_title for dish in vm.special_production_groups[1].dishes] == ["Ugnsbakad fisk med dill"]
-    assert [dish.quantity for dish in vm.special_production_groups[1].dishes] == [1]
+    assert [dish.display_title for dish in vm.special_production_groups[0].dishes] == [
+        "Vardagsgryta med rotfrukter",
+        "Ugnsbakad fisk med dill",
+    ]
+    assert [dish.display_label for dish in vm.special_production_groups[0].dishes] == ["Alt 1", "Alt 2"]
+    assert [dish.quantity for dish in vm.special_production_groups[0].dishes] == [2, 1]
 
     assert vm.special_destination_groups[0].display_name == "Avdelning 16"
-    assert vm.special_destination_groups[0].rows[0].label == "Timbal"
+    assert vm.special_destination_groups[0].rows[0].label == "Timbal + Glutenfri"
     assert vm.special_destination_groups[0].rows[0].quantity == 2
     assert vm.special_destination_groups[0].rows[0].modifier_labels == ("Glutenfri",)
     assert vm.special_destination_groups[0].rows[0].unresolved_primary is False
     assert [dish.quantity for dish in vm.special_destination_groups[0].rows[0].dishes] == [2]
 
     assert vm.special_destination_groups[1].display_name == "Avdelning 11"
-    assert vm.special_destination_groups[1].rows[0].label == "Timbal"
+    assert vm.special_destination_groups[1].rows[0].label == "Timbal + Glutenfri"
     assert vm.special_destination_groups[1].rows[0].quantity == 1
     assert vm.special_destination_groups[1].rows[0].modifier_labels == ("Glutenfri",)
     assert [dish.quantity for dish in vm.special_destination_groups[1].rows[0].dishes] == [1]
@@ -1413,10 +1422,10 @@ def test_build_product2_page3_vm_uses_primary_not_member_order_for_special_group
 
     vm = build_product2_page3_vm(tenant_id=1, site_id="site-1", service_date="2026-09-08", meal="lunch")
 
-    assert vm.special_production_groups[0].label == "Glutenfri"
+    assert vm.special_production_groups[0].label == "Timbal + Glutenfri"
     assert vm.special_production_groups[0].modifier_labels == ("Timbal",)
     assert vm.special_production_groups[0].unresolved_primary is False
-    assert vm.special_destination_groups[0].rows[0].label == "Glutenfri"
+    assert vm.special_destination_groups[0].rows[0].label == "Timbal + Glutenfri"
     assert vm.special_destination_groups[0].rows[0].modifier_labels == ("Timbal",)
 
 

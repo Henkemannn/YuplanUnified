@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 import re
 
 from core.admin_repo import DepartmentServiceAddonsRepo, DepartmentsRepo, ServiceAddonsRepo, SitesRepo
@@ -754,7 +755,7 @@ def test_page3_route_renders_xor_special_views_for_production_and_department(app
     assert not _tag_has_hidden(department_html, 'data-page3-special-view-panel="department"')
 
 
-def test_page3_special_view_renders_primary_and_modifier_pills(app_session, monkeypatch):
+def test_page3_special_view_renders_exact_combination_without_redundant_pills(app_session, monkeypatch):
     client = app_session.test_client()
     with client.session_transaction() as sess:
         sess["tenant_id"] = 1
@@ -766,7 +767,7 @@ def test_page3_special_view_renders_primary_and_modifier_pills(app_session, monk
         special_production_groups=(
             Product2Page3SpecialProductionGroupVM(
                 combination_key="special__timbal__glutenfri",
-                label="Timbal",
+                label="Timbal + Glutenfri",
                 quantity=3,
                 dishes=(
                     Product2Page3SpecialDishVM(
@@ -789,7 +790,7 @@ def test_page3_special_view_renders_primary_and_modifier_pills(app_session, monk
                 rows=(
                     Product2Page3SpecialDestinationRowVM(
                         combination_key="special__timbal__glutenfri",
-                        label="Timbal",
+                        label="Timbal + Glutenfri",
                         quantity=3,
                         dishes=(
                             Product2Page3SpecialDestinationDishVM(
@@ -814,11 +815,43 @@ def test_page3_special_view_renders_primary_and_modifier_pills(app_session, monk
 
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
-    assert "Timbal" in html
+    assert html.count('aria-label="Skriv ut aktuell vy"') == 1
+    assert 'aria-label="Skriv ut aktuell vy"' in html
+    assert 'title="Skriv ut aktuell vy"' in html
+    assert 'static/js/planera_product2_page3.js' in html
+    assert "Timbal + Glutenfri" in html
     assert "Glutenfri" in html
-    assert "yp-planera-page3-pill--modifier" in html
-    assert "yp-planera-page3-pill--menu" in html
+    assert "yp-planera-page3-pill--modifier" not in html
+    assert "yp-planera-page3-pill--menu" not in html
     assert "Huvudsaklig specialkost behöver anges" not in html
+
+
+def test_page3_print_title_and_preliminary_warning_follow_active_special_view(app_session, monkeypatch):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+
+    site, _ = SitesRepo().create_site(name="Page3 Print Site", tenant_id=1)
+    monkeypatch.setattr(
+        "core.ui_blueprint.build_product2_page3_vm",
+        lambda **_: _page3_vm_hierarchy(
+            view="special",
+            special_view="department",
+            ready=False,
+            blocker_messages=("Avdelning saknar val",),
+        ),
+    )
+
+    rv = client.get(
+        f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=special&special_view=department",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert "Specialkost – Packlista" in html
+    assert "Preliminärt underlag: Avdelning saknar val" in html
+    assert html.count('aria-label="Skriv ut aktuell vy"') == 1
 
 
 def test_page3_route_hides_inactive_panels_for_special_department_view(app_session, monkeypatch):
@@ -848,8 +881,10 @@ def test_page3_route_hides_inactive_panels_for_special_department_view(app_sessi
     assert 'Glutenfri' in html
     assert 'Laktosfri' in html
     assert 'Avdelning 16' in html
-    assert 'Avdelning 11 · 1 portion' in html
-    assert 'Avdelning 16 · 3 portioner' in html
+    assert 'Glutenfri' in html
+    assert '4 portioner' in html
+    assert 'Laktosfri' in html
+    assert '1 portion' in html
 
 
 def test_page3_route_renders_navigation_and_history_hooks(app_session, monkeypatch):
@@ -918,6 +953,21 @@ def test_page3_route_renders_incomplete_blocker_details(app_session, monkeypatch
     assert 'yp-planera-page3-status__text' not in html
 
 
+def test_page3_print_styles_keep_overview_and_matrix_text_dark():
+    css = (Path(__file__).parents[2] / "static" / "css" / "planera_product2_page3.css").read_text(encoding="utf-8")
+    print_css = css[css.index("@media print"):]
+
+    assert ".yp-planera-page3-table th" in print_css
+    assert ".yp-planera-page3-table td" in print_css
+    assert ".yp-planera-page3-overview-row__title" in print_css
+    assert ".yp-planera-page3-matrix-column-title" in print_css
+    assert ".yp-planera-page3-matrix-column-total" in print_css
+    assert ".yp-planera-page3-table--matrix .is-sticky" in print_css
+    assert "color: #071426 !important" in print_css
+    assert "background: #fff !important" in print_css
+    assert ".yp-planera-page3-date-control__arrow" in print_css
+
+
 def test_page3_route_hides_empty_special_departments(app_session, monkeypatch):
     client = app_session.test_client()
     with client.session_transaction() as sess:
@@ -971,7 +1021,8 @@ def test_page3_route_keeps_special_hierarchy_with_multi_dish_cohort(app_session,
     assert 'data-page3-special-view-panel="production"' in production_panel
     assert "RÄTT" not in production_panel
     assert "AVDELNINGAR" not in production_panel
-    assert "Avdelning 16 · 3 portioner" in production_panel
+    assert "Avdelning 16" in production_panel
+    assert "2 portioner" in production_panel
     assert "Glutenfri" in production_panel
     assert "Timbal" in production_panel
     assert "Vardagsgryta med rotfrukter" in production_panel

@@ -8,6 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const specialTabs = Array.from(root.querySelectorAll("[data-page3-special-view-link]"));
   const panels = new Map(Array.from(root.querySelectorAll("[data-page3-panel]"), (panel) => [panel.getAttribute("data-page3-panel"), panel]));
   const specialPanels = new Map(Array.from(root.querySelectorAll("[data-page3-special-view-panel]"), (panel) => [panel.getAttribute("data-page3-special-view-panel"), panel]));
+  const printTitle = root.querySelector("[data-page3-print-title]");
 
   const readStateFromUrl = () => {
     const params = new URLSearchParams(window.location.search);
@@ -51,20 +52,38 @@ document.addEventListener("DOMContentLoaded", () => {
     const resolvedSpecialView = view === "special" ? specialView : lastSpecialView;
 
     panels.forEach((panel, panelView) => {
-      panel.hidden = panelView !== view;
+      const active = panelView === view;
+      panel.hidden = !active;
+      panel.classList.toggle("is-print-active", active);
+      panel.classList.toggle("is-print-inactive", !active);
     });
 
     setActiveLink(topTabs, (link) => link.getAttribute("data-page3-view") === view);
 
     if (specialPanels.size > 0) {
       specialPanels.forEach((panel, panelView) => {
-        panel.hidden = view !== "special" || panelView !== resolvedSpecialView;
+        const active = view === "special" && panelView === resolvedSpecialView;
+        panel.hidden = !active;
+        panel.classList.toggle("is-print-active", active);
+        panel.classList.toggle("is-print-inactive", !active);
       });
       setActiveLink(specialTabs, (link) => view === "special" && link.getAttribute("data-page3-special-view") === resolvedSpecialView);
     }
 
     if (view === "special") {
       lastSpecialView = resolvedSpecialView;
+    }
+    root.setAttribute("data-page3-active-view", view);
+    root.setAttribute("data-page3-active-special-view", resolvedSpecialView);
+    if (printTitle) {
+      const title = view === "overview"
+        ? "Översikt – Dagens produktion"
+        : view === "normal"
+          ? "Normalkost"
+          : resolvedSpecialView === "department"
+            ? "Specialkost – Packlista"
+            : "Specialkost – Produktionslista";
+      printTitle.textContent = title;
     }
 
     if (updateHistory) {
@@ -102,6 +121,10 @@ document.addEventListener("DOMContentLoaded", () => {
     showState(readStateFromUrl(), { updateHistory: false });
   });
 
+  window.addEventListener("beforeprint", () => {
+    showState(readStateFromUrl(), { updateHistory: false });
+  });
+
   const completionButton = root.querySelector("[data-page3-completion-button]");
   const completionFeedback = root.querySelector("[data-page3-completion-feedback]");
   const completionDepartmentIds = (() => {
@@ -122,6 +145,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const optionId = (root.getAttribute("data-page3-option-id") || "").trim();
   const isoYear = Number.parseInt(root.getAttribute("data-page3-year") || "0", 10);
   const isoWeek = Number.parseInt(root.getAttribute("data-page3-week") || "0", 10);
+
+  const printButton = root.querySelector("[data-page3-print]");
+  if (printButton) {
+    printButton.addEventListener("click", () => window.print());
+  }
 
   if (!completionButton || !completionDepartmentIds.length || !siteId || !serviceDate || !meal || !Number.isInteger(isoYear) || !Number.isInteger(isoWeek)) {
     return;
