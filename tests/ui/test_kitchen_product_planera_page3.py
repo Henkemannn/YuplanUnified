@@ -922,12 +922,101 @@ def test_page3_route_renders_compact_normal_headers_and_totals(app_session, monk
 
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
-    assert "79 portioner" in html
-    assert "54 portioner" in html
-    assert "TOTALT" in html
+    assert "79 portioner" not in html
+    assert "54 portioner" not in html
+    assert "SUMMA" in html
+    assert "kända portioner" not in html
     assert "2 rätt" not in html
-    assert 'yp-planera-page3-matrix-column-total' in html
     assert 'yp-planera-page3-matrix-column-title' in html
+    assert 'data-page3-normal-selector' in html
+    assert "Alla r" in html
+    assert '<option value="" selected>' in html
+    assert '<option value="option-1"' in html
+    assert '<option value="option-2"' in html
+
+
+def test_page3_normal_selector_defaults_to_target_option(app_session, monkeypatch):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+
+    site, _ = SitesRepo().create_site(name="Page3 Target Normal Site", tenant_id=1)
+    vm = replace(_page3_vm_hierarchy(view="normal"), target_option_id="option-2")
+    monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: vm)
+
+    rv = client.get(
+        f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=normal&option_id=option-2",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert '<option value="option-2" selected>Ugnsbakad fisk med dill</option>' in html
+    assert '<option value="" selected>Alla rätter</option>' not in html
+    assert 'data-page3-all-normal-link' in html
+    assert 'meal=lunch&amp;view=normal' in html
+    assert '&amp;option_id=' not in html.split('data-page3-all-normal-link', 1)[1].split('</a>', 1)[0]
+    assert 'data-page3-normal-single-heading="option-2"' in html
+
+
+def test_page3_targeted_non_lunch_does_not_offer_full_meal_link(app_session, monkeypatch):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+
+    site, _ = SitesRepo().create_site(name="Page3 Target Dinner Site", tenant_id=1)
+    vm = replace(_page3_vm_hierarchy(view="normal"), meal="dinner", target_option_id="option-2")
+    monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: vm)
+
+    rv = client.get(
+        f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=dinner&view=normal&option_id=option-2",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert "data-page3-all-normal-link" not in html
+    assert "data-page3-all-overview-link" not in html
+
+
+def test_page3_targeted_lunch_overview_offers_full_lunch_link(app_session, monkeypatch):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+
+    site, _ = SitesRepo().create_site(name="Page3 Overview Lunch Site", tenant_id=1)
+    vm = replace(_page3_vm_hierarchy(view="overview"), target_option_id="option-2")
+    monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: vm)
+
+    rv = client.get(
+        f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=overview&option_id=option-2",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert "data-page3-all-overview-link" in html
+    assert "Visa hela lunchen" in html
+    link = html.split("data-page3-all-overview-link", 1)[1].split("</a>", 1)[0]
+    assert "meal=lunch&amp;view=overview" in link
+    assert "&amp;option_id=" not in link
+
+
+def test_page3_normal_selector_is_driven_by_external_state_script():
+    script = (Path(__file__).parents[2] / "static" / "js" / "planera_product2_page3.js").read_text(
+        encoding="utf-8"
+    )
+    css = (Path(__file__).parents[2] / "static" / "css" / "planera_product2_page3.css").read_text(
+        encoding="utf-8"
+    )
+
+    assert "data-page3-normal-selector" in script
+    assert "data-page3-normal-option" in script
+    assert "applyNormalSelection" in script
+    assert 'window.addEventListener("beforeprint"' in script
+    assert "showState(readStateFromUrl()" in script
+    assert ".yp-planera-page3-normal-single-heading[hidden]" in css
+    assert "display: none !important" in css
 
 
 def test_page3_route_renders_incomplete_blocker_details(app_session, monkeypatch):

@@ -516,6 +516,67 @@
   gap: 12px;
 }
 
+.yp-planera-page3-normal-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--page2-muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.yp-planera-page3-normal-selector select {
+  min-height: 36px;
+  max-width: 15rem;
+  padding: 0.25rem 2rem 0.25rem 0.65rem;
+  border: 1px solid var(--page2-line);
+  border-radius: 8px;
+  background: var(--page2-surface-soft);
+  color: var(--page2-ink);
+  font: inherit;
+  font-weight: 750;
+}
+
+.yp-planera-page3-normal-all-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0.25rem 0.65rem;
+  border: 1px solid var(--page2-line);
+  border-radius: 8px;
+  color: var(--page2-ink);
+  font-size: 0.78rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.yp-planera-page3-normal-all-link:hover {
+  border-color: var(--page2-accent);
+  color: var(--page2-accent);
+}
+
+.yp-planera-page3-normal-single-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 2px 2px;
+  color: var(--page2-ink);
+  font-size: 0.96rem;
+  font-weight: 850;
+}
+
+.yp-planera-page3-normal-single-heading[hidden] {
+  display: none !important;
+}
+
+.yp-planera-page3-normal-single-heading small {
+  color: var(--page2-muted);
+  font-size: 0.8rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
 .yp-planera-page3-overview-row__title {
   display: block;
   color: var(--page2-ink);
@@ -873,6 +934,14 @@
   }
 
   .yp-planera-page3-date-control__arrow {
+    display: none;
+  }
+
+  .yp-planera-page3-normal-selector {
+    display: none;
+  }
+
+  .yp-planera-page3-normal-all-link {
     display: none;
   }
 

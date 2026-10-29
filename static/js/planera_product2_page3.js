@@ -9,6 +9,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const panels = new Map(Array.from(root.querySelectorAll("[data-page3-panel]"), (panel) => [panel.getAttribute("data-page3-panel"), panel]));
   const specialPanels = new Map(Array.from(root.querySelectorAll("[data-page3-special-view-panel]"), (panel) => [panel.getAttribute("data-page3-special-view-panel"), panel]));
   const printTitle = root.querySelector("[data-page3-print-title]");
+  const normalSelector = root.querySelector("[data-page3-normal-selector]");
+  const normalTable = root.querySelector("[data-page3-normal-table]");
+  const normalColumnHeaders = Array.from(root.querySelectorAll("[data-page3-normal-table] thead th[data-page3-normal-option]"));
+  const normalSingleHeadings = Array.from(root.querySelectorAll("[data-page3-normal-single-heading]"));
+  const normalQuantityHeading = root.querySelector("[data-page3-normal-quantity-heading]");
 
   const readStateFromUrl = () => {
     const params = new URLSearchParams(window.location.search);
@@ -44,6 +49,47 @@ document.addEventListener("DOMContentLoaded", () => {
       window.history.replaceState(state, "", url);
     } else {
       window.history.pushState(state, "", url);
+    }
+  };
+
+  const applyNormalSelection = () => {
+    const selectedOptionId = normalSelector ? normalSelector.value : "";
+    const onlyOptionId = normalColumnHeaders.length === 1
+      ? normalColumnHeaders[0].getAttribute("data-page3-normal-option") || ""
+      : "";
+    const displayedOptionId = selectedOptionId || onlyOptionId;
+    const isSingleSelection = Boolean(displayedOptionId);
+    if (normalTable) {
+      normalTable.classList.toggle("is-single-selection", isSingleSelection);
+    }
+    normalColumnHeaders.forEach((element) => {
+      element.hidden = isSingleSelection;
+    });
+    if (normalQuantityHeading) {
+      normalQuantityHeading.hidden = !isSingleSelection;
+    }
+    root.querySelectorAll("[data-page3-normal-option]").forEach((element) => {
+      const optionId = element.getAttribute("data-page3-normal-option") || "";
+      if (element.closest("thead")) {
+        return;
+      }
+      element.hidden = Boolean(displayedOptionId && optionId !== displayedOptionId);
+    });
+    normalSingleHeadings.forEach((element) => {
+      const optionId = element.getAttribute("data-page3-normal-single-heading") || "";
+      element.hidden = !isSingleSelection || optionId !== displayedOptionId;
+    });
+    if (printTitle && root.getAttribute("data-page3-active-view") === "normal") {
+      const selectedOption = normalSelector && normalSelector.selectedOptions[0];
+      const selectedHeading = normalSingleHeadings.find((heading) => (
+        heading.getAttribute("data-page3-normal-single-heading") === displayedOptionId
+      ));
+      const selectedTitle = selectedOptionId && selectedOption
+        ? `Normalkost – ${selectedOption.textContent}`
+        : selectedHeading && selectedHeading.firstElementChild
+          ? selectedHeading.firstElementChild.textContent
+          : "";
+      printTitle.textContent = selectedTitle ? selectedTitle : "Normalkost";
     }
   };
 
@@ -85,6 +131,7 @@ document.addEventListener("DOMContentLoaded", () => {
             : "Specialkost – Produktionslista";
       printTitle.textContent = title;
     }
+    applyNormalSelection();
 
     if (updateHistory) {
       updateUrl({ view, specialView: resolvedSpecialView }, replaceHistory);
@@ -115,7 +162,12 @@ document.addEventListener("DOMContentLoaded", () => {
       event.preventDefault();
       showState({ view: "special", specialView }, { updateHistory: true });
     });
+
   });
+
+  if (normalSelector) {
+    normalSelector.addEventListener("change", applyNormalSelection);
+  }
 
   window.addEventListener("popstate", () => {
     showState(readStateFromUrl(), { updateHistory: false });

@@ -97,6 +97,13 @@
               <section class="yp-planera-page3-section yp-planera-page3-section--overview" data-page3-panel="overview" {% if vm.view != 'overview' %}hidden{% endif %}>
                 <div class="yp-planera-page3-section__head">
                   <h2 class="yp-planera-page3-section__title" id="yp-planera-page3-overview-title">Dagens produktion{% if vm.is_partial %} · kända mängder{% endif %}</h2>
+                  {% if vm.target_option_id and vm.meal == 'lunch' and vm.target_variant_type != 'dessert' %}
+                  <a
+                    class="yp-planera-page3-normal-all-link"
+                    data-page3-all-overview-link
+                    href="/ui/kitchen/planering/day/production?ui=product2&amp;site_id={{ vm.site_id }}&amp;date={{ vm.service_date }}&amp;meal={{ vm.meal }}&amp;view=overview"
+                  >Visa hela lunchen</a>
+                  {% endif %}
                 </div>
                 {% if vm.overview_options %}
                 {% set overview_totals = namespace(baseline=0, normal=0, special=0) %}
@@ -146,19 +153,45 @@
               <section class="yp-planera-page3-section yp-planera-page3-section--matrix" aria-labelledby="yp-planera-page3-normal-title" data-page3-panel="normal" {% if vm.view != 'normal' %}hidden{% endif %}>
                 <div class="yp-planera-page3-section__head">
                   <h2 class="yp-planera-page3-section__title" id="yp-planera-page3-normal-title">Normalkost{% if vm.is_partial %} · kända mängder{% endif %}</h2>
+                  {% if vm.normal_matrix and vm.normal_matrix.columns|length > 1 %}
+                  <label class="yp-planera-page3-normal-selector">
+                    <span>Visa</span>
+                    <select data-page3-normal-selector aria-label="Välj rätt för Normalkost">
+                      <option value="" {% if not vm.target_option_id %}selected{% endif %}>Alla rätter</option>
+                      {% for column in vm.normal_matrix.columns %}
+                      <option value="{{ column.option_id }}" {% if vm.target_option_id == column.option_id %}selected{% endif %}>{{ column.display_title }}</option>
+                      {% endfor %}
+                    </select>
+                  </label>
+                  {% endif %}
+                  {% if vm.target_option_id and vm.meal == 'lunch' and vm.target_variant_type != 'dessert' %}
+                  <a
+                    class="yp-planera-page3-normal-all-link"
+                    data-page3-all-normal-link
+                    href="/ui/kitchen/planering/day/production?ui=product2&amp;site_id={{ vm.site_id }}&amp;date={{ vm.service_date }}&amp;meal={{ vm.meal }}&amp;view=normal"
+                  >Visa alla rätter</a>
+                  {% endif %}
                 </div>
                 {% if vm.normal_matrix and vm.normal_matrix.columns %}
+                {% for column in vm.normal_matrix.columns %}
+                <div class="yp-planera-page3-normal-single-heading" data-page3-normal-single-heading="{{ column.option_id }}" hidden>
+                  <span>{{ column.display_title }}</span>
+                  {% if not column.has_demand %}
+                  <small>Ingen avdelning har valt rätten ännu.</small>
+                  {% endif %}
+                </div>
+                {% endfor %}
                 <div class="yp-planera-page3-table-wrap">
-                  <table class="yp-planera-page3-table yp-planera-page3-table--matrix">
+                  <table class="yp-planera-page3-table yp-planera-page3-table--matrix" data-page3-normal-table>
                     <thead>
                       <tr>
                         <th class="is-sticky">Avdelning</th>
                         {% for column in vm.normal_matrix.columns %}
-                        <th>
+                        <th data-page3-normal-option="{{ column.option_id }}">
                           <span class="yp-planera-page3-matrix-column-title">{{ column.display_title }}</span>
-                          <span class="yp-planera-page3-matrix-column-total">{{ column.display_total }} {{ "kända " if vm.is_partial else "" }}portioner</span>
                         </th>
                         {% endfor %}
+                        <th data-page3-normal-quantity-heading hidden>Portioner</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -166,16 +199,16 @@
                       <tr>
                         <th class="is-sticky" scope="row">{{ row.display_name }}</th>
                         {% for cell in row.cells %}
-                        <td>{{ cell.display_value }}</td>
+                        <td data-page3-normal-option="{{ cell.option_id }}">{{ cell.display_value }}</td>
                         {% endfor %}
                       </tr>
                       {% endfor %}
                     </tbody>
                     <tfoot>
                       <tr>
-                        <th class="is-sticky" scope="row">{{ "KÄNDA TOTALER" if vm.is_partial else "TOTALT" }}</th>
+                        <th class="is-sticky" scope="row">SUMMA</th>
                         {% for total in vm.normal_matrix.totals %}
-                        <th>{{ total.display_total }}</th>
+                        <th data-page3-normal-option="{{ total.option_id }}">{{ total.display_total }}</th>
                         {% endfor %}
                       </tr>
                     </tfoot>

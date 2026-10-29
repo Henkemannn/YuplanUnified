@@ -16,7 +16,11 @@ from core.planera_product2_page2_context import (
     build_product2_page2_planning_context,
     build_product2_page2_target_planning_context,
 )
-from core.planera_product2_page3_vm import Product2Page3VmError, build_product2_page3_vm
+from core.planera_product2_page3_vm import (
+    Product2Page3VmError,
+    _display_matrix_quantity,
+    build_product2_page3_vm,
+)
 from core.planera_v2.domain import PlanResult, PlanningSlice, Totals, UnitBreakdown
 from core.planera_v2.meal_orchestration import (
     KommunMealDestinationResult,
@@ -66,6 +70,12 @@ def _context() -> Product2Page2PlanningContext:
         destinations=(destination,),
         requirement_groups=(requirement_group,),
     )
+
+
+def test_normal_matrix_quantity_display_preserves_zero_and_unknown():
+    assert _display_matrix_quantity(0) == "0"
+    assert _display_matrix_quantity(7) == "7"
+    assert _display_matrix_quantity(None) == "—"
 
 
 def _meal_result() -> KommunMealOrchestrationResult:
@@ -1182,8 +1192,8 @@ def test_build_product2_page3_vm_overview_and_normal_matrix_projection(monkeypat
     assert [column.display_title for column in vm.normal_matrix.columns] == ["Vardagsgryta med rotfrukter", "Ugnsbakad fisk med dill"]
     assert vm.normal_matrix.rows[0].display_name == "Avdelning 01"
     assert vm.normal_matrix.rows[0].cells[0].display_value == "79"
-    assert vm.normal_matrix.rows[0].cells[1].display_value == "—"
-    assert vm.normal_matrix.rows[1].cells[0].display_value == "—"
+    assert vm.normal_matrix.rows[0].cells[1].display_value == "0"
+    assert vm.normal_matrix.rows[1].cells[0].display_value == "0"
     assert vm.normal_matrix.rows[1].cells[1].display_value == "54"
     assert [total.display_total for total in vm.normal_matrix.totals] == ["79", "54"]
 
@@ -1718,6 +1728,8 @@ def test_build_product2_page3_vm_zero_demand_option_stays_visible_without_invent
     assert vm.options[0].special_total is None
     assert vm.options[0].normal_department_rows == ()
     assert vm.options[0].special_cohorts == ()
+    assert vm.normal_matrix.columns[0].has_demand is False
+    assert vm.normal_matrix.columns[0].display_total == "—"
 
 
 @pytest.mark.parametrize("blocker_code,status_label", [

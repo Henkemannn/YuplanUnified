@@ -43,6 +43,7 @@ class Product2Page3NormalMatrixColumnVM:
     display_title: str
     total: int | None
     display_total: str
+    has_demand: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -439,7 +440,7 @@ def _build_requirement_group_display_lookup(
 
 
 def _display_matrix_quantity(value: int | None) -> str:
-    if value is None or int(value) <= 0:
+    if value is None:
         return "—"
     return str(int(value))
 
@@ -513,6 +514,7 @@ def _build_normal_matrix(
                     display_title=str(getattr(context_option, "display_title", "")).strip(),
                     total=None,
                     display_total="—",
+                    has_demand=bool(option_result.has_demand) if option_result is not None else True,
                 )
             )
             continue
@@ -523,6 +525,7 @@ def _build_normal_matrix(
                 display_title=option_result.display_title,
                 total=total,
                 display_total=_display_summary_quantity(total),
+                has_demand=bool(option_result.has_demand),
             )
         )
 
