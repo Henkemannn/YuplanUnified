@@ -50,18 +50,6 @@
                 Preliminärt underlag: {{ vm.blocker_messages | join("; ") }}
               </div>
               {% endif %}
-              {% if vm.completion_allowed and completion_department_ids %}
-              <div class="yp-planera-page3-action-row" data-page3-completion-shell>
-                <button
-                  class="yp-planera-page3-completion-button"
-                  type="button"
-                  data-page3-completion-button
-                >
-                  Markera som gjorda i veckolistan
-                </button>
-                <p class="yp-planera-page3-completion-feedback" data-page3-completion-feedback aria-live="polite" hidden></p>
-              </div>
-              {% endif %}
             </header>
 
             <div class="yp-planera-page3-tabs-row">
@@ -290,6 +278,18 @@
                   <p class="empty-text">Inga specialkostgrupper beräknades för detta menyval.</p>
                   {% endif %}
                 </div>
+                {% if vm.completion_allowed and completion_department_ids %}
+                <div class="yp-planera-page3-action-row yp-planera-page3-special-completion" data-page3-completion-shell>
+                  <button
+                    class="yp-planera-page3-completion-button"
+                    type="button"
+                    data-page3-completion-button
+                  >
+                    Markera som tillagad i veckovyn
+                  </button>
+                  <p class="yp-planera-page3-completion-feedback" data-page3-completion-feedback aria-live="polite" hidden></p>
+                </div>
+                {% endif %}
               </section>
             </div>
           </section>

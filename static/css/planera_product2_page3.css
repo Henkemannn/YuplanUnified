@@ -420,6 +420,18 @@
   flex-wrap: wrap;
 }
 
+.yp-planera-page3-special-completion {
+  justify-content: flex-end;
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--page2-line);
+}
+
+.yp-planera-page3-special-completion .yp-planera-page3-completion-button {
+  padding: 0.45rem 0.8rem;
+  font-size: 0.84rem;
+}
+
 .yp-planera-page3-completion-button {
   display: inline-flex;
   align-items: center;

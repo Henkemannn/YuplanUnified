@@ -475,8 +475,23 @@ def test_page3_route_renders_completion_button_for_ready_targets(app_session, mo
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
     assert 'data-page3-completion-target-departments=\'["dept-a", "dept-b"]\'' in html
-    assert 'Markera som gjorda i veckolistan' in html
+    assert 'Markera som tillagad i veckovyn' in html
     assert 'data-page3-completion-button' in html
+    assert 'data-page3-special-view-panel="production"' in html
+    assert html.index('data-page3-special-view-panel="department"') < html.index('data-page3-completion-shell')
+    assert 'data-page3-panel="overview"' in html
+    assert html.index('data-page3-completion-shell') > html.index('data-page3-panel="special"')
+    special_panel_start = html.index('data-page3-panel="special"')
+    assert "hidden" in html[special_panel_start:html.index(">", special_panel_start)]
+
+    normal_rv = client.get(
+        f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=normal",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    normal_html = normal_rv.get_data(as_text=True)
+    normal_panel_start = normal_html.index('data-page3-panel="special"')
+    assert "hidden" in normal_html[normal_panel_start:normal_html.index(">", normal_panel_start)]
+    assert normal_html.count('data-page3-completion-button') == 1
 
 
 def test_page3_route_renders_partial_completion_button_for_unassigned_only(app_session, monkeypatch):
@@ -502,7 +517,7 @@ def test_page3_route_renders_partial_completion_button_for_unassigned_only(app_s
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
     assert 'data-page3-completion-button' in html
-    assert 'Markera som gjorda i veckolistan' in html
+    assert 'Markera som tillagad i veckovyn' in html
 
 
 def test_page3_route_labels_dessert_and_hides_completion_when_ready(app_session, monkeypatch):
@@ -556,7 +571,7 @@ def test_page3_route_hides_completion_button_when_no_completion_targets(app_sess
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
     assert 'data-page3-completion-button' not in html
-    assert 'Markera som gjorda i veckolistan' not in html
+    assert 'Markera som tillagad i veckovyn' not in html
 
 
 def test_page3_ready_status_is_compact_and_rendered_once(app_session, monkeypatch):
@@ -1055,6 +1070,8 @@ def test_page3_print_styles_keep_overview_and_matrix_text_dark():
     assert "color: #071426 !important" in print_css
     assert "background: #fff !important" in print_css
     assert ".yp-planera-page3-date-control__arrow" in print_css
+    assert ".yp-planera-page3-action-row" in print_css
+    assert ".yp-planera-page3-special-completion" in css
 
 
 def test_page3_route_hides_empty_special_departments(app_session, monkeypatch):
