@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+from types import SimpleNamespace
 
 from sqlalchemy import text
 
@@ -136,6 +137,64 @@ def test_production_lists_index_renders_and_keeps_site_id(app_session, client_ad
     html = rv.get_data(as_text=True)
     assert "Produktionslistor" in html
     assert f"/ui/production-lists?site_id={site['id']}" in html
+
+
+def test_production_lists_index_renders_selected_iso_week_and_lunch_links(app_session, client_admin, monkeypatch):
+    site, _ = SitesRepo().create_site(f"Prod list week site {uuid.uuid4()}")
+    _set_active_site(client_admin, site["id"])
+    monkeypatch.setattr(
+        "core.ui_blueprint.build_product2_page2_planning_context",
+        lambda **_: SimpleNamespace(status="ok", options=(object(),)),
+    )
+
+    rv = client_admin.get(
+        f"/ui/production-lists?site_id={site['id']}&year=2026&week=1",
+        headers=_h(),
+    )
+
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert "Vecka 1" in html
+    assert html.count('class="production-lists-day-row"') == 7
+    assert html.count("meal=lunch") == 7
+    assert "view=overview" in html
+    assert "option_id" not in html
+    assert "year=2025&amp;week=52" in html
+    assert "year=2026&amp;week=2" in html
+    assert "2025" in html
+    assert "29/12" in html
+
+
+def test_production_lists_index_defaults_to_current_iso_week(app_session, client_admin, monkeypatch):
+    site, _ = SitesRepo().create_site(f"Prod list current week site {uuid.uuid4()}")
+    _set_active_site(client_admin, site["id"])
+
+    class FrozenDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 12, 31)
+
+    monkeypatch.setattr("core.ui_blueprint._date", FrozenDate)
+    monkeypatch.setattr(
+        "core.ui_blueprint.build_product2_page2_planning_context",
+        lambda **_: SimpleNamespace(status="no_publication", options=()),
+    )
+
+    rv = client_admin.get(f"/ui/production-lists?site_id={site['id']}", headers=_h())
+
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert "Vecka 53" in html
+    assert "2026" in html
+    assert "Ej publicerad" in html
+
+
+def test_production_lists_index_rejects_site_outside_tenant(app_session, client_admin):
+    _set_active_site(client_admin, "site-not-authorized")
+
+    rv = client_admin.get("/ui/production-lists?site_id=site-not-authorized", headers=_h())
+
+    assert rv.status_code == 404
 
 
 def test_production_list_shows_production_group_with_subtypes_and_departments(app_session, client_admin):

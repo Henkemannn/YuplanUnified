@@ -1627,12 +1627,76 @@ def ui_production_lists_index():
     if not site_id:
         return redirect(url_for("ui.select_site", next="/ui/production-lists"))
 
+    tenant_id = ctx.get("tenant_id")
+    try:
+        tenant_id = int(tenant_id)
+    except (TypeError, ValueError):
+        return abort(404)
+    active_site_id = str(ctx.get("site_id") or "").strip()
+    if active_site_id and active_site_id != site_id:
+        return abort(404)
+
     db = get_session()
     try:
-        row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
-        site_name = str(row_s[0]) if row_s else ""
+        row_s = db.execute(
+            text("SELECT name FROM sites WHERE id=:i AND tenant_id=:tid"),
+            {"i": site_id, "tid": tenant_id},
+        ).fetchone()
     finally:
         db.close()
+    if not row_s:
+        return abort(404)
+    site_name = str(row_s[0] or "").strip()
+
+    today = _date.today()
+    current_iso = today.isocalendar()
+    current_year = int(current_iso[0])
+    current_week = int(current_iso[1])
+    try:
+        selected_year = int(request.args.get("year") or current_year)
+        selected_week = int(request.args.get("week") or current_week)
+        monday = _date.fromisocalendar(selected_year, selected_week, 1)
+    except (TypeError, ValueError):
+        return abort(404)
+
+    previous_monday = monday - timedelta(days=7)
+    next_monday = monday + timedelta(days=7)
+    previous_iso = previous_monday.isocalendar()
+    next_iso = next_monday.isocalendar()
+    week_days = []
+    for day_offset in range(7):
+        day_date = monday + timedelta(days=day_offset)
+        available = False
+        try:
+            day_context = build_product2_page2_planning_context(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                service_date=day_date,
+                meal="lunch",
+            )
+            available = day_context.status == "ok" and bool(day_context.options)
+        except Product2Page2ContextError:
+            available = False
+        week_days.append(
+            {
+                "date": day_date.isoformat(),
+                "date_label": f"{day_date.day}/{day_date.month}",
+                "weekday_label": ("Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön")[day_offset],
+                "available": available,
+                "url": (
+                    url_for(
+                        "ui.kitchen_planering_product2_day_production",
+                        ui="product2",
+                        site_id=site_id,
+                        date=day_date.isoformat(),
+                        meal="lunch",
+                        view="overview",
+                    )
+                    if available
+                    else None
+                ),
+            }
+        )
 
     try:
         items = ProductionListsRepo().list_for_site(site_id=site_id)
@@ -1644,6 +1708,21 @@ def ui_production_lists_index():
         "site_id": site_id,
         "site_name": site_name,
         "items": items,
+        "year": selected_year,
+        "week": selected_week,
+        "week_days": week_days,
+        "previous_url": url_for(
+            "ui.ui_production_lists_index",
+            site_id=site_id,
+            year=int(previous_iso[0]),
+            week=int(previous_iso[1]),
+        ),
+        "next_url": url_for(
+            "ui.ui_production_lists_index",
+            site_id=site_id,
+            year=int(next_iso[0]),
+            week=int(next_iso[1]),
+        ),
         "allow_site_switch": False,
         "nav_context": "kitchen",
     }

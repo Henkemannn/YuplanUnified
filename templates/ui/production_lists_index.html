@@ -2,6 +2,10 @@
 
 {% block page_title %}Produktionslistor{% endblock %}
 
+{% block head_extra %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/production_lists.css') }}" />
+{% endblock %}
+
 {% block content %}
 <div class="app-page">
   <section class="app-shell__page-header">
@@ -13,10 +17,49 @@
     </div>
   </section>
 
-  <article class="app-shell__card">
+  <article class="app-shell__card production-lists-week-card">
+    <div class="app-shell__card-header">
+      <div>
+        <h2 class="app-shell__card-title">Vecka {{ vm.week }}</h2>
+        <p class="app-shell__card-text">Välj dag för att öppna dagens produktionsunderlag.</p>
+      </div>
+      <span class="app-shell__card-meta">År {{ vm.year }}</span>
+    </div>
     <div class="app-shell__card-body">
-      {% set prod_items = vm['items'] if vm is mapping and 'items' in vm else [] %}
-      {% if prod_items and prod_items|length > 0 %}
+      <nav class="production-lists-week-nav" aria-label="Veckonavigering">
+        <a class="yp-button yp-button-secondary" href="{{ vm.previous_url }}" aria-label="Föregående vecka">‹</a>
+        <strong>Vecka {{ vm.week }}</strong>
+        <a class="yp-button yp-button-secondary" href="{{ vm.next_url }}" aria-label="Nästa vecka">›</a>
+      </nav>
+      <div class="production-lists-day-list">
+        {% for day in vm.week_days %}
+        <div class="production-lists-day-row{% if not day.available %} is-unavailable{% endif %}">
+          <div>
+            <strong>{{ day.weekday_label }}</strong>
+            <span>{{ day.date_label }}</span>
+          </div>
+          {% if day.available %}
+            <a class="yp-button yp-button-primary" href="{{ day.url }}">Lunch</a>
+          {% else %}
+            <span class="production-lists-unavailable">Ej publicerad</span>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </article>
+
+  {% set prod_items = vm['items'] if vm is mapping and 'items' in vm else [] %}
+  {% if prod_items and prod_items|length > 0 %}
+  <article class="app-shell__card production-lists-legacy-card">
+    <div class="app-shell__card-header">
+      <div>
+        <h2 class="app-shell__card-title">Tidigare sparade listor</h2>
+        <p class="app-shell__card-text">Äldre sparade produktionslistor påverkas inte.</p>
+      </div>
+    </div>
+    <div class="app-shell__card-body">
+      <div class="production-lists-table-wrap">
         <table class="grid-table">
           <thead>
             <tr>
@@ -33,16 +76,15 @@
                 <td>{{ it.date }}</td>
                 <td>{{ 'Lunch' if it.meal_type == 'lunch' else 'Kvällsmat' }}</td>
                 <td>
-                  <a class="yp-button" href="{{ url_for('ui.ui_production_lists_detail', list_id=it.id, site_id=vm.site_id) }}">Visa</a>
+                  <a class="yp-button yp-button-secondary" href="{{ url_for('ui.ui_production_lists_detail', list_id=it.id, site_id=vm.site_id) }}">Visa</a>
                 </td>
               </tr>
             {% endfor %}
           </tbody>
         </table>
-      {% else %}
-        <p class="empty-text">Inga sparade produktionslistor ännu.</p>
-      {% endif %}
+      </div>
     </div>
   </article>
+  {% endif %}
 </div>
 {% endblock %}
