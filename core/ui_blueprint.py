@@ -1663,6 +1663,14 @@ def ui_production_lists_index():
     next_monday = monday + timedelta(days=7)
     previous_iso = previous_monday.isocalendar()
     next_iso = next_monday.isocalendar()
+    try:
+        _date.fromisocalendar(selected_year, 53, 1)
+        selected_year_weeks = 53
+    except ValueError:
+        selected_year_weeks = 52
+    year_options = sorted(
+        set(range(current_year - 5, current_year + 6)) | {selected_year}
+    )
     week_days = []
     for day_offset in range(7):
         day_date = monday + timedelta(days=day_offset)
@@ -1680,8 +1688,8 @@ def ui_production_lists_index():
         week_days.append(
             {
                 "date": day_date.isoformat(),
-                "date_label": f"{day_date.day}/{day_date.month}",
-                "weekday_label": ("Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön")[day_offset],
+                "date_label": f"{day_date.day} {('januari', 'februari', 'mars', 'april', 'maj', 'juni', 'juli', 'augusti', 'september', 'oktober', 'november', 'december')[day_date.month - 1]}",
+                "weekday_label": ("Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag")[day_offset],
                 "available": available,
                 "url": (
                     url_for(
@@ -1710,6 +1718,8 @@ def ui_production_lists_index():
         "items": items,
         "year": selected_year,
         "week": selected_week,
+        "week_options": tuple(range(1, selected_year_weeks + 1)),
+        "year_options": tuple(year_options),
         "week_days": week_days,
         "previous_url": url_for(
             "ui.ui_production_lists_index",

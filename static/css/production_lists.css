@@ -3,12 +3,17 @@
   margin-bottom: 16px;
 }
 
+.production-lists-week-card {
+  width: min(100%, 960px);
+}
+
 .production-lists-week-nav {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 12px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .production-lists-week-nav .yp-button {
@@ -16,6 +21,45 @@
   min-height: 44px;
   padding: 0.35rem 0.7rem;
   font-size: 1.2rem;
+}
+
+.production-lists-week-nav label {
+  display: inline-flex;
+}
+
+.production-lists-week-nav select {
+  min-height: 44px;
+  padding: 0.35rem 2rem 0.35rem 0.7rem;
+  border: 1px solid var(--yp-shell-border, rgba(107, 114, 128, 0.3));
+  border-radius: 10px;
+  background-color: var(--surface-2);
+  color: var(--text);
+  color-scheme: light dark;
+  font: inherit;
+  font-weight: 700;
+}
+
+.production-lists-week-nav select:focus-visible {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.production-lists-week-nav select option {
+  background-color: var(--surface-2);
+  color: var(--text);
+}
+
+.production-lists-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .production-lists-day-list {
@@ -26,7 +70,7 @@
 .production-lists-day-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   min-height: 58px;
   padding: 8px 0;
@@ -40,6 +84,7 @@
 .production-lists-day-row > div {
   display: grid;
   gap: 2px;
+  min-width: 9.5rem;
 }
 
 .production-lists-day-row > div span {
@@ -47,9 +92,55 @@
   font-size: 0.86rem;
 }
 
-.production-lists-day-row .yp-button {
+.production-lists-services {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.production-lists-service-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
   min-width: 92px;
   min-height: 44px;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--yp-shell-border-strong);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface-2) 32%, transparent);
+  color: var(--yp-shell-text);
+  font-size: 0.9rem;
+  font-weight: 750;
+  opacity: 1;
+  text-align: center;
+  text-decoration: none;
+  transition: border-color 140ms ease, background-color 140ms ease, transform 140ms ease;
+}
+
+.production-lists-service-link:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 55%, transparent);
+  color: var(--yp-shell-text);
+}
+
+.production-lists-service-link:focus-visible {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.production-lists-service-link:active {
+  transform: translateY(1px);
+}
+
+.production-lists-service-chevron {
+  color: var(--yp-shell-text-muted);
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.production-lists-day-row .production-lists-service-link {
   text-align: center;
 }
 
@@ -64,6 +155,11 @@
 
 @media (max-width: 560px) {
   .production-lists-day-row {
+    align-items: flex-start;
     min-height: 62px;
+  }
+
+  .production-lists-day-row > div {
+    min-width: 7.5rem;
   }
 }

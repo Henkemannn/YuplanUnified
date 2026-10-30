@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 
 from sqlalchemy import text
@@ -162,7 +163,50 @@ def test_production_lists_index_renders_selected_iso_week_and_lunch_links(app_se
     assert "year=2025&amp;week=52" in html
     assert "year=2026&amp;week=2" in html
     assert "2025" in html
-    assert "29/12" in html
+    assert "29 december" in html
+    assert "Måndag" in html
+    assert "Tisdag" in html
+    assert "Onsdag" in html
+    assert "Torsdag" in html
+    assert "Fredag" in html
+    assert "Lördag" in html
+    assert "Söndag" in html
+    assert 'name="week"' in html
+    assert 'name="year"' in html
+    assert "production-lists-week-submit" not in html
+    assert "production-lists-service-link" in html
+    assert "yp-button-primary" not in html
+
+
+def test_production_lists_index_supports_week_53_and_selected_picker_values(app_session, client_admin, monkeypatch):
+    site, _ = SitesRepo().create_site(f"Prod list week 53 site {uuid.uuid4()}")
+    _set_active_site(client_admin, site["id"])
+    monkeypatch.setattr(
+        "core.ui_blueprint.build_product2_page2_planning_context",
+        lambda **_: SimpleNamespace(status="no_publication", options=()),
+    )
+
+    rv = client_admin.get(
+        f"/ui/production-lists?site_id={site['id']}&year=2026&week=53",
+        headers=_h(),
+    )
+
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert '<option value="53" selected>Vecka 53</option>' in html
+    assert '<option value="2026" selected>2026</option>' in html
+
+
+def test_production_lists_week_picker_navigates_without_submit_button():
+    script = (Path(__file__).parents[2] / "static" / "js" / "production_lists.js").read_text(encoding="utf-8")
+    css = (Path(__file__).parents[2] / "static" / "css" / "production_lists.css").read_text(encoding="utf-8")
+
+    assert 'weekSelect.addEventListener("change", navigate)' in script
+    assert 'yearSelect.addEventListener("change", navigate)' in script
+    assert "form.submit()" in script
+    assert "color: var(--text)" in css
+    assert "background-color: var(--surface-2)" in css
+    assert "color-scheme: light dark" in css
 
 
 def test_production_lists_index_defaults_to_current_iso_week(app_session, client_admin, monkeypatch):

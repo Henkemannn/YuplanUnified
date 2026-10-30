@@ -4,6 +4,7 @@
 
 {% block head_extra %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/production_lists.css') }}" />
+  <script src="{{ url_for('static', filename='js/production_lists.js') }}" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -20,17 +21,32 @@
   <article class="app-shell__card production-lists-week-card">
     <div class="app-shell__card-header">
       <div>
-        <h2 class="app-shell__card-title">Vecka {{ vm.week }}</h2>
+        <h2 class="app-shell__card-title">Välj vecka</h2>
         <p class="app-shell__card-text">Välj dag för att öppna dagens produktionsunderlag.</p>
       </div>
-      <span class="app-shell__card-meta">År {{ vm.year }}</span>
     </div>
     <div class="app-shell__card-body">
-      <nav class="production-lists-week-nav" aria-label="Veckonavigering">
+      <form class="production-lists-week-nav" method="get" action="{{ url_for('ui.ui_production_lists_index') }}" data-production-lists-week-form>
+        <input type="hidden" name="site_id" value="{{ vm.site_id }}" />
         <a class="yp-button yp-button-secondary" href="{{ vm.previous_url }}" aria-label="Föregående vecka">‹</a>
-        <strong>Vecka {{ vm.week }}</strong>
+        <label>
+          <span class="production-lists-visually-hidden">Vecka</span>
+          <select name="week" aria-label="Vecka">
+            {% for week in vm.week_options %}
+            <option value="{{ week }}" {% if week == vm.week %}selected{% endif %}>Vecka {{ week }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span class="production-lists-visually-hidden">År</span>
+          <select name="year" aria-label="År" data-production-lists-year>
+            {% for year in vm.year_options %}
+            <option value="{{ year }}" {% if year == vm.year %}selected{% endif %}>{{ year }}</option>
+            {% endfor %}
+          </select>
+        </label>
         <a class="yp-button yp-button-secondary" href="{{ vm.next_url }}" aria-label="Nästa vecka">›</a>
-      </nav>
+      </form>
       <div class="production-lists-day-list">
         {% for day in vm.week_days %}
         <div class="production-lists-day-row{% if not day.available %} is-unavailable{% endif %}">
@@ -39,7 +55,12 @@
             <span>{{ day.date_label }}</span>
           </div>
           {% if day.available %}
-            <a class="yp-button yp-button-primary" href="{{ day.url }}">Lunch</a>
+            <div class="production-lists-services">
+              <a class="production-lists-service-link" href="{{ day.url }}">
+                <span>Lunch</span>
+                <span class="production-lists-service-chevron" aria-hidden="true">›</span>
+              </a>
+            </div>
           {% else %}
             <span class="production-lists-unavailable">Ej publicerad</span>
           {% endif %}
