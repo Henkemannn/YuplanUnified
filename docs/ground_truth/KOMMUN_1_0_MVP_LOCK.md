@@ -3,6 +3,29 @@ Last reviewed: 2026-09-28
 
 # Kommun MVP Lock — Product2 / Kommun 1.1
 
+## Operational status addendum — 2026-10-30
+
+The **implementation-status paragraphs below are a 2026-09-28 snapshot**, not the active checkpoint. This addendum updates status only; it does not alter locked semantics, canonical inputs, Specialkost/Serveringsanpassning separation, or parity/cutover requirements.
+
+Current development checkpoint: `6233b11cd4530ed0261992dc6be18af0357955c7`.
+
+**Accepted individual surfaces since the September snapshot:**
+- Product2 Page3 review/production views and four print variants; Specialkost completion action placed within its work tab and manually accepted.
+- Produktionslistor 2.0: a compact ISO-week/year navigator, seven weekdays, direct access to full **lunch** Page3, preservation of legacy saved lists.
+- App Shell: early light/dark theme synchronized and white card/sidebar flashes eliminated, user-verified, with **77 focused tests passed** on the latest fix.
+
+**Not verified as complete for Kommun 1.1 pilot:**
+- Gate 02 new-customer department/registered-need setup and UX findings;
+- Admin-vs-Portal authoritative menu-choice handling;
+- end-to-end clean-customer publication → Portal → Planera → completion → reports;
+- Kvällsmat/dessert parity or explicit scope decision;
+- reporting/statistics bridge from new quantity/completion truth;
+- Serveringstillägg-preserving separate Servering/Packning output and daily destination pack acceptance;
+- Planera 1/2.0 parity, iPad smoke, complete regression/security and pilot tag.
+
+The current working ledger and prioritization are [`KOMMUN_1_1_CURRENT_STATUS_2026-10-30.md`](../KOMMUN_1_1_CURRENT_STATUS_2026-10-30.md) and [`KOMMUN_1_1_LIVE_ACCEPTANCE.md`](../KOMMUN_1_1_LIVE_ACCEPTANCE.md). Treat the older `2364ba47` checkpoint and its “current uncommitted gate” below as historical; the foundational product and architecture rules remain binding.
+
+
 
 ## Goal
 
@@ -17,7 +40,7 @@ This file keeps its historical path for continuity, but its active implementatio
 The MVP must preserve the useful working Kommun 1.0 behavior while moving production truth to the canonical Builder -> Business Context -> Planera 2.0 architecture. Reuse working Weekview, registration and admin surfaces before rewriting them.
 
 
-## Current Implementation Status
+## Historical implementation status snapshot — 2026-09-28
 
 As of 2026-09-28:
 
@@ -369,7 +392,7 @@ Weekview rendering keeps states independent:
 
 A live investigation proved the observed yellow state in the reusable E2E DB came from pre-existing `department_menu_choices` rows, not from Product2 completion writes.
 
-## Current Page3 UX Status
+## Page3 UX status — historical baseline, see 2026-10-30 addendum
 
 The old 2026-09-24 visual-debt list is no longer the active blocker.
 
