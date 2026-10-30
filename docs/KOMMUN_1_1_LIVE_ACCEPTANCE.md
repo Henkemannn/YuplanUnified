@@ -1,5 +1,8 @@
 # Kommun 1.1 — Live Acceptance & UX Race
 
+> **Status update – 2026-10-30 (current operational snapshot):** Read [current MVP/TODO status](KOMMUN_1_1_CURRENT_STATUS_2026-10-30.md) and [roadmap](roadmap.md). Page3 production/prints, the Specialkost completion UX and Produktionslistor 2.0 (lunch-only entry) are now individually accepted. App Shell dark/light navigation flashing is resolved and manually accepted at source checkpoint `6233b11c`. The most recent **77 passed** tests cover a focused slice, **not** the entire release suite. **Gate 02 and the end-to-end clean-customer flow remain OPEN**; do not infer overall pilot GO from the completed screens. The 2342-passed baseline and `04731895` HEAD below are **historical evidence**, not today's HEAD. No fresh Gate 02 or full release acceptance was performed by this docs update.
+
+
 ## Status
 
 TECHNICAL AUTOMATED GATE = GO
