@@ -83,6 +83,6 @@ Primära låsta beslut:
 Operativ live-ledger: `docs/KOMMUN_1_1_LIVE_ACCEPTANCE.md`.  
 Genomförande: `docs/roadmap.md`.
 
-Lokalt på utvecklingsbranchen vid senaste checkpointen har följande **skyddade, ocommittade** förändringar rapporterats: `core/admin_repo.py`, `scripts/seed_ostergarden_from_json.py`, `scripts/seed_product2_e2e.py`, `artifacts/`. Dessa är inte en del av den nya lägesbilden, får inte skrivas över, och deras innehåll har inte granskas i denna dokumentationsuppdatering.
+Lokalt på utvecklingsbranchen vid senaste checkpointen har följande **skyddade, ocommittade** förändringar rapporterats: `core/admin_repo.py`, `scripts/seed_ostergarden_from_json.py`, `scripts/seed_product2_e2e.py`, `artifacts/`. Dessa är inte en del av den nya lägesbilden, får inte skrivas över, och deras innehåll har inte granskats i denna dokumentationsuppdatering.
 
 Detta dokument skiljer mellan **verifierat i git / tester**, **tidigare live-acceptans**, **kvarvarande öppet** och **framtida scope**. Ett nytt acceptance-GO måste grundas på bevis vid aktuell kod och miljö.
