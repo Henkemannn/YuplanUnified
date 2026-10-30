@@ -11,6 +11,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const isDark = theme === "dark";
     root.classList.toggle("app-shell--dark", isDark);
     root.setAttribute("data-theme", theme);
+    document.documentElement.classList.toggle("yp-theme-dark", isDark);
+    document.documentElement.setAttribute("data-theme", theme);
     document.documentElement.style.colorScheme = isDark ? "dark" : "light";
     if (themeToggle) {
       themeToggle.setAttribute("aria-pressed", isDark ? "true" : "false");
@@ -20,11 +22,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  const storedTheme = localStorage.getItem(themeKey);
+  const storedTheme = localStorage.getItem(themeKey) || document.documentElement.getAttribute("data-theme");
   applyTheme(storedTheme === "dark" ? "dark" : "light");
-  requestAnimationFrame(() => {
-    root.classList.add("is-ready");
-  });
+  root.classList.add("is-ready");
 
   if (themeToggle) {
     themeToggle.addEventListener("click", () => {

@@ -771,6 +771,23 @@ def test_kitchen_planering_product2_week_selector_has_native_change_wiring():
     assert "panel.hidden" not in app_shell_js
 
 
+def test_app_shell_initializes_theme_before_app_shell_stylesheet():
+    template = Path("templates/ui/_layout/app_shell_base.html").read_text(encoding="utf-8")
+    theme_init = Path("static/js/theme_init.js").read_text(encoding="utf-8")
+    app_shell_css = Path("static/css/app_shell.css").read_text(encoding="utf-8")
+
+    assert 'js/theme_init.js' in template
+    assert template.index("js/theme_init.js") < template.index("css/app_shell.css")
+    assert 'localStorage.getItem("yp_theme")' in theme_init
+    assert 'classList.toggle("yp-theme-dark"' in theme_init
+    assert "html.yp-theme-dark .app-shell" in app_shell_css
+    assert "html:not(.yp-theme-dark) .app-shell:not(.app-shell--dark) .app-shell__card" in app_shell_css
+    assert "html:not(.yp-theme-dark) .app-shell:not(.app-shell--dark) .app-shell__topbar" in app_shell_css
+    assert "html:not(.yp-theme-dark) .app-shell:not(.app-shell--dark) .app-shell__nav-item--active" in app_shell_css
+    assert "html.yp-theme-dark .app-shell .app-shell__nav-item--active" in app_shell_css
+    assert "html.yp-theme-dark .app-shell .app-shell__sidebar-panel" in app_shell_css
+
+
 def test_kitchen_planering_product2_week_selector_handles_iso_year_boundary(client_admin, monkeypatch):
     monkeypatch.setattr("core.ui_blueprint._date", _FixedTodayIsoBoundary)
     site_id = _seed_site(client_admin.application, site_name="Boundary Selector Site")

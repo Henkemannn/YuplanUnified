@@ -17,6 +17,7 @@
   <link rel="shortcut icon" href="/favicon.ico?v={{ icon_version }}">
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png?v={{ icon_version }}" sizes="180x180">
   <link rel="mask-icon" href="/static/safari-pinned-tab.svg?v={{ icon_version }}" color="#111827">
+  <script src="{{ url_for('static', filename='js/theme_init.js') }}"></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app_shell.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/yuplan_print.css') }}" media="print" />
   {% block unified_ui_css %}
