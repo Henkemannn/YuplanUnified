@@ -62,7 +62,7 @@
 | K22 | OPEN | Rapportexport: HTML/CSV/XLSX/PDF-konsistens; PDF placeholder |
 | K23 | VERIFY security | Rapportens tenant/site/department-behörighet |
 | K24 | VERIFY/OPEN | Admin Menyval-översikt och admin-overrideregel enligt realt behov |
-| K25 | OPEN | Under avdelningsnamn: sparad serveringspreferens |
+| K25 | CLOSED local / checkpoint pending | Under avdelningsnamn: sparad serveringspreferens, kompakt horisontellt informationsfält med befintlig allmän information; 7 fokustester godkända och visuell acceptans på verklig Kitchen Weekview 2026-10-31. Ändringarna är fortfarande lokalt ocommittade. |
 | K26 | OPEN | Produktionslistor: Tillägg-ikon vid Lunch, sparade poster per tillägg |
 | K27 | OPEN | Packlistor: sparat tillägg/antal/kommentar per avdelning |
 | K28 | LOCKED | Specialkost och Serveringsanpassning är separata domäner |
@@ -108,6 +108,14 @@
 ## Serveringstillägg – explicit beslut 2026-10-31
 
 MVP:n visar **endast registrerad information**. Veckovy visar sparad preferenstext under avdelningen. Produktionslistor har en Tillägg-ikon bredvid Lunch och en lista per tillägg med avdelning, antal och anteckning. Packlistorna visar samma information direkt under respektive avdelning. Kökspersonalen avgör vad som ska lagas. **Ingen menyaware mos-/salladsautomatik, ingen extra beräkning och ingen ny Page3-flik.** Långsiktig regelmotor i Ground Truth är en framtida möjlighet, inte aktuell MVP-order.
+
+## K25 – acceptansnotering 2026-10-31
+
+**Beslut:** K25 funktion/UI är CLOSED efter Copilotrapport och manuell screenshot av Kökets Veckovy vecka 44, 2026. Registrerade serveringstillägg ligger horisontellt med diskreta avgränsare och naturlig radbrytning i samma kompakta informationsfält som befintlig allmän avdelningsinformation. Tidigare dubblerat avdelningsprefix har rättats. Ingen ny beräknings- eller skrivlogik, ingen K26/K27-implementation.
+
+**Evidens:** Copilot rapporterade `tests/ui/test_kitchen_week_v3.py -q` = **7 passed**, `git diff --check` godkänd och bevarade dirty-filer. Manuell screenshot accepterades av produktägaren 2026-10-31. Relaterad äldre Weekview-slice rapporterades som **28 passed, 2 failed** (veckoetikett-förväntningar); detta är fortsatt regressionsskuld och inte bevis för full suite.
+
+**Checkpoint-gate:** K25-filerna `core/ui_blueprint.py`, `templates/ui/kitchen_week_v3.html`, `static/css/kitchen_week_v3.css`, `tests/ui/test_kitchen_week_v3.py` är ännu **lokalt ocommittade**, ingen push. Bas-HEAD i denna inventering är fortsatt `6233b11c`. Skydda `core/admin_repo.py`, båda seed-scripts och `artifacts/`. Dokumentationsbranch/PR #130 är fortfarande separat från utvecklingsbranchen. Full tenant-/site-regression, iPad, CI och staging tillhör kvarvarande release-gates; inget övergripande pilot-GO utfärdat.
 
 ## Rekommenderad återstående ordning
 
