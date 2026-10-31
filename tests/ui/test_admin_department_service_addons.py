@@ -124,6 +124,15 @@ def test_admin_department_service_addons_renders_compact_read_state_and_modal_co
     assert 'data-service-addon-state="edit"' in html
     assert 'data-service-addon-state="remove"' in html
     assert 'data-service-addon-switch-create' in html
+    assert 'data-service-addon-family-filter' in html
+    assert '<option value="mos">Mos</option>' in html
+    assert '<option value="sallad">Sallad</option>' in html
+    assert '<option value="ovrigt">Ovrigt</option>' in html or '<option value="ovrigt">Övrigt</option>' in html
+    assert 'data-service-addon-family="mos"' in html
+    assert 'data-service-addon-family="sallad"' in html
+    assert 'data-service-addon-family="ovrigt"' in html
+    assert 'data-service-addon-duplicate-status' in html
+    assert 'data-service-addon-use-existing' in html
     assert 'data-service-addon-remove-start' in html
     assert 'data-service-addon-remove-confirm' in html
     assert 'name="service_scope"' in html
@@ -137,10 +146,13 @@ def test_admin_department_service_addons_renders_compact_read_state_and_modal_co
     assert 'data-service-addon-count-field="lunch"' in html
     assert 'data-service-addon-count-field="dinner"' in html
     assert '+ Skapa ny familj…' in html
-    assert 'Välj befintlig' not in html
-    assert 'Välj befintlig serveringsanpassning' not in html
+    assert 'Välj befintlig serveringsanpassning' in html
     assert 'Lägg till en återkommande anpassning för avdelningen.' not in html
     js = Path('static/js/admin_service_addons.js').read_text(encoding='utf-8')
+    assert "filterAddSelect('', addFamilyFilter.value)" in js
+    assert "firstVisible" not in js
+    assert "findSimilarAddon" in js
+    assert "Välj befintlig:" in js
     assert js.count('Lägg till en återkommande anpassning för avdelningen.') == 1
     assert html.count('class="admin-service-addon-item"') == 4
     assert html.count('admin-service-addon-item__edit-trigger') == 4

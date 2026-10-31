@@ -26,10 +26,14 @@
     var editState = $('[data-service-addon-state="edit"]', dialog);
     var removeState = $('[data-service-addon-state="remove"]', dialog);
     var addSelect = $('[data-service-addon-select]', addState);
+    var addFamilyFilter = $('[data-service-addon-family-filter]', addState);
     var addSearch = $('[data-service-addon-search]', addState);
     var familySelect = $('[data-service-addon-family-select]', createState);
     var familyWrap = $('[data-service-addon-family-custom]', createState);
     var familyInput = $('input[name="service_addon_family_custom"]', createState);
+    var createName = $('input[name="service_addon_new_name"]', createState);
+    var duplicateStatus = $('[data-service-addon-duplicate-status]', createState);
+    var useExisting = $('[data-service-addon-use-existing]', createState);
     var editName = $('[data-service-addon-edit-name]', editState);
     var editFamily = $('[data-service-addon-edit-family]', editState);
     var removeName = $('[data-service-addon-remove-name]', removeState);
@@ -132,23 +136,59 @@
       subtitleNode.textContent = 'Välj en aktiv serveringsanpassning för den här siten.';
     }
 
-    function filterAddSelect(query) {
+    function filterAddSelect(query, family) {
       if (!addSelect) return;
       var normalized = text(query).toLowerCase();
-      var firstVisible = null;
+      var selectedFamily = text(family || (addFamilyFilter && addFamilyFilter.value)).toLowerCase();
       $all('option', addSelect).forEach(function (option) {
         if (!option.value) {
           option.hidden = false;
           return;
         }
-        var match = !normalized || text(option.textContent).toLowerCase().indexOf(normalized) !== -1;
-        option.hidden = !match;
-        if (match && !firstVisible) {
-          firstVisible = option;
+
+        function normalizeAddonName(value) {
+          return text(value).toLowerCase().replace(/\s+/g, ' ').replace(/[.,!?;:]+$/g, '');
         }
+
+        function findSimilarAddon(value) {
+          var normalized = normalizeAddonName(value);
+          if (normalized.length < 3 || !addSelect) return null;
+          var candidate = null;
+          $all('option', addSelect).some(function (option) {
+            var optionName = normalizeAddonName(option.textContent);
+            if (!option.value || !optionName) return false;
+            if (optionName === normalized || optionName.indexOf(normalized) !== -1 || normalized.indexOf(optionName) !== -1) {
+              candidate = option;
+              return true;
+            }
+            return false;
+          });
+          return candidate;
+        }
+
+        function updateDuplicateWarning() {
+          var candidate = findSimilarAddon(createName ? createName.value : '');
+          if (!duplicateStatus || !useExisting) return;
+          if (!candidate) {
+            duplicateStatus.hidden = true;
+            useExisting.hidden = true;
+            useExisting.removeAttribute('data-service-addon-existing-id');
+            return;
+          }
+          duplicateStatus.textContent = 'En likadan eller liknande beskrivning finns redan: ' + text(candidate.textContent) + '.';
+          duplicateStatus.hidden = false;
+          useExisting.hidden = false;
+          useExisting.textContent = 'Välj befintlig: ' + text(candidate.textContent);
+          useExisting.setAttribute('data-service-addon-existing-id', candidate.value);
+        }
+        var optionFamily = text(option.getAttribute('data-service-addon-family')).toLowerCase();
+        var match = !!selectedFamily &&
+          optionFamily === selectedFamily &&
+          (!normalized || text(option.textContent).toLowerCase().indexOf(normalized) !== -1);
+        option.hidden = !match;
       });
-      if (firstVisible && (!addSelect.value || addSelect.selectedOptions.length && addSelect.selectedOptions[0].hidden)) {
-        addSelect.value = firstVisible.value;
+      if (!addSelect.value || (addSelect.selectedOptions.length && addSelect.selectedOptions[0].hidden)) {
+        addSelect.value = '';
       }
     }
 
@@ -222,6 +262,7 @@
       }
       actionInput.value = '';
       rowIdInput.value = '';
+      if (addFamilyFilter) addFamilyFilter.value = '';
       if (addSearch) addSearch.value = '';
       if (addSelect) addSelect.selectedIndex = 0;
       if (fields.add.addonId) fields.add.addonId.value = '';
@@ -239,9 +280,10 @@
       if (editFamily) editFamily.textContent = '';
       if (removeName) removeName.textContent = '';
       resetFamilyMode();
+      updateDuplicateWarning();
       showState('add');
       setShellTitle('add');
-      filterAddSelect('');
+      filterAddSelect('', '');
       syncServiceAddonState('add');
     }
 
@@ -272,7 +314,9 @@
       showState('add');
       syncServiceAddonState('add');
       openDialog();
-      if (addSelect && typeof addSelect.focus === 'function') {
+      if (addFamilyFilter && typeof addFamilyFilter.focus === 'function') {
+        addFamilyFilter.focus();
+      } else if (addSelect && typeof addSelect.focus === 'function') {
         addSelect.focus();
       }
     }
@@ -348,6 +392,30 @@
         return;
       }
 
+      if (event.target.closest('[data-service-addon-use-existing]')) {
+        event.preventDefault();
+        var existingId = text(useExisting && useExisting.getAttribute('data-service-addon-existing-id'));
+        var existingOption = null;
+        if (existingId && addSelect) {
+          $all('option', addSelect).some(function (option) {
+            if (option.value === existingId) {
+              existingOption = option;
+              return true;
+            }
+            return false;
+          });
+        }
+        if (!existingOption) return;
+        if (addFamilyFilter) addFamilyFilter.value = text(existingOption.getAttribute('data-service-addon-family'));
+        filterAddSelect('', addFamilyFilter ? addFamilyFilter.value : '');
+        addSelect.value = existingId;
+        showState('add');
+        setShellTitle('add');
+        syncServiceAddonState('add');
+        if (addSelect && typeof addSelect.focus === 'function') addSelect.focus();
+        return;
+      }
+
       if (event.target.closest('[data-service-addon-remove-start]')) {
         event.preventDefault();
         if (removeForm) {
@@ -387,9 +455,18 @@
       if (event.target === addSearch) {
         filterAddSelect(addSearch.value);
       }
+      if (event.target === createName) {
+        updateDuplicateWarning();
+      }
     });
 
     document.addEventListener('change', function (event) {
+      if (event.target === addFamilyFilter) {
+        if (addSelect) addSelect.value = '';
+        if (addSearch) addSearch.value = '';
+        filterAddSelect('', addFamilyFilter.value);
+        return;
+      }
       if (event.target === familySelect) {
         if (familySelect && familySelect.value === '__custom__') {
           switchToCustomFamily();
