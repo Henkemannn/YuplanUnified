@@ -67,7 +67,7 @@
 | K27 | CLOSED / LOCAL COMMIT | Page3 Specialkost → Packlista: tydliga avdelningskort med specialkost och serveringstillägg, inklusive addon-only-avdelningar, numeriska antal/kommentarer samt A4-utskrift. 79 tester och verklig skärm/print-preview godkända 2026-10-31. Lokal commit `0d8032620cd5943439d7a9eda29c267a27b3f189` (exakt 5 filer), ännu ej pushad. |
 | K28 | LOCKED | Specialkost och Serveringsanpassning är separata domäner |
 | K29 | OPEN | Planera 1 vs 2.0 parity och kontrollerad cutover |
-| K30 | OPEN | Färsk full clean-customer E2E till rapport/packning |
+| K30 | BLOCKED – K30-01 | Full clean-customer E2E väntar. Read-only census 2026-10-31: 67 Admin/import/portal passed, 44 completion passed; reproducerat HTTP 500 i GET ny avdelning (`resident_variation_forever_table` Undefined till `tojson`), kompletterande Planera-/rapport-/Weekview-testfel att klassificera, 20+ avdelningar/print och rapport→completion ej slutbevisade. Lokal HEAD `0d8032620cd5943439d7a9eda29c267a27b3f189`, ingen kodändring. |
 | K31 | VERIFY | iPad full acceptans samt empty/error-states |
 | K32 | DEFERRED | Extern debitering och Mathilda-/ekonomiintegrationer |
 
@@ -166,6 +166,14 @@ Uppgivet beteende: läser aktiva site-scopade addons, löser `whole_department` 
 **CLOSED / LOCAL COMMIT.** Produktägaren granskade riktig Page3 Packlista med Avdelning 2 (specialkost och tillägg) och Avdelning A (endast tillägg) efter UI-förfining. Avdelningsgränser, separata sektioner, familj/beskrivning/antal, läsbara högerställda antal och addon-only-fall visuellt godkända. Verklig ljus A4-print-preview för 12 oktober 2026 granskad och godkänd; på testbladet ryms båda avdelningarna på 1 sida. Fortsatt **79 passed** i Page3 VM/UI, K26 och Admin verifierade i terminalen (3.77 s), `git diff --check` OK; selektiv lokal commit `0d8032620cd5943439d7a9eda29c267a27b3f189` med exakt fem K27-filer (435 additions, 10 deletions). Ingen push/merge. Skyddade ocommittade filer kvar: `core/admin_repo.py`, båda seed-scripten och `artifacts/`.
 
 **Valfri senare UI-förfining, INTE blockerande K27:** möjlig skärmbaserad fäll ihop/expandera för Serveringstillägg per avdelning vid 20+ avdelningar; öppet som standard och alltid fullt synligt på utskrift. Ingen sådan funktion ska läggas till i pågående K27-gate. Storskalig print med 20 avdelningar och full pilot-E2E kvarstår som separat release-verifiering. K27:s lokala checkpoint är klar; nästa gate är Kommun release-/E2E-verifiering, utan att återöppna godkända produktfunktioner. Skydda `core/admin_repo.py`, båda seed-scripten och `artifacts/`. Ingen push förrän uttryckligt beslut.
+
+## K30 – Read-only E2E-census och K30-01 blocker (2026-10-31)
+
+**Ingen kodändring.** Lokal branch `feat/planera-app-shell-2026-03-03`, HEAD `0d8032620cd5943439d7a9eda29c267a27b3f189`, `git diff --check` godkänd; tidigare skyddade dirty `core/admin_repo.py`, båda seed-scripten och `artifacts/` kvar. Pilotdatabasen användes inte som testmål; hash kunde inte tas på låst `instance/yuplan_mvp.db`, vilket inte i sig bevisar databasändring.
+
+**Grönt verifierat i särskilda testskivor:** 67 Admin/menyimport/publicering/portal; 44 completion service/API. **Inte full grön regression:** Planera option-review två fixtur-/invariantfel före avsedda assertions; rapporttest om duplicerat `Glutenfri` samt äldre testsetups med saknade legacytabeller; Weekview äldre shared-DB/`create_all`-problem. Klassificera dessa separat, påstå inte att hela Planera/rapport/Weekview är testgrönt.
+
+**Blocker K30-01:** GET `/ui/admin/departments/new` och redirects dit kan ge HTTP 500 eftersom `templates/ui/unified_admin_departments_form.html` renderar `vm.resident_variation_forever_table | tojson` i ett edit-only variationsmodal medan new-VM i `core/ui_blueprint.py` saknar denna nyckel. Exempeltestfall från `tests/ui/test_admin_departments_residences.py`: `test_new_department_form_shows_residence_controls`, `test_create_residence_from_new_form_redirects_with_selection`, `test_create_department_requires_residence_selection`. Rotorsak måste reproduceras och avgränsas lokalt. Företrädesvis säkra villkorad rendering av edit-only modaler utan att dölja delad `residence-create-modal` eller injicera fejkdata i VM. Korrigera endast nödvändiga template/controller-/testfiler; ingen K25–K27-/Admin-addon-/DB-motorändring, commit/push eller pilotdataåtkomst. Efter fix: separat clean-customer E2E, rapportcompletion-truth, kväll/dessert och 20-avdelnings A4.
 
 ## Rekommenderad återstående ordning
 
