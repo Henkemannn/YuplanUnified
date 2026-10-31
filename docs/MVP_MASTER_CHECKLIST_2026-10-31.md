@@ -64,7 +64,7 @@
 | K24 | VERIFY/OPEN | Admin Menyval-översikt och admin-overrideregel enligt realt behov |
 | K25 | CLOSED / LOCAL COMMIT | Under avdelningsnamn: sparad serveringspreferens, kompakt horisontellt informationsfält med befintlig allmän information; 7 fokustester godkända och visuell acceptans på verklig Kitchen Weekview 2026-10-31. Lokal commit `bbea233b0ac8268d3b58a055a5318652612be688` bekräftad, ännu inte pushad. |
 | K26 | CLOSED / LOCAL COMMIT | Produktionslistor: separat sida med familjegrupper, numeriska avdelningsantal för vald dag, beskrivning/kommentar, utskrift av alla eller vald familj. 16 fokustester godkända; skärm och utskrift accepterade 2026-10-31. Lokal commit `b09c3d7a719e304666c5900a0c6a0587b7496e83` (6 filer), ännu inte pushad. |
-| K27 | IMPLEMENTERAD LOKALT / 79 TESTER GRÖNA – VISUELL ACCEPTANS ÖPPEN | Page3 Specialkost → Packlista: familj/antal/beskrivning/kommentar per avdelning, även addon-only-avdelningar och print. Exakt 5 filer enligt Copilotrapport; ingen commit eller push. |
+| K27 | CLOSED FUNCTION/UI – LOCAL COMMIT PENDING | Page3 Specialkost → Packlista: tydliga avdelningskort, kost och serveringstillägg inklusive addon-only-avdelningar, familj/antal/beskrivning/kommentar och A4-utskrift. 79 tester gröna; skärm och verklig print-preview visuellt godkända av produktägaren 2026-10-31. Exakt 5 lokalt modifierade K27-filer; ingen commit/push ännu. |
 | K28 | LOCKED | Specialkost och Serveringsanpassning är separata domäner |
 | K29 | OPEN | Planera 1 vs 2.0 parity och kontrollerad cutover |
 | K30 | OPEN | Färsk full clean-customer E2E till rapport/packning |
@@ -160,6 +160,12 @@ Uppgivet beteende: läser aktiva site-scopade addons, löser `whole_department` 
 **Visuell acceptans fortsatt OPEN.** Produktägaren visade en faktisk Page3 Packlista där specialkost och serveringstillägg såg ut att flyta ihop utan tydliga avdelningsgränser; önskemålet var att omedelbart se vilken avdelning, vilken kategori och vilket numeriskt antal varje rad hör till. Efter avgränsad UI-order rapporterar Copilot ändringar endast i `templates/ui/kitchen_product_planera_page3.html`, `static/css/planera_product2_page3.css`, `tests/ui/test_kitchen_product_planera_page3.py` (den första implementationens VM/test-diff ligger kvar). Nya avdelningsblock med distinkta rubriker; separat Specialkost endast där sådan finns, tydlig Serveringstillägg-tabell med `Familj | Beskrivning / kommentar | Antal`, kapitaliserade familjer och högerjusterade antal, A4-/responsiva regler. **79 passed** samma fyra Page3/K26/Admin-testfiler; `git diff --check` godkänd. Ingen commit/push.
 
 **Nästa acceptansgate:** skärmbild av uppdaterad faktisk Packlista med både Specialkost+Serveringstillägg samt addon-only-avdelning; därefter faktisk A4-print-preview. Kontrollera övriga Page3-vyer oförändrade. Gör först efter godkännande slutlig samlad diff-/staginggranskning av exakt fem K27-filer och lokal checkpoint; skydda `core/admin_repo.py`, båda seed-filerna och `artifacts/`. Inga ytterligare Copilot-order parallellt.
+
+## K27 – Visuell och printacceptans (2026-10-31)
+
+**CLOSED funktion/UI, lokal checkpoint återstår.** Produktägaren granskade riktig Page3 Packlista med Avdelning 2 (specialkost och tillägg) och Avdelning A (endast tillägg) efter UI-förfining. Avdelningsgränser, separata sektioner, familj/beskrivning/antal, läsbara högerställda antal och addon-only-fall visuellt godkända. Verklig ljus A4-print-preview för 12 oktober 2026 granskad och godkänd; på testbladet ryms båda avdelningarna på 1 sida. Fortsatt **79 passed** i Page3 VM/UI, K26 och Admin enligt senaste Copilotrapport, `git diff --check` OK; **ännu ingen K27-commit**, utvecklingsbranchen lokalt vid `ad96abd4f0c5b26640bd0557b745544685d64d6e` före checkpoint.
+
+**Valfri senare UI-förfining, INTE blockerande K27:** möjlig skärmbaserad fäll ihop/expandera för Serveringstillägg per avdelning vid 20+ avdelningar; öppet som standard och alltid fullt synligt på utskrift. Ingen sådan funktion ska läggas till i pågående K27-gate. Storskalig print med 20 avdelningar och full pilot-E2E kvarstår som separat release-verifiering. Nu: selektiv lokal diff-/staginggranskning, kör tester, commit av exakt fem K27-filer; skydda `core/admin_repo.py`, båda seed-scripten och `artifacts/`. Ingen push förrän uttryckligt beslut.
 
 ## Rekommenderad återstående ordning
 
