@@ -74,6 +74,28 @@ Föreslagen minsta arbetsorder till Copilot (först efter gemensamt beslut):
 
 Beslutspunkt efter rapportcensus: **A)** rapporten korrekt → gå vidare i A–Ö; **B)** rapporten saknar Product2-truth → en avgränsad brygga; **C)** servering/packning hindrar arbetet → prioritera separat köksvy. Tidigare godkända A–Ö-delar förblir stängda utan ny buggevidens.
 
+## 4b. Operativt tillverkning/packning — förtydligat användarkrav 2026-10-31
+
+**Köket arbetar i två riktningar med exakt samma registrerade data och beräknade behov:**
+
+1. **Tillverka / grupperat per serveringsanpassning.** Exempel: `Mos — totalt 9` med `Avdelning 11: 4` och `Avdelning 12: 5`. `Sallad vanlig` och `Sallad utan tomat` måste kunna bli skilda praktiska produktionsvarianter, med totalsiffra och destinationsrader för respektive variant. Syftet är att göra en stor sats för samtliga mottagare.
+2. **Packa / grupperat per avdelning eller destination.** Exempel: `Avdelning 11: mos 4 (istället för kokt potatis), sallad utan tomat 6`. Serveringsinformationen ska finnas tillsammans med den avdelningens övriga packinformation, inte behöva letas upp i en separat administration.
+
+**Föreslagen placering:**
+- Kitchen Weekview: lågmäld indikator på avdelningsraden när den har relevanta serveringsönskemål, med snabb läsbar detalj. Skilj från person-/cohortbaserad Specialkost.
+- Page3: kontextuell länk/ingång till dagens Servering & Packning. Behåll de tre låsta Page3-huvudflikarna Översikt, Normalkost, Specialkost tills ett separat beslut motiverar ändring.
+- Produktionslistor: naturlig huvudvy, med två användarlägen **Tillverka (per behov/variant)** och **Packa (per avdelning)** för vald dag/måltid.
+
+**Datalås / teknisk gräns:**
+- En registrering, en kanonisk quantity truth, två läsprojektioner. Ingen parallell Planera-beräkning, inget kopierat addonregister eller separat pack-beräkningssystem.
+- Nuvarande statiska `service_addons` och `department_service_addons` måste återanvändas och bevaras. Stöd befintlig service-scope och helt-avdelning/anpassat antal där aktuellt.
+- Skilj fasta tillägg från **villkorade substitutioner**: `mos istället för kokt potatis` ska inte automatiskt skapa mos varje dag eller dubbelräknas när menyn redan har mos. Att identifiera rätt menykomponent kräver Builder-kunskap och ska göras i en separat och verifierad resolver, inte genom att gissa ur fritext.
+- Att sammanställa en produktionsvariant med annan hantering, såsom `utan tomat`, får inte tappa instruktion eller lägga ihop oförenliga beredningar.
+- Specialkost (recipient/cohort) och Serveringsanpassning (department/destination) behåller separata datadomäner. En frivillig slutlig sammanslagen avdelningspacklista konsumerar dem båda, utan att slå ihop domänmodellerna.
+- Befintlig portalvy och äldre produktionslistas summering är relevanta återanvändningspunkter, men utgör **inte** den nya samlade köksvyn.
+
+**Genomförandeordning:** Slutför nuvarande A–Ö vid Rapport först. Därefter read-only teknisk census av återanvändbara datafält/projektioner, separat liten implementeringsgate för per-tillägg-/per-avdelningsvy och liveacceptans i köket. Undvik att öppna Page3:s färdigställda produktionsflikar eller göra bred meny-/receptmotorrefaktor.
+
 ## 5. Datakällor, skydd och dokumentationsdisciplin
 
 Primära låsta beslut:
