@@ -91,7 +91,7 @@ Beslutspunkt efter rapportcensus: **A)** rapporten korrekt → gå vidare i A–
 - Nuvarande statiska `service_addons` och `department_service_addons` måste återanvändas och bevaras. Stöd befintlig service-scope och helt-avdelning/anpassat antal där aktuellt.
 - Skilj fasta tillägg från **villkorade substitutioner**: `mos istället för kokt potatis` ska inte automatiskt skapa mos varje dag eller dubbelräknas när menyn redan har mos. Att identifiera rätt menykomponent kräver Builder-kunskap och ska göras i en separat och verifierad resolver, inte genom att gissa ur fritext.
 - Att sammanställa en produktionsvariant med annan hantering, såsom `utan tomat`, får inte tappa instruktion eller lägga ihop oförenliga beredningar.
-- Specialkost (recipient/cohort) och Serveringsanpassning (department/destination) behåller separata datadomäner. En frivillig slutlig sammanslagen avdelningspacklista konsumerar dem båda, utan att slå ihop domänmodellerna.
+- Specialkost (recipient/cohort) och Serveringsanpassning (department/destination) behåller separata datadomäner. **Avdelningens dagliga packlista ska kunna visa tillägg och anpassningar tillsammans med övrig relevant packinformation**, utan att slå ihop datamodellerna eller beräkna samma portion flera gånger.
 - Befintlig portalvy och äldre produktionslistas summering är relevanta återanvändningspunkter, men utgör **inte** den nya samlade köksvyn.
 
 **Genomförandeordning:** Slutför nuvarande A–Ö vid Rapport först. Därefter read-only teknisk census av återanvändbara datafält/projektioner, separat liten implementeringsgate för per-tillägg-/per-avdelningsvy och liveacceptans i köket. Undvik att öppna Page3:s färdigställda produktionsflikar eller göra bred meny-/receptmotorrefaktor.
