@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 from dataclasses import replace
+from datetime import date as _date
 
 import pytest
 
@@ -18,7 +19,9 @@ from core.planera_product2_page2_context import (
 )
 from core.planera_product2_page3_vm import (
     Product2Page3VmError,
+    Product2Page3DestinationVM,
     _display_matrix_quantity,
+    _build_service_addons_by_destination,
     build_product2_page3_vm,
 )
 from core.planera_v2.domain import PlanResult, PlanningSlice, Totals, UnitBreakdown
@@ -76,6 +79,94 @@ def test_normal_matrix_quantity_display_preserves_zero_and_unknown():
     assert _display_matrix_quantity(0) == "0"
     assert _display_matrix_quantity(7) == "7"
     assert _display_matrix_quantity(None) == "—"
+
+
+def test_service_addons_projection_keeps_department_rows_and_meal_scope(monkeypatch):
+    class _Addons:
+        def list_active(self, site_id):
+            assert site_id == "site-1"
+            return [
+                {"id": "mos-1", "name": "Mos", "addon_family": "mos"},
+                {"id": "sallad-1", "name": "Sallad", "addon_family": "sallad"},
+            ]
+
+    class _Departments:
+        def list_for_site(self, site_id):
+            assert site_id == "site-1"
+            return [
+                {"id": "dept-a", "name": "Avdelning A"},
+                {"id": "dept-b", "name": "Avdelning B"},
+                {"id": "dept-c", "name": "Avdelning C"},
+            ]
+
+    class _Assignments:
+        def list_for_department(self, department_id, *, site_id):
+            assert site_id == "site-1"
+            return {
+                "dept-a": [
+                    {
+                        "addon_id": "mos-1",
+                        "service_scope": "lunch",
+                        "quantity_mode": "whole_department",
+                        "note": "Vid kokt potatis",
+                    },
+                    {
+                        "addon_id": "sallad-1",
+                        "service_scope": "all_services",
+                        "quantity_mode": "custom",
+                        "lunch_count": 5,
+                        "dinner_count": 2,
+                        "note": "Utan rå tomat",
+                    },
+                ],
+                "dept-b": [
+                    {
+                        "addon_id": "mos-1",
+                        "service_scope": "dinner",
+                        "quantity_mode": "custom",
+                        "dinner_count": 3,
+                    },
+                ],
+                "dept-c": [
+                    {
+                        "addon_id": "inactive-1",
+                        "service_scope": "lunch",
+                        "quantity_mode": "custom",
+                        "lunch_count": 8,
+                    },
+                ],
+            }.get(department_id, [])
+
+    monkeypatch.setattr("core.admin_repo.ServiceAddonsRepo", _Addons)
+    monkeypatch.setattr("core.admin_repo.DepartmentsRepo", _Departments)
+    monkeypatch.setattr("core.admin_repo.DepartmentServiceAddonsRepo", _Assignments)
+    monkeypatch.setattr(
+        "core.service_addon_contract.resolve_service_addon_quantity",
+        lambda assignment, **_: 12 if assignment["addon_id"] == "mos-1" else (
+            assignment.get("lunch_count") or assignment.get("dinner_count") or 0
+        ),
+    )
+
+    from flask import Flask
+
+    app = Flask(__name__)
+    with app.app_context():
+        lunch_rows, names = _build_service_addons_by_destination(
+            site_id="site-1",
+            service_date=_date(2026, 9, 8),
+            meal="lunch",
+            destination_map={
+                "dept-a": Product2Page3DestinationVM("dept-a", "Avdelning A", 10),
+            },
+            dessert=False,
+        )
+
+    assert names["dept-b"] == "Avdelning B"
+    assert [row.description for row in lunch_rows["dept-a"]] == ["Mos", "Sallad"]
+    assert [row.quantity_label for row in lunch_rows["dept-a"]] == ["12", "5"]
+    assert lunch_rows["dept-a"][1].note == "Utan rå tomat"
+    assert "dept-b" not in lunch_rows
+    assert "dept-c" not in lunch_rows
 
 
 def _meal_result() -> KommunMealOrchestrationResult:

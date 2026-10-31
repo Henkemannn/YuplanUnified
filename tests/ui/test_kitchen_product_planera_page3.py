@@ -22,6 +22,7 @@ from core.planera_product2_page3_vm import (
     Product2Page3SpecialDishVM,
     Product2Page3SpecialProductionGroupVM,
     Product2Page3SpecialCohortVM,
+    Product2Page3ServiceAddonVM,
     Product2Page3VM,
 )
 
@@ -1072,6 +1073,68 @@ def test_page3_print_styles_keep_overview_and_matrix_text_dark():
     assert ".yp-planera-page3-date-control__arrow" in print_css
     assert ".yp-planera-page3-action-row" in print_css
     assert ".yp-planera-page3-special-completion" in css
+    assert ".yp-planera-page3-service-addon-row" in print_css
+    assert "page-break-inside: avoid" in print_css
+
+
+def test_page3_packlist_renders_serveringstillägg_for_existing_and_addon_only_departments(app_session, monkeypatch):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+
+    site, _ = SitesRepo().create_site(name="Page3 Addon Site", tenant_id=1)
+    base_vm = _page3_vm_hierarchy(view="special", special_view="department")
+    existing_group = replace(
+        base_vm.special_destination_groups[0],
+        service_addons=(
+            Product2Page3ServiceAddonVM(
+                addon_id="mos-1",
+                family="mos",
+                description="Mos",
+                quantity_label="12",
+                note="Vid kokt potatis",
+            ),
+        ),
+    )
+    addon_only_group = Product2Page3SpecialDestinationGroupVM(
+        destination_id="dept-addon-only",
+        display_name="Avdelning utan specialkost",
+        rows=(),
+        service_addons=(
+            Product2Page3ServiceAddonVM(
+                addon_id="sallad-1",
+                family="sallad",
+                description="Sallad",
+                quantity_label="5",
+                note="Utan rå tomat",
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "core.ui_blueprint.build_product2_page3_vm",
+        lambda **_: replace(
+            base_vm,
+            special_destination_groups=(existing_group, addon_only_group),
+        ),
+    )
+
+    rv = client.get(
+        f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=special&special_view=department",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert html.count('class="yp-planera-page3-service-addons"') == 2
+    assert html.count('class="yp-planera-page3-special-section"') == 1
+    assert html.count("Beskrivning / kommentar") == 2
+    assert "Mos" in html
+    assert "12" in html
+    assert "Vid kokt potatis" in html
+    assert "Sallad" in html
+    assert "Avdelning utan specialkost" in html
+    assert "Utan rå tomat" in html
+    assert 'class="yp-planera-page3-special-department-rows"' in html
 
 
 def test_page3_route_hides_empty_special_departments(app_session, monkeypatch):

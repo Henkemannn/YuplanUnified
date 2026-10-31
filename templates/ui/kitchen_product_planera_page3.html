@@ -258,6 +258,9 @@
                       <div class="yp-planera-page3-special-group__head">
                         <h3 class="yp-planera-page3-special-group__title">{{ destination.display_name }}</h3>
                       </div>
+                      {% if destination.rows %}
+                      <div class="yp-planera-page3-special-section">
+                        <h4 class="yp-planera-page3-special-section__title">Specialkost</h4>
                       <div class="yp-planera-page3-special-department-rows">
                         {% for row in destination.rows %}
                           {% for dish in row.dishes %}
@@ -271,6 +274,29 @@
                           {% endfor %}
                         {% endfor %}
                       </div>
+                      </div>
+                      {% endif %}
+                      {% if destination.service_addons %}
+                      <div class="yp-planera-page3-service-addons" aria-label="Serveringstillägg">
+                          <h4 class="yp-planera-page3-service-addons__title">Serveringstillägg</h4>
+                          <div class="yp-planera-page3-service-addons__header" aria-hidden="true">
+                          <span>Familj</span>
+                          <span>Beskrivning / kommentar</span>
+                          <span>Antal</span>
+                          </div>
+                          <div class="yp-planera-page3-service-addons__rows">
+                          {% for addon in destination.service_addons %}
+                          <div class="yp-planera-page3-service-addon-row">
+                            <span class="yp-planera-page3-service-addon-row__family">{{ addon.family|lower|title }}</span>
+                            <span class="yp-planera-page3-service-addon-row__description">
+                              {{ addon.description }}{% if addon.note %}<span class="yp-planera-page3-service-addon-row__note"> · {{ addon.note }}</span>{% endif %}
+                            </span>
+                            <span class="yp-planera-page3-service-addon-row__quantity">{{ addon.quantity_label }}</span>
+                          </div>
+                          {% endfor %}
+                        </div>
+                      </div>
+                      {% endif %}
                     </section>
                     {% endfor %}
                   </div>

@@ -105,10 +105,20 @@ class Product2Page3SpecialDestinationRowVM:
 
 
 @dataclass(frozen=True, slots=True)
+class Product2Page3ServiceAddonVM:
+    addon_id: str
+    family: str
+    description: str
+    quantity_label: str
+    note: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class Product2Page3SpecialDestinationGroupVM:
     destination_id: str
     display_name: str
     rows: tuple[Product2Page3SpecialDestinationRowVM, ...]
+    service_addons: tuple[Product2Page3ServiceAddonVM, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -788,6 +798,93 @@ def _build_special_destination_groups(
     return tuple(groups)
 
 
+def _build_service_addons_by_destination(
+    *,
+    site_id: str,
+    service_date: _date,
+    meal: str,
+    destination_map: dict[str, Product2Page3DestinationVM],
+    dessert: bool,
+) -> tuple[dict[str, tuple[Product2Page3ServiceAddonVM, ...]], dict[str, str]]:
+    from flask import has_app_context
+
+    if not has_app_context():
+        return {}, {}
+    if dessert:
+        return {}, {}
+
+    from .admin_repo import DepartmentServiceAddonsRepo, DepartmentsRepo, ServiceAddonsRepo
+    from .service_addon_contract import resolve_service_addon_quantity
+
+    active_addons = {
+        str(addon["id"]): addon
+        for addon in ServiceAddonsRepo().list_active(site_id)
+    }
+    departments = DepartmentsRepo().list_for_site(site_id)
+    department_names = {
+        str(department["id"]): str(department.get("name") or "").strip()
+        for department in departments
+    }
+    department_names.update(
+        {
+            str(destination_id): destination.display_name
+            for destination_id, destination in destination_map.items()
+        }
+    )
+    iso = service_date.isocalendar()
+    rows_by_destination: dict[str, list[Product2Page3ServiceAddonVM]] = {}
+    assignments_repo = DepartmentServiceAddonsRepo()
+    for department_id, department_name in department_names.items():
+        if not department_name:
+            continue
+        for assignment in assignments_repo.list_for_department(department_id, site_id=site_id):
+            addon_id = str(assignment.get("addon_id") or "")
+            addon = active_addons.get(addon_id)
+            scope = str(assignment.get("service_scope") or "").strip().lower()
+            if not addon or scope not in {"lunch", "dinner", "all_services"}:
+                continue
+            if scope not in {meal, "all_services"}:
+                continue
+            quantity_mode = str(assignment.get("quantity_mode") or "").strip().lower()
+            if quantity_mode == "custom" and assignment.get(f"{meal}_count") is None:
+                quantity_label = "Antal saknas"
+            else:
+                try:
+                    quantity = resolve_service_addon_quantity(
+                        {**assignment, "department_id": department_id},
+                        meal=meal,
+                        year=iso.year,
+                        week=iso.week,
+                        weekday=iso.weekday,
+                    )
+                    quantity_label = str(quantity) if quantity >= 0 else "Antal saknas"
+                except ValueError:
+                    quantity_label = "Antal saknas"
+            family = str(addon.get("addon_family") or "ovrigt").strip() or "ovrigt"
+            rows_by_destination.setdefault(department_id, []).append(
+                Product2Page3ServiceAddonVM(
+                    addon_id=addon_id,
+                    family=family,
+                    description=str(addon.get("name") or ""),
+                    quantity_label=quantity_label,
+                    note=str(assignment.get("note") or "").strip(),
+                )
+            )
+    return {
+        destination_id: tuple(
+            sorted(
+                rows,
+                key=lambda row: (
+                    row.family.casefold(),
+                    row.description.casefold(),
+                    row.addon_id,
+                ),
+            )
+        )
+        for destination_id, rows in rows_by_destination.items()
+    }, department_names
+
+
 def _build_completion_targets(
     *,
     options: tuple[KommunMealOptionResult, ...],
@@ -1029,6 +1126,43 @@ def build_product2_page3_vm(
         destination_map=destination_map,
         requirement_name_map=requirement_name_map,
         requirement_group_display_lookup=requirement_group_display_lookup,
+    )
+    if normalized_view == "special" and normalized_special_view == "department":
+        service_addons_by_destination, service_addon_department_names = _build_service_addons_by_destination(
+            site_id=normalized_site_id,
+            service_date=normalized_service_date,
+            meal=normalized_meal,
+            destination_map=destination_map,
+            dessert=target_variant_type == "dessert",
+        )
+    else:
+        service_addons_by_destination, service_addon_department_names = {}, {}
+    special_groups_by_destination = {
+        group.destination_id: group for group in special_destination_groups
+    }
+    destination_ids = list(destination_map.keys())
+    destination_ids.extend(
+        destination_id
+        for destination_id in service_addons_by_destination
+        if destination_id not in destination_map
+    )
+    special_destination_groups = tuple(
+        Product2Page3SpecialDestinationGroupVM(
+            destination_id=destination_id,
+            display_name=(
+                special_groups_by_destination[destination_id].display_name
+                if destination_id in special_groups_by_destination
+                else service_addon_department_names.get(destination_id, destination_id)
+            ),
+            rows=(
+                special_groups_by_destination[destination_id].rows
+                if destination_id in special_groups_by_destination
+                else ()
+            ),
+            service_addons=service_addons_by_destination.get(destination_id, ()),
+        )
+        for destination_id in destination_ids
+        if destination_id in special_groups_by_destination or destination_id in service_addons_by_destination
     )
 
     page1_url = _build_product2_page1_url(site_id=normalized_site_id, service_date=normalized_service_date)
