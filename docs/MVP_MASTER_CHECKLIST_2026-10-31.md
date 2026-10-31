@@ -63,7 +63,7 @@
 | K23 | VERIFY security | Rapportens tenant/site/department-behörighet |
 | K24 | VERIFY/OPEN | Admin Menyval-översikt och admin-overrideregel enligt realt behov |
 | K25 | CLOSED / LOCAL COMMIT | Under avdelningsnamn: sparad serveringspreferens, kompakt horisontellt informationsfält med befintlig allmän information; 7 fokustester godkända och visuell acceptans på verklig Kitchen Weekview 2026-10-31. Lokal commit `bbea233b0ac8268d3b58a055a5318652612be688` bekräftad, ännu inte pushad. |
-| K26 | CLOSED FUNCTION/UI – LOCAL COMMIT PENDING | Produktionslistor: separat sida med familjegrupper, numeriska avdelningsantal för vald dag, beskrivning/kommentar, utskrift av alla eller vald familj. 15 fokustester godkända; skärm och utskriftsflöde accepterade av produktägaren 2026-10-31. Local K26 commit/push återstår. |
+| K26 | CLOSED / LOCAL COMMIT | Produktionslistor: separat sida med familjegrupper, numeriska avdelningsantal för vald dag, beskrivning/kommentar, utskrift av alla eller vald familj. 16 fokustester godkända; skärm och utskrift accepterade 2026-10-31. Lokal commit `b09c3d7a719e304666c5900a0c6a0587b7496e83` (6 filer), ännu inte pushad. |
 | K27 | OPEN | Packlistor: sparat tillägg/antal/kommentar per avdelning |
 | K28 | LOCKED | Specialkost och Serveringsanpassning är separata domäner |
 | K29 | OPEN | Planera 1 vs 2.0 parity och kontrollerad cutover |
@@ -119,11 +119,11 @@ MVP:n visar **endast registrerad information**. Veckovy visar sparad preferenste
 
 ## K26 – Utskrift och familjegrupperad vy visuellt accepterade (2026-10-31)
 
-**Visuell och funktionell acceptans:** Produktägaren har granskat `/ui/production-lists/addons` med familjer MOS, PASTA och SALLAD, numeriska antal, kommentarer samt skrivarikoner och bekräftat att funktionerna fungerar. K26 är **CLOSED function/UI**, men **lokal commit och push återstår**. Copilotrapport: `tests/ui/test_production_lists_snapshot.py -q` = 15 passed; `git diff --check` OK. Ingen fristående rad-för-rad-granskning av lokal diff ännu.
+**Visuell och funktionell acceptans:** Produktägaren har granskat `/ui/production-lists/addons` med familjer MOS, PASTA och SALLAD, numeriska antal, kommentarer samt skrivarikoner och bekräftat att funktionerna fungerar. K26 är **CLOSED / LOCAL COMMIT**. Terminalverifierat: `tests/ui/test_production_lists_snapshot.py -q` = **16 passed**, `git diff --check` OK och selektiv commit `b09c3d7a719e304666c5900a0c6a0587b7496e83` med exakt sex K26-filer. Den samlade diffen granskades före checkpoint. Ingen push eller merge utförd.
 
 **Implementerat enligt Copilotrapport:** Page3-lik skrivarikon i sidhuvudet för alla familjer och diskret ikon för varje familj. Familjeprint filtreras endast under print via stabilt `data-family-key`; `afterprint` och Escape återställer skärmstatus. Ljus A4-layout används. Ingen backendändring för utskriftsfunktionen.
 
-**Kvarvarande checkpoint/release-verifiering:** kontrollera samlad lokal K26-diff inklusive nytillkomna filer, skapa selektiv lokal commit utan att beröra skyddade dirty-filer; ingen automatisk push. Full iPad-/storskalig 20+-regression och CI kvarstår inför pilot. Ingen parallell K27- eller Admin-implementation innan checkpoint.
+**Återstående release-verifiering:** lokal K26-checkpoint är färdig. Fortsatt skyddade dirty-filer: `core/admin_repo.py`, `scripts/seed_ostergarden_from_json.py`, `scripts/seed_product2_e2e.py` samt `artifacts/`. Full iPad-/storskalig 20+-regression och CI kvarstår inför pilot. Nästa avgränsade gate: återanvändbara serveringstillägg i Admin, därefter K27 packlistor. Ingen övergripande pilot-GO utfärdad.
 
 ## Beslut: Familjegrupperad kökslista och återanvändbara registreringar (2026-10-31; förtydligat)
 
