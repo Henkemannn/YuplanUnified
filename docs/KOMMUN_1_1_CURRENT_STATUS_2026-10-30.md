@@ -19,6 +19,9 @@ Arbetssätt: **1 order → 1 Copilot-rapport → review → nästa order**.
 
 ## 2. Verifierat genomfört (avgränsad acceptans)
 
+**A–Ö-status uppdaterad 2026-10-31:** Användaren bekräftar att den löpande A–Ö-genomgången redan nått **Rapport**. Äldre "Gate 02 – OPEN" i historisk live-ledger är administrativ dokumentationsskuld, inte bevis för att Avdelningar behöver byggas eller testas om från början. Tidigare acceptans ska dock inte likställas med ett nytt komplett clean-customer release-GO.
+
+
 | Leverans | Status | Evidens / begränsning |
 | --- | --- | --- |
 | Gemensamma Builder-editorer, kanonisk publicering och kärnarkitektur | Accepterad tidigare | Tidigare överlämning `docs/handoffs/KOMMUN_1_1_HANDOFF_2026-10-02.md` på separat dokumentationsbranch, samt Ground Truth. Inte omgranskad i detta docs-pass. |
@@ -37,15 +40,15 @@ Produktionslistor är en **lätt navigeringsvy**, inte en andra källa till prod
 
 ### P0 — live-acceptans / produktfakta, gör först
 
-1. **Återuppta Gate 02: Avdelningar + registrerade behov, på en ren kund**. Kontrollera nuvarande Department Edit, antal, cohorts, varierat antal och Serveringstillägg. Tidigare UX-13–18 (hierarki, sparomfång, begrepp, serveringstillägg) är fortfarande öppna i live-ledgern tills nya bevis finns. Ändra inte sidan i stor skala utan konkret reproduktion och avgränsat beslut.
+1. **A–Ö-genomgången är redan framme vid Rapport – fortsätt där.** Enligt senare livearbete i oktober har kund/site, avdelningar, boendeantal/variationer, registrerade behov, Serveringstillägg, Builder/import/publicering och portalflöde redan granskats. Den äldre Gate 02-ledgern saknar sammanställd slutlig status, men detta är **inte** skäl att återstarta Avdelningar. Återöppna en tidigare yta endast vid konkret reproducerad blockerare.
 2. **Teknisk kontroll av Admin → Menyval / override-semantik**. Nuvarande portal- och adminflöden använder kanoniska `department_menu_choices`; ingen bevisad separat lagring för ursprungligt portalval, adminöverskrivning och effektivt val. Besluta minsta korrekta regel innan nya adminval byggs.
 3. **Full clean-customer kedja**: onboarding → avdelning/behov → Builder-import/publicering → Department Portal val och explicit spara → Kitchen Weekview → Planera Page1/Page2 → Page3 → färdigmarkering → reload/login → Admin Weekview → rapport. Dokumentera skärmbild, tenant/site, status och faktisk data; ingen demo-förkonfigurerad E2E får räknas som ett nytt kundscenario.
 4. **Måltidsvägar**: kontrollera lunch och pröva kvällsmat/dessert separat; rapportera stöd, saknad länk, blockerare eller uttryckligt scope-beslut. Utgå inte från att full-lunch-Page3 automatiskt betyder full måltidsparitet.
 
 ### P1 — måste bedömas före pilot GO; implementation efter uppmätt gap
 
-5. **Reporting/statistik-brygga**: verifiera om aktuell rapport verkligen konsumerar Product2 cohort-quantities och completion (inte enbart legacy-registrering). Nuvarande `docs/report_current_behaviour.md` beskriver äldre rapportkällor. Klassificera som bekräftad funktion, blockerare eller kontrollerat avgränsat pilotkrav.
-6. **Separat Servering / Packning**: håll Specialkost skild från avdelningsvisa serveringsanpassningar. Bevara befintliga `service_addons` och `department_service_addons`. Kontrollera behovet av daglig destinationsorienterad packvy; Page3:s specialkost-packlista är **inte i sig bevis för full sammanlagd packningsparitet**.
+5. **Rapport – nästa aktiva A–Ö-gate**: verifiera vad dagens rapport faktiskt visar (avdelningsval, antal, specialkost, produktion, completion), vilka datakällor den läser och om den konsumerar Product2 cohort-quantities/completion eller bara legacy-registrering. `docs/report_current_behaviour.md` beskriver de äldre rapportkällorna. Börja med read-only census och live-screenshot, klassificera sedan konkreta luckor.
+6. **Separat Servering / Packning – bekräftad presentationslucka**: befintliga `service_addons`/`department_service_addons` kan administreras i avdelning, visas read-only på Portal Home och ingår i äldre sparade produktionslistor. Däremot saknar nya Product2 Page3 och Produktionslistor 2.0 en tydlig **köksorienterad, dags-/måltids- och avdelningsbaserad Serveringstillägg/Packning-vy**. Gör en separat operativ läsprojektion; blanda inte in tilläggen i default Normalkost/Specialkost och skapa ingen ny beräkningsmotor. Page3:s specialkost-packlista bevisar inte total packningsparitet.
 7. **Planera 1 vs 2.0 parity/cutover**: prov med realistisk vecka och samma menykälla/antal/avvikelser/val/destinationer; klassificera skillnad som regression, legacy-begränsning eller avsiktligt nytt beteende. Ingen okontrollerad cutover.
 8. **iPad + polish endast där det blockerar uppgift**: 1024×768 och 768×1024, tom-/felstatus, rättigheter, popup/overlay, färger, menyval och tillagningsflöde. Återöppna inte färdiga Page3-/Produktionslistor-/Builder-ytor för smakändringar.
 9. **Release-gate**: full regression, säkerhet/tenant-scope, migration, staging/deploy, ny kundsmoke och fryst/taggad pilotkandidat. Senaste **77 passed** är en *fokuserad* testslice, inte en fullständig releaseverifiering.
@@ -58,18 +61,18 @@ Produktionslistor är en **lätt navigeringsvy**, inte en andra källa till prod
 
 ## 4. Beslutsunderlag / rekommenderad nästa gate
 
-**Rekommendation: READ-ONLY acceptanscensus av Gate 02 – Avdelningar + behov, med därefter en livekontroll på ren kund.**
+**Rekommendation: fortsätt A–Ö på Rapport, inte en omstart på Avdelningar.**
 
-Varför: Här möts uppgifter som matar hela Planera 2.0-kedjan. Om kundadmin inte kan registrera och spara korrekt behov/antal eller förstå omfattningen av sina val, spelar en färdig Page3 mindre roll. Det är också den första uttryckligen öppna gaten i den senare live-acceptansledgern.
+Varför: A–Ö-arbetet har redan nått Rapport. Rapporteringens koppling till Planera 2.0- och färdigmarkeringsdata är ännu inte bevisad. Den identifierade luckan i hur köket ser Serveringstillägg bör få en egen separat Servering/Packning-gate efter rapportcensus (eller tidigare endast om dagens verkliga arbetsflöde blockeras).
 
 Föreslagen minsta arbetsorder till Copilot (först efter gemensamt beslut):
-- verifiera nuvarande route och dataflöde för avdelningslistan, Department Edit och Registered Needs,
-- mappa sparknappar mot persistence och tenant/site-scope,
-- jämför UX-13–18 mot vad som *faktiskt* är implementerat på aktuell HEAD,
-- bedöm blocker/HIGH och lämna en liten acceptanslista,
+- kartlägg befintliga Rapport-routes/UI/services och om de läser Product2 quantity/completion eller legacy-registrering,
+- verifiera aktuell rapportupplevelse med verkliga data och en skärmbild,
+- mappa dagens Serveringstillägg från Admin/Portal/legacy mot saknad köksvy (read-only; inget skrivande),
+- dokumentera vilka skillnader som blockerar pilot respektive kan vänta,
 - **ingen implementation, migration, reset, commit eller push** i första census-gaten.
 
-Beslutspunkten efter census: **A)** Gate 02 redan bra → liveacceptans och gå vidare till Menyval; **B)** konkret blocker → en avgränsad Copilot-order; **C)** produktbeslut krävs om antal/sparomfång → ta det innan kod.
+Beslutspunkt efter rapportcensus: **A)** rapporten korrekt → gå vidare i A–Ö; **B)** rapporten saknar Product2-truth → en avgränsad brygga; **C)** servering/packning hindrar arbetet → prioritera separat köksvy. Tidigare godkända A–Ö-delar förblir stängda utan ny buggevidens.
 
 ## 5. Datakällor, skydd och dokumentationsdisciplin
 
