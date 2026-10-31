@@ -3,8 +3,24 @@ Last reviewed: 2026-09-28
 
 # Yuplan 1.0 Finishline
 
+## Operational status addendum — 2026-10-30
 
-## Current Phase
+**Current verified development baseline:** `feat/planera-app-shell-2026-03-03` @ `6233b11cd4530ed0261992dc6be18af0357955c7`. This supersedes the **checkpoint and active-gate status** recorded in the dated September sections below, **not** their locked product/architecture principles.
+
+- Product2 Page3 (Översikt, Normalkost, Specialkost, prints and completion interaction): individually accepted for pilot. Completion API/Weekview persistence remain governed by the locks below.
+- Produktionslistor 2.0: accepted week/year navigator and **lunch-only** direct full-Page3 entry; legacy saved lists preserved. Checkpoints `b23f22f4`, `9399350d`.
+- App Shell initial light/dark navigation flashes: fixed and user-verified at `6233b11c`; latest focused test slice **77 passed**.
+- **Kommun 1.1 as a whole is NOT yet PILOT READY.** The ongoing A–Ö manual walkthrough has progressed to **Rapport**, including earlier work on Departments, needs, menu publishing and Portal. The historic Gate 02 ledger is not fully reconciled with later acceptance; do not restart from Departments without a proven blocker. Admin menu-choice precedence, complete clean-customer E2E, Kvällsmat/dessert verification, reporting bridge, separate kitchen Serving/packing, parity, tablet and final release gate need evidence/explicit decisions.
+- Recommended next work: **continue A–Ö at Rapport** with read-only report data-source verification and live acceptance, followed by a bounded **Servering/Packning** kitchen-view scope decision. Do not reopen accepted Builder, Page3, Produktionslistor or Department Edit UX without a real defect.
+- **2026-10-31 MVP serving-addon presentation decision:** show *only existing registrations* in Kitchen Weekview (short text beneath department name), a **Tillägg** entry beside Lunch in Produktionslistor (list grouped by addon → department/count/note), and **the same saved addon/count/note displayed under each department in the existing relevant packlists**, with no separate lookup. No current-menu decision making, automatic "mos instead of potato" interpretation, new summation/production logic, or fourth Page3 tab. Future menu-aware rules remain future architecture, not part of this gate.
+- Current live plan: [`docs/KOMMUN_1_1_CURRENT_STATUS_2026-10-30.md`](../KOMMUN_1_1_CURRENT_STATUS_2026-10-30.md), [roadmap](../roadmap.md), [live acceptance](../KOMMUN_1_1_LIVE_ACCEPTANCE.md).
+- The 77-test result is a **focused** slice, not a full-suite run; prior 2342-pass results are historical baselines.
+
+**The older dated "Current..." sections below are retained as a September status snapshot for traceability. Their architecture/completion/packing/parallel-run decisions remain locked.**
+
+
+
+## Historical phase snapshot (2026-09-28)
 
 The shared Builder/Menu/Offshore seam remains accepted and frozen.
 
@@ -20,7 +36,7 @@ The Page3 information architecture and Specialkost hierarchy are no longer the m
 Broad Builder/Menu and Offshore MVP expansion remains closed. Only pilot-blocking regressions or shared-platform issues may reopen those seams before Kommun is pilot-ready.
 
 
-## Current Checkpoint
+## Historical checkpoint snapshot (2026-09-28)
 
 Active development branch:
 
@@ -76,7 +92,7 @@ Do not checkpoint that uncommitted gate until the clean manual Page3 -> Kitchen 
 - Existing Serveringstillägg remains valid operational input and must be preserved in a separate Servering / Packning track.
 
 
-## Current Active Gate
+## Historical active gate snapshot (2026-09-28)
 
 ### Close the Page3 -> Weekview completion E2E
 
@@ -149,7 +165,7 @@ The E2E database must not be confused with `dev.db`. Reused E2E state may contai
 A small developer-experience helper for deterministic E2E startup may be added later, but it is not allowed to become a launch-blocking side project.
 
 
-## Next Major Milestone
+## Historical milestone sequence (2026-09-28)
 
 **Kommun 1.1 — Ready for Pilot.**
 

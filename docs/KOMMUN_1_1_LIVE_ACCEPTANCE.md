@@ -1,5 +1,14 @@
 # Kommun 1.1 — Live Acceptance & UX Race
 
+> **Status update – 2026-10-30 (historical reconciled snapshot):** Read [current MVP/TODO status](KOMMUN_1_1_CURRENT_STATUS_2026-10-30.md) and [roadmap](roadmap.md). Page3 production/prints, the Specialkost completion UX and Produktionslistor 2.0 (lunch-only entry) are now individually accepted. App Shell dark/light navigation flashing is resolved and manually accepted at source checkpoint `6233b11c`. The most recent **77 passed** tests cover a focused slice, **not** the entire release suite. **Gate 02 and the end-to-end clean-customer flow remain OPEN**; do not infer overall pilot GO from the completed screens. The 2342-passed baseline and `04731895` HEAD below are **historical evidence**, not today's HEAD. No fresh Gate 02 or full release acceptance was performed by this docs update.
+
+
+## A–Ö progress correction — 2026-10-31
+
+The ongoing manual **A–Ö review has progressed to Rapport**, confirmed by the user. Previous A–Ö checks covered customer/site, departments and their counts/needs/Serveringstillägg, Builder menu creation/import/publication, and Portal. Do **not** restart at Departments based on the older Gate 02 label. The old Gate 02 GO checkbox below was never reconciled with the subsequent A–Ö work; it is a **ledger-status discrepancy**, not evidence that these screens need another broad development pass. Any actual failed acceptance should be documented with a specific reproduction.
+
+**Next active A–Ö gate:** verify current Report UI/data sources against Product2 quantity/completion truth; then address the distinct kitchen presentation gap for Serveringstillägg/Servering/Packning. Admin editing, Portal Home read-only view and legacy snapshot detail exist, but a coherent current day/meal × department kitchen pack view is not established. A full new-customer release GO and final regression remain pending.
+
 ## Status
 
 TECHNICAL AUTOMATED GATE = GO
