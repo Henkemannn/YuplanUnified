@@ -47,7 +47,7 @@ Produktionslistor är en **lätt navigeringsvy**, inte en andra källa till prod
 
 ### P1 — måste bedömas före pilot GO; implementation efter uppmätt gap
 
-5. **Rapport – nästa aktiva A–Ö-gate**: verifiera vad dagens rapport faktiskt visar (avdelningsval, antal, specialkost, produktion, completion), vilka datakällor den läser och om den konsumerar Product2 cohort-quantities/completion eller bara legacy-registrering. `docs/report_current_behaviour.md` beskriver de äldre rapportkällorna. Börja med read-only census och live-screenshot, klassificera sedan konkreta luckor.
+5. **Rapport – kodcensus genomförd, A–Ö-gate fortfarande OPEN**: olika rapportvyer/exporter har delvis oförenliga syften; statisk PDF och missvisande coverage-etiketter är bekräftade. Befintlig Weekview-rapport läser redan samma cohort-färdigmarkering som Page3 för markerad specialkost, men saknar full Planera 2.0-produktion. Bekräfta tenant/site/department-åtkomst med negativt test **före UI-/exportarbete** och välj tydligt rapportkontrakt; se §4c.
 6. **Serveringstillägg – enkel köksvisning saknas**: visa befintliga registreringar/antal/anteckningar direkt under avdelningsnamn i Kitchen Weekview och via Tillägg-ikon bredvid Lunch i Produktionslistor. Listan grupperas per tillägg med en avdelningsrad och dess anmärkning. Visa även informationen avdelningsvis vid packning, men ingen menylogik/ny beräkningsmotor/ny Page3-flik; se §4b.
 7. **Planera 1 vs 2.0 parity/cutover**: prov med realistisk vecka och samma menykälla/antal/avvikelser/val/destinationer; klassificera skillnad som regression, legacy-begränsning eller avsiktligt nytt beteende. Ingen okontrollerad cutover.
 8. **iPad + polish endast där det blockerar uppgift**: 1024×768 och 768×1024, tom-/felstatus, rättigheter, popup/overlay, färger, menyval och tillagningsflöde. Återöppna inte färdiga Page3-/Produktionslistor-/Builder-ytor för smakändringar.
@@ -96,6 +96,27 @@ Beslutspunkt efter rapportcensus: **A)** rapporten korrekt → gå vidare i A–
 - Tidigare långsiktiga idéer om menyberoende substitutionsregler/resolver finns i Ground Truth för framtiden, men **är uttryckligen utanför denna 1.0-implementation**. Ingen migration, schemaändring eller ny generell specialkostmotor behövs.
 
 **Genomförandeordning:** Fortsätt A–Ö-gaten Rapport som planerat. Därefter en smal read-only Copilot-census av befintlig service-addon visning, scope och registrering; därefter en enda liten UI-order för Weekview-text och Produktionslistor-ikonen/listan, följd av iPad/liveacceptans. Ingen ombyggnad av Page3.
+
+## 4c. A–Ö Rapport – kodcensus efter Copilotrapport 2026-10-31
+
+**Status: OPEN / REVIEWED – ingen kodändring godkänd.** Granskningen utgår från utvecklings-HEAD `6233b11c` och Copilots read-only rapport, med uppföljande kodverifiering på GitHub.
+
+### Bekräftade tekniska förhållanden
+
+- Det finns flera rapportvägar med **olika** syften: `/ui/reports/weekview` visar summeringar av boende/normal/specialkost; `/ui/admin/report/week` gör en adminorienterad veckovy; `/ui/reports/weekly` mäter registreringstäckning (`meal_registrations` mot menyförekomst). Dessa ska inte okritiskt behandlas som samma rapport.
+- Den senare `/ui/reports/weekly`-familjens **HTML** visar täckningsdata, medan dess **CSV/XLSX** bygger på `compute_weekview_report()` och alltså ger andra tal. Dess **PDF** skickar en statisk minimal placeholder, trots att en print-template renderas. Rättas eller tydliggörs efter beslut om den kanoniska rapportens syfte.
+- I `unified_report_weekly.html` använder **coverage-grenen** `lunch_registered` som `Normal`, sätter `Special` till 0 och har dagsrader med hårdkodade 0. Detta är felaktig/otydlig semantisk märkning av täckning som matproduktion.
+- **Viktig korrigering till Copilots slutsats:** `core/weekview_report_service.py:resolve_weekview_specialkost_count` läser `build_department_requirement_group_weekview_projection` och dess `need.marked`/effektiv kvantitet. Page3:s bulk completion skriver till **samma `DepartmentRequirementGroupCompletionRepo`** via `core/weekview/cohort_bulk_completion_service.py`. Rapporterna har därför **en redan existerande, delvis korrekt Product2-cohort-färdigmarkeringsbrygga** för markerad specialkost. Det är däremot inte en komplett Planera 2.0-`PlanResult`-rapport, och `meal_registrations` är en separat, äldre sanning.
+- Flera rapport-routes gör först site-/department-uppslag utan tydlig `tenant_id`-avgränsning; `/ui/reports/weekly` kan dessutom falla tillbaka till global första site och använda `session.get("tenant_id") or 1`. **Misstänkt högprioriterad accesskontrollslucka:** behov av negativa två-tenant-/site-/department-tester. Att SQL-uppslaget är oskärmat bevisar inte ensamt komplett cross-tenant dataexponering; kontrollera faktiskt svar och underliggande `WeekviewService` innan klassificering.
+
+### Styrning / nästa minsta gate
+
+1. **Först:** liten, teststyrd scope/security-gate på befintliga rapport-routes och exporter. Bekräfta vad felaktigt site-id/department-id kan avslöja och hindra cross-tenant/cross-site åtkomst utan global fallback. Återanvänd befintligt site-context-/auth-mönster. Ingen ändring av rapportberäkning eller gränssnittsdesign.
+2. **Därefter:** verklig Rapport-UI-acceptans med skärmbilder på den aktiva navigationsvägen; definiera användningssyfte och vad som faktiskt måste exporteras för första kommunpilot.
+3. **Sedan:** kirurgisk korrigering av falska Normal/Special-etiketter och felmatchade exporter/PDF utifrån valt rapportkontrakt. Behåll den redan fungerande cohort-färdigmarkeringsbryggan. Bygg **inte** en ny generisk Product2-rapportmotor utan ett separat belagt behov.
+4. Fortsätt planerat separat, read-only **Serveringstillägg i Weekview/Produktionslistor/Packlistor** efter rapportens minsta kritiska gate.
+
+**Inga rapportfiler ändrades av censusen.** De tidigare lokala smutsiga filerna är fortsatt skyddade.
 
 ## 5. Datakällor, skydd och dokumentationsdisciplin
 
