@@ -20,12 +20,12 @@ Development baseline: `feat/planera-app-shell-2026-03-03` @ `6233b11cd4530ed0261
 
 ## NOW – Kommun 1.1 Pilot Gate sequence
 
-1. **Gate 02: Departments + needs – OPEN.** Read-only evidence census of the current Department Edit/needs behavior against UX-13–18; then real clean-customer validation. Only repair confirmed blockers/HIGH issues.
-2. **Admin menu-choice semantics – OPEN technical decision.** Confirm admin-vs-portal choice precedence and persisted identity, then implement at most an MVP-sized Admin → Menyval overview where needed.
+1. **Continue the A–Ö live review at Rapport – ACTIVE.** Departments/needs, menu publishing and Portal were covered earlier in the ongoing A–Ö review. The old Gate 02 ledger remains historically open but must not cause a restart. Confirm report data sources and the current Product2 completion/quantity bridge before coding.
+2. **Admin menu-choice semantics – OPEN technical decision (revisit only where real A–Ö evidence exposes a gap).** Confirm admin-vs-portal choice precedence and persisted identity, then implement at most an MVP-sized Admin → Menyval overview where needed.
 3. **Full clean-customer E2E – PENDING.** Builder publish → Portal choices → Kitchen → Page1/Page2 → Page3 → completion → Weekview → report, including reload/relogin and tenant-scope.
 4. **Meal coverage – PENDING verification.** Lunch established; verify Kvällsmat and dessert or make explicit scoped pilot decision. Produktionslistor is currently lunch-only.
 5. **Report bridge – PENDING verification.** Confirm current reports consume Product2 cohort quantity/completion instead of only legacy sources; fix only demonstrated gap.
-6. **Serving/packing – PENDING operational acceptance.** Preserve Serveringstillägg and separate Serveringsanpassning from Specialkost; assess daily destination-based pack output. No second calculation engine.
+6. **Serving/packing – missing kitchen read projection.** Admin department edit persists Serveringstillägg, Portal Home can show them read-only, and legacy snapshot detail lists them. New Product2 Page3/Produktionslistor do not give kitchen staff a complete department × meal/day serving/packing overview. Build it separately from Normalkost/Specialkost after bounded scope/acceptance review; no second calculation engine.
 7. **Planera 1 / 2.0 parity – PENDING.** Compare real weeks, classify differences, preserve legacy fallback until proven cutover.
 8. **iPad UX, error/empty states – PENDING focused final pass.** 1024×768 and 768×1024; only user-visible blockers or high-impact friction.
 9. **Release readiness – PENDING.** Full automated regression, cross-tenant security, migrations/staging smoke, final new-customer acceptance; freeze/tag Kommun 1.1 pilot candidate.
@@ -44,4 +44,4 @@ Home, Hotel/Bankett, advanced ingredient conversion and costing, full recipe imp
 
 ## Next decision
 
-**Recommendation:** a small read-only Gate 02 census first, then decide if Department Edit needs a surgical repair or can proceed directly through live acceptance. See the linked status report for the exact evidence request and unresolved product questions.
+**Recommendation:** continue at **Rapport** with a read-only data/route census and live acceptance; make a separate **Servering/Packning** kitchen view a deliberate next product gate. Do not restart the A–Ö traversal at Avdelningar. See the linked status report.
