@@ -4703,18 +4703,30 @@ def kitchen_veckovy_week():
         site_id = q_site_id or (ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None))
         if not site_id:
             return redirect(url_for("ui.select_site", next="/ui/kitchen/week"))
+        try:
+            tenant_id = int(ctx.get("tenant_id") or session.get("tenant_id"))
+        except (TypeError, ValueError):
+            return abort(404)
         db = get_session()
         try:
-            # If query provided site_id, validate it exists; else fall back to context site
+            # If query provided site_id, validate it belongs to the active tenant; else fall back to context site
             if q_site_id:
-                row_check = db.execute(text("SELECT id FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+                row_check = db.execute(
+                    text("SELECT id FROM sites WHERE id=:i AND tenant_id=:tid"),
+                    {"i": site_id, "tid": tenant_id},
+                ).fetchone()
                 if not row_check:
                     # invalid site_id: fall back to context/session
                     site_id = ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None)
                     if not site_id:
                         return redirect(url_for("ui.select_site", next="/ui/kitchen/week"))
-            row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
-            site_name = str(row_s[0]) if row_s else ""
+            row_s = db.execute(
+                text("SELECT name FROM sites WHERE id=:i AND tenant_id=:tid"),
+                {"i": site_id, "tid": tenant_id},
+            ).fetchone()
+            if not row_s:
+                return abort(404)
+            site_name = str(row_s[0] or "")
             rows = db.execute(
                 text(
                     "SELECT id, name, COALESCE(resident_count_fixed,0), COALESCE(notes,'') "
@@ -4728,7 +4740,13 @@ def kitchen_veckovy_week():
         finally:
             db.close()
         svc = WeekviewService()
-        tenant_id = (session.get("tenant_id") or 1)
+        from core.admin_repo import DepartmentServiceAddonsRepo, ServiceAddonsRepo
+
+        active_addon_ids = {
+            str(addon["id"])
+            for addon in ServiceAddonsRepo().list_active(str(site_id))
+        }
+        department_addons_repo = DepartmentServiceAddonsRepo()
         deps_out = []
         for dep in departments:
             dep_id = dep["id"]
@@ -4788,9 +4806,24 @@ def kitchen_veckovy_week():
                     # Resolve diet name from site-linked types only
                     diet_name = name_by_id.get(str(dtid), str(dtid))
                     diet_rows.append({"diet_type_id": str(dtid), "diet_type_name": diet_name, "cells": cells})
+            service_addons = []
+            for addon in department_addons_repo.list_for_department(dep_id, site_id=str(site_id)):
+                if str(addon.get("addon_id") or "") not in active_addon_ids:
+                    continue
+                service_scope = str(addon.get("service_scope") or "").strip().lower()
+                service_addons.append(
+                    {
+                        "addon_name": str(addon.get("addon_name") or "").strip(),
+                        "note": str(addon.get("note") or "").strip(),
+                        "service_scope_label": {
+                            "lunch": "Endast lunch",
+                            "dinner": "Endast kväll",
+                        }.get(service_scope, ""),
+                    }
+                )
             info_text = dep.get("info_text") or ""
             info_text = info_text.strip()
-            deps_out.append({"id": dep_id, "name": dep["name"], "resident_count": dep["resident_count"], "info_text": (info_text if info_text else None), "no_diets": (not default_ids), "diet_rows": diet_rows, "days": days})
+            deps_out.append({"id": dep_id, "name": dep["name"], "resident_count": dep["resident_count"], "info_text": (info_text if info_text else None), "service_addons": service_addons, "no_diets": (not default_ids), "diet_rows": diet_rows, "days": days})
         for dep in deps_out:
             dep["diet_rows"] = build_week_grid_specialkost_rows(
                 tenant_id=tenant_id,

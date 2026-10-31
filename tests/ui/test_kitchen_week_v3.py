@@ -8,7 +8,14 @@ import re
 import pytest
 
 from core.db import get_session
-from core.admin_repo import DietTypesRepo, Alt2Repo
+from core.admin_repo import (
+    Alt2Repo,
+    DepartmentServiceAddonsRepo,
+    DepartmentsRepo,
+    DietTypesRepo,
+    ServiceAddonsRepo,
+    SitesRepo,
+)
 from core.department_menu_choice_repo import MenuChoiceRepo
 
 
@@ -31,7 +38,10 @@ pytestmark = pytest.mark.usefixtures("enable_weekview")
 
 def _seed_site_and_departments(db, site_id: str, deps: list[tuple[str, str, int]]):
     if not db.execute(text("SELECT 1 FROM sites WHERE id=:i"), {"i": site_id}).fetchone():
-        db.execute(text("INSERT INTO sites(id,name) VALUES(:i,:n)"), {"i": site_id, "n": f"K3 {site_id}"})
+        db.execute(
+            text("INSERT INTO sites(id,name,tenant_id) VALUES(:i,:n,1)"),
+            {"i": site_id, "n": f"K3 {site_id}"},
+        )
     cols = {r[1] for r in db.execute(text("PRAGMA table_info('departments')")).fetchall()}
     for dep_id, dep_name, rc in deps:
         if not db.execute(text("SELECT 1 FROM departments WHERE id=:i"), {"i": dep_id}).fetchone():
@@ -80,9 +90,14 @@ def test_kitchen_week_v3_renders_and_flags(app_session):
         db = get_session()
         try:
             site_id = f"site-k3-{suffix}"
-            dep1 = (f"dep-1-{suffix}", f"Avd Ett {suffix}", 12)
+            dep1 = (f"dep-1-{suffix}", f"Avdelning A {suffix}", 12)
             dep2 = (f"dep-2-{suffix}", f"Avd Två {suffix}", 9)
             _seed_site_and_departments(db, site_id, [dep1, dep2])
+            db.execute(
+                text("UPDATE departments SET notes=:notes WHERE id=:id"),
+                {"notes": "Äter mycket <mat>", "id": dep1[0]},
+            )
+            db.commit()
             # Create diet types
             dt_repo = DietTypesRepo()
             dt1 = dt_repo.create(site_id=site_id, name=f"Glutenfri {site_id}", default_select=False)
@@ -100,6 +115,57 @@ def test_kitchen_week_v3_renders_and_flags(app_session):
                 weekday=1,
                 selected_alt="Alt2",
             )
+            addon_repo = ServiceAddonsRepo()
+            mos_id = addon_repo.create_if_missing(
+                f"Mos {site_id}",
+                site_id=site_id,
+                addon_family="mos",
+            )
+            salad_id = addon_repo.create_if_missing(
+                f"Sallad {site_id}",
+                site_id=site_id,
+                addon_family="sallad",
+            )
+            inactive_id = addon_repo.create_if_missing(
+                f"Inaktiv {site_id}",
+                site_id=site_id,
+                addon_family="ovrigt",
+            )
+            DepartmentServiceAddonsRepo().replace_for_department(
+                dep1[0],
+                [
+                    {
+                        "addon_id": mos_id,
+                        "service_scope": "lunch",
+                        "quantity_mode": "custom",
+                        "lunch_count": 4,
+                        "dinner_count": None,
+                        "note": "Aldrig <tomat>",
+                    },
+                    {
+                        "addon_id": salad_id,
+                        "service_scope": "dinner",
+                        "quantity_mode": "custom",
+                        "lunch_count": None,
+                        "dinner_count": 3,
+                        "note": "",
+                    },
+                    {
+                        "addon_id": inactive_id,
+                        "service_scope": "all_services",
+                        "quantity_mode": "custom",
+                        "lunch_count": 2,
+                        "dinner_count": 2,
+                        "note": "Ska inte visas",
+                    },
+                ],
+                site_id=site_id,
+            )
+            db.execute(
+                text("UPDATE service_addons SET is_active=0 WHERE id=:id"),
+                {"id": inactive_id},
+            )
+            db.commit()
         finally:
             db.close()
     client: FlaskClient = app.test_client()
@@ -112,8 +178,20 @@ def test_kitchen_week_v3_renders_and_flags(app_session):
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
     # Department names and presence of Boende row in the grid (not header pill)
-    assert "Avd Ett" in html
+    assert f"Avdelning A {suffix}" in html
+    assert f"Avd Avdelning A {suffix}" not in html
     assert "Avd Två" in html
+    assert f"Mos {site_id}" in html
+    assert "Aldrig &lt;tomat&gt;" in html
+    assert "Aldrig <tomat>" not in html
+    assert "Endast lunch" in html
+    assert f"Sallad {site_id}" in html
+    assert "Endast kväll" in html
+    assert "Ska inte visas" not in html
+    assert "dept-info-field" in html
+    assert "dept-info-field__addons" in html
+    assert "dept-info-field__general" in html
+    assert "Äter mycket &lt;mat&gt;" in html
     assert "<tr class=\"boende-row\">" in html or "Boende</td>" in html
     _assert_boende_row_is_read_only(html)
     # Diet names scoped per department
@@ -146,6 +224,52 @@ def test_kitchen_week_v3_renders_and_flags(app_session):
     # Only Veckovy should be active in kitchen nav on weekview
     assert html.count("app-shell__nav-item--active") == 1
     assert re.search(r"app-shell__nav-item--active[^>]*>\s*Veckovy\s*<", html)
+
+
+def test_kitchen_week_v3_does_not_read_another_tenant_site(app_session):
+    with app_session.app_context():
+        db = get_session()
+        db.execute(
+            text("INSERT OR IGNORE INTO tenants(id, name, active) VALUES(2, 'ForeignTenant', 1)")
+        )
+        db.commit()
+        db.close()
+        authorized_site, _ = SitesRepo().create_site(f"K3 authorized {uuid.uuid4()}", tenant_id=1)
+        foreign_site, _ = SitesRepo().create_site(f"K3 foreign {uuid.uuid4()}", tenant_id=2)
+        foreign_dep, _ = DepartmentsRepo().create_department(
+            site_id=foreign_site["id"],
+            name=f"Foreign department {uuid.uuid4()}",
+            resident_count_mode="fixed",
+            resident_count_fixed=5,
+        )
+        foreign_addon_id = ServiceAddonsRepo().create_if_missing(
+            f"Foreign addon {uuid.uuid4()}",
+            site_id=foreign_site["id"],
+        )
+        DepartmentServiceAddonsRepo().add_for_department(
+            foreign_dep["id"],
+            foreign_addon_id,
+            service_scope="lunch",
+            quantity_mode="custom",
+            lunch_count=2,
+            dinner_count=None,
+            note="Foreign note",
+            site_id=foreign_site["id"],
+        )
+
+    client: FlaskClient = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+        sess["site_id"] = authorized_site["id"]
+    response = client.get(
+        f"/ui/kitchen/week?site_id={foreign_site['id']}&year=2026&week=5",
+        headers={"X-User-Role": "cook", "X-Tenant-Id": "1"},
+    )
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Foreign addon" not in html
+    assert "Foreign note" not in html
 
 
 def test_kitchen_week_v3_canonical_alt2_beats_stale_legacy_flags(app_session):

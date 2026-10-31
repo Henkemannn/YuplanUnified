@@ -45,10 +45,48 @@
   font-weight: 600;
 }
 
-.kitchen-week .dept-subtitle {
+.kitchen-week .dept-info-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.75rem;
+  width: 100%;
+  margin-top: 0.2rem;
+  padding: 0.45rem 0.7rem;
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
   color: var(--muted);
   font-size: 0.86em;
-  line-height: 1.2;
+  line-height: 1.3;
+}
+
+.kitchen-week .dept-info-field__addons {
+  display: flex;
+  flex: 1 1 18rem;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.85rem;
+  min-width: 0;
+}
+
+.kitchen-week .dept-info-field__addon {
+  display: inline-flex;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.kitchen-week .dept-info-field__addon + .dept-info-field__addon::before {
+  content: "•";
+  margin-right: 0.85rem;
+  color: var(--accent);
+}
+
+.kitchen-week .dept-info-field__general {
+  flex: 1 1 100%;
+  min-width: 0;
+  padding-top: 0.35rem;
+  border-top: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  overflow-wrap: anywhere;
 }
 
 .kitchen-week .dept-empty {

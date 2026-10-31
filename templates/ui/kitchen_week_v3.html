@@ -36,12 +36,28 @@
       <section class="app-shell__card app-card" data-department-id="{{ dep.id }}">
         <div class="dept-header">
           {% set _dn = dep.name or '' %}
-          {% set dep_display = _dn if _dn[:4]|lower == 'avd ' else 'Avd ' ~ _dn %}
+          {% set _dn_lower = _dn|lower %}
+          {% set dep_display = _dn if _dn_lower[:4] == 'avd ' or _dn_lower[:10] == 'avdelning ' else 'Avd ' ~ _dn %}
           <div class="dept-title">{{ dep_display }}</div>
+          {% if dep.service_addons or dep.info_text %}
+            <div class="dept-info-field">
+              {% if dep.service_addons %}
+                <div class="dept-info-field__addons" aria-label="Registrerade serveringstillägg">
+                  {% for addon in dep.service_addons %}
+                    <span class="dept-info-field__addon">
+                      <span>{{ addon.addon_name }}</span>
+                      {% if addon.service_scope_label %}<span> · {{ addon.service_scope_label }}</span>{% endif %}
+                      {% if addon.note %}<span> — {{ addon.note }}</span>{% endif %}
+                    </span>
+                  {% endfor %}
+                </div>
+              {% endif %}
+              {% if dep.info_text %}
+                <div class="dept-info-field__general">{{ dep.info_text }}</div>
+              {% endif %}
+            </div>
+          {% endif %}
         </div>
-        {% if dep.info_text %}
-          <div class="yp-info-box">{{ dep.info_text }}</div>
-        {% endif %}
         {% set interactive = vm.weekview_enabled %}
         {% include "ui/_partials/week_grid.html" %}
         {% if dep.no_diets %}
