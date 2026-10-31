@@ -64,7 +64,7 @@
 | K24 | VERIFY/OPEN | Admin Menyval-översikt och admin-overrideregel enligt realt behov |
 | K25 | CLOSED / LOCAL COMMIT | Under avdelningsnamn: sparad serveringspreferens, kompakt horisontellt informationsfält med befintlig allmän information; 7 fokustester godkända och visuell acceptans på verklig Kitchen Weekview 2026-10-31. Lokal commit `bbea233b0ac8268d3b58a055a5318652612be688` bekräftad, ännu inte pushad. |
 | K26 | CLOSED / LOCAL COMMIT | Produktionslistor: separat sida med familjegrupper, numeriska avdelningsantal för vald dag, beskrivning/kommentar, utskrift av alla eller vald familj. 16 fokustester godkända; skärm och utskrift accepterade 2026-10-31. Lokal commit `b09c3d7a719e304666c5900a0c6a0587b7496e83` (6 filer), ännu inte pushad. |
-| K27 | OPEN | Packlistor: sparat tillägg/antal/kommentar per avdelning |
+| K27 | IMPLEMENTERAD LOKALT / 79 TESTER GRÖNA – VISUELL ACCEPTANS ÖPPEN | Page3 Specialkost → Packlista: familj/antal/beskrivning/kommentar per avdelning, även addon-only-avdelningar och print. Exakt 5 filer enligt Copilotrapport; ingen commit eller push. |
 | K28 | LOCKED | Specialkost och Serveringsanpassning är separata domäner |
 | K29 | OPEN | Planera 1 vs 2.0 parity och kontrollerad cutover |
 | K30 | OPEN | Färsk full clean-customer E2E till rapport/packning |
@@ -148,6 +148,12 @@ MVP:n visar **endast registrerad information**. Veckovy visar sparad preferenste
 **Kritisk kant:** även avdelningar som bara har serveringstillägg (ingen specialkost) måste komma med på avdelningspacklistan, men helt tomma avdelningar får inte tillkomma. Datumstyrda `whole_department`-antal via befintlig `resolve_service_addon_quantity`; `custom` från rätt måltid; lunch/dinner/all_services filtreras korrekt; dessert ska aldrig få lunchens serveringstillägg; inaktiva poster och andra sites/tenants bort. Bevara unika addon-ID/kommentarer utan sammanslagning eller dubbelräkning. Page3:s completion/ready/blocked, normalkost, specialkost och print-state får inte ändras i övrigt.
 
 **Ordning:** en avgränsad K27-order → Copilotrapport med fokustester → browser+printacceptans → selektiv checkpoint. Admin-gate är CLOSED på `ad96abd4f0c5b26640bd0557b745544685d64d6e`; K26 `b09c3d7a719e304666c5900a0c6a0587b7496e83`; båda endast lokalt, ej pushade.
+
+## K27 – Copilotrapport efter första implementation (2026-10-31)
+
+**IN PROGRESS / EJ ACCEPTED:** Copilot har lokalt implementerat K27 i fem filer (`core/planera_product2_page3_vm.py`, `templates/ui/kitchen_product_planera_page3.html`, `static/css/planera_product2_page3.css`, två tillhörande Page3-testfiler). Rapport: `pytest tests/core/test_planera_product2_page3_vm.py tests/ui/test_kitchen_product_planera_page3.py tests/ui/test_production_lists_snapshot.py tests/ui/test_admin_department_service_addons.py -q` = **79 passed**, `git diff --check` OK; lokal HEAD är fortfarande `ad96abd4f0c5b26640bd0557b745544685d64d6e`, inga commits/pushes, skyddade dirty-filer kvar.
+
+Uppgivet beteende: läser aktiva site-scopade addons, löser `whole_department` och `custom` per datum/måltid, visar familj/antal/beskrivning/notering under respektive avdelnings specialkost i befintlig Packlista, skapar addon-only-grupper men inga helt tomma grupper, bevarar addon-ID och print-CSS. Ingen särskild route eller motor. **Måste fortfarande visuellt testas i riktig Page3 inklusive avdelning med specialkost + tillägg, enbart tillägg samt utskriftsförhandsgranskning, och att andra Page3-lägen är oförändrade.** Före commit: lokal K27-diff/allowlist- och regressionskontroll. Inte hävda full clean-customer/pilot-GO.
 
 ## Rekommenderad återstående ordning
 
