@@ -7,7 +7,11 @@ from types import SimpleNamespace
 
 from sqlalchemy import text
 
-from core.admin_repo import SitesRepo
+from core.admin_repo import (
+    DepartmentServiceAddonsRepo,
+    ServiceAddonsRepo,
+    SitesRepo,
+)
 from core.db import get_session
 from core.production_lists_repo import ProductionListsRepo
 
@@ -157,7 +161,7 @@ def test_production_lists_index_renders_selected_iso_week_and_lunch_links(app_se
     html = rv.get_data(as_text=True)
     assert "Vecka 1" in html
     assert html.count('class="production-lists-day-row"') == 7
-    assert html.count("meal=lunch") == 7
+    assert html.count("meal=lunch") == 14
     assert "view=overview" in html
     assert "option_id" not in html
     assert "year=2025&amp;week=52" in html
@@ -200,6 +204,7 @@ def test_production_lists_index_supports_week_53_and_selected_picker_values(app_
 def test_production_lists_week_picker_navigates_without_submit_button():
     script = (Path(__file__).parents[2] / "static" / "js" / "production_lists.js").read_text(encoding="utf-8")
     css = (Path(__file__).parents[2] / "static" / "css" / "production_lists.css").read_text(encoding="utf-8")
+    addons_script = (Path(__file__).parents[2] / "static" / "js" / "production_lists_addons.js").read_text(encoding="utf-8")
 
     assert 'weekSelect.addEventListener("change", navigate)' in script
     assert 'yearSelect.addEventListener("change", navigate)' in script
@@ -207,6 +212,14 @@ def test_production_lists_week_picker_navigates_without_submit_button():
     assert "color: var(--text)" in css
     assert "background-color: var(--surface-2)" in css
     assert "color-scheme: light dark" in css
+    assert ".production-lists-day-row > .production-lists-services" in css
+    assert "production-lists-addon-toggle" not in script
+    assert "window.print()" in addons_script
+    assert "afterprint" in addons_script
+    assert "data-production-lists-print-family" in addons_script
+    assert "data-production-lists-print-all" in addons_script
+    assert "@media print" in css
+    assert "break-inside: avoid" in css
 
 
 def test_production_lists_index_defaults_to_current_iso_week(app_session, client_admin, monkeypatch):
@@ -234,11 +247,243 @@ def test_production_lists_index_defaults_to_current_iso_week(app_session, client
 
 
 def test_production_lists_index_rejects_site_outside_tenant(app_session, client_admin):
-    _set_active_site(client_admin, "site-not-authorized")
+    with app_session.app_context():
+        db = get_session()
+        db.execute(
+            text("INSERT OR IGNORE INTO tenants(id, name, active) VALUES(2, 'Other tenant', 1)")
+        )
+        db.commit()
+        db.close()
+        foreign_site, _ = SitesRepo().create_site(
+            f"Prod list foreign site {uuid.uuid4()}",
+            tenant_id=2,
+        )
+    _set_active_site(client_admin, foreign_site["id"])
 
-    rv = client_admin.get("/ui/production-lists?site_id=site-not-authorized", headers=_h())
+    rv = client_admin.get(
+        f"/ui/production-lists?site_id={foreign_site['id']}",
+        headers=_h(),
+    )
 
     assert rv.status_code == 404
+    addons = client_admin.get(
+        f"/ui/production-lists/addons?site_id={foreign_site['id']}&date=2026-01-05&meal=lunch",
+        headers=_h("cook"),
+    )
+    assert addons.status_code == 404
+
+
+def test_production_lists_addons_rejects_invalid_date_and_renders_empty_state(
+    app_session,
+    client_admin,
+):
+    site, _ = SitesRepo().create_site(f"Prod list empty addon site {uuid.uuid4()}")
+    _set_active_site(client_admin, site["id"])
+
+    invalid = client_admin.get(
+        f"/ui/production-lists/addons?site_id={site['id']}&date=not-a-date&meal=lunch",
+        headers=_h("cook"),
+    )
+    assert invalid.status_code == 404
+
+    empty = client_admin.get(
+        f"/ui/production-lists/addons?site_id={site['id']}&date=2026-01-05&meal=lunch",
+        headers=_h("cook"),
+    )
+    assert empty.status_code == 200
+    assert "Inga registrerade serveringstillägg" in empty.get_data(as_text=True)
+
+
+def test_production_lists_requires_active_site_for_index_and_addons(
+    app_session,
+    client_admin,
+):
+    site_a, _ = SitesRepo().create_site(f"Prod list active site {uuid.uuid4()}")
+    site_b, _ = SitesRepo().create_site(f"Prod list other site {uuid.uuid4()}")
+
+    with client_admin.session_transaction() as sess:
+        sess.pop("site_id", None)
+    no_active_index = client_admin.get(
+        f"/ui/production-lists?site_id={site_a['id']}",
+        headers=_h("cook"),
+    )
+    no_active_addons = client_admin.get(
+        f"/ui/production-lists/addons?site_id={site_a['id']}&date=2026-01-05&meal=lunch",
+        headers=_h("cook"),
+    )
+    assert no_active_index.status_code == 302
+    assert no_active_addons.status_code == 302
+    assert "/ui/select-site" in no_active_index.headers["Location"]
+    assert "/ui/select-site" in no_active_addons.headers["Location"]
+
+    _set_active_site(client_admin, site_a["id"])
+    other_index = client_admin.get(
+        f"/ui/production-lists?site_id={site_b['id']}",
+        headers=_h("cook"),
+    )
+    other_addons = client_admin.get(
+        f"/ui/production-lists/addons?site_id={site_b['id']}&date=2026-01-05&meal=lunch",
+        headers=_h("cook"),
+    )
+    assert other_index.status_code == 404
+    assert other_addons.status_code == 404
+
+    own_index = client_admin.get(
+        f"/ui/production-lists?site_id={site_a['id']}",
+        headers=_h("cook"),
+    )
+    own_addons = client_admin.get(
+        f"/ui/production-lists/addons?site_id={site_a['id']}&date=2026-01-05&meal=lunch",
+        headers=_h("cook"),
+    )
+    assert own_index.status_code == 200
+    assert own_addons.status_code == 200
+
+
+def test_production_lists_index_renders_lunch_service_addons_without_new_requests(
+    app_session,
+    client_admin,
+    monkeypatch,
+):
+    site, _ = SitesRepo().create_site(f"Prod list addon site {uuid.uuid4()}")
+    department_id = f"prod-addon-department-{uuid.uuid4()}"
+    with app_session.app_context():
+        db = get_session()
+        db.execute(
+            text(
+                """
+                INSERT INTO departments(
+                    id, site_id, name, resident_count_mode, resident_count_fixed, version
+                ) VALUES(:id, :site_id, :name, 'fixed', 10, 0)
+                """
+            ),
+            {
+                "id": department_id,
+                "site_id": site["id"],
+                "name": "Avdelning 11",
+            },
+        )
+        db.commit()
+        db.close()
+
+    addon_repo = ServiceAddonsRepo()
+    mos_id = addon_repo.create_if_missing(
+        "Mos",
+        site_id=site["id"],
+        addon_family="mos",
+    )
+    salad_id = addon_repo.create_if_missing(
+        "Sallad",
+        site_id=site["id"],
+        addon_family="sallad",
+    )
+    dinner_id = addon_repo.create_if_missing(
+        "Kvällstillägg",
+        site_id=site["id"],
+        addon_family="ovrigt",
+    )
+    inactive_id = addon_repo.create_if_missing(
+        "Inaktivt tillägg",
+        site_id=site["id"],
+        addon_family="ovrigt",
+    )
+    addon_rows = DepartmentServiceAddonsRepo()
+    addon_rows.add_for_department(
+        department_id,
+        mos_id,
+        service_scope="lunch",
+        quantity_mode="custom",
+        lunch_count=4,
+        dinner_count=None,
+        note="Aldrig tomat",
+        site_id=site["id"],
+    )
+    addon_rows.add_for_department(
+        department_id,
+        salad_id,
+        service_scope="all_services",
+        quantity_mode="whole_department",
+        lunch_count=None,
+        dinner_count=None,
+        note="",
+        site_id=site["id"],
+    )
+    addon_rows.add_for_department(
+        department_id,
+        dinner_id,
+        service_scope="dinner",
+        quantity_mode="custom",
+        lunch_count=None,
+        dinner_count=3,
+        note="Kväll endast",
+        site_id=site["id"],
+    )
+    addon_rows.add_for_department(
+        department_id,
+        inactive_id,
+        service_scope="lunch",
+        quantity_mode="custom",
+        lunch_count=8,
+        dinner_count=None,
+        note="Ska inte visas",
+        site_id=site["id"],
+    )
+    with app_session.app_context():
+        db = get_session()
+        db.execute(
+            text("UPDATE service_addons SET is_active=0 WHERE id=:id"),
+            {"id": inactive_id},
+        )
+        db.commit()
+        db.close()
+
+    _set_active_site(client_admin, site["id"])
+    monkeypatch.setattr(
+        "core.ui_blueprint.build_product2_page2_planning_context",
+        lambda **_: SimpleNamespace(status="ok", options=(object(),)),
+    )
+
+    rv = client_admin.get(
+        f"/ui/production-lists?site_id={site['id']}&year=2026&week=1",
+        headers=_h("cook"),
+    )
+
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert html.count('class="production-lists-addon-link"') == 7
+    assert "production-lists-addon-toggle" not in html
+    assert "production-lists-addon-panel" not in html
+    assert "ui/production-lists/addons" in html
+    assert "2025-12-29" in html
+    assert "meal=lunch" in html
+    assert "view=overview" in html
+
+    addons = client_admin.get(
+        f"/ui/production-lists/addons?site_id={site['id']}&date=2026-01-05&meal=lunch&year=2026&week=1",
+        headers=_h("cook"),
+    )
+    assert addons.status_code == 200
+    addons_html = addons.get_data(as_text=True)
+    assert "Serveringstillägg" in addons_html
+    assert "5 januari 2026 · Lunch" in addons_html
+    assert "Tillbaka till Produktionslistor" in addons_html
+    assert "Mos" in addons_html
+    assert "Avdelning 11" in addons_html
+    assert "4" in addons_html
+    assert "Aldrig tomat" in addons_html
+    assert "Sallad" in addons_html
+    assert "10" in addons_html
+    assert ">mos<" in addons_html
+    assert ">sallad<" in addons_html
+    assert "Kvällstillägg" not in addons_html
+    assert "Inaktivt tillägg" not in addons_html
+    assert "Ska inte visas" not in addons_html
+    assert "stå" in addons_html
+    assert "year=2026&amp;week=1" in addons_html
+    assert 'aria-label="Skriv ut alla serveringstillägg"' in addons_html
+    assert addons_html.count("data-production-lists-print-family") == 2
+    assert "data-production-lists-print-all" in addons_html
+    assert "production_lists_addons.js" in addons_html
 
 
 def test_production_list_shows_production_group_with_subtypes_and_departments(app_session, client_admin):

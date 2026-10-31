@@ -1616,6 +1616,99 @@ def api_create_production_list_snapshot():
     return jsonify({"ok": True, "item": created}), 201
 
 
+def _build_production_list_service_addons(site_id: str, service_date: _date) -> list[dict]:
+    from core.admin_repo import DepartmentServiceAddonsRepo, ServiceAddonsRepo
+    from .service_addon_contract import resolve_service_addon_quantity
+
+    active_addons = {
+        str(addon["id"]): addon
+        for addon in ServiceAddonsRepo().list_active(str(site_id))
+    }
+    db = get_session()
+    try:
+        rows = db.execute(
+            text(
+                "SELECT id, name FROM departments "
+                "WHERE site_id=:site_id "
+                "ORDER BY COALESCE(display_order, 2147483647), name"
+            ),
+            {"site_id": str(site_id)},
+        ).fetchall()
+    finally:
+        db.close()
+
+    iso = service_date.isocalendar()
+    grouped_service_addons: dict[str, dict] = {}
+    department_addons_repo = DepartmentServiceAddonsRepo()
+    for row in rows:
+        department_id = str(row[0])
+        department_name = str(row[1] or "")
+        for assignment in department_addons_repo.list_for_department(
+            department_id,
+            site_id=str(site_id),
+        ):
+            addon_id = str(assignment.get("addon_id") or "")
+            addon = active_addons.get(addon_id)
+            service_scope = str(assignment.get("service_scope") or "").strip().lower()
+            if not addon or service_scope not in {"lunch", "all_services"}:
+                continue
+            quantity_label = ""
+            quantity_issue = ""
+            quantity_mode = str(assignment.get("quantity_mode") or "").strip().lower()
+            assignment_for_resolution = dict(assignment)
+            assignment_for_resolution["department_id"] = department_id
+            try:
+                if quantity_mode == "custom" and assignment.get("lunch_count") is None:
+                    raise ValueError("missing_lunch_count")
+                quantity = resolve_service_addon_quantity(
+                    assignment_for_resolution,
+                    meal="lunch",
+                    year=iso.year,
+                    week=iso.week,
+                    weekday=iso.weekday,
+                )
+                if quantity < 0:
+                    raise ValueError("negative_quantity")
+                quantity_label = str(quantity)
+            except ValueError:
+                quantity_label = "Antal saknas"
+                quantity_issue = "Boendeantal kunde inte fastställas för valt datum."
+            family_key = str(addon.get("addon_family") or "ovrigt").strip() or "ovrigt"
+            family = grouped_service_addons.setdefault(
+                family_key.casefold(),
+                {
+                    "family_name": family_key,
+                    "rows": [],
+                },
+            )
+            family["rows"].append(
+                {
+                    "addon_id": addon_id,
+                    "addon_name": str(addon.get("name") or ""),
+                    "department_id": department_id,
+                    "department_name": department_name,
+                    "quantity_label": quantity_label,
+                    "quantity_issue": quantity_issue,
+                    "note": str(assignment.get("note") or "").strip(),
+                }
+            )
+
+    service_addon_families = sorted(
+        grouped_service_addons.values(),
+        key=lambda family: (str(family["family_name"]).casefold(),),
+    )
+    for family in service_addon_families:
+        family["rows"].sort(
+            key=lambda department: (
+                str(department["department_name"]).casefold(),
+                str(department["addon_name"]).casefold(),
+                str(department["addon_id"]),
+                str(department["department_id"]),
+            )
+        )
+    return service_addon_families
+
+
 @ui_bp.get("/ui/production-lists")
 @require_roles(*KITCHEN_UI_ROLES)
 def ui_production_lists_index():
@@ -1623,17 +1716,28 @@ def ui_production_lists_index():
 
     from .context import get_active_context as _get_ctx
     ctx = _get_ctx()
-    site_id = (request.args.get("site_id") or "").strip() or (ctx.get("site_id") or "")
-    if not site_id:
-        return redirect(url_for("ui.select_site", next="/ui/production-lists"))
-
+    requested_site_id = (request.args.get("site_id") or "").strip()
     tenant_id = ctx.get("tenant_id")
     try:
         tenant_id = int(tenant_id)
     except (TypeError, ValueError):
         return abort(404)
     active_site_id = str(ctx.get("site_id") or "").strip()
-    if active_site_id and active_site_id != site_id:
+    if not active_site_id:
+        if requested_site_id:
+            db = get_session()
+            try:
+                requested_site = db.execute(
+                    text("SELECT 1 FROM sites WHERE id=:site_id AND tenant_id=:tenant_id"),
+                    {"site_id": requested_site_id, "tenant_id": tenant_id},
+                ).fetchone()
+            finally:
+                db.close()
+            if not requested_site:
+                return abort(404)
+        return redirect(url_for("ui.select_site", next=request.full_path or request.path))
+    site_id = requested_site_id or active_site_id
+    if active_site_id != site_id:
         return abort(404)
 
     db = get_session()
@@ -1647,7 +1751,6 @@ def ui_production_lists_index():
     if not row_s:
         return abort(404)
     site_name = str(row_s[0] or "").strip()
-
     today = _date.today()
     current_iso = today.isocalendar()
     current_year = int(current_iso[0])
@@ -1691,6 +1794,18 @@ def ui_production_lists_index():
                 "date_label": f"{day_date.day} {('januari', 'februari', 'mars', 'april', 'maj', 'juni', 'juli', 'augusti', 'september', 'oktober', 'november', 'december')[day_date.month - 1]}",
                 "weekday_label": ("Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag")[day_offset],
                 "available": available,
+                "addons_url": (
+                    url_for(
+                        "ui.ui_production_lists_addons",
+                        site_id=site_id,
+                        date=day_date.isoformat(),
+                        meal="lunch",
+                        year=int(selected_year),
+                        week=int(selected_week),
+                    )
+                    if available
+                    else None
+                ),
                 "url": (
                     url_for(
                         "ui.kitchen_planering_product2_day_production",
@@ -1737,6 +1852,77 @@ def ui_production_lists_index():
         "nav_context": "kitchen",
     }
     return render_template("ui/production_lists_index.html", vm=vm)
+
+
+@ui_bp.get("/ui/production-lists/addons")
+@require_roles(*KITCHEN_UI_ROLES)
+def ui_production_lists_addons():
+    from .context import get_active_context as _get_ctx
+
+    ctx = _get_ctx()
+    site_id = (request.args.get("site_id") or "").strip()
+    active_site_id = str(ctx.get("site_id") or "").strip()
+    try:
+        tenant_id = int(ctx.get("tenant_id"))
+    except (TypeError, ValueError):
+        return abort(404)
+    if not active_site_id:
+        if site_id:
+            db = get_session()
+            try:
+                requested_site = db.execute(
+                    text("SELECT 1 FROM sites WHERE id=:site_id AND tenant_id=:tenant_id"),
+                    {"site_id": site_id, "tenant_id": tenant_id},
+                ).fetchone()
+            finally:
+                db.close()
+            if not requested_site:
+                return abort(404)
+        return redirect(url_for("ui.select_site", next=request.full_path or request.path))
+    if not site_id or active_site_id != site_id:
+        return abort(404)
+    date_iso = (request.args.get("date") or "").strip()
+    if (request.args.get("meal") or "lunch").strip().lower() != "lunch":
+        return abort(404)
+    try:
+        service_date = _date.fromisoformat(date_iso)
+    except ValueError:
+        return abort(404)
+    iso = service_date.isocalendar()
+    try:
+        back_year = int(request.args.get("year") or iso[0])
+        back_week = int(request.args.get("week") or iso[1])
+        _date.fromisocalendar(back_year, back_week, 1)
+    except (TypeError, ValueError):
+        return abort(404)
+
+    db = get_session()
+    try:
+        row_s = db.execute(
+            text("SELECT name FROM sites WHERE id=:site_id AND tenant_id=:tenant_id"),
+            {"site_id": site_id, "tenant_id": tenant_id},
+        ).fetchone()
+    finally:
+        db.close()
+    if not row_s:
+        return abort(404)
+
+    vm = {
+        "site_id": site_id,
+        "site_name": str(row_s[0] or "").strip(),
+        "service_date": service_date,
+        "service_date_label": f"{service_date.day} {('januari', 'februari', 'mars', 'april', 'maj', 'juni', 'juli', 'augusti', 'september', 'oktober', 'november', 'december')[service_date.month - 1]} {service_date.year}",
+        "service_addons": _build_production_list_service_addons(site_id, service_date),
+        "back_url": url_for(
+            "ui.ui_production_lists_index",
+            site_id=site_id,
+            year=back_year,
+            week=back_week,
+        ),
+        "allow_site_switch": False,
+        "nav_context": "kitchen",
+    }
+    return render_template("ui/production_lists_addons.html", vm=vm)
 
 
 @ui_bp.get("/ui/production-lists/<list_id>")
