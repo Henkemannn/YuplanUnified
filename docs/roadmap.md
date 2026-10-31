@@ -20,7 +20,7 @@ Development baseline: `feat/planera-app-shell-2026-03-03` @ `6233b11cd4530ed0261
 
 ## NOW – Kommun 1.1 Pilot Gate sequence
 
-1. **Continue the A–Ö live review at Rapport – ACTIVE.** Departments/needs, menu publishing and Portal were covered earlier in the ongoing A–Ö review. The old Gate 02 ledger remains historically open but must not cause a restart. Confirm report data sources and the current Product2 completion/quantity bridge before coding.
+1. **A–Ö Rapport – read-only census REVIEWED; gate OPEN.** Existing Weekview reporting already consumes the same completion repository as Page3 for marked specialkost cohorts, but not a full Planera 2.0 production result. The coverage route reports legacy meal registrations; coverage HTML and CSV/XLSX differ, its PDF is placeholder and some labels misleading. **Next narrow gate: negative two-tenant access test and minimal report site/department scoping fix, before any report UI or export redesign.** Refer to §4c in the current status document.
 2. **Admin menu-choice semantics – OPEN technical decision (revisit only where real A–Ö evidence exposes a gap).** Confirm admin-vs-portal choice precedence and persisted identity, then implement at most an MVP-sized Admin → Menyval overview where needed.
 3. **Full clean-customer E2E – PENDING.** Builder publish → Portal choices → Kitchen → Page1/Page2 → Page3 → completion → Weekview → report, including reload/relogin and tenant-scope.
 4. **Meal coverage – PENDING verification.** Lunch established; verify Kvällsmat and dessert or make explicit scoped pilot decision. Produktionslistor is currently lunch-only.
@@ -44,4 +44,4 @@ Home, Hotel/Bankett, advanced ingredient conversion and costing, full recipe imp
 
 ## Next decision
 
-**Recommendation:** continue at **Rapport** with a read-only data/route census and live acceptance; make a separate **Servering/Packning** kitchen view a deliberate next product gate. Do not restart the A–Ö traversal at Avdelningar. See the linked status report.
+**Recommendation:** the Rapport census is complete. Start with an evidence-led **report tenant/site authorization gate** (test first, narrow fix). Then inspect the actual Report UI and choose pilot report semantics before repairing misleading exports. Keep the simple registered-only Serveringstillägg display as a separate planned UI gate. Do not restart the A–Ö traversal at Avdelningar. See the linked status report.
