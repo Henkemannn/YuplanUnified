@@ -117,6 +117,16 @@ MVP:n visar **endast registrerad information**. Veckovy visar sparad preferenste
 
 **Checkpoint-gate:** K25-filerna `core/ui_blueprint.py`, `templates/ui/kitchen_week_v3.html`, `static/css/kitchen_week_v3.css`, `tests/ui/test_kitchen_week_v3.py` är lokalt committade som `bbea233b0ac8268d3b58a055a5318652612be688` (`feat(kommun): show serving addons in kitchen weekview`), bekräftat med användarens terminalrapport. **Ingen push**; GitHub remote development-branch har därför inte bekräftats innehålla committen. Kvarvarande dirty-filer: `core/admin_repo.py`, `scripts/seed_ostergarden_from_json.py`, `scripts/seed_product2_e2e.py`, `artifacts/`. Dokumentationsbranch/PR #130 är separat från utvecklingsbranchen. Full tenant-/site-regression, iPad, CI och staging tillhör kvarvarande release-gates; inget övergripande pilot-GO utfärdat.
 
+## Beslut: Familj och återanvändbara serveringsbeskrivningar (2026-10-31)
+
+**Produktbeslut – ännu inte implementerat eller accepterat:** Presentation av Serveringstillägg ska följa hierarkin **kategori/familj → återanvändbar beskrivning/tillägg → avdelning med serveringsscope, antal och eventuell avdelningsspecifik notering**. Exempel: familjen `Sallad` med en återanvändbar beskrivning `Aldrig rå tomat i sallad`; beskrivningen är inte en ny toppnivåkategori. Om flera avdelningar behöver `Mos istället för kokt potatis` ska de välja samma befintliga beskrivning, inte skapa stavningsvarianter.
+
+I Admins skapa-/lägg-till-flöde bör vald familj styra en sökbar lista med befintliga beskrivningar inom aktiv site; återanvänd befintligt `service_addons`-ID när en beskrivning väljs. Skapa ny beskrivning endast när den verkligen saknas, med kontroll av dubbletter. Individuella antal, serveringsscope och noteringar ligger fortsatt i avdelningens tilldelning. Befintlig kod har redan `addon_family`, `ServiceAddonsRepo.list_active(site_id)`, `create_if_missing` och `department_service_addons`; verifiera aktuell lokal kod före UI-order, ingen ny datamodell som standard.
+
+Viktigt: vissa nuvarande registreringar kan ha `Sallad` som tillägg och `Aldrig rå tomat` som avdelningsnotering; andra kan ha längre beskrivning som själva tillägget. Tolka inte eller migrera dessa automatiskt och skriv inte om pilotdata. Visning ska skilja familj, beskrivning och notering utifrån faktiskt lagrade fält.
+
+**Sekvens:** först slutför och granska pågående K26 antal/print-gate; därefter en separat avgränsad Admin/återanvändningsgate före K27/vid relevant pilottestbeslut. Ingen parallell implementation och ingen omöppning av K25.
+
 ## Rekommenderad återstående ordning
 
 1. Avsluta den nuvarande CI-censusen: välj små, testade Ruff- och därefter Vitest-fixar, utan att skriva om fungerande produktbeteende.
