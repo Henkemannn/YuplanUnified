@@ -63,7 +63,7 @@
 | K23 | VERIFY security | Rapportens tenant/site/department-behörighet |
 | K24 | VERIFY/OPEN | Admin Menyval-översikt och admin-overrideregel enligt realt behov |
 | K25 | CLOSED / LOCAL COMMIT | Under avdelningsnamn: sparad serveringspreferens, kompakt horisontellt informationsfält med befintlig allmän information; 7 fokustester godkända och visuell acceptans på verklig Kitchen Weekview 2026-10-31. Lokal commit `bbea233b0ac8268d3b58a055a5318652612be688` bekräftad, ännu inte pushad. |
-| K26 | OPEN | Produktionslistor: Tillägg-ikon vid Lunch, sparade poster per tillägg |
+| K26 | CLOSED FUNCTION/UI – LOCAL COMMIT PENDING | Produktionslistor: separat sida med familjegrupper, numeriska avdelningsantal för vald dag, beskrivning/kommentar, utskrift av alla eller vald familj. 15 fokustester godkända; skärm och utskriftsflöde accepterade av produktägaren 2026-10-31. Local K26 commit/push återstår. |
 | K27 | OPEN | Packlistor: sparat tillägg/antal/kommentar per avdelning |
 | K28 | LOCKED | Specialkost och Serveringsanpassning är separata domäner |
 | K29 | OPEN | Planera 1 vs 2.0 parity och kontrollerad cutover |
@@ -117,23 +117,23 @@ MVP:n visar **endast registrerad information**. Veckovy visar sparad preferenste
 
 **Checkpoint-gate:** K25-filerna `core/ui_blueprint.py`, `templates/ui/kitchen_week_v3.html`, `static/css/kitchen_week_v3.css`, `tests/ui/test_kitchen_week_v3.py` är lokalt committade som `bbea233b0ac8268d3b58a055a5318652612be688` (`feat(kommun): show serving addons in kitchen weekview`), bekräftat med användarens terminalrapport. **Ingen push**; GitHub remote development-branch har därför inte bekräftats innehålla committen. Kvarvarande dirty-filer: `core/admin_repo.py`, `scripts/seed_ostergarden_from_json.py`, `scripts/seed_product2_e2e.py`, `artifacts/`. Dokumentationsbranch/PR #130 är separat från utvecklingsbranchen. Full tenant-/site-regression, iPad, CI och staging tillhör kvarvarande release-gates; inget övergripande pilot-GO utfärdat.
 
-## K26 – Utskriftsförfining godkänd som nästa begränsade steg (2026-10-31)
+## K26 – Utskrift och familjegrupperad vy visuellt accepterade (2026-10-31)
 
-**Visuell acceptans av familjegrupperad skärm och A4-utskrift:** Produktägaren har granskat skärmbilder från `/ui/production-lists/addons`; familjer (MOS, PASTA, SALLAD), numeriska antal och kommentarer presenteras korrekt och tydligt. K26 är **fortfarande OPEN**, ännu ingen commit för K26.
+**Visuell och funktionell acceptans:** Produktägaren har granskat `/ui/production-lists/addons` med familjer MOS, PASTA och SALLAD, numeriska antal, kommentarer samt skrivarikoner och bekräftat att funktionerna fungerar. K26 är **CLOSED function/UI**, men **lokal commit och push återstår**. Copilotrapport: `tests/ui/test_production_lists_snapshot.py -q` = 15 passed; `git diff --check` OK. Ingen fristående rad-för-rad-granskning av lokal diff ännu.
 
-**Nästa enda K26-korrigering:** Byt nuvarande textknapp för utskrift till samma etablerade skrivarikon/knappstil som Page3. Behåll utskrift av alla familjer i sidhuvudet, med begripligt tillgängligt namn `Skriv ut alla`. Lägg även en liten skrivarikon till höger om varje familjerubrik. Klick på familjeikonen skriver endast ut den familjens rader med befintlig ljus A4-layout, korrekt datum/måltid/site samt vald familj i utskriftstiteln. Alla grupper och hela vyn återställs efter print/avbryt. Inga serveranrop eller ändringar av data, ingen ny vy, inga extra tunga knappar eller popups. Använd etablerade tillgängliga ikoner och CSP-kompatibla externa JS-events. Familjeidentitet ska följa befintlig datastruktur, inte fragil textmatchning.
+**Implementerat enligt Copilotrapport:** Page3-lik skrivarikon i sidhuvudet för alla familjer och diskret ikon för varje familj. Familjeprint filtreras endast under print via stabilt `data-family-key`; `afterprint` och Escape återställer skärmstatus. Ljus A4-layout används. Ingen backendändring för utskriftsfunktionen.
 
-**Test/acceptans:** helutskrift fortfarande oförändrad; familjeutskrift visar endast vald grupp och dess avdelningar; även flera rader och A4-sidbrytning; korrekt återställning efter utskrift; tangentbord/aria-label; desktop- och iPad-vyer. Utför som en liten K26-order, review och lokal checkpoint innan nästa gate. Ingen parallell K27- eller Admin-implementation.
+**Kvarvarande checkpoint/release-verifiering:** kontrollera samlad lokal K26-diff inklusive nytillkomna filer, skapa selektiv lokal commit utan att beröra skyddade dirty-filer; ingen automatisk push. Full iPad-/storskalig 20+-regression och CI kvarstår inför pilot. Ingen parallell K27- eller Admin-implementation innan checkpoint.
 
 ## Beslut: Familjegrupperad kökslista och återanvändbara registreringar (2026-10-31; förtydligat)
 
-**Produktbeslut – K26 presentation, ännu ej implementerat/godkänt:** Kökslistan ska **grupperas direkt per kategori/familj som rubrik**, t.ex. `Sallad`, `Mos`, `Pasta`, `Övrigt`. Direkt under rubriken visas **avdelning | numeriskt antal för vald dag/måltid | avdelningsspecifik kommentar**. Exempel under `Sallad`: `Avdelning A | 5 | Utan rå tomat`, `Avdelning B | 8 | —`. Visa inte `Aldrig rå tomat` som egen huvudrubrik eller extra kategorinivå. Gruppstruktur ska fungera för 20+ avdelningar och utskrift.
+**Produktbeslut – K26 presentation nu accepterad:** Kökslistan ska **grupperas direkt per kategori/familj som rubrik**, t.ex. `Sallad`, `Mos`, `Pasta`, `Övrigt`. Direkt under rubriken visas **avdelning | numeriskt antal för vald dag/måltid | avdelningsspecifik kommentar**. Exempel under `Sallad`: `Avdelning A | 5 | Utan rå tomat`, `Avdelning B | 8 | —`. Visa inte `Aldrig rå tomat` som egen huvudrubrik eller extra kategorinivå. Gruppstruktur ska fungera för 20+ avdelningar och utskrift.
 
 **Dataintegritet:** Befintlig `service_addons.addon_family` är familjen, `service_addons.name` är registreringens beskrivning/identitet, och `department_service_addons.note` är avdelningens kommentar. Gruppning på familj är **endast en visningsprojektion**; bibehåll registreringens unika addon-ID. Om flera olika tillägg i samma familj finns på samma avdelning måste de hållas särskiljbara (t.ex. liten beskrivningsrad) i stället för att dölja, slå ihop eller summera dem automatiskt. En text som för närvarande är sparad som tilläggsnamn får **inte** automatiskt flyttas till kommentarsfältet. Inga migrationer eller ändringar av pilotdata.
 
 **Separat framtida Admin-UX-gate:** Vid tilldelning av serveringsanpassning bör administratören först välja familj och sedan söka/välja en befintlig återanvändbar beskrivning inom aktiv site eller skapa en ny endast vid behov. Återanvänd befintligt `service_addons`-ID, minska dubbletter utan automatisk sammanslagning, behåll antal/scope/notering per avdelning. Befintlig kod innehåller `addon_family`, `ServiceAddonsRepo.list_active(site_id)`, `create_if_missing` och `department_service_addons`; verifiera lokal kod före separat order.
 
-**Sekvens:** slutför först pågående K26 numeriska antal, familjegrupperad presentation och utskrift som **en reviderad K26-order**; därefter separat review/acceptans. Ingen parallell Admin-implementation eller K27-order före K26-godkännande. K25 förblir CLOSED.
+**Sekvens:** säkra först K26:s selektiva lokala checkpoint. Därefter separat avgränsad Admin-UX-gate för återanvändning av beskrivningar före K27. Ingen parallell implementation. K25 förblir CLOSED.
 
 ## Rekommenderad återstående ordning
 
