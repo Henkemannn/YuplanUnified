@@ -155,6 +155,12 @@ MVP:n visar **endast registrerad information**. Veckovy visar sparad preferenste
 
 Uppgivet beteende: läser aktiva site-scopade addons, löser `whole_department` och `custom` per datum/måltid, visar familj/antal/beskrivning/notering under respektive avdelnings specialkost i befintlig Packlista, skapar addon-only-grupper men inga helt tomma grupper, bevarar addon-ID och print-CSS. Ingen särskild route eller motor. **Måste fortfarande visuellt testas i riktig Page3 inklusive avdelning med specialkost + tillägg, enbart tillägg samt utskriftsförhandsgranskning, och att andra Page3-lägen är oförändrade.** Före commit: lokal K27-diff/allowlist- och regressionskontroll. Inte hävda full clean-customer/pilot-GO.
 
+## K27 – UI-läsbarhet efter användarfeedback (2026-10-31)
+
+**Visuell acceptans fortsatt OPEN.** Produktägaren visade en faktisk Page3 Packlista där specialkost och serveringstillägg såg ut att flyta ihop utan tydliga avdelningsgränser; önskemålet var att omedelbart se vilken avdelning, vilken kategori och vilket numeriskt antal varje rad hör till. Efter avgränsad UI-order rapporterar Copilot ändringar endast i `templates/ui/kitchen_product_planera_page3.html`, `static/css/planera_product2_page3.css`, `tests/ui/test_kitchen_product_planera_page3.py` (den första implementationens VM/test-diff ligger kvar). Nya avdelningsblock med distinkta rubriker; separat Specialkost endast där sådan finns, tydlig Serveringstillägg-tabell med `Familj | Beskrivning / kommentar | Antal`, kapitaliserade familjer och högerjusterade antal, A4-/responsiva regler. **79 passed** samma fyra Page3/K26/Admin-testfiler; `git diff --check` godkänd. Ingen commit/push.
+
+**Nästa acceptansgate:** skärmbild av uppdaterad faktisk Packlista med både Specialkost+Serveringstillägg samt addon-only-avdelning; därefter faktisk A4-print-preview. Kontrollera övriga Page3-vyer oförändrade. Gör först efter godkännande slutlig samlad diff-/staginggranskning av exakt fem K27-filer och lokal checkpoint; skydda `core/admin_repo.py`, båda seed-filerna och `artifacts/`. Inga ytterligare Copilot-order parallellt.
+
 ## Rekommenderad återstående ordning
 
 1. Avsluta den nuvarande CI-censusen: välj små, testade Ruff- och därefter Vitest-fixar, utan att skriva om fungerande produktbeteende.
