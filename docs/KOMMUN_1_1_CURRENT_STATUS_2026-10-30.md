@@ -48,7 +48,7 @@ Produktionslistor är en **lätt navigeringsvy**, inte en andra källa till prod
 ### P1 — måste bedömas före pilot GO; implementation efter uppmätt gap
 
 5. **Rapport – nästa aktiva A–Ö-gate**: verifiera vad dagens rapport faktiskt visar (avdelningsval, antal, specialkost, produktion, completion), vilka datakällor den läser och om den konsumerar Product2 cohort-quantities/completion eller bara legacy-registrering. `docs/report_current_behaviour.md` beskriver de äldre rapportkällorna. Börja med read-only census och live-screenshot, klassificera sedan konkreta luckor.
-6. **Separat Servering / Packning – bekräftad presentationslucka**: befintliga `service_addons`/`department_service_addons` kan administreras i avdelning, visas read-only på Portal Home och ingår i äldre sparade produktionslistor. Däremot saknar nya Product2 Page3 och Produktionslistor 2.0 en tydlig **köksorienterad, dags-/måltids- och avdelningsbaserad Serveringstillägg/Packning-vy**. Gör en separat operativ läsprojektion; blanda inte in tilläggen i default Normalkost/Specialkost och skapa ingen ny beräkningsmotor. Page3:s specialkost-packlista bevisar inte total packningsparitet.
+6. **Serveringstillägg – enkel köksvisning saknas**: visa befintliga registreringar/antal/anteckningar direkt under avdelningsnamn i Kitchen Weekview och via Tillägg-ikon bredvid Lunch i Produktionslistor. Listan grupperas per tillägg med en avdelningsrad och dess anmärkning. Visa även informationen avdelningsvis vid packning, men ingen menylogik/ny beräkningsmotor/ny Page3-flik; se §4b.
 7. **Planera 1 vs 2.0 parity/cutover**: prov med realistisk vecka och samma menykälla/antal/avvikelser/val/destinationer; klassificera skillnad som regression, legacy-begränsning eller avsiktligt nytt beteende. Ingen okontrollerad cutover.
 8. **iPad + polish endast där det blockerar uppgift**: 1024×768 och 768×1024, tom-/felstatus, rättigheter, popup/overlay, färger, menyval och tillagningsflöde. Återöppna inte färdiga Page3-/Produktionslistor-/Builder-ytor för smakändringar.
 9. **Release-gate**: full regression, säkerhet/tenant-scope, migration, staging/deploy, ny kundsmoke och fryst/taggad pilotkandidat. Senaste **77 passed** är en *fokuserad* testslice, inte en fullständig releaseverifiering.
@@ -74,27 +74,28 @@ Föreslagen minsta arbetsorder till Copilot (först efter gemensamt beslut):
 
 Beslutspunkt efter rapportcensus: **A)** rapporten korrekt → gå vidare i A–Ö; **B)** rapporten saknar Product2-truth → en avgränsad brygga; **C)** servering/packning hindrar arbetet → prioritera separat köksvy. Tidigare godkända A–Ö-delar förblir stängda utan ny buggevidens.
 
-## 4b. Operativt tillverkning/packning — förtydligat användarkrav 2026-10-31
+## 4b. Serveringstillägg i köksvyer — beslutad MVP-avgränsning 2026-10-31
 
-**Köket arbetar i två riktningar med exakt samma registrerade data och beräknade behov:**
+**Produktbeslut:** Yuplan 1.0 ska **endast visa den information som faktiskt är registrerad på avdelningen**: tillägg/preferens, sparat antal där det finns samt anteckning/instruktion. Personalen avgör själv när maten ska tillverkas och vilka tillägg som är aktuella mot dagens meny. **Ingen automatisk menyanalys, tolkning av fritext, substitutionsmotor, ny produktionskalkyl, variantgenerering eller beslut om mos/sallad ska göras i denna MVP-gate.**
 
-1. **Tillverka / grupperat per serveringsanpassning.** Exempel: `Mos — totalt 9` med `Avdelning 11: 4` och `Avdelning 12: 5`. `Sallad vanlig` och `Sallad utan tomat` måste kunna bli skilda praktiska produktionsvarianter, med totalsiffra och destinationsrader för respektive variant. Syftet är att göra en stor sats för samtliga mottagare.
-2. **Packa / grupperat per avdelning eller destination.** Exempel: `Avdelning 11: mos 4 (istället för kokt potatis), sallad utan tomat 6`. Serveringsinformationen ska finnas tillsammans med den avdelningens övriga packinformation, inte behöva letas upp i en separat administration.
+### Placering
 
-**Föreslagen placering:**
-- Kitchen Weekview: lågmäld indikator på avdelningsraden när den har relevanta serveringsönskemål, med snabb läsbar detalj. Skilj från person-/cohortbaserad Specialkost.
-- Page3: kontextuell länk/ingång till dagens Servering & Packning. Behåll de tre låsta Page3-huvudflikarna Översikt, Normalkost, Specialkost tills ett separat beslut motiverar ändring.
-- Produktionslistor: naturlig huvudvy, med två användarlägen **Tillverka (per behov/variant)** och **Packa (per avdelning)** för vald dag/måltid.
+1. **Kitchen Weekview**: Under avdelningens namn visas en kort, diskret rad med stående registrerade serveringsönskemål/anteckningar, t.ex. `Aldrig potatis – mos istället`. Återge användarens faktiska text; hitta inte på en regel från dagens publicerade meny. Håll skillnad mot personbaserad Specialkost.
+2. **Produktionslistor / veckolistan**: Behåll befintlig Lunch-knapp till Page3 oförändrad. Placera en tydlig men lågmäld **Tillägg-ikon** bredvid Lunch för relevant dag/måltid. Klick öppnar registrerade serveringstillägg i samma kökskontext, utan att navigera in i avdelningsadministrationen.
+3. **Tilläggslistan – grupperat per registrerat tillägg**: `Mos → Avd 11: 4; Avd 12: 5` och `Sallad → Avd 11: 6; Avd 12: 8 (Aldrig tomat)`. Kommentar står direkt vid **rätt avdelningsrad**. Visa inte automatisk "sallad utan tomat"-produktvariant; det är en instruktion till personalen.
+4. **Avdelningsvis packinformation**: Samma registrerade tillägg/antal/anteckning ska kunna läsas per avdelning när köket packar. Prioritera enkel läsning i befintlig kökskontext; bygg inte en andra separat data- eller beräkningsmodell.
+5. **Page3**: Lägg **inte** till en ny flik i nuvarande gate. Page3:s låsta Översikt/Normalkost/Specialkost och färdigmarkering lämnas oförändrade. Framtida ingång kan övervägas först efter faktisk nytta.
 
-**Datalås / teknisk gräns:**
-- En registrering, en kanonisk quantity truth, två läsprojektioner. Ingen parallell Planera-beräkning, inget kopierat addonregister eller separat pack-beräkningssystem.
-- Nuvarande statiska `service_addons` och `department_service_addons` måste återanvändas och bevaras. Stöd befintlig service-scope och helt-avdelning/anpassat antal där aktuellt.
-- Skilj fasta tillägg från **villkorade substitutioner**: `mos istället för kokt potatis` ska inte automatiskt skapa mos varje dag eller dubbelräknas när menyn redan har mos. Att identifiera rätt menykomponent kräver Builder-kunskap och ska göras i en separat och verifierad resolver, inte genom att gissa ur fritext.
-- Att sammanställa en produktionsvariant med annan hantering, såsom `utan tomat`, får inte tappa instruktion eller lägga ihop oförenliga beredningar.
-- Specialkost (recipient/cohort) och Serveringsanpassning (department/destination) behåller separata datadomäner. **Avdelningens dagliga packlista ska kunna visa tillägg och anpassningar tillsammans med övrig relevant packinformation**, utan att slå ihop datamodellerna eller beräkna samma portion flera gånger.
-- Befintlig portalvy och äldre produktionslistas summering är relevanta återanvändningspunkter, men utgör **inte** den nya samlade köksvyn.
+### Datakontrakt / icke-mål
 
-**Genomförandeordning:** Slutför nuvarande A–Ö vid Rapport först. Därefter read-only teknisk census av återanvändbara datafält/projektioner, separat liten implementeringsgate för per-tillägg-/per-avdelningsvy och liveacceptans i köket. Undvik att öppna Page3:s färdigställda produktionsflikar eller göra bred meny-/receptmotorrefaktor.
+- Läs befintliga site-/department-scopade `service_addons` och `department_service_addons` samt gällande registreringsfält (`service_scope`, `quantity_mode`, lunch-/dinner-antal, anteckning) enligt det befintliga kontraktet.
+- **Enbart läsprojektion.** Visa redan registrerade antal utan ny produktionskalkyl eller ny totalsummering. Om ett val avser `whole_department` och inga fasta antal finns, återge det begripligt som `Hela avdelningen` i första versionen i stället för att hitta på en siffra. Håll tidigare verifierad semantik oförändrad.
+- Måltidskontext får filtrera det **redan registrerade** scope:t (lunch/kväll/alla serveringar); den får inte tolka maträtt eller avgöra om tillägget "behövs" idag.
+- Skilj serveringstillägg/avdelningsönskemål från Specialkost/individkrav. Återge inte interna privata fält på avdelningsportaler; köksvyn ska använda avsedda serveringsfält.
+- Existerande legacylistor och tidigare addonregistreringar får inte brytas.
+- Tidigare långsiktiga idéer om menyberoende substitutionsregler/resolver finns i Ground Truth för framtiden, men **är uttryckligen utanför denna 1.0-implementation**. Ingen migration, schemaändring eller ny generell specialkostmotor behövs.
+
+**Genomförandeordning:** Fortsätt A–Ö-gaten Rapport som planerat. Därefter en smal read-only Copilot-census av befintlig service-addon visning, scope och registrering; därefter en enda liten UI-order för Weekview-text och Produktionslistor-ikonen/listan, följd av iPad/liveacceptans. Ingen ombyggnad av Page3.
 
 ## 5. Datakällor, skydd och dokumentationsdisciplin
 
