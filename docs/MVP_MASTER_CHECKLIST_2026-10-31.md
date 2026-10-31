@@ -62,7 +62,7 @@
 | K22 | OPEN | Rapportexport: HTML/CSV/XLSX/PDF-konsistens; PDF placeholder |
 | K23 | VERIFY security | Rapportens tenant/site/department-behörighet |
 | K24 | VERIFY/OPEN | Admin Menyval-översikt och admin-overrideregel enligt realt behov |
-| K25 | CLOSED local / checkpoint pending | Under avdelningsnamn: sparad serveringspreferens, kompakt horisontellt informationsfält med befintlig allmän information; 7 fokustester godkända och visuell acceptans på verklig Kitchen Weekview 2026-10-31. Ändringarna är fortfarande lokalt ocommittade. |
+| K25 | CLOSED / LOCAL COMMIT | Under avdelningsnamn: sparad serveringspreferens, kompakt horisontellt informationsfält med befintlig allmän information; 7 fokustester godkända och visuell acceptans på verklig Kitchen Weekview 2026-10-31. Lokal commit `bbea233b0ac8268d3b58a055a5318652612be688` bekräftad, ännu inte pushad. |
 | K26 | OPEN | Produktionslistor: Tillägg-ikon vid Lunch, sparade poster per tillägg |
 | K27 | OPEN | Packlistor: sparat tillägg/antal/kommentar per avdelning |
 | K28 | LOCKED | Specialkost och Serveringsanpassning är separata domäner |
@@ -115,7 +115,7 @@ MVP:n visar **endast registrerad information**. Veckovy visar sparad preferenste
 
 **Evidens:** Copilot rapporterade `tests/ui/test_kitchen_week_v3.py -q` = **7 passed**, `git diff --check` godkänd och bevarade dirty-filer. Manuell screenshot accepterades av produktägaren 2026-10-31. Relaterad äldre Weekview-slice rapporterades som **28 passed, 2 failed** (veckoetikett-förväntningar); detta är fortsatt regressionsskuld och inte bevis för full suite.
 
-**Checkpoint-gate:** K25-filerna `core/ui_blueprint.py`, `templates/ui/kitchen_week_v3.html`, `static/css/kitchen_week_v3.css`, `tests/ui/test_kitchen_week_v3.py` är ännu **lokalt ocommittade**, ingen push. Bas-HEAD i denna inventering är fortsatt `6233b11c`. Skydda `core/admin_repo.py`, båda seed-scripts och `artifacts/`. Dokumentationsbranch/PR #130 är fortfarande separat från utvecklingsbranchen. Full tenant-/site-regression, iPad, CI och staging tillhör kvarvarande release-gates; inget övergripande pilot-GO utfärdat.
+**Checkpoint-gate:** K25-filerna `core/ui_blueprint.py`, `templates/ui/kitchen_week_v3.html`, `static/css/kitchen_week_v3.css`, `tests/ui/test_kitchen_week_v3.py` är lokalt committade som `bbea233b0ac8268d3b58a055a5318652612be688` (`feat(kommun): show serving addons in kitchen weekview`), bekräftat med användarens terminalrapport. **Ingen push**; GitHub remote development-branch har därför inte bekräftats innehålla committen. Kvarvarande dirty-filer: `core/admin_repo.py`, `scripts/seed_ostergarden_from_json.py`, `scripts/seed_product2_e2e.py`, `artifacts/`. Dokumentationsbranch/PR #130 är separat från utvecklingsbranchen. Full tenant-/site-regression, iPad, CI och staging tillhör kvarvarande release-gates; inget övergripande pilot-GO utfärdat.
 
 ## Rekommenderad återstående ordning
 
