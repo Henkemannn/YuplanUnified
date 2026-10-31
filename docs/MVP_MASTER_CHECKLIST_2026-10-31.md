@@ -141,6 +141,14 @@ MVP:n visar **endast registrerad information**. Veckovy visar sparad preferenste
 
 **Sekvens:** säkra först K26:s selektiva lokala checkpoint. Därefter separat avgränsad Admin-UX-gate för återanvändning av beskrivningar före K27. Ingen parallell implementation. K25 förblir CLOSED.
 
+## K27 – Packlista per avdelning: serving addons (2026-10-31)
+
+**Status: OPEN – nästa implementation, ej accepterad.** Page3 har redan `Specialkost → Packlista` med avdelningskort från `Product2Page3VM.special_destination_groups`. Detta är rätt yta; ingen ny Page3-flik/route, ingen motor och ingen separat PDF-funktion. Under varje relevant avdelning ska en tydligt avskild `Serveringstillägg`-sektion visa familj, registrerad beskrivning, numeriskt antal för valt datum/måltid och avdelningsspecifik notering. Samma innehåll måste ingå vid befintlig Page3-utskrift av Packlistan.
+
+**Kritisk kant:** även avdelningar som bara har serveringstillägg (ingen specialkost) måste komma med på avdelningspacklistan, men helt tomma avdelningar får inte tillkomma. Datumstyrda `whole_department`-antal via befintlig `resolve_service_addon_quantity`; `custom` från rätt måltid; lunch/dinner/all_services filtreras korrekt; dessert ska aldrig få lunchens serveringstillägg; inaktiva poster och andra sites/tenants bort. Bevara unika addon-ID/kommentarer utan sammanslagning eller dubbelräkning. Page3:s completion/ready/blocked, normalkost, specialkost och print-state får inte ändras i övrigt.
+
+**Ordning:** en avgränsad K27-order → Copilotrapport med fokustester → browser+printacceptans → selektiv checkpoint. Admin-gate är CLOSED på `ad96abd4f0c5b26640bd0557b745544685d64d6e`; K26 `b09c3d7a719e304666c5900a0c6a0587b7496e83`; båda endast lokalt, ej pushade.
+
 ## Rekommenderad återstående ordning
 
 1. Avsluta den nuvarande CI-censusen: välj små, testade Ruff- och därefter Vitest-fixar, utan att skriva om fungerande produktbeteende.
