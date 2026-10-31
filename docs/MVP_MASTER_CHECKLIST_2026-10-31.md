@@ -117,6 +117,14 @@ MVP:n visar **endast registrerad information**. Veckovy visar sparad preferenste
 
 **Checkpoint-gate:** K25-filerna `core/ui_blueprint.py`, `templates/ui/kitchen_week_v3.html`, `static/css/kitchen_week_v3.css`, `tests/ui/test_kitchen_week_v3.py` är lokalt committade som `bbea233b0ac8268d3b58a055a5318652612be688` (`feat(kommun): show serving addons in kitchen weekview`), bekräftat med användarens terminalrapport. **Ingen push**; GitHub remote development-branch har därför inte bekräftats innehålla committen. Kvarvarande dirty-filer: `core/admin_repo.py`, `scripts/seed_ostergarden_from_json.py`, `scripts/seed_product2_e2e.py`, `artifacts/`. Dokumentationsbranch/PR #130 är separat från utvecklingsbranchen. Full tenant-/site-regression, iPad, CI och staging tillhör kvarvarande release-gates; inget övergripande pilot-GO utfärdat.
 
+## K26 – Utskriftsförfining godkänd som nästa begränsade steg (2026-10-31)
+
+**Visuell acceptans av familjegrupperad skärm och A4-utskrift:** Produktägaren har granskat skärmbilder från `/ui/production-lists/addons`; familjer (MOS, PASTA, SALLAD), numeriska antal och kommentarer presenteras korrekt och tydligt. K26 är **fortfarande OPEN**, ännu ingen commit för K26.
+
+**Nästa enda K26-korrigering:** Byt nuvarande textknapp för utskrift till samma etablerade skrivarikon/knappstil som Page3. Behåll utskrift av alla familjer i sidhuvudet, med begripligt tillgängligt namn `Skriv ut alla`. Lägg även en liten skrivarikon till höger om varje familjerubrik. Klick på familjeikonen skriver endast ut den familjens rader med befintlig ljus A4-layout, korrekt datum/måltid/site samt vald familj i utskriftstiteln. Alla grupper och hela vyn återställs efter print/avbryt. Inga serveranrop eller ändringar av data, ingen ny vy, inga extra tunga knappar eller popups. Använd etablerade tillgängliga ikoner och CSP-kompatibla externa JS-events. Familjeidentitet ska följa befintlig datastruktur, inte fragil textmatchning.
+
+**Test/acceptans:** helutskrift fortfarande oförändrad; familjeutskrift visar endast vald grupp och dess avdelningar; även flera rader och A4-sidbrytning; korrekt återställning efter utskrift; tangentbord/aria-label; desktop- och iPad-vyer. Utför som en liten K26-order, review och lokal checkpoint innan nästa gate. Ingen parallell K27- eller Admin-implementation.
+
 ## Beslut: Familjegrupperad kökslista och återanvändbara registreringar (2026-10-31; förtydligat)
 
 **Produktbeslut – K26 presentation, ännu ej implementerat/godkänt:** Kökslistan ska **grupperas direkt per kategori/familj som rubrik**, t.ex. `Sallad`, `Mos`, `Pasta`, `Övrigt`. Direkt under rubriken visas **avdelning | numeriskt antal för vald dag/måltid | avdelningsspecifik kommentar**. Exempel under `Sallad`: `Avdelning A | 5 | Utan rå tomat`, `Avdelning B | 8 | —`. Visa inte `Aldrig rå tomat` som egen huvudrubrik eller extra kategorinivå. Gruppstruktur ska fungera för 20+ avdelningar och utskrift.
