@@ -15,12 +15,12 @@ Current development checkpoint: `6233b11cd4530ed0261992dc6be18af0357955c7`.
 - App Shell: early light/dark theme synchronized and white card/sidebar flashes eliminated, user-verified, with **77 focused tests passed** on the latest fix.
 
 **Not verified as complete for Kommun 1.1 pilot:**
-- Gate 02 new-customer department/registered-need setup and UX findings;
+- A–Ö acceptance ledger reconciliation: user confirms manual walkthrough reached **Rapport**, covering Department/needs earlier; no blanket redo of Gate 02 without a concrete blocker;
 - Admin-vs-Portal authoritative menu-choice handling;
 - end-to-end clean-customer publication → Portal → Planera → completion → reports;
 - Kvällsmat/dessert parity or explicit scope decision;
 - reporting/statistics bridge from new quantity/completion truth;
-- Serveringstillägg-preserving separate Servering/Packning output and daily destination pack acceptance;
+- Serveringstillägg-preserving separate Servering/Packning output and daily destination pack acceptance; existing Department admin edit, Portal Home read-only view and legacy saved-list print support do not cover the current full kitchen view;
 - Planera 1/2.0 parity, iPad smoke, complete regression/security and pilot tag.
 
 The current working ledger and prioritization are [`KOMMUN_1_1_CURRENT_STATUS_2026-10-30.md`](../KOMMUN_1_1_CURRENT_STATUS_2026-10-30.md) and [`KOMMUN_1_1_LIVE_ACCEPTANCE.md`](../KOMMUN_1_1_LIVE_ACCEPTANCE.md). Treat the older `2364ba47` checkpoint and its “current uncommitted gate” below as historical; the foundational product and architecture rules remain binding.
