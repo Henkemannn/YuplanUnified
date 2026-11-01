@@ -70,6 +70,8 @@
 | K30 | IN PROGRESS – K30-01 CLOSED / K30-02 NEXT | Full clean-customer Kommun E2E återstår. K30-01 HTTP 500 vid ny avdelning fixad och lokalt committad `14ab0825f56d17500eb516f09a226bfdf5341bc6` (2 tilläggsrader, 1 template); 40 tester passed (13+27). Full K30, 20+ avdelningar/print, kväll/dessert och rapport→completion ej slutbevisade. Ingen push. |
 | K31 | VERIFY | iPad full acceptans samt empty/error-states |
 | K32 | DEFERRED | Extern debitering och Mathilda-/ekonomiintegrationer |
+| K33 | OPEN – PILOT SECURITY | Inloggning och lösenordsåterställning: riktiga felmeddelanden i HTML, uthålligt throttling/lockout över flera workers, fungerande email-tokenreset med single-use/expiry, konto-/tenantisolering, revokering av sessions/tokens, auditering; säker full regression. Nuvarande `/auth/forgot` är placeholder. |
+| K34 | OPEN – LOGIN UX | Enhetlig branded Yuplan-login med rätt officiell logga, dark/light, iPad, visning av lösenord, tangentbords-/tillgänglighetstest, diskret visuell identitet; behåll all autentiseringslogik oförändrad under UI-passet. |
 
 ## Offshore 1.0 – separat låst mål efter Kommun
 
@@ -203,6 +205,16 @@ Uppgivet beteende: läser aktiva site-scopade addons, löser `whole_department` 
 **Priority next diagnostic gate:** READ ONLY, one representative isolated testcase per failure family with traceback, captured effective auth claims/tenant/site/DB config and code-path, then classify each as product regression / test fixture drift / deprecated contract / unresolved. No blanket authentication weakening, renaming product UI to satisfy old snapshots, resetting DB, committing or changing production code. Since K30-02A clean-customer E2E is pending, its execution should be sequenced after this priority triage unless diagnostic proof shows the environment safe. Planera v2 default switch K29 remains OPEN.
 
 **Product-owner decision:** No expansion of report/statistics dashboard proposed on 2026-11-01; preserve current report scope and fix only validated data-semantic/reporting defects (K21-K23) before pilot.
+
+## Login / återställning – kodinventering och prioritering (2026-11-01)
+
+**Produktbeslut:** prioritera fungerande självbetjäning för glömt lösenord och säker felhantering före bred login-designpolish; designen ska vara Yuplan-clean med officiell logga, inte ny loginmotor eller publikt användarregistreringsflöde. För närvarande pågår Copilot K30-testtriage och ingen parallell order ska ges.
+
+**Kodinventering (GitHub remote `feat/planera-app-shell-2026-03-03`, som kan ligga efter lokal kod):** `templates/login.html` ärver `ui/_layout/auth_base.html`, har e-post, password, csrf, felruta, glömt-länk och roterande `logo-proposal-globe-exp-v3.svg`. `templates/auth_forgot.html` är bara texten `Återställ lösenord kommer snart`. `core/auth.py`: POST `/auth/login` använder check_password_hash och in-memory `_RATE_LIMIT_STORE` per epost:IP med default 5 fel/300 s och lock 600 s (401/429 JSON även för webform); GET `/auth/forgot` renderar bara placeholder. `tests/test_auth_rate_limit.py` testar enkel spärr. Admin kan skapa tillfälligt lösenord och tvinga lösenordsbyte; `tests/ui/test_auth_version_revocation.py` visar befintlig `auth_version` / refresh revocation vid admin-reset och eget password change. Serverregeln i `core/ui_blueprint.py::account_change_password` accepterar min 6 tecken; behöver policyreview (NIST SP 800-63B-4 rekommenderar/kräver min 15 vid single factor, minst 8 vid MFA) och avgränsad migration för nya/bytta lösenord, utan att omedelbart låsa ute existerande användare.
+
+**Acceptanskriterier auth:** HTML-fel för fel uppgifter utan account enumeration; 429 vänlig retry; beständiga/spårbara och rimliga rate limits (separat epost, IP, ändamål), ingen permanent lockout som möjliggör DoS. Forgot POST alltid neutralt svar; på riktig adress levereras resetmail med slumpmässig kryptostark engångstoken, kort expiry, hashad token i storage, single-use/atomic compare-and-consume, rate-limit och ingen token i URL-loggar/analytics; verifierad password policy, sessions/JWT- och refresh-invalidering via befintlig auth_version mekanism, mailnotis efter lyckad reset, CSRF, tenant/site guards, funktionella isolerade tester inkl. token reuse/expiry/concurrency. Verifiera mailleverans/infrastruktur före implementation; inget gissande om redan befintlig mailprovider. Admins befintliga säkra resetflöde ska behållas som fallback.
+
+**Login-design:** använd officiell Yuplan SVG/brandfärger, lugn ljus/mörk inloggning med diskret optional rörelse (reduced-motion), bra kontrast, visa/dölj lösenord, tydliga felfält, mobil/iPad-touch, autofill/password manager och korrekt ÅÄÖ; ingen ny registrera-dig-knapp eller rollväljare. Begränsa till login/auth CSS/templates som en separat UI-gate efter authkontraktet. **Inga kodändringar beställda i detta beslut.**
 
 ## Rekommenderad återstående ordning
 
