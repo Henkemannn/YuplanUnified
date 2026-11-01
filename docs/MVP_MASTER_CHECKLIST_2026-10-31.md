@@ -192,6 +192,18 @@ Uppgivet beteende: läser aktiva site-scopade addons, löser `whole_department` 
 
 **Föreslagen arbetsordning efter fulla pytest-resultatet:** 1) triagera nya failure-/error-typer utan massfix, 2) genomför isolerad K30-02A från ny kund till rapport och identifiera fakta, 3) minimal språk/source-vs-DB-fix; 4) rapportcompletion-truth och cutovergate; 5) små shell/printikon-parityfixar samt 20-avdelnings/iPad/A4; 6) staging/pilotfreeze. Prioritering kan ändras om full pytest visar en omedelbar blocker.
 
+## Full pytest 2026-11-01 – 138 failures triage
+
+**Source:** user-provided complete pytest summary, local `feat/planera-app-shell-2026-03-03` at recent checkpoint `14ab0825f56d17500eb516f09a226bfdf5341bc6` (the pasted log does not itself independently print HEAD). Run total **2426 passed, 138 failed, 16 skipped, 3 warnings**, **667.33 s**. This is not a clean release gate; broad test pass rate 94.6% of executed tests but no basis to call all 138 product defects.
+
+**Distinct recurring patterns, counts from 138 FAILED lines:** 57 include HTTP 401/authentication-required; 17 `tests/core/test_planera_product2_menu_vm.py` failures share `CommunMenuProjectionRow.__init__` required argument mismatch; 8 legacy dietary migration failures `NoSuchTableError: users`; 9 `ValueError: duplicate_name`; 3 `RequirementCountExceededError`; 7 tasks tests have `KeyError: task_id` often downstream of failed auth. UI label/snapshot mismatches include deprecated emojis, renamed buttons and week headings. No causality established beyond output text.
+
+**Must independently triage before v2 cutover or pilot:** 4 tests in `tests/admin/test_admin_ui_departments_delete_canonical_cleanup.py` including orphaned canonical rows, FK-off case and service overrides; 1 Builder publication rollback test where `published` remains instead of `draft`; 3 announcement UI tests and 2 week-grid cohort tests giving HTTP 500; sample authenticated-site/menu-choice API tests giving HTTP 401. These may be fixture/auth/setup mismatches or genuine behavioral bugs; do not silently relabel. Protect locally dirty `core/admin_repo.py` and both seeds. Existing K25-K27/K30-01 focused tests remain accepted, but whole regression NOT GREEN.
+
+**Priority next diagnostic gate:** READ ONLY, one representative isolated testcase per failure family with traceback, captured effective auth claims/tenant/site/DB config and code-path, then classify each as product regression / test fixture drift / deprecated contract / unresolved. No blanket authentication weakening, renaming product UI to satisfy old snapshots, resetting DB, committing or changing production code. Since K30-02A clean-customer E2E is pending, its execution should be sequenced after this priority triage unless diagnostic proof shows the environment safe. Planera v2 default switch K29 remains OPEN.
+
+**Product-owner decision:** No expansion of report/statistics dashboard proposed on 2026-11-01; preserve current report scope and fix only validated data-semantic/reporting defects (K21-K23) before pilot.
+
 ## Rekommenderad återstående ordning
 
 1. Avsluta den nuvarande CI-censusen: välj små, testade Ruff- och därefter Vitest-fixar, utan att skriva om fungerande produktbeteende.
