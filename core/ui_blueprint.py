@@ -314,6 +314,16 @@ def _track_pilot_ui_usage():
         return False
 
 
+def _format_announcement_display(event_date: _date, event_time: _time | None, message: str) -> str:
+    day_names = {1: "Mån", 2: "Tis", 3: "Ons", 4: "Tors", 5: "Fre", 6: "Lör", 7: "Sön"}
+    day_label = day_names.get(int(event_date.isoweekday()), "")
+    date_part = f"{event_date.day}/{event_date.month}"
+    text = f"{day_label} {date_part} – {message}"
+    if event_time is not None:
+        text = f"{text} kl {event_time.strftime('%H:%M')}"
+    return text
+
+
 def _build_dashboard_announcements(site_id: str | None, *, kitchen_only: bool) -> list[dict]:
     if not site_id:
         return []

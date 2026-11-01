@@ -1,10 +1,55 @@
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 
 from sqlalchemy import text
 
 
 ADMIN_HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 COOK_HEADERS = {"X-User-Role": "cook", "X-Tenant-Id": "1"}
+
+
+def test_announcement_display_formats_optional_time_and_swedish_text():
+    from core.ui_blueprint import _format_announcement_display
+
+    event_date = date(2026, 11, 2)
+    assert _format_announcement_display(event_date, None, "ÅÄÖ") == "Mån 2/11 – ÅÄÖ"
+    assert _format_announcement_display(event_date, time(13, 15), "ÅÄÖ") == "Mån 2/11 – ÅÄÖ kl 13:15"
+
+
+def test_announcements_are_site_scoped_and_html_escaped(client_admin):
+    app = client_admin.application
+    _seed_site(app, "site-ann-visible", "Visible Announcements")
+    _seed_site(app, "site-ann-hidden", "Hidden Announcements")
+
+    with app.app_context():
+        from core.announcements_repo import AnnouncementsRepo
+
+        repo = AnnouncementsRepo()
+        repo.create(
+            site_id="site-ann-visible",
+            message="Synligt ÅÄÖ <script>alert(1)</script>",
+            event_date=date.today(),
+            event_time=None,
+            show_on_kitchen_dashboard=False,
+            created_by_user_id=None,
+        )
+        repo.create(
+            site_id="site-ann-hidden",
+            message="Ska inte visas",
+            event_date=date.today(),
+            event_time=None,
+            show_on_kitchen_dashboard=False,
+            created_by_user_id=None,
+        )
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = "site-ann-visible"
+
+    response = client_admin.get("/ui/admin/announcements", headers=ADMIN_HEADERS)
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+    assert "Synligt ÅÄÖ" in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert "Ska inte visas" not in html
 
 
 def _seed_site(app, site_id: str, name: str) -> None:
