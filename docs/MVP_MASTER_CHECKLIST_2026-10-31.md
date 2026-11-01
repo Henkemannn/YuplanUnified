@@ -71,7 +71,7 @@
 | K31 | VERIFY | iPad full acceptans samt empty/error-states |
 | K32 | DEFERRED | Extern debitering och Mathilda-/ekonomiintegrationer |
 | K33 | OPEN – PILOT SECURITY | Inloggning och lösenordsåterställning: riktiga felmeddelanden i HTML, uthålligt throttling/lockout över flera workers, fungerande email-tokenreset med single-use/expiry, konto-/tenantisolering, revokering av sessions/tokens, auditering; säker full regression. Nuvarande `/auth/forgot` är placeholder. |
-| K34 | OPEN – LOGIN UX | Enhetlig branded Yuplan-login med rätt officiell logga, dark/light, iPad, visning av lösenord, tangentbords-/tillgänglighetstest, diskret visuell identitet; behåll all autentiseringslogik oförändrad under UI-passet. |
+| K34 | OPEN – LOGIN UX | Bevara uttryckligen den befintliga snurrande Yuplan-globen, som produktägaren vill behålla. Ta fram separata diskreta form-/bakgrundsförslag runt samma animation; rätt logga/brandfärger, dark/light, iPad, visa/dölj lösenord, tangentbord/tillgänglighet, reduced-motion; ändra inte authlogik under UI-passet. |
 
 ## Offshore 1.0 – separat låst mål efter Kommun
 
@@ -215,6 +215,19 @@ Uppgivet beteende: läser aktiva site-scopade addons, löser `whole_department` 
 **Acceptanskriterier auth:** HTML-fel för fel uppgifter utan account enumeration; 429 vänlig retry; beständiga/spårbara och rimliga rate limits (separat epost, IP, ändamål), ingen permanent lockout som möjliggör DoS. Forgot POST alltid neutralt svar; på riktig adress levereras resetmail med slumpmässig kryptostark engångstoken, kort expiry, hashad token i storage, single-use/atomic compare-and-consume, rate-limit och ingen token i URL-loggar/analytics; verifierad password policy, sessions/JWT- och refresh-invalidering via befintlig auth_version mekanism, mailnotis efter lyckad reset, CSRF, tenant/site guards, funktionella isolerade tester inkl. token reuse/expiry/concurrency. Verifiera mailleverans/infrastruktur före implementation; inget gissande om redan befintlig mailprovider. Admins befintliga säkra resetflöde ska behållas som fallback.
 
 **Login-design:** använd officiell Yuplan SVG/brandfärger, lugn ljus/mörk inloggning med diskret optional rörelse (reduced-motion), bra kontrast, visa/dölj lösenord, tydliga felfält, mobil/iPad-touch, autofill/password manager och korrekt ÅÄÖ; ingen ny registrera-dig-knapp eller rollväljare. Begränsa till login/auth CSS/templates som en separat UI-gate efter authkontraktet. **Inga kodändringar beställda i detta beslut.**
+
+## K30-TEST-TRIAGE – verifierade P0-resultat (2026-11-01)
+
+**READ ONLY, ingen commit/produktändring.** Branch `feat/planera-app-shell-2026-03-03`, lokal HEAD `14ab0825f56d17500eb516f09a226bfdf5341bc6`. Isolerade pytest-fixtures under systemets tempkatalog; rapporterade skyddade dirty-filer oförändrade; `git diff --check` grönt.
+
+- **P0 verklig regression: Meddelanden/Påminnelser** `tests/ui/test_announcements_mvp.py` → **3 failed, 1 passed**; återkommande `NameError: _format_announcement_display is not defined` i `core/ui_blueprint.py::_build_dashboard_announcements` (~rad 340), anropas för Admin announcements/dashboard och Kitchen dashboard efter att relevant meddelande lagts till. Saknad definition/import verifierad vid separat GitHub-kodläsning; nästa ENDA Copilot-order bör kirurgiskt återställa formatteringen med test av datum/tid och site-/kitchen-only-filtrering. Före fix är detta pilotblockerare när meddelanden används.
+- **Avdelningsradering – ännu ej fullständigt cleanup-verifierad:** `tests/admin/test_admin_ui_departments_delete_canonical_cleanup.py` → **3 failed, 1 passed**. Test-POST saknar ny obligatorisk `confirmation`, varvid route stoppar före repo. Ett separat happy-path `tests/ui/test_unified_admin_departments_phase2.py::test_departments_delete_happy_path` → **1 passed** med korrekt bekräftelse, men detta bevisar inte alla kanoniska/override-cleanup fall. Anpassa senare testfixtures och verifiera FK-on/off, scope och relaterade rader i isolerad DB, utan att skriva över dirty `core/admin_repo.py`.
+- **Publikationsrollback:** tidigare full-suite-fail kan inte isolerat reproduceras, `test_publish_projection_failure_keeps_legacy_draft_and_no_pin` → **1 passed**; observera suite-interaktion som möjlig förklaring, ännu inte generell full-suite-friskförklaring.
+- **Cohort/Weekgrid:** `tests/ui/test_week_grid_cohort_shared_render.py` → **3 passed** isolerat; tidigare 500 ej reproducerad.
+- **Menu-choice API 401:** ett isolerat test **1 failed** p.g.a. testets manipulerade session/otillräcklig autentisering gentemot nuvarande fail-closed-kontroll. Misstänkt inaktuellt testkontrakt; säkerheten får inte släppas. Detta ensamma test bevisar inte att samtliga 57 401-fel har samma orsak.
+- **Planera2 menu VM:** ett isolerat test **1 failed** p.g.a. att testfixture inte anger nya obligatoriska `CommunMenuProjectionRow.selection_group_id`. Produktionsanrop har fältet. Endast fixture ska uppdateras efter avgränsad review, inte dataklassens kontrakt; full testfil fortfarande 17 reds.
+
+**Nästa ordning:** P0 saknad announcement formatter → fokustest + närliggande regressionsgranskning → selektiv lokal checkpoint → tester som verifierar verklig canonical cleanup → K30-02A clean-customer E2E → återstående testdrift och release-frysning. K33/K34 login backlog, ingen parallell order. Full pytest fortfarande **2426 passed, 138 failed, 16 skipped**, ej pilotklart.
 
 ## Rekommenderad återstående ordning
 
