@@ -14,6 +14,51 @@ def _alembic_cfg(db_url: str) -> Config:
     return cfg
 
 
+def _seed_historical_0034_support(conn) -> None:
+    conn.execute(
+        text(
+            """
+            CREATE TABLE departments (
+                id TEXT PRIMARY KEY,
+                site_id TEXT NOT NULL,
+                name TEXT,
+                resident_count_mode TEXT NOT NULL DEFAULT 'manual',
+                resident_count_fixed INTEGER NULL,
+                notes TEXT NULL,
+                created_at DATETIME NULL,
+                updated_at DATETIME NULL,
+                version INTEGER NOT NULL DEFAULT 0,
+                residence_id TEXT NULL,
+                display_order INTEGER NULL
+            )
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY,
+                tenant_id INTEGER NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL,
+                unit_id INTEGER NULL,
+                refresh_token_jti TEXT NULL,
+                username TEXT NULL,
+                full_name TEXT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                deleted_at DATETIME NULL,
+                updated_at DATETIME NULL,
+                department_id TEXT NULL,
+                FOREIGN KEY(department_id) REFERENCES departments(id)
+            )
+            """
+        )
+    )
+    conn.execute(text("CREATE UNIQUE INDEX ix_users_username_unique ON users(username)"))
+
+
 def test_fresh_upgrade_adds_dietary_types_site_id_and_index(tmp_path: Path, monkeypatch) -> None:
     db_path = tmp_path / "fresh_dietary_types_site_id.db"
     db_url = f"sqlite:///{db_path.as_posix()}"
@@ -47,6 +92,7 @@ def test_legacy_rows_survive_site_id_migration_with_null_site(tmp_path: Path, mo
     engine = create_engine(db_url)
     try:
         with engine.begin() as conn:
+            _seed_historical_0034_support(conn)
             conn.execute(
                 text(
                     """
@@ -90,6 +136,7 @@ def test_existing_site_id_schema_is_left_intact(tmp_path: Path, monkeypatch) -> 
     site_id = str(uuid.uuid4())
     try:
         with engine.begin() as conn:
+            _seed_historical_0034_support(conn)
             conn.execute(
                 text(
                     """
@@ -148,6 +195,7 @@ def test_equivalent_lookup_index_under_alternate_name_is_not_duplicated(tmp_path
     site_id = str(uuid.uuid4())
     try:
         with engine.begin() as conn:
+            _seed_historical_0034_support(conn)
             conn.execute(
                 text(
                     """
@@ -203,6 +251,7 @@ def test_downgrade_is_non_destructive_for_existing_site_id_schema(tmp_path: Path
     site_id = str(uuid.uuid4())
     try:
         with engine.begin() as conn:
+            _seed_historical_0034_support(conn)
             conn.execute(
                 text(
                     """

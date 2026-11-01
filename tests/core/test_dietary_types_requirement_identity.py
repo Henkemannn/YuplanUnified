@@ -20,6 +20,51 @@ def _equivalent_requirement_indexes(inspector) -> list[dict]:
     return [index for index in inspector.get_indexes("dietary_types") if list(index.get("column_names") or []) == ["requirement_key"]]
 
 
+def _seed_historical_0034_support(conn) -> None:
+    conn.execute(
+        text(
+            """
+            CREATE TABLE departments (
+                id TEXT PRIMARY KEY,
+                site_id TEXT NOT NULL,
+                name TEXT,
+                resident_count_mode TEXT NOT NULL DEFAULT 'manual',
+                resident_count_fixed INTEGER NULL,
+                notes TEXT NULL,
+                created_at DATETIME NULL,
+                updated_at DATETIME NULL,
+                version INTEGER NOT NULL DEFAULT 0,
+                residence_id TEXT NULL,
+                display_order INTEGER NULL
+            )
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY,
+                tenant_id INTEGER NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL,
+                unit_id INTEGER NULL,
+                refresh_token_jti TEXT NULL,
+                username TEXT NULL,
+                full_name TEXT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                deleted_at DATETIME NULL,
+                updated_at DATETIME NULL,
+                department_id TEXT NULL,
+                FOREIGN KEY(department_id) REFERENCES departments(id)
+            )
+            """
+        )
+    )
+    conn.execute(text("CREATE UNIQUE INDEX ix_users_username_unique ON users(username)"))
+
+
 def _seed_legacy_dietary_types_table(conn, *, with_site_id: bool = False, with_requirement_fields: bool = False) -> None:
     if with_requirement_fields:
         conn.execute(
@@ -181,6 +226,7 @@ def test_existing_legacy_row_backfills_to_legacy_identity(tmp_path: Path, monkey
     engine = create_engine(db_url)
     try:
         with engine.begin() as conn:
+            _seed_historical_0034_support(conn)
             conn.execute(
                 text(
                     """
@@ -217,6 +263,7 @@ def test_multiple_legacy_rows_get_unique_requirement_keys(tmp_path: Path, monkey
     engine = create_engine(db_url)
     try:
         with engine.begin() as conn:
+            _seed_historical_0034_support(conn)
             _seed_legacy_dietary_types_table(conn, with_site_id=False)
             conn.execute(text("INSERT INTO dietary_types(id, tenant_id, name, default_select) VALUES (1, 1, 'Glutenfri', 0)"))
             conn.execute(text("INSERT INTO dietary_types(id, tenant_id, name, default_select) VALUES (2, 1, 'Laktosfri', 0)"))
@@ -244,6 +291,7 @@ def test_existing_equivalent_requirement_index_is_not_duplicated(tmp_path: Path,
     engine = create_engine(db_url)
     try:
         with engine.begin() as conn:
+            _seed_historical_0034_support(conn)
             conn.execute(
                 text(
                     """
@@ -366,6 +414,7 @@ def test_legacy_site_id_null_stays_null_after_identity_upgrade(tmp_path: Path, m
     engine = create_engine(db_url)
     try:
         with engine.begin() as conn:
+            _seed_historical_0034_support(conn)
             _seed_legacy_dietary_types_table(conn, with_site_id=True)
             conn.execute(text("INSERT INTO dietary_types(id, tenant_id, site_id, name, default_select) VALUES (13, 1, NULL, 'Timbal', 0)"))
 
