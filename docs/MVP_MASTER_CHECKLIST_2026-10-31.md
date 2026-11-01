@@ -43,8 +43,8 @@
 | K03 | CLOSED | Registrerade Kostbehov, primär/modifier, undvik dubbelräkning |
 | K04 | CLOSED | Behovsantal och aktuella overrides |
 | K05 | CLOSED admin | Registrera Serveringstillägg, antal och anteckning |
-| K06 | CLOSED | Avdelningsportal ser kanoniskt publicerad meny |
-| K07 | CLOSED | Avdelningsportal väljer och skickar menyval |
+| K06 | **P0 REVERIFY – #131** | Tidigare portalacceptans, men ny avdelningsinloggning lokalt visar ingen veckoväljare och ingen meny; verifiera ny-kund-flödet i faktisk browser. |
+| K07 | **P0 REVERIFY – #131** | Tidigare menyvalacceptans, men ny användare får inte fram valbara menyer; bevisa publicerad meny, spara val och återläs på samma avdelning. |
 | K08 | CLOSED | Kökets Veckovy/Menyöversikt ser samma meny och val |
 | K09 | CLOSED seam | Admin Weekview read-only completion-projektion |
 | K10 | CLOSED | Alt2 gul menyvalstatus separat från grön färdigmarkering |
@@ -72,6 +72,7 @@
 | K32 | DEFERRED | Extern debitering och Mathilda-/ekonomiintegrationer |
 | K33 | OPEN – PILOT SECURITY | Inloggning och lösenordsåterställning: riktiga felmeddelanden i HTML, uthålligt throttling/lockout över flera workers, fungerande email-tokenreset med single-use/expiry, konto-/tenantisolering, revokering av sessions/tokens, auditering; säker full regression. Nuvarande `/auth/forgot` är placeholder. |
 | K34 | OPEN – LOGIN UX | Bevara uttryckligen den befintliga snurrande Yuplan-globen, som produktägaren vill behålla. Ta fram separata diskreta form-/bakgrundsförslag runt samma animation; rätt logga/brandfärger, dark/light, iPad, visa/dölj lösenord, tangentbord/tillgänglighet, reduced-motion; ändra inte authlogik under UI-passet. |
+| K35 | **P0 OPEN – PORTAL ONBOARDING #131** | Lokal observation 2026-11-01: tidigare skapade portalanvändare syns inte längre i centralkökets admin (inte bevisat raderade); ny avdelningslogin saknar veckoväljare och menyalternativ. Kontrollera effektiv DB-fil, konto-/tenant-/site-/department-binding, adminlistfiltrering, publicerad meny, veckoval och portal-rendering read-only. Pilot-GO blockerat tills verklig ny-användare-E2E fungerar. |
 
 ## Offshore 1.0 – separat låst mål efter Kommun
 
