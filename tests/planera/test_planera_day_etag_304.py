@@ -1,6 +1,19 @@
 import uuid
 from datetime import date
 
+from core.admin_repo import DietTypesRepo
+
+
+def _canonical_diet_id(site_id: str, name: str, *, default_select: bool) -> int:
+    row = next(row for row in DietTypesRepo().list_all(site_id=site_id) if row["name"] == name)
+    assert row["semantics"] == "atomic"
+    assert row["requirement_key"]
+    if bool(row["default_select"]) != default_select:
+        DietTypesRepo().update(int(row["id"]), default_select=default_select)
+        row = next(row for row in DietTypesRepo().list_all(site_id=site_id) if row["name"] == name)
+    assert bool(row["default_select"]) is default_select
+    return int(row["id"])
+
 
 def _h(role):
     return {"X-User-Role": role, "X-Tenant-Id": "1"}
@@ -59,7 +72,7 @@ def test_planera_day_compute_day_counts_default_select_specialkost(client_admin)
             resident_count_mode="fixed",
             resident_count_fixed=10,
         )
-        diet_id = DietTypesRepo().create(site_id=site["id"], name="Glutenfri", default_select=True)
+        diet_id = _canonical_diet_id(site["id"], "Glutenfri", default_select=True)
         DepartmentsRepo().upsert_department_diet_defaults(
             dept["id"],
             0,

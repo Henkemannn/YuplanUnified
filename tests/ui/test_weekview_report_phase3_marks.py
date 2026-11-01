@@ -9,6 +9,17 @@ from core.admin_repo import DepartmentsRepo, DietTypesRepo, SitesRepo
 ADMIN = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 
+def _canonical_diet_id(repo, site_id: str, name: str, *, default_select: bool) -> int:
+    row = next(row for row in repo.list_all(site_id=site_id) if row["name"] == name)
+    assert row["semantics"] == "atomic"
+    assert row["requirement_key"]
+    if bool(row["default_select"]) != default_select:
+        repo.update(int(row["id"]), default_select=default_select)
+        row = next(row for row in repo.list_all(site_id=site_id) if row["name"] == name)
+    assert bool(row["default_select"]) is default_select
+    return int(row["id"])
+
+
 def _enable_weekview(app) -> None:
     with app.app_context():
         reg = getattr(app, "feature_registry", None)
@@ -29,7 +40,9 @@ def _seed_setup(app, year: int, week: int):
         )
         gluten_id = DietTypesRepo().create(site_id=site["id"], name="Gluten", default_select=False)
         laktos_id = DietTypesRepo().create(site_id=site["id"], name="Laktos", default_select=False)
-        timbal_id = DietTypesRepo().create(site_id=site["id"], name="Timbal", default_select=True)
+        timbal_id = _canonical_diet_id(
+            DietTypesRepo(), site["id"], "Timbal", default_select=True
+        )
         DepartmentsRepo().upsert_department_diet_defaults(
             dept["id"],
             0,

@@ -11,6 +11,17 @@ from core.admin_repo import (
 from core.weekview.service import WeekviewService
 
 
+def _canonical_diet_id(site_id: str, name: str, *, default_select: bool) -> int:
+    row = next(row for row in DietTypesRepo().list_all(site_id=site_id) if row["name"] == name)
+    assert row["semantics"] == "atomic"
+    assert row["requirement_key"]
+    if bool(row["default_select"]) != default_select:
+        DietTypesRepo().update(int(row["id"]), default_select=default_select)
+        row = next(row for row in DietTypesRepo().list_all(site_id=site_id) if row["name"] == name)
+    assert bool(row["default_select"]) is default_select
+    return int(row["id"])
+
+
 def _diet_entry(payload: dict, diet_type_id: str, day: int, meal: str) -> dict | None:
     summaries = payload.get("department_summaries") or []
     if not summaries:
@@ -31,7 +42,7 @@ def test_weekview_applies_department_diet_overrides_and_falls_back(app_session):
         resident_count_mode="fixed",
         resident_count_fixed=12,
     )
-    diet_id = DietTypesRepo().create(site_id=site["id"], name="Laktosfri", default_select=False)
+    diet_id = _canonical_diet_id(site["id"], "Laktosfri", default_select=False)
     new_v = DepartmentsRepo().upsert_department_diet_defaults(
         dept_id=dep["id"],
         expected_version=dep_v,

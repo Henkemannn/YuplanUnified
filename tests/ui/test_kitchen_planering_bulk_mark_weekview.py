@@ -4,6 +4,14 @@ from sqlalchemy import text
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 
+def _canonical_diet_id(repo, site_id: str, name: str) -> int:
+    row = next(row for row in repo.list_all(site_id=site_id) if row["name"] == name)
+    assert row["semantics"] == "atomic"
+    assert row["requirement_key"]
+    assert bool(row["default_select"]) is False
+    return int(row["id"])
+
+
 def _seed_bulk():
     from core.admin_repo import SitesRepo, DepartmentsRepo, DietTypesRepo
     srepo = SitesRepo()
@@ -13,8 +21,8 @@ def _seed_bulk():
     dep_a, _ = drepo.create_department(site_id, "Avd A", "fixed", 10)
     dep_b, _ = drepo.create_department(site_id, "Avd B", "fixed", 8)
     trepo = DietTypesRepo()
-    dt_gluten = trepo.create(site_id=site_id, name="Glutenfri", default_select=False)
-    dt_laktos = trepo.create(site_id=site_id, name="Laktosfri", default_select=False)
+    dt_gluten = _canonical_diet_id(trepo, site_id, "Glutenfri")
+    dt_laktos = _canonical_diet_id(trepo, site_id, "Laktosfri")
     v_a = drepo.get_version(dep_a["id"]) or 0
     v_b = drepo.get_version(dep_b["id"]) or 0
     drepo.upsert_department_diet_defaults(dep_a["id"], v_a, [

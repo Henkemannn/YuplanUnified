@@ -15,6 +15,17 @@ def _h(role):
     return {"X-User-Role": role, "X-Tenant-Id": "1"}
 
 
+def _canonical_diet_id(site_id: str, name: str, *, default_select: bool) -> int:
+    row = next(row for row in DietTypesRepo().list_all(site_id=site_id) if row["name"] == name)
+    assert row["semantics"] == "atomic"
+    assert row["requirement_key"]
+    if bool(row["default_select"]) != default_select:
+        DietTypesRepo().update(int(row["id"]), default_select=default_select)
+        row = next(row for row in DietTypesRepo().list_all(site_id=site_id) if row["name"] == name)
+    assert bool(row["default_select"]) is default_select
+    return int(row["id"])
+
+
 @pytest.fixture
 def enable_weekview(client_admin):
     resp = client_admin.post(
@@ -188,7 +199,7 @@ def test_weekview_report_default_select_marked_specialkost_comes_from_weekview_p
             resident_count_mode="fixed",
             resident_count_fixed=10,
         )
-        diet_id = DietTypesRepo().create(site_id=site["id"], name="Glutenfri", default_select=True)
+        diet_id = _canonical_diet_id(site["id"], "Glutenfri", default_select=True)
         DepartmentsRepo().upsert_department_diet_defaults(
             dept["id"],
             0,
@@ -262,11 +273,11 @@ def test_weekview_report_cohort_bridge_uses_group_completions_and_ignores_legacy
         dept_b, _ = DepartmentsRepo().create_department(site_id=site["id"], name="Avdelning 13", resident_count_mode="fixed", resident_count_fixed=8)
         dept_c, _ = DepartmentsRepo().create_department(site_id=site["id"], name="Avdelning 16", resident_count_mode="fixed", resident_count_fixed=10)
 
-        gluten = DietTypesRepo().create(site_id=site["id"], name="Glutenfri", default_select=True, semantics="atomic")
-        lactose = DietTypesRepo().create(site_id=site["id"], name="Laktosfri", default_select=False, semantics="atomic")
-        egg = DietTypesRepo().create(site_id=site["id"], name="Äggfri", default_select=False, semantics="atomic")
-        timbal = DietTypesRepo().create(site_id=site["id"], name="Timbal", default_select=False, semantics="atomic")
-        vegetarian = DietTypesRepo().create(site_id=site["id"], name="Vegetarisk", default_select=False, semantics="atomic")
+        gluten = _canonical_diet_id(site["id"], "Glutenfri", default_select=True)
+        lactose = _canonical_diet_id(site["id"], "Laktosfri", default_select=False)
+        egg = _canonical_diet_id(site["id"], "Äggfri", default_select=False)
+        timbal = _canonical_diet_id(site["id"], "Timbal", default_select=False)
+        vegetarian = _canonical_diet_id(site["id"], "Vegetarisk", default_select=False)
 
         # Legacy data that would overcount if the report did not switch to cohort truth.
         DepartmentsRepo().upsert_department_diet_defaults(
