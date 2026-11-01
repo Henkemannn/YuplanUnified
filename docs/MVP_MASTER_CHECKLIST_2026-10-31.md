@@ -229,6 +229,12 @@ Uppgivet beteende: läser aktiva site-scopade addons, löser `whole_department` 
 
 **Nästa ordning:** P0 saknad announcement formatter → fokustest + närliggande regressionsgranskning → selektiv lokal checkpoint → tester som verifierar verklig canonical cleanup → K30-02A clean-customer E2E → återstående testdrift och release-frysning. K33/K34 login backlog, ingen parallell order. Full pytest fortfarande **2426 passed, 138 failed, 16 skipped**, ej pilotklart.
 
+## K30-P0 – Announcements formatter restored locally (2026-11-01)
+
+**Status: CLOSED FUNCTION / TESTED LOCALLY – COMMIT PENDING.** Copilot på lokal `feat/planera-app-shell-2026-03-03`, HEAD `14ab0825f56d17500eb516f09a226bfdf5341bc6`, reproducerade `tests/ui/test_announcements_mvp.py` **3 failed, 1 passed** p.g.a. saknad `_format_announcement_display` vid Admin-/Kitchen-dashboardrendering. Återställde befintligt historiskt formatteringskontrakt i `core/ui_blueprint.py` med svenska veckodagsförkortningar, dag/månad och valfri `kl HH:MM`; lade till fokuserade tester i `tests/ui/test_announcements_mvp.py` för ÅÄÖ, datum/tid, site-isolering och HTML-escaping. Inga schema-, repo- eller behörighetsändringar.
+
+**Rapporterat testbevis:** announcements **6 passed**; Admin/Kitchen dashboards (`tests/ui/test_admin_dashboard_today_menu.py`, `tests/ui/test_unified_cook_dashboard_phase4.py`) **31 passed**; `git diff --check` OK. Endast två produkt-/testfiler ändrade; skyddade dirty `core/admin_repo.py`, `scripts/seed_ostergarden_from_json.py`, `scripts/seed_product2_e2e.py`, `artifacts/` kvar. Ingen commit/push ännu. Nästa steg: selektiv lokal two-file checkpoint, sedan återstående canonical department-delete cleanup-gate eller isolerad K30-02A. Full regressionssvit alltjämt ej grön och ingen pilot-GO.
+
 ## Rekommenderad återstående ordning
 
 1. Avsluta den nuvarande CI-censusen: välj små, testade Ruff- och därefter Vitest-fixar, utan att skriva om fungerande produktbeteende.
