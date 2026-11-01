@@ -21,7 +21,7 @@ from core.department_requirement_group_service_overrides_repo import (
 ADMIN_HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 
-def _seed_site_department_group(active_site_name: str = "Active Site") -> tuple[str, str, int, str]:
+def _seed_site_department_group(active_site_name: str = "Active Site") -> tuple[str, str, str, int, str]:
     site_repo = SitesRepo()
     dept_repo = DepartmentsRepo()
     diet_repo = DietTypesRepo()
@@ -41,18 +41,19 @@ def _seed_site_department_group(active_site_name: str = "Active Site") -> tuple[
         semantics="atomic",
     )
     group = group_repo.create_group(department["id"], 1, [requirement_id], label="Department group")
-    return site["id"], department["id"], requirement_id, str(group["id"])
+    return site["id"], department["id"], department["name"], requirement_id, str(group["id"])
 
 
 def test_department_delete_cleans_canonical_group_rows_in_same_transaction(app_session, client_admin: FlaskClient) -> None:
     with app_session.app_context():
-        site_id, dept_id, requirement_id, group_id = _seed_site_department_group("Delete Site")
+        site_id, dept_id, dept_name, requirement_id, group_id = _seed_site_department_group("Delete Site")
         with client_admin.session_transaction() as sess:
             sess["site_id"] = site_id
 
         response = client_admin.post(
             f"/ui/admin/departments/{dept_id}/delete",
             headers=ADMIN_HEADERS,
+            data={"confirmation": dept_name},
             follow_redirects=True,
         )
         assert response.status_code == 200
@@ -88,7 +89,7 @@ def test_department_delete_cleans_canonical_group_rows_in_same_transaction(app_s
 
 def test_department_delete_wrong_site_keeps_department_and_canonical_rows(app_session, client_admin: FlaskClient) -> None:
     with app_session.app_context():
-        site_a_id, dept_id, requirement_id, group_id = _seed_site_department_group("Site A")
+        site_a_id, dept_id, dept_name, requirement_id, group_id = _seed_site_department_group("Site A")
         site_b, _ = SitesRepo().create_site("Site B")
 
         with client_admin.session_transaction() as sess:
@@ -97,11 +98,12 @@ def test_department_delete_wrong_site_keeps_department_and_canonical_rows(app_se
         response = client_admin.post(
             f"/ui/admin/departments/{dept_id}/delete",
             headers=ADMIN_HEADERS,
+            data={"confirmation": dept_name},
             follow_redirects=True,
         )
         assert response.status_code == 200
         html = response.data.decode()
-        assert "Avdelning hittades inte för vald site." in html
+        assert "Bekräftelsen matchar inte avdelningens namn." in html
 
         from core.db import get_session
 
@@ -135,7 +137,7 @@ def test_department_delete_wrong_site_keeps_department_and_canonical_rows(app_se
 
 def test_department_delete_cleans_canonical_rows_with_sqlite_fk_off(app_session, client_admin: FlaskClient, monkeypatch) -> None:
     with app_session.app_context():
-        site_id, dept_id, requirement_id, group_id = _seed_site_department_group("SQLite Off Site")
+        site_id, dept_id, dept_name, requirement_id, group_id = _seed_site_department_group("SQLite Off Site")
         with client_admin.session_transaction() as sess:
             sess["site_id"] = site_id
 
@@ -154,6 +156,7 @@ def test_department_delete_cleans_canonical_rows_with_sqlite_fk_off(app_session,
         response = client_admin.post(
             f"/ui/admin/departments/{dept_id}/delete",
             headers=ADMIN_HEADERS,
+            data={"confirmation": dept_name},
             follow_redirects=True,
         )
         assert response.status_code == 200
@@ -187,7 +190,7 @@ def test_department_delete_cleans_canonical_rows_with_sqlite_fk_off(app_session,
 
 def test_department_delete_cleans_service_override_rows(app_session, client_admin: FlaskClient) -> None:
     with app_session.app_context():
-        site_id, dept_id, requirement_id, group_id = _seed_site_department_group("Override Delete Site")
+        site_id, dept_id, dept_name, requirement_id, group_id = _seed_site_department_group("Override Delete Site")
         override_repo = DepartmentRequirementGroupServiceOverridesRepo()
         override_repo.set_override(group_id, date(2026, 9, 8), "lunch", 4)
 
@@ -197,6 +200,7 @@ def test_department_delete_cleans_service_override_rows(app_session, client_admi
         response = client_admin.post(
             f"/ui/admin/departments/{dept_id}/delete",
             headers=ADMIN_HEADERS,
+            data={"confirmation": dept_name},
             follow_redirects=True,
         )
         assert response.status_code == 200
@@ -220,3 +224,43 @@ def test_department_delete_cleans_service_override_rows(app_session, client_admi
 
         assert override_row is None
         assert requirement_row is not None
+
+
+def test_department_delete_wrong_confirmation_preserves_all_rows(app_session, client_admin: FlaskClient) -> None:
+    with app_session.app_context():
+        site_id, dept_id, dept_name, requirement_id, group_id = _seed_site_department_group("Wrong Confirmation Site")
+
+        with client_admin.session_transaction() as sess:
+            sess["site_id"] = site_id
+
+        response = client_admin.post(
+            f"/ui/admin/departments/{dept_id}/delete",
+            headers=ADMIN_HEADERS,
+            data={"confirmation": f"{dept_name} - fel"},
+            follow_redirects=True,
+        )
+        assert response.status_code == 200
+        assert "Bekräftelsen matchar inte avdelningens namn." in response.data.decode()
+
+        from core.db import get_session
+
+        conn = get_session()
+        try:
+            dept_row = conn.execute(text("SELECT id FROM departments WHERE id=:id"), {"id": dept_id}).fetchone()
+            group_row = conn.execute(
+                text("SELECT id FROM department_requirement_groups WHERE id=:id"),
+                {"id": group_id},
+            ).fetchone()
+            join_row = conn.execute(
+                text(
+                    "SELECT group_id, dietary_type_id FROM department_requirement_group_requirements "
+                    "WHERE group_id=:gid AND dietary_type_id=:did"
+                ),
+                {"gid": group_id, "did": requirement_id},
+            ).fetchone()
+        finally:
+            conn.close()
+
+        assert dept_row is not None
+        assert group_row is not None
+        assert join_row is not None
