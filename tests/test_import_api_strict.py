@@ -5,27 +5,35 @@ import pytest
 from flask import Flask
 
 from core.app_factory import create_app
+from core.db import create_all
 
 CSV_SAMPLE = b"title,description,priority\nA,Alpha,1\nB,Beta,2\n"
 CSV_EMPTY = b"title,description,priority\n"
 
 
-def _app(flags=None) -> Flask:
+def _app(tmp_path, flags=None) -> Flask:
     cfg = {"TESTING": True, "FEATURE_FLAGS": {"openapi_ui": True}}
+    cfg.update({"database_url": f"sqlite:///{(tmp_path / 'import_strict_main.db').as_posix()}", "BUILDER_DB_PATH": str(tmp_path / "import_strict_builder.db"), "FORCE_DB_REINIT": True})
     if flags:
         cfg["FEATURE_FLAGS"].update(flags)
-    return create_app(cfg)
+    app = create_app(cfg)
+    with app.app_context():
+        create_all()
+    return app
 
 
 def _login(client):
+    client.environ_base.update(
+        {"HTTP_X_USER_ROLE": "admin", "HTTP_X_TENANT_ID": "1", "HTTP_X_USER_ID": "1"}
+    )
     with client.session_transaction() as sess:
         sess["tenant_id"] = 1
         sess["user_id"] = 1
         sess["role"] = "admin"
 
 
-def test_csv_happy_meta_format():
-    app = _app()
+def test_csv_happy_meta_format(tmp_path):
+    app = _app(tmp_path)
     with app.test_client() as client:
         _login(client)
         resp = client.post(
@@ -40,8 +48,8 @@ def test_csv_happy_meta_format():
         assert body["meta"]["count"] == 2
 
 
-def test_csv_empty_returns_200_zero_count():
-    app = _app()
+def test_csv_empty_returns_200_zero_count(tmp_path):
+    app = _app(tmp_path)
     with app.test_client() as client:
         _login(client)
         resp = client.post(
@@ -56,8 +64,8 @@ def test_csv_empty_returns_200_zero_count():
         assert body["meta"]["format"] == "csv"
 
 
-def test_csv_bad_mime_415():
-    app = _app()
+def test_csv_bad_mime_415(tmp_path):
+    app = _app(tmp_path)
     with app.test_client() as client:
         _login(client)
         # Force mismatched mimetype by overriding content_type
@@ -79,8 +87,8 @@ def test_csv_bad_mime_415():
             assert resp.status_code in (400, 415)
 
 
-def test_docx_happy_or_skip():
-    app = _app()
+def test_docx_happy_or_skip(tmp_path):
+    app = _app(tmp_path)
     with app.test_client() as client:
         _login(client)
         try:
@@ -110,8 +118,8 @@ def test_docx_happy_or_skip():
             assert body["meta"]["format"] == "docx"
 
 
-def test_xlsx_happy_or_skip():
-    app = _app()
+def test_xlsx_happy_or_skip(tmp_path):
+    app = _app(tmp_path)
     with app.test_client() as client:
         _login(client)
         try:
@@ -135,8 +143,8 @@ def test_xlsx_happy_or_skip():
             assert body["meta"]["format"] == "xlsx"
 
 
-def test_menu_dry_run_meta_and_alias(monkeypatch):
-    app = _app()
+def test_menu_dry_run_meta_and_alias(monkeypatch, tmp_path):
+    app = _app(tmp_path)
     with app.test_client() as client:
         _login(client)
 
@@ -173,8 +181,8 @@ def test_menu_dry_run_meta_and_alias(monkeypatch):
         assert body.get("dry_run") is True  # legacy alias
 
 
-def test_unsupported_pdf_415():
-    app = _app()
+def test_unsupported_pdf_415(tmp_path):
+    app = _app(tmp_path)
     with app.test_client() as client:
         _login(client)
         resp = client.post(
@@ -185,8 +193,8 @@ def test_unsupported_pdf_415():
         assert resp.status_code in (415, 400)
 
 
-def test_rate_limit_flag_on(monkeypatch):
-    app = _app({"rate_limit_import": True})
+def test_rate_limit_flag_on(monkeypatch, tmp_path):
+    app = _app(tmp_path, {"rate_limit_import": True})
     with app.test_client() as client:
         _login(client)
         headers = {"X-Force-Rate-Limit": "1", "X-Force-Rate-Limit-Limit": "3"}

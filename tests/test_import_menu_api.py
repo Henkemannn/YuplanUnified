@@ -17,13 +17,27 @@ from core.components import (
     InMemoryRecipeRepository,
 )
 from core.menu import InMemoryCompositionAliasRepository, MenuService, create_composition_alias
+from core.db import create_all
 
 
-def _app():
-    return create_app({"TESTING": True})
+def _app(tmp_path):
+    app = create_app(
+        {
+            "TESTING": True,
+            "database_url": f"sqlite:///{(tmp_path / 'import_menu_main.db').as_posix()}",
+            "BUILDER_DB_PATH": str(tmp_path / "import_menu_builder.db"),
+            "FORCE_DB_REINIT": True,
+        }
+    )
+    with app.app_context():
+        create_all()
+    return app
 
 
 def _login(client):
+    client.environ_base.update(
+        {"HTTP_X_USER_ROLE": "admin", "HTTP_X_TENANT_ID": "1", "HTTP_X_USER_ID": "10"}
+    )
     with client.session_transaction() as sess:
         sess["tenant_id"] = 1
         sess["user_id"] = 10
@@ -62,8 +76,8 @@ def _build_flow():
     )
 
 
-def test_menu_dry_run_true_sets_meta_flag(monkeypatch):
-    app: Flask = _app()
+def test_menu_dry_run_true_sets_meta_flag(monkeypatch, tmp_path):
+    app: Flask = _app(tmp_path)
 
     class DummyImporter:
         def parse(self, data, filename, mime):
@@ -100,8 +114,8 @@ def test_menu_dry_run_true_sets_meta_flag(monkeypatch):
         assert len(body["rows"]) == 1
 
 
-def test_menu_unsupported_mime_415(monkeypatch):
-    app: Flask = _app()
+def test_menu_unsupported_mime_415(monkeypatch, tmp_path):
+    app: Flask = _app(tmp_path)
     import core.import_api as import_api_mod
 
     monkeypatch.setattr(import_api_mod, "_importer", None)
