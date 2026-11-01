@@ -21,6 +21,7 @@ def _row(
     text: str = "Dish",
     unresolved_text: str | None = None,
     error: str | None = None,
+    selection_group_id: str | None = None,
 ) -> CommunMenuProjectionRow:
     return CommunMenuProjectionRow(
         day=day,
@@ -30,6 +31,7 @@ def _row(
         builder_menu_id="menu-1",
         builder_menu_version=1,
         builder_menu_row_id=builder_menu_row_id,
+        selection_group_id=selection_group_id,
         composition_id=composition_id,
         resolved=resolved,
         text=text,
