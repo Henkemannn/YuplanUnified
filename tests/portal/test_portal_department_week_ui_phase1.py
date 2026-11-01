@@ -128,3 +128,32 @@ def test_portal_department_week_ui_renders_alt1_selected_state(client_admin, see
     assert "Val gjort" in html
     assert 'aria-pressed="true"' in html
     assert "portal-alt-selected" in html
+
+
+def test_portal_department_week_ui_handles_iso_year_boundary_without_menu(
+    client_admin,
+    seed_portal_department_data,
+):
+    dept_id = "22222222-3333-4444-5555-666666666669"
+    site_id = "bbbbbbbb-cccc-dddd-eeee-fffffffffff2"
+    seed_portal_department_data(dept_id=dept_id, site_id=site_id, year=2026, week=53)
+
+    week_53 = client_admin.get(
+        "/ui/portal/department/week?year=2026&week=53",
+        environ_overrides={"test_claims": {"department_id": dept_id}},
+    )
+    assert week_53.status_code == 200
+    html_53 = week_53.get_data(as_text=True)
+    assert "28 december" in html_53
+    assert "3 januari" in html_53
+    assert "Ingen meny publicerad för denna vecka." in html_53
+
+    week_1 = client_admin.get(
+        "/ui/portal/department/week?year=2027&week=1",
+        environ_overrides={"test_claims": {"department_id": dept_id}},
+    )
+    assert week_1.status_code == 200
+    html_1 = week_1.get_data(as_text=True)
+    assert "4 januari" in html_1
+    assert "10 januari" in html_1
+    assert "Ingen meny publicerad för denna vecka." in html_1

@@ -250,7 +250,8 @@ def test_department_portal_home_hides_stale_complete_and_excludes_past_publicati
     resp = client_admin.get("/ui/portal/department", headers=_h(), environ_overrides={"test_claims": {"department_id": DEPT_ID}})
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
-    assert "Vecka 39" not in html
+    assert "Vecka 39" in html
+    assert "Historik" in html
     assert "Behöver granskas igen" in html
     assert "Färdig" not in html
 
@@ -269,8 +270,75 @@ def test_department_portal_home_shows_empty_state_without_publications(client_ad
     resp = client_admin.get("/ui/portal/department", headers=_h(), environ_overrides={"test_claims": {"department_id": DEPT_ID}})
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
-    assert "Inga menyer har publicerats ännu." in html
-    assert "Vecka 40" not in html
+    current_year, current_week, _ = _date.today().isocalendar()
+    assert "Inga aktuella eller kommande menyer har publicerats." in html
+    assert f"Vecka {current_week}" in html
+    assert "Ingen meny publicerad" in html
+
+
+def test_department_portal_home_keeps_historical_week_navigation(
+    client_admin,
+    seed_portal_department_data,
+    seed_canonical_builder_publication,
+):
+    current_year, current_week, _ = _date.today().isocalendar()
+    seed_portal_department_data(dept_id=DEPT_ID, site_id=SITE_ID, year=current_year, week=current_week)
+    db = get_session()
+    try:
+        db.execute(
+            text("DELETE FROM commun_builder_publication_revisions WHERE site_id=:site_id AND year=2026 AND week=42"),
+            {"site_id": SITE_ID},
+        )
+        db.execute(
+            text("DELETE FROM commun_builder_publication_pins WHERE site_id=:site_id AND year=2026 AND week=42"),
+            {"site_id": SITE_ID},
+        )
+        db.commit()
+    finally:
+        db.close()
+    seed_canonical_builder_publication(site_id=SITE_ID, year=2026, week=42)
+
+    resp = client_admin.get("/ui/portal/department", headers=_h(), environ_overrides={"test_claims": {"department_id": DEPT_ID}})
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert f"/ui/portal/department/week?year={current_year}&amp;week={current_week}" in html
+    assert "/ui/portal/department/week?year=2026&amp;week=42" in html
+    assert "Historik" in html
+    assert "Inga aktuella eller kommande menyer har publicerats." in html
+
+
+def test_department_portal_week_selector_includes_historical_publication(
+    client_admin,
+    seed_portal_department_data,
+    seed_canonical_builder_publication,
+):
+    current_year, current_week, _ = _date.today().isocalendar()
+    seed_portal_department_data(dept_id=DEPT_ID, site_id=SITE_ID, year=current_year, week=current_week)
+    db = get_session()
+    try:
+        db.execute(
+            text("DELETE FROM commun_builder_publication_revisions WHERE site_id=:site_id AND year=2026 AND week=42"),
+            {"site_id": SITE_ID},
+        )
+        db.execute(
+            text("DELETE FROM commun_builder_publication_pins WHERE site_id=:site_id AND year=2026 AND week=42"),
+            {"site_id": SITE_ID},
+        )
+        db.commit()
+    finally:
+        db.close()
+    seed_canonical_builder_publication(site_id=SITE_ID, year=2026, week=42)
+
+    resp = client_admin.get(
+        f"/ui/portal/department/week?year={current_year}&week={current_week}",
+        headers=_h(),
+        environ_overrides={"test_claims": {"department_id": DEPT_ID}},
+    )
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert 'id="portal-week-selector"' in html
+    assert "/ui/portal/department/week?year=2026&amp;week=42" in html
+    assert "Ingen meny publicerad för denna vecka." in html
 
 
 def test_department_portal_home_shows_variable_identity_without_fake_zero(client_admin, seed_portal_department_data):
@@ -289,7 +357,7 @@ def test_department_portal_home_shows_variable_identity_without_fake_zero(client
     html = resp.get_data(as_text=True)
     assert "Kaktusen · Varierar per dag/måltid" in html
     assert "0 boende" not in html
-    assert "Inga menyer har publicerats ännu." in html
+    assert "Inga aktuella eller kommande menyer har publicerats." in html
 
 
 def test_department_portal_home_normalizes_duplicate_requirement_labels(client_admin, seed_portal_department_data, seed_canonical_builder_publication):

@@ -58,6 +58,12 @@
     </div>
   </section>
 
+  {% if not vm.has_published_menu %}
+    <div class="portal-week-empty-state" role="status">
+      Ingen meny publicerad för denna vecka.
+    </div>
+  {% endif %}
+
   <section id="portal-week-scroll" class="portal-week-grid" aria-label="Veckans dagar" data-scroll-owner>
     {% for day in vm.days %}
       {% set menu = day.menu %}

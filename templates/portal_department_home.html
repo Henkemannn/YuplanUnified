@@ -21,6 +21,20 @@
         <p class="app-shell__card-text">Välj och bekräfta publicerade veckor.</p>
       </div>
 
+      <nav class="portal-home-week-navigation" aria-label="Veckonavigering">
+        <h3>Veckonavigering</h3>
+        <div class="portal-home-week-navigation__links">
+          {% for option in vm.week_navigation %}
+            <a href="{{ option.url }}" class="portal-home-week-navigation__link{% if option.is_current %} is-current{% endif %}">
+              <span>Vecka {{ option.week }}</span>
+              <span class="portal-home-week-navigation__meta">
+                {% if option.is_current and not option.published %}Ingen meny publicerad{% elif not option.is_current %}Historik{% endif %}
+              </span>
+            </a>
+          {% endfor %}
+        </div>
+      </nav>
+
       {% if vm.weeks %}
         <div class="portal-home-week-list" role="list">
           {% for week in vm.weeks %}
@@ -39,7 +53,8 @@
         </div>
       {% else %}
         <div class="portal-home-empty-state">
-          <p>Inga menyer har publicerats ännu.</p>
+          <p>Inga aktuella eller kommande menyer har publicerats.</p>
+          <p>Äldre publicerade veckor finns under historik ovan.</p>
         </div>
       {% endif %}
     </section>

@@ -197,6 +197,7 @@ def build_department_home_payload(scope: DepartmentPortalScope) -> dict[str, Any
             )
 
         weeks: list[dict[str, Any]] = []
+        published_weeks: list[dict[str, Any]] = []
         publication_service = CommunBuilderPublicationService()
         status_service = DepartmentPortalWeekSubmissionService()
         rows = db.execute(
@@ -211,10 +212,17 @@ def build_department_home_payload(scope: DepartmentPortalScope) -> dict[str, Any
             year = int(year_raw)
             week = int(week_raw)
             week_start, week_end = _week_date_bounds(year, week)
-            if week_end < today:
-                continue
             publication = publication_service.get_publication_for_week(tenant_id=int(scope.tenant_id), site_id=site_id, year=year, week=week)
             if publication is None:
+                continue
+            published_weeks.append(
+                {
+                    "year": year,
+                    "week": week,
+                    "span": _week_span_label(year, week),
+                }
+            )
+            if week_end < today:
                 continue
             status = status_service.get_status(scope, year, week)
             status_text, status_class, review_text = _format_choice_status(status)
@@ -250,6 +258,7 @@ def build_department_home_payload(scope: DepartmentPortalScope) -> dict[str, Any
             "requirement_groups": requirement_groups,
             "service_addons": service_addons,
             "weeks": weeks,
+            "published_weeks": published_weeks,
         }
     finally:
         db.close()

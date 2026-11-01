@@ -79,6 +79,49 @@ def _portal_week_url(year: int, week: int, department_id: str | None = None) -> 
     return url_for("portal_dept_ui.portal_department_week_ui", year=year, week=week)
 
 
+def _week_navigation(
+    *,
+    published_weeks: list[dict[str, object]],
+    current_year: int,
+    current_week: int,
+    department_id: str | None = None,
+) -> list[dict[str, object]]:
+    options: dict[tuple[int, int], dict[str, object]] = {
+        (int(current_year), int(current_week)): {
+            "year": int(current_year),
+            "week": int(current_week),
+            "span": _format_sv_date_span(
+                _date.fromisocalendar(int(current_year), int(current_week), 1),
+                _date.fromisocalendar(int(current_year), int(current_week), 7),
+            ),
+            "published": False,
+        }
+    }
+    for published in published_weeks:
+        year = int(published.get("year") or 0)
+        week = int(published.get("week") or 0)
+        if year < 2000 or week < 1 or week > 53:
+            continue
+        options[(year, week)] = {
+            "year": year,
+            "week": week,
+            "span": str(published.get("span") or ""),
+            "published": True,
+        }
+    navigation: list[dict[str, object]] = []
+    for option in sorted(options.values(), key=lambda item: (int(item["year"]), int(item["week"]))):
+        year = int(option["year"])
+        week = int(option["week"])
+        navigation.append(
+            {
+                **option,
+                "url": _portal_week_url(year, week, department_id),
+                "is_current": (year, week) == (int(current_year), int(current_week)),
+            }
+        )
+    return navigation
+
+
 def _shift_iso_week(year: int, week: int, delta_weeks: int) -> tuple[int, int]:
     week_start = _date.fromisocalendar(year, week, 1)
     shifted = week_start + timedelta(days=7 * delta_weeks)
@@ -148,15 +191,17 @@ def portal_department_week_ui():  # type: ignore[override]
         contextual_department_id = None
     week_options: list[dict[str, object]] = []
     selected_week_key = f"{year}-{week}"
-    for option in home_payload.get("weeks", []):
+    for option in home_payload.get("published_weeks", []):
         option_year = int(option.get("year") or 0)
         option_week = int(option.get("week") or 0)
+        option_start = _date.fromisocalendar(option_year, option_week, 1)
+        option_end = _date.fromisocalendar(option_year, option_week, 7)
         option_url = _portal_week_url(option_year, option_week, contextual_department_id)
         week_options.append(
             {
                 "year": option_year,
                 "week": option_week,
-                "label": f"Vecka {option_week} · {option.get('span', '')} {option_year}",
+                "label": f"Vecka {option_week} · {_format_sv_date_span(option_start, option_end)}",
                 "url": option_url,
                 "selected": f"{option_year}-{option_week}" == selected_week_key,
             }
@@ -196,6 +241,11 @@ def portal_department_week_ui():  # type: ignore[override]
         "etag_map": payload["etag_map"],
         "summary": payload.get("summary", {"registered_lunch_days": 0, "registered_dinner_days": 0}),
         "week_selector_label": f"Vecka {week} · {week_span_label}",
+        "has_published_menu": any(
+            bool(day.get("menu", {}).get(key))
+            for day in payload["days"]
+            for key in ("lunch_alt1", "lunch_alt2", "dessert", "dinner")
+        ),
     }
     portal_home_url = _portal_home_url(scope)
     return render_template(
@@ -229,6 +279,14 @@ def portal_department_home_ui():  # type: ignore[override]
     explicit_department_id = (request.args.get("department_id") or "").strip() or None
     scope = resolve_department_portal_scope(explicit_department_id=explicit_department_id)
     vm = build_department_home_payload(scope)
+    current_year, current_week, _ = _date.today().isocalendar()
+    contextual_department_id = explicit_department_id if scope.role != "unit_portal" else None
+    vm["week_navigation"] = _week_navigation(
+        published_weeks=list(vm.get("published_weeks", [])),
+        current_year=int(current_year),
+        current_week=int(current_week),
+        department_id=contextual_department_id,
+    )
     if explicit_department_id and scope.role != "unit_portal":
         for week in vm.get("weeks", []):
             week["url"] = _portal_week_url(int(week["year"]), int(week["week"]), explicit_department_id)
