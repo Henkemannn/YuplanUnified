@@ -2,11 +2,24 @@ import pytest
 from flask import Flask
 
 from core.app_factory import create_app
+from core.db import create_all
 
 
 @pytest.fixture(scope="module")
-def app():
-    return create_app({"TESTING": True, "SECRET_KEY": "test"})
+def app(tmp_path_factory):
+    root = tmp_path_factory.mktemp("tasks-api")
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "test",
+            "database_url": f"sqlite:///{(root / 'tasks_main.db').as_posix()}",
+            "BUILDER_DB_PATH": str(root / "tasks_builder.db"),
+            "FORCE_DB_REINIT": True,
+        }
+    )
+    with app.app_context():
+        create_all()
+    return app
 
 
 @pytest.fixture()
@@ -21,6 +34,13 @@ def auth_session(client):
     """
 
     def _login(role: str = "admin", tenant_id: int = 1, user_id: int = 100):
+        client.environ_base.update(
+            {
+                "HTTP_X_USER_ROLE": role,
+                "HTTP_X_TENANT_ID": str(tenant_id),
+                "HTTP_X_USER_ID": str(user_id),
+            }
+        )
         with client.session_transaction() as sess:  # type: ignore[attr-defined]
             sess["role"] = role
             sess["tenant_id"] = tenant_id
