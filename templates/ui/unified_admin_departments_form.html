@@ -789,6 +789,7 @@
 </dialog>
 {% endif %}
 
+{% if vm.mode == 'edit' and vm.department %}
 <dialog id="residents-variation-modal" class="ua-modal admin-variation-modal">
     <div class="ua-modal-inner admin-variation-modal__inner">
         <header class="ua-modal-header admin-variation-modal__header">
@@ -901,6 +902,7 @@
         </footer>
     </div>
 </dialog>
+{% endif %}
 {% endif %}
 
 {% endblock %}
