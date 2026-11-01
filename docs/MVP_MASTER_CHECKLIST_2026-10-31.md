@@ -294,6 +294,19 @@ Uppgivet beteende: läser aktiva site-scopade addons, löser `whole_department` 
 
 **Priority immediately after selective commit:** P0 GitHub [#131](https://github.com/Henkemannn/YuplanUnified/issues/131): new department user sees neither week selector nor selectable menus, and previously created department portal accounts reportedly no longer visible in central kitchen admin. Investigation begins READ-ONLY with local effective SQLite path, user/role/tenant/site/department bindings and visibility, actual published menu and portal view; no reset, re-seeding, writes or auth bypass before root-cause evidence.
 
+## Planerad data-/importacceptans: 10 DOCX-veckomenyer över årsskiftet (2026-11-01)
+
+**PARKERAD – genomförs först när pågående pytest-återhämtning och P0-portalundersökning är hanterade; ingen ny Copilot-order eller DOCX-generering nu.**
+
+Skapa **10 individuella DOCX-veckomenyer** för Kommun-storkök, veckorna **v44–v53 år 2026** (måndag–söndag). Varje meny ska ha:
+- **Måndag–fredag:** Lunch alternativ 1 och Lunch alternativ 2, dessert, kvällsmat.
+- **Lördag–söndag:** endast Lunch alternativ 1 (ingen påhittad Alt 2), dessert, kvällsmat.
+- Realistiska svenska storköks-/äldreomsorgsrätter och tydliga dag-/måltidsrubriker, så att Builder-importen kan verifieras med kontrollerbara slotstrukturer.
+
+Kalender: **v53 2026 löper 2026-12-28 till 2027-01-03**; tio menyer korsar kalenderår, men inte ISO-veckoskiftet **v53 → v1**. **Rekommendera en extra 11:e DOCX för v1 2027 (2027-01-04–10)** för full verifiering av week/year-nycklar. Alternativt beslutas antalet senare med användaren, utan att hoppa över v53.
+
+Vid acceptans: DOCX-parser för vardag/helg och 1/2 lunchalternativ, dessert och kvällsmat, korrekta år/veckonummer, publiceringssnapshot/site-scope, inloggning som ny avdelningsanvändare, veckoväljare och korrekta valbara rätter samt säkert tomläge när meny saknas. Kontrollera att importerad ny vecka inte ersätter tidigare publicerad meny. Ingen produktion/seed/menypublicering mot pilotdatabas under diagnostik.
+
 ## Rekommenderad återstående ordning
 
 1. Avsluta den nuvarande CI-censusen: välj små, testade Ruff- och därefter Vitest-fixar, utan att skriva om fungerande produktbeteende.
