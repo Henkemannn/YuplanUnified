@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import os
 import shutil
+import subprocess
+import sys
 from dataclasses import replace
 from datetime import date as _date
+from pathlib import Path
 
 import pytest
 
@@ -1041,19 +1045,45 @@ def test_build_product2_page3_vm_omits_zero_quantity_completion_refs(monkeypatch
 
 
 def test_build_product2_page3_vm_live_completion_targets_are_read_only(monkeypatch, tmp_path):
-    from scripts.seed_product2_e2e import BUILDER_DB_PATH, MAIN_DB_PATH
     from scripts.prepare_product2_completion_e2e import prepare_product2_completion_e2e
 
-    temp_main_db = tmp_path / "product2_e2e.db"
-    temp_builder_db = tmp_path / "product2_e2e_builder.db"
-    shutil.copy2(MAIN_DB_PATH, temp_main_db)
-    shutil.copy2(BUILDER_DB_PATH, temp_builder_db)
+    workspace = tmp_path / "workspace"
+    scripts_dir = workspace / "scripts"
+    instance_dir = workspace / "instance"
+    scripts_dir.mkdir(parents=True)
+    instance_dir.mkdir()
+    project_root = Path(__file__).resolve().parents[2]
+    shutil.copy2(project_root / "scripts" / "seed_product2_e2e.py", scripts_dir / "seed_product2_e2e.py")
+
+    temp_main_db = instance_dir / "product2_e2e.db"
+    temp_builder_db = instance_dir / "product2_e2e_builder.db"
+    assert temp_main_db.is_relative_to(instance_dir)
+    assert temp_builder_db.is_relative_to(instance_dir)
+    assert project_root / "instance" not in (temp_main_db, temp_builder_db)
+    database_url = f"sqlite:///{temp_main_db.as_posix()}"
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("BUILDER_DB_PATH", str(temp_builder_db))
+    subprocess.run(
+        [sys.executable, str(scripts_dir / "seed_product2_e2e.py")],
+        cwd=workspace,
+        env={
+            **os.environ,
+            "DATABASE_URL": database_url,
+            "BUILDER_DB_PATH": str(temp_builder_db),
+            "PYTHONPATH": os.pathsep.join(
+                [str(project_root), os.environ.get("PYTHONPATH", "")]
+            ),
+        },
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     prepare_product2_completion_e2e(main_db_path=temp_main_db, builder_db_path=temp_builder_db)
 
     app = create_app(
         {
             "TESTING": True,
-            "database_url": f"sqlite:///{temp_main_db.as_posix()}",
+            "database_url": database_url,
             "BUILDER_DB_PATH": str(temp_builder_db),
         }
     )
