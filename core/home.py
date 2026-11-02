@@ -30,105 +30,10 @@ def index():  # pragma: no cover - legacy landing retained under /home
 
 @bp.route("/ui/login", methods=["GET", "POST"])
 def ui_login():  # Simple HTML login that sets session directly or redirects to auth login
-    from werkzeug.security import check_password_hash
-    from .db import get_session as _get_session
-    from .models import User
-    from .auth import set_csrf_cookie as _set_csrf_cookie, _lookup_user_by_email as _get_user_by_email
-    from flask import make_response
     if request.method == "POST":
-        email = (request.form.get("email") or "").strip().lower()
-        password = request.form.get("password") or ""
-        if not email or not password:
-            return render_template("login.html", vm={"error": "Saknade uppgifter"})
-        db = _get_session()
-        try:
-            user = _get_user_by_email(db, email)
-            if not user or not check_password_hash(user.password_hash, password):
-                return render_template("login.html", vm={"error": "Ogiltiga uppgifter"})
-            # Set session
-            try:
-                # Stabilize by clearing prior keys first
-                session.clear()
-            except Exception:
-                pass
-            session["user_id"] = user.id
-            session["role"] = user.role
-            session["tenant_id"] = user.tenant_id
-            # Enrich session with identity for greetings
-            try:
-                session["user_email"] = user.email
-                if getattr(user, "full_name", None):
-                    session["full_name"] = user.full_name
-            except Exception:
-                pass
-            # Auto-select site for single-site admins to avoid selector
-            try:
-                if user.role == "admin":
-                    from .admin_repo import SitesRepo as _SitesRepo
-                    repo = _SitesRepo()
-                    # Prefer tenant-scoped listing when available
-                    sites = repo.list_sites_for_tenant(user.tenant_id) or []
-                    if not sites:
-                        # Fallback to global listing in sqlite/dev environments
-                        sites = repo.list_sites() or []
-                    if len(sites) == 1:
-                        session["site_id"] = str(sites[0]["id"])  # single-site shortcut
-                elif user.role == "kitchen":
-                    try:
-                        from sqlalchemy import text as _t
+        from .auth import login as _auth_login
 
-                        row_k = db.execute(
-                            _t(
-                                "SELECT site_id FROM kitchen_user_sites "
-                                "WHERE user_id=:uid AND tenant_id=:tid LIMIT 1"
-                            ),
-                            {"uid": int(user.id), "tid": int(user.tenant_id)},
-                        ).fetchone()
-                        if row_k and row_k[0]:
-                            session["site_id"] = str(row_k[0])
-                            session["site_lock"] = True
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-            # Ensure CSRF cookie
-            import secrets as _secrets
-            tok = request.cookies.get("csrf_token") or _secrets.token_hex(16)
-            # Role-based redirect to proper dashboards
-            target = "/"
-            if user.role == "superuser":
-                target = "/ui/systemadmin/dashboard"
-            elif user.role == "kitchen":
-                target = "/ui/kitchen"
-            elif user.role == "admin":
-                target = "/ui/admin"
-            elif user.role == "unit_portal":
-                target = "/ui/portal/department"
-            elif user.role in ("staff", "department"):
-                target = "/ui/portal/week"
-            else:
-                target = "/ui/admin"
-            resp = make_response(redirect(target))
-            _set_csrf_cookie(resp, tok)
-            try:
-                from .pilot_activity import track_activity as _track_activity
-
-                _track_activity(
-                    event_type="login",
-                    user_id=session.get("user_id"),
-                    site_id=(session.get("site_id") or "").strip() or None,
-                )
-            except Exception:
-                pass
-            try:
-                logger = current_app.config.get("DEV_AUTH_FINGERPRINT_LOGGER")
-                if callable(logger):
-                    logger("login_ok")
-            except Exception:
-                pass
-            return resp
-        finally:
-            db.close()
+        return _auth_login()
     # For GET, prefer the polished auth login page and preserve `next` parameter
     try:
         next_url = (request.args.get("next") or "/").strip()

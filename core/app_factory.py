@@ -1044,6 +1044,14 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         except Exception:
             # Non-fatal; continue to handlers
             pass
+        # Apply impersonation before validating site context so stale-site checks use
+        # the effective tenant rather than the pre-impersonation session tenant.
+        try:
+            from .impersonation import apply_impersonation  # local import to avoid cycles
+
+            apply_impersonation()
+        except Exception:  # pragma: no cover - defensive
+            app.logger.warning("Failed to apply impersonation", exc_info=True)
         # Query param site_id should not override session site; show banner when mismatched
         # Explicit mismatch should fail fast only for weekview UI routes.
         try:
@@ -1083,13 +1091,6 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         except Exception:
             # Non-fatal; proceed without clearing if any issue arises
             pass
-        # Apply impersonation (may override tenant context)
-        try:
-            from .impersonation import apply_impersonation  # local import to avoid cycles
-
-            apply_impersonation()
-        except Exception:  # pragma: no cover - defensive
-            app.logger.warning("Failed to apply impersonation", exc_info=True)
         g._t0 = time.perf_counter()
         g.request_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())
         _load_feature_flags_logic()

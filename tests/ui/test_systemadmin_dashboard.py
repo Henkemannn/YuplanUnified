@@ -30,12 +30,12 @@ def test_systemadmin_dashboard_renders_for_superuser(app_session, client: FlaskC
         finally:
             db.close()
 
-    # 1) Login via /ui/login
+    # 1) Login via the current auth contract
     resp = client.post(
-        "/ui/login",
-        data={"email": "sysadmin@example.com", "password": "superpass"},
-        follow_redirects=True,
+        "/auth/login",
+        json={"email": "sysadmin@example.com", "password": "superpass"},
     )
+    resp = client.get("/ui/systemadmin/dashboard")
 
     # 2) Should end up on /ui/systemadmin/dashboard with 200
     assert resp.status_code == 200

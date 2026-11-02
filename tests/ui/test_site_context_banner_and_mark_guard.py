@@ -93,7 +93,7 @@ def _create_department(client: FlaskClient, app_session, site_id: str, name: str
 
 def test_A_query_param_site_id_does_not_switch_site_and_shows_banner(app_session, client: FlaskClient):
     ta, tb = _seed_superuser_and_tenants(app_session)
-    client.post("/ui/login", data={"email": "sa-banner@example.com", "password": "superpass"}, follow_redirects=True)
+    client.post("/auth/login", json={"email": "sa-banner@example.com", "password": "superpass"})
     _create_site(client, ta, name="Site A-CTX", admin_email="adm.a@x")
     _create_site(client, tb, name="Site B-CTX", admin_email="adm.b@x")
     site_a = _get_site_id_by_name(app_session, "Site A-CTX")
@@ -113,7 +113,7 @@ def test_A_query_param_site_id_does_not_switch_site_and_shows_banner(app_session
 def test_B_mark_done_wrong_site_returns_403_and_no_write(app_session, client: FlaskClient):
     from datetime import date
     ta, tb = _seed_superuser_and_tenants(app_session)
-    client.post("/ui/login", data={"email": "sa-banner@example.com", "password": "superpass"}, follow_redirects=True)
+    client.post("/auth/login", json={"email": "sa-banner@example.com", "password": "superpass"})
     _create_site(client, ta, name="Site A-MARK", admin_email="adm.a2@x")
     _create_site(client, tb, name="Site B-MARK", admin_email="adm.b2@x")
     site_a = _get_site_id_by_name(app_session, "Site A-MARK")

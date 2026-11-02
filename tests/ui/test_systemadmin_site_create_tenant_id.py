@@ -38,9 +38,8 @@ def test_systemadmin_site_create_sets_tenant_id(app_session, client: FlaskClient
 
     # Login as superuser
     client.post(
-        "/ui/login",
-        data={"email": "sysadmin-create@example.com", "password": "superpass"},
-        follow_redirects=True,
+        "/auth/login",
+        json={"email": "sysadmin-create@example.com", "password": "superpass"},
     )
 
     # Create a site for the tenant
@@ -134,9 +133,8 @@ def test_systemadmin_can_add_additional_admin_for_site(app_session, client: Flas
             db.close()
 
     client.post(
-        "/ui/login",
-        data={"email": "sysadmin-add-admin@example.com", "password": "superpass"},
-        follow_redirects=True,
+        "/auth/login",
+        json={"email": "sysadmin-add-admin@example.com", "password": "superpass"},
     )
 
     resp = client.post(
