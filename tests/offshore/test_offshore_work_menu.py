@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-import uuid
+import gc
+import os
 import re
+import shutil
+import tempfile
+import uuid
 from datetime import UTC, date, datetime, time
 
 import pytest
@@ -10,7 +14,7 @@ from core.app_factory import create_app
 from core.builder.library_scope import ActorContext
 from core.builder.library_scope import ObjectScope
 from core.db import create_all, get_session
-from core.models import CommunBuilderPublicationPin, Site, Tenant
+from core.models import CommunBuilderPublicationPin, Site, Tenant, User
 from modules.offshore2.menu_context import _service as menu_context_service
 from modules.offshore2.models import OffshoreInstallationSettings, OffshoreWorkMenuDecision
 from modules.offshore2.periods import _service as period_service
@@ -21,6 +25,7 @@ from core.builder_menu_context_api import _get_menu_context_flow
 
 
 TEST_WORK_MENU_DAY = datetime.now(UTC).date()
+_TEMP_DB_DIRS: list[str] = []
 
 
 class _MemoryScopeRepository:
@@ -67,17 +72,52 @@ def _login(client, *, tenant_id: int, site_id: str, role: str):
         sess["site_id"] = site_id
         sess["user_id"] = 42
         sess["role"] = role
+        sess["auth_version"] = 1
         sess["full_name"] = "Henrik"
 
 
 def _mk_app():
-    app = create_app({"TESTING": True, "SECRET_KEY": "test", "database_url": "sqlite:///:memory:"})
+    db_dir = tempfile.mkdtemp(prefix="offshore_work_menu_")
+    _TEMP_DB_DIRS.append(db_dir)
+    main_db_path = os.path.join(db_dir, "main.db")
+    builder_db_path = os.path.join(db_dir, "builder.db")
+    previous_builder_db_path = os.environ.get("BUILDER_DB_PATH")
+    os.environ["BUILDER_DB_PATH"] = builder_db_path
+    try:
+        app = create_app(
+            {
+                "TESTING": True,
+                "SECRET_KEY": "test",
+                "database_url": f"sqlite:///{main_db_path}",
+                "BUILDER_DB_PATH": builder_db_path,
+                "FORCE_DB_REINIT": True,
+            }
+        )
+    finally:
+        if previous_builder_db_path is None:
+            os.environ.pop("BUILDER_DB_PATH", None)
+        else:
+            os.environ["BUILDER_DB_PATH"] = previous_builder_db_path
     with app.app_context():
         create_all()
         db = get_session()
         try:
             if not db.query(Tenant).filter_by(id=1).first():
                 db.add(Tenant(id=1, name="Tenant One"))
+            if not db.query(User).filter_by(id=42).first():
+                db.add(
+                    User(
+                        id=42,
+                        tenant_id=1,
+                        username="offshore-test",
+                        email="offshore-test@example.test",
+                        password_hash="not-used",
+                        auth_version=1,
+                        role="cook",
+                        full_name="Henrik",
+                        is_active=True,
+                    )
+                )
             db.commit()
         finally:
             db.close()
@@ -143,6 +183,7 @@ def _seed_builder_menu(app, *, menu_id: str = "builder-menu-1") -> None:
     with app.app_context():
         flow = _get_builder_flow()
         menu_flow = _get_menu_context_flow()
+        actor = ActorContext(tenant_id=1, user_id=42, site_id="demo-site", role="admin")
         seeded_compositions = [
             ("demo_offshore_kott", "Demo Offshore Kött", "demo-offshore"),
             ("demo_offshore_fisk", "Demo Offshore Fisk", "demo-offshore"),
@@ -154,19 +195,40 @@ def _seed_builder_menu(app, *, menu_id: str = "builder-menu-1") -> None:
             ("real_ovrigt_dish", "Grönsakssoppa med bröd", "ovrigt"),
         ]
         for composition_id, composition_name, library_group in seeded_compositions:
-            flow.create_standalone_component(composition_name)
+            flow.create_standalone_component(composition_name, actor=actor)
             if flow._composition_repository.get(composition_id) is None:
-                flow.create_composition(composition_id, composition_name, library_group=library_group)
+                flow.create_composition(
+                    composition_id,
+                    composition_name,
+                    library_group=library_group,
+                    actor=actor,
+                )
             flow.add_component_to_composition(
                 composition_id=composition_id,
                 component_name=composition_name,
                 role="main",
+                actor=actor,
             )
         menu_flow.create_menu(menu_id=menu_id, site_id="demo-site", week_key="demo-week", title="Demo Offshore Builder Menu", version=1, status="draft")
         for day in ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"):
             for meal_slot in ("lunch", "dinner"):
                 for sort_order, composition_id in enumerate(("demo_offshore_kott", "demo_offshore_fisk", "demo_offshore_soppa", "demo_offshore_vegetariskt", "real_kott_dish", "real_fisk_dish", "real_dessert_dish", "real_ovrigt_dish"), start=1):
                     menu_flow.add_composition_menu_row(menu_id=menu_id, day=day, meal_slot=meal_slot, composition_id=composition_id, sort_order=sort_order)
+
+
+def teardown_module() -> None:
+    from core import db as db_mod
+
+    if db_mod._SessionFactory is not None:
+        db_mod._SessionFactory.remove()
+    if db_mod._engine is not None:
+        db_mod._engine.dispose()
+    db_mod._SessionFactory = None
+    db_mod._engine = None
+    gc.collect()
+    for db_dir in _TEMP_DB_DIRS:
+        shutil.rmtree(db_dir)
+    _TEMP_DB_DIRS.clear()
 
 
 def _seed_period(app, *, tenant_id: int, site_id: str):
