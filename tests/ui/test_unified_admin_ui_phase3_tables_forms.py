@@ -11,6 +11,10 @@ Tests that all admin CRUD pages use the unified design system:
 
 import pytest
 from flask.testing import FlaskClient
+from sqlalchemy import text
+from werkzeug.security import generate_password_hash
+
+from core.db import get_session
 
 
 def _h(role="admin"):
@@ -30,7 +34,7 @@ def test_departments_list_uses_yp_table(client_admin: FlaskClient):
     
     # Page should render with yp-button (present in both empty and populated states)
     assert 'class="yp-button yp-button-primary"' in html
-    assert 'Lägg till avdelning' in html
+    assert '+ Ny avdelning' in html
     
     # Note: .yp-table only appears when departments exist
     # This test verifies the page loads and uses unified design components
@@ -44,7 +48,7 @@ def test_users_list_uses_yp_table(client_admin: FlaskClient):
     
     # Page should render with yp-button components
     assert 'class="yp-button' in html
-    assert 'Ny användare' in html
+    assert '+ Skapa användare' in html
     
     # Note: .yp-table only appears when users exist
     # This test verifies the page loads and uses unified design components
@@ -110,9 +114,8 @@ def test_departments_form_uses_yp_form(client_admin: FlaskClient):
     # Should use .yp-input
     assert 'class="yp-input"' in html
     
-    # Should have icons in labels
-    assert '🏷️ Namn' in html
-    assert '🔢 Antal boende' in html
+    assert 'Avdelningsnamn' in html
+    assert 'Antal personer' in html
     
     # Should have .yp-form-help
     assert 'class="yp-form-help"' in html
@@ -136,11 +139,9 @@ def test_users_form_uses_yp_form(client_admin: FlaskClient):
     # Should use .yp-input
     assert 'class="yp-input"' in html
     
-    # Should have icons in labels
-    assert '👤 Användarnamn' in html
-    assert '📧 E-post' in html
-    assert '👥 Roll' in html
-    assert '🔑 Lösenord' in html
+    assert 'E-post' in html
+    assert 'Typ' in html
+    assert 'Lösenord' in html
     
     # Should have .yp-form-help
     assert 'class="yp-form-help"' in html
@@ -171,7 +172,7 @@ def test_departments_list_uses_yp_button(client_admin: FlaskClient):
     
     # Header button
     assert 'class="yp-button yp-button-primary"' in html
-    assert '➕' in html
+    assert '+ Ny avdelning' in html
     
     # Should have edit/delete button classes (if any departments exist)
     assert 'yp-button' in html
@@ -185,7 +186,7 @@ def test_users_list_uses_yp_button(client_admin: FlaskClient):
     
     # Header button
     assert 'class="yp-button yp-button-primary"' in html
-    assert '➕ Ny användare' in html
+    assert '+ Skapa användare' in html
     
     # Should have action button classes
     assert 'yp-button' in html
@@ -198,10 +199,10 @@ def test_department_form_uses_yp_button(client_admin: FlaskClient):
     html = response.data.decode('utf-8')
     
     assert 'class="yp-button yp-button-primary"' in html
-    assert '💾 Skapa avdelning' in html
+    assert 'Skapa avdelning' in html
     
     assert 'class="yp-button yp-button-secondary"' in html
-    assert '✖ Avbryt' in html
+    assert 'Avbryt' in html
 
 
 def test_user_form_uses_yp_button(client_admin: FlaskClient):
@@ -211,10 +212,10 @@ def test_user_form_uses_yp_button(client_admin: FlaskClient):
     html = response.data.decode('utf-8')
     
     assert 'class="yp-button yp-button-primary"' in html
-    assert '💾 Skapa användare' in html
+    assert 'Skapa användare' in html
     
     assert 'class="yp-button yp-button-secondary"' in html
-    assert '✖ Avbryt' in html
+    assert 'Tillbaka' in html
 
 
 def test_reports_weekly_uses_yp_button(client_admin: FlaskClient):
@@ -248,12 +249,31 @@ def test_menu_planning_uses_yp_button(client_admin: FlaskClient):
 
 def test_users_list_uses_yp_badge_for_roles(client_admin: FlaskClient):
     """Test that users list uses .yp-badge for role badges."""
+    db = get_session()
+    try:
+        db.execute(
+            text(
+                "INSERT INTO users (tenant_id, email, password_hash, role, username, full_name, is_active) "
+                "VALUES (1, :email, :password_hash, 'admin', :username, :full_name, 1)"
+            ),
+            {
+                "email": "badge.admin@example.com",
+                "password_hash": generate_password_hash("badge-pass"),
+                "username": "badge.admin@example.com",
+                "full_name": "Badge Admin",
+            },
+        )
+        db.commit()
+    finally:
+        db.close()
+
     response = client_admin.get('/ui/admin/users', headers=_h())
     assert response.status_code == 200
     html = response.data.decode('utf-8')
     
     # Should use .yp-badge classes
-    assert 'class="yp-badge' in html
+    assert 'class="yp-badge yp-badge-secondary"' in html
+    assert "Admin" in html
 
 
 def test_users_list_uses_yp_badge_for_status(client_admin: FlaskClient):

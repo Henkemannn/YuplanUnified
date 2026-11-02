@@ -378,7 +378,8 @@ def test_login_unit_portal_follow_redirect_reaches_department_portal(monkeypatch
             assert follow.request.path == "/ui/portal/department"
             html = follow.get_data(as_text=True)
             assert "Avdelningsportal" in html
-            assert "/ui/portal/department/week" not in html
+            assert 'href="/ui/portal/department/week' in html
+            assert "Veckonavigering" in html
         finally:
             db.close()
 
