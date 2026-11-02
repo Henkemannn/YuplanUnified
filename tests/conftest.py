@@ -198,6 +198,19 @@ def app_session(request):
     return app
 
 
+@pytest.fixture(autouse=True)
+def _restore_session_database_engine(request):
+    state = getattr(request.config, "_yuplan_test_db_state", None)
+    if state is not None:
+        from core import db as db_mod
+
+        if db_mod._engine is None or db_mod._SessionFactory is None:
+            from core.db import init_engine
+
+            init_engine(f"sqlite:///{state['main_db'].as_posix()}", force=True)
+    yield
+
+
 @pytest.fixture(scope="function")
 def client_admin(app_session):
     c = app_session.test_client()
