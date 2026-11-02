@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from html.parser import HTMLParser
 from urllib.parse import urlsplit
@@ -13,15 +15,42 @@ import pytest
 from core.app_factory import create_app
 from core.db import get_session
 from core.planera_product2_page2_context import build_product2_page2_planning_context
-from scripts.seed_product2_e2e import MAIN_DB_PATH, BUILDER_DB_PATH, SITE_ID, YEAR, WEEK, SERVICE_DATE
+from scripts.seed_product2_e2e import SERVICE_DATE, SITE_ID, WEEK, YEAR
+
+
+@dataclass(frozen=True)
+class Product2SeedWorkspace:
+    root: Path
+    script: Path
+    main_db: Path
+    builder_db: Path
 
 
 def _python_executable() -> str:
     return str(Path(sys.executable))
 
 
-def _seed_script_path() -> Path:
+def _seed_script_source() -> Path:
     return Path(__file__).resolve().parents[2] / "scripts" / "seed_product2_e2e.py"
+
+
+def _make_seed_workspace(tmp_path: Path) -> Product2SeedWorkspace:
+    repository_root = Path(__file__).resolve().parents[2]
+    workspace_root = tmp_path / "workspace"
+    script_path = workspace_root / "scripts" / "seed_product2_e2e.py"
+    script_path.parent.mkdir(parents=True)
+    shutil.copy2(_seed_script_source(), script_path)
+    workspace = Product2SeedWorkspace(
+        root=workspace_root,
+        script=script_path,
+        main_db=workspace_root / "instance" / "product2_e2e.db",
+        builder_db=workspace_root / "instance" / "product2_e2e_builder.db",
+    )
+    assert workspace.script.resolve().is_relative_to(workspace.root.resolve())
+    assert workspace.root.resolve() != repository_root.resolve()
+    assert not workspace.main_db.resolve().is_relative_to(repository_root / "instance")
+    assert not workspace.builder_db.resolve().is_relative_to(repository_root / "instance")
+    return workspace
 
 
 def _load_counts() -> dict[str, int]:
@@ -98,30 +127,43 @@ def _cleanup_seed_db_state() -> None:
             pass
 
 
-def _seed_via_subprocess(*, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+def _seed_via_subprocess(
+    workspace: Product2SeedWorkspace,
+    *,
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
+    repository_root = Path(__file__).resolve().parents[2]
+    inherited_pythonpath = env.get("PYTHONPATH", "")
+    pythonpath = [str(repository_root)]
+    if inherited_pythonpath:
+        pythonpath.append(inherited_pythonpath)
     env.update(
         {
             "APP_ENV": "local",
             "FLASK_ENV": "local",
             "DEPLOY_ENV": "local",
-            "DATABASE_URL": f"sqlite:///{MAIN_DB_PATH.as_posix()}",
-            "BUILDER_DB_PATH": str(BUILDER_DB_PATH),
+            "DATABASE_URL": f"sqlite:///{workspace.main_db.as_posix()}",
+            "BUILDER_DB_PATH": str(workspace.builder_db),
+            "PYTHONPATH": os.pathsep.join(pythonpath),
         }
     )
     if extra_env:
         env.update(extra_env)
     return subprocess.run(
-        [_python_executable(), str(_seed_script_path())],
+        [_python_executable(), str(workspace.script)],
         capture_output=True,
         text=True,
         env=env,
+        cwd=workspace.root,
         check=False,
     )
 
 
-def test_seed_refuses_dev_db_and_production_like_env() -> None:
+def test_seed_refuses_dev_db_and_production_like_env(tmp_path) -> None:
+    workspace = _make_seed_workspace(tmp_path)
     result = _seed_via_subprocess(
+        workspace,
         extra_env={
             "APP_ENV": "production",
             "DATABASE_URL": "sqlite:///dev.db",
@@ -133,23 +175,23 @@ def test_seed_refuses_dev_db_and_production_like_env() -> None:
 
 
 def test_seed_product2_e2e_builds_isolated_dataset(tmp_path, monkeypatch) -> None:
-    monkeypatch.chdir(tmp_path)
-    result = _seed_via_subprocess()
+    workspace = _make_seed_workspace(tmp_path)
+    result = _seed_via_subprocess(workspace)
 
     assert result.returncode == 0, result.stderr or result.stdout
-    assert MAIN_DB_PATH.exists()
-    assert BUILDER_DB_PATH.exists()
+    assert workspace.main_db.exists()
+    assert workspace.builder_db.exists()
 
     # Deterministic reseed should succeed cleanly and preserve the same counts.
-    result_again = _seed_via_subprocess()
+    result_again = _seed_via_subprocess(workspace)
     assert result_again.returncode == 0, result_again.stderr or result_again.stdout
 
     try:
         app = create_app(
             {
                 "TESTING": True,
-                "database_url": f"sqlite:///{MAIN_DB_PATH.as_posix()}",
-                "BUILDER_DB_PATH": str(BUILDER_DB_PATH),
+                "database_url": f"sqlite:///{workspace.main_db.as_posix()}",
+                "BUILDER_DB_PATH": str(workspace.builder_db),
             }
         )
         with app.app_context():
@@ -226,16 +268,17 @@ def test_seed_product2_e2e_builds_isolated_dataset(tmp_path, monkeypatch) -> Non
 
 
 def test_seed_product2_e2e_normal_html_auth_and_page_flow(tmp_path, monkeypatch) -> None:
+    workspace = _make_seed_workspace(tmp_path)
     monkeypatch.chdir(tmp_path)
-    result = _seed_via_subprocess()
+    result = _seed_via_subprocess(workspace)
     assert result.returncode == 0, result.stderr or result.stdout
 
     try:
         app = create_app(
             {
                 "TESTING": True,
-                "database_url": f"sqlite:///{MAIN_DB_PATH.as_posix()}",
-                "BUILDER_DB_PATH": str(BUILDER_DB_PATH),
+                "database_url": f"sqlite:///{workspace.main_db.as_posix()}",
+                "BUILDER_DB_PATH": str(workspace.builder_db),
             }
         )
         with app.app_context():
