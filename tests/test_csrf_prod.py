@@ -1,16 +1,32 @@
 import secrets
 
 from core import create_app
+from core.db import create_all
 
 
-def _make_app():
+def _make_app(tmp_path, monkeypatch):
     # Force production-like CSRF (TESTING False) but keep other defaults.
     # We explicitly disable TESTING to exercise production policy.
-    return create_app({"TESTING": False, "SECRET_KEY": "csrf-secret", "ENABLE_CSRF": True})
+    database_url = f"sqlite:///{(tmp_path / 'csrf_main.db').as_posix()}"
+    builder_db_path = tmp_path / "csrf_builder.db"
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("BUILDER_DB_PATH", str(builder_db_path))
+    app = create_app(
+        {
+            "TESTING": False,
+            "SECRET_KEY": "csrf-secret",
+            "ENABLE_CSRF": True,
+            "database_url": database_url,
+            "BUILDER_DB_PATH": str(builder_db_path),
+        }
+    )
+    with app.app_context():
+        create_all()
+    return app
 
 
-def test_post_without_token_forbidden():
-    app = _make_app()
+def test_post_without_token_forbidden(tmp_path, monkeypatch):
+    app = _make_app(tmp_path, monkeypatch)
     client = app.test_client()
     # Provide Origin to ensure CSRF evaluated before route handler might reject
     r = client.post("/tasks/", json={"title": "X"}, headers={"Origin": "http://localhost"})
@@ -23,8 +39,8 @@ def test_post_without_token_forbidden():
     assert body.get("detail") in {"csrf_missing", "origin_mismatch"}
 
 
-def test_double_submit_token_allows():
-    app = _make_app()
+def test_double_submit_token_allows(tmp_path, monkeypatch):
+    app = _make_app(tmp_path, monkeypatch)
     client = app.test_client()
     token = secrets.token_hex(8)
     cookie_name = app.config.get("CSRF_COOKIE_NAME", "csrf_token")
@@ -44,8 +60,8 @@ def test_double_submit_token_allows():
         assert "csrf_" not in r.get_data(as_text=True)
 
 
-def test_origin_mismatch_blocked():
-    app = _make_app()
+def test_origin_mismatch_blocked(tmp_path, monkeypatch):
+    app = _make_app(tmp_path, monkeypatch)
     client = app.test_client()
     # Supply an Origin that is not the host
     r = client.post("/tasks/", json={"title": "Z"}, headers={"Origin": "http://evil.example"})
@@ -56,8 +72,8 @@ def test_origin_mismatch_blocked():
     assert body.get("detail") == "origin_mismatch"
 
 
-def test_safe_methods_ok_without_token():
-    app = _make_app()
+def test_safe_methods_ok_without_token(tmp_path, monkeypatch):
+    app = _make_app(tmp_path, monkeypatch)
     client = app.test_client()
     for method in ("GET", "HEAD", "OPTIONS"):
         resp = client.open(path="/tasks/", method=method)
@@ -65,8 +81,8 @@ def test_safe_methods_ok_without_token():
         assert resp.status_code in {200, 401, 404}
 
 
-def test_prod_exempt_paths_require_token_for_write():
-    app = _make_app()
+def test_prod_exempt_paths_require_token_for_write(tmp_path, monkeypatch):
+    app = _make_app(tmp_path, monkeypatch)
     client = app.test_client()
     # /auth/ login (POST) is exempt in production, but should allow without CSRF; test expectation clarified.
     # For metrics POST (simulate ingest) -> we expect exemption too.

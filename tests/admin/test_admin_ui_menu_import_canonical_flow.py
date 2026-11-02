@@ -462,12 +462,12 @@ def test_admin_menu_import_upload_creates_builder_link_publication_and_portal_pa
     assert "Middag" not in overview_html
 
 
-def test_admin_menu_import_week_fresh_get_hydrates_canonical_builder_rows(app_session):
+def test_admin_menu_import_week_fresh_get_hydrates_canonical_builder_rows(app_session, tmp_path):
     site_id = "yuplan-e2e-centralkoket"
     year = 2025
     week = 49
     menu_id = "builder-menu-1-yuplan-e2e-centralkoket-2025-w49-menu"
-    builder_db_path = Path(app_session.instance_path) / "test_builder_week49.db"
+    builder_db_path = tmp_path / "test_builder_week49.db"
 
     with app_session.app_context():
         app_session.config["BUILDER_DB_PATH"] = str(builder_db_path)
