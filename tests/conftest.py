@@ -1,5 +1,9 @@
 import os
+import gc
+from pathlib import Path
+import shutil
 import sys
+import tempfile
 
 import pytest
 
@@ -35,6 +39,66 @@ _CSRF_ALLOWLIST_FILES = {
     "test_csrf_prod.py",
     "test_cookies.py",
 }
+
+
+def pytest_sessionstart(session):  # pragma: no cover - pytest lifecycle hook
+    workspace = Path(tempfile.mkdtemp(prefix="yuplan-pytest-")).resolve()
+    repository_root = Path(__file__).resolve().parents[1]
+    if workspace.is_relative_to(repository_root):
+        shutil.rmtree(workspace)
+        raise RuntimeError("pytest database workspace must be outside the repository")
+    main_db = workspace / "main.db"
+    builder_db = workspace / "builder.db"
+    env_names = (
+        "DATABASE_URL",
+        "BUILDER_DB_PATH",
+        "APP_ENV",
+        "YP_ENABLE_SQLITE_BOOTSTRAP",
+    )
+    previous_env = {name: os.environ.get(name) for name in env_names}
+    os.environ["DATABASE_URL"] = f"sqlite:///{main_db.as_posix()}"
+    os.environ["BUILDER_DB_PATH"] = str(builder_db)
+    os.environ["APP_ENV"] = "testing"
+    os.environ["YP_ENABLE_SQLITE_BOOTSTRAP"] = "1"
+    session.config._yuplan_test_db_state = {
+        "workspace": workspace,
+        "main_db": main_db,
+        "builder_db": builder_db,
+        "previous_env": previous_env,
+    }
+    create_app, create_all, _ = _lazy_imports()
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "test",
+            "database_url": f"sqlite:///{main_db.as_posix()}",
+            "BUILDER_DB_PATH": str(builder_db),
+        }
+    )
+    with app.app_context():
+        create_all()
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_sessionfinish(session, exitstatus):  # pragma: no cover - pytest lifecycle hook
+    state = getattr(session.config, "_yuplan_test_db_state", None)
+    if state is None:
+        return
+    for name, value in state["previous_env"].items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
+    from core import db as db_mod
+
+    if db_mod._SessionFactory is not None:
+        db_mod._SessionFactory.remove()
+    if db_mod._engine is not None:
+        db_mod._engine.dispose()
+    db_mod._SessionFactory = None
+    db_mod._engine = None
+    gc.collect()
+    shutil.rmtree(state["workspace"])
 
 
 def pytest_configure(config):  # pragma: no cover - pytest hook
@@ -79,20 +143,23 @@ def csrf_headers(client):
 
 
 @pytest.fixture(scope="session")
-def app_session(tmp_path_factory):
+def app_session(request):
     create_app, create_all, Tenant = _lazy_imports()
-    db_file = tmp_path_factory.mktemp("db") / "test_app.db"
-    url = f"sqlite:///{db_file}"
+    state = getattr(request.config, "_yuplan_test_db_state", None)
+    if state is None:
+        raise RuntimeError("pytest session database isolation was not initialized")
+    db_file = state["main_db"]
+    builder_db_file = state["builder_db"]
+    url = f"sqlite:///{db_file.as_posix()}"
 
-    # Force tests to use the temp DB even if .env or user env points at dev.db
-    os.environ["DATABASE_URL"] = url
-    os.environ["APP_ENV"] = "testing"
-    
-    # Enable SQLite bootstrap for test environments
-    os.environ["YP_ENABLE_SQLITE_BOOTSTRAP"] = "1"
-    
     app = create_app(
-        {"TESTING": True, "SECRET_KEY": "test", "database_url": url, "FORCE_DB_REINIT": True}
+        {
+            "TESTING": True,
+            "SECRET_KEY": "test",
+            "database_url": url,
+            "BUILDER_DB_PATH": str(builder_db_file),
+            "FORCE_DB_REINIT": True,
+        }
     )
     with app.app_context():
         create_all()
