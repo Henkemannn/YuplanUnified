@@ -6,6 +6,7 @@ import uuid
 from core.db import get_session
 from core.admin_repo import SitesRepo, DepartmentsRepo
 from core.department_menu_choice_repo import MenuChoiceRepo
+from core.models import User
 from portal.department.auth import DepartmentPortalScope
 from portal.department.service import build_department_week_payload
 from sqlalchemy import text
@@ -21,10 +22,36 @@ def _auth_headers(role: str = "admin"):
 
 
 def _set_auth_session(client, *, tenant_id: int = 1, user_id: int = 1, role: str = "admin", site_id: str | None = None) -> None:
+    with client.application.app_context():
+        db = get_session()
+        try:
+            user = db.query(User).filter_by(id=user_id).first()
+            if user is None:
+                user = User(
+                    id=user_id,
+                    tenant_id=tenant_id,
+                    email=f"menu-choice-{user_id}@example.test",
+                    username=f"menu-choice-{user_id}",
+                    password_hash="test-only",
+                    auth_version=1,
+                    role=role,
+                    full_name="Menu Choice Test User",
+                    is_active=True,
+                )
+                db.add(user)
+            else:
+                user.tenant_id = tenant_id
+                user.role = role
+                user.auth_version = 1
+                user.is_active = True
+            db.commit()
+        finally:
+            db.close()
     with client.session_transaction() as sess:
         sess["tenant_id"] = tenant_id
         sess["user_id"] = user_id
         sess["role"] = role
+        sess["auth_version"] = 1
         if site_id is not None:
             sess["site_id"] = site_id
 
