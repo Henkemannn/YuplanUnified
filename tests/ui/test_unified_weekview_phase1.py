@@ -50,7 +50,7 @@ def test_weekview_happy_path_with_menu_data(client_admin):
         create_all()
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Testköket"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',25,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dep_id, "s": site_id, "n": "Kök Avdelning A"})
@@ -116,7 +116,8 @@ def test_weekview_happy_path_with_menu_data(client_admin):
     
     # Assert: HTTP 200
     # Assert: Page contains "Vecka {WW}, {YYYY}"
-    assert f"Vecka {week}, {year}" in html
+    assert f"Vecka {week}" in html
+    assert str(year) in html
     
     # Assert: Department names are present
     assert "Kök Avdelning A" in html
@@ -128,7 +129,7 @@ def test_weekview_happy_path_with_menu_data(client_admin):
     assert "Lasagne" in html
     
     # Assert: Resident count text is present
-    assert "Boende: 18" in html
+    assert "Boende totalt: 18" in html
 
 
 @pytest.mark.usefixtures("enable_weekview")

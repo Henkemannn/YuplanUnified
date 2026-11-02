@@ -28,7 +28,7 @@ def _seed_basics():
     conn = get_session()
     try:
         conn.execute(
-            text("INSERT OR IGNORE INTO sites (id, name) VALUES (:id, :name)"),
+            text("INSERT OR IGNORE INTO sites (id, tenant_id, name) VALUES (:id, 1, :name)"),
             {"id": SITE_ID, "name": "Test Site"},
         )
         conn.execute(
@@ -60,6 +60,9 @@ def _seed_basics():
 def test_menu_modal_contract(app_session, path):
     client = app_session.test_client()
     _seed_basics()
+    if path.startswith("/ui/kitchen/week"):
+        with client.session_transaction() as sess:
+            sess["site_id"] = SITE_ID
     rv = client.get(path, headers=HEADERS)
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")

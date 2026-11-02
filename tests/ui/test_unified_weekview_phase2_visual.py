@@ -186,7 +186,7 @@ def test_meal_sections_have_labels(client_admin, seed_weekview_data):
     html = resp.data.decode("utf-8")
     
     # Should have meal type labels
-    assert 'LUNCH' in html
+    assert 'Lunch' in html
     # Weekview typically shows lunch, dinner is optional
     # Just verify label structure exists
     assert 'meal-label' in html

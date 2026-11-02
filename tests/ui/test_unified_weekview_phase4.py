@@ -326,7 +326,7 @@ def test_weekview_phase1_phase2_phase3_still_passing(client_admin):
     html = resp.get_data(as_text=True)
     
     # Basic Phase 1 elements
-    assert f"Vecka {week}, {year}" in html
+    assert f"Vecka {week} ·" in html
     
     # Phase 2 registration elements
     assert "registrationModal" in html

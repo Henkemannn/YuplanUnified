@@ -59,7 +59,7 @@ def _seed_site_dep_with_no_diets(site_id: str, dep_id: str, residents_fixed: int
         # Create site and department
         row = conn.execute(text("SELECT 1 FROM sites WHERE id=:id"), {"id": site_id}).fetchone()
         if not row:
-            conn.execute(text("INSERT INTO sites (id, name) VALUES (:id, 'K3 Test Site')"), {"id": site_id})
+            conn.execute(text("INSERT INTO sites (id, name, tenant_id) VALUES (:id, 'K3 Test Site', 1)"), {"id": site_id})
         row = conn.execute(text("SELECT 1 FROM departments WHERE id=:id"), {"id": dep_id}).fetchone()
         if not row:
             conn.execute(text("INSERT INTO departments (id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES (:id, :sid, 'Avd K3', 'fixed', :rc, 0)"), {"id": dep_id, "sid": site_id, "rc": residents_fixed})
@@ -90,6 +90,8 @@ def test_kitchen_week_no_diets_still_shows_grid(app_session):
     year = 2026
     week = 8
     _seed_site_dep_with_no_diets(site_id, dep_id, residents_fixed=7, year=year, week=week, alt2_day=1)
+    with client.session_transaction() as sess:
+        sess["site_id"] = site_id
 
     rv = client.get(f"/ui/kitchen/week?site_id={site_id}&year={year}&week={week}", headers=HEADERS)
     assert rv.status_code == 200
