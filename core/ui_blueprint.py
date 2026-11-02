@@ -9388,7 +9388,7 @@ def admin_kitchen_users_create():
         new_user_id = repo.create_user(
             tenant_id=int(tid),
             username=email,
-            email=normalized_email,
+            email=email,
             password=password,
             full_name=name,
             role="kitchen",
