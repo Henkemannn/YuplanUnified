@@ -4,6 +4,41 @@ from sqlalchemy import text
 from core.admin_repo import DepartmentsRepo, DietTypesRepo, SitesRepo
 from core.department_requirement_group_completion_repo import DepartmentRequirementGroupCompletionRepo
 from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
+from core.models import User
+
+
+def _seed_admin_session(client):
+    from core.db import get_session
+
+    db = get_session()
+    try:
+        user = db.query(User).filter(User.id == 1).first()
+        if user is None:
+            user = User(
+                id=1,
+                tenant_id=1,
+                email="report-admin@example.test",
+                username="report-admin@example.test",
+                password_hash="test-only",
+                role="admin",
+                is_active=True,
+                auth_version=1,
+            )
+            db.add(user)
+        else:
+            user.tenant_id = 1
+            user.role = "admin"
+            user.is_active = True
+            user.auth_version = 1
+        db.commit()
+    finally:
+        db.close()
+    with client.session_transaction() as s:
+        s["role"] = "admin"
+        s["user_id"] = 1
+        s["tenant_id"] = 1
+        s["site_id"] = "site-1"
+        s["auth_version"] = 1
 
 
 def _seed_site_and_departments(db):
@@ -110,11 +145,7 @@ def _seed_weekview(db, year: int, week: int):
 
 def test_seeded_weekly_diets_report(client):
     year, week = 2025, 10
-    with client.session_transaction() as s:
-        s["role"] = "admin"
-        s["user_id"] = "tester"
-        s["tenant_id"] = 1
-        s["site_id"] = "site-1"
+    _seed_admin_session(client)
     from core.db import get_session
     db = get_session()
     try:
@@ -208,10 +239,8 @@ def test_admin_report_week_uses_cohort_truth_when_groups_exist(client):
     finally:
         db.close()
 
+    _seed_admin_session(client)
     with client.session_transaction() as s:
-        s["role"] = "admin"
-        s["user_id"] = "tester"
-        s["tenant_id"] = 1
         s["site_id"] = site["id"]
 
     resp = client.get(f"/ui/admin/report/week?year={year}&week={week}&department_id=ALL&view=day")

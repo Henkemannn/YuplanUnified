@@ -79,8 +79,8 @@ def _load_counts() -> dict[str, int]:
         db.close()
 
 
-def _extract_planera_lunch_href(html: str) -> str:
-    class _PlaneraLunchLinkParser(HTMLParser):
+def _extract_product2_day_href(html: str, *, year: int, week: int, day: int) -> str:
+    class _Product2DayLinkParser(HTMLParser):
         def __init__(self) -> None:
             super().__init__()
             self._current_href: str | None = None
@@ -99,12 +99,14 @@ def _extract_planera_lunch_href(html: str) -> str:
         def handle_endtag(self, tag: str) -> None:
             if tag.lower() == "a" and self._current_href is not None:
                 text = "".join(self._current_text).strip()
-                if text.startswith("Planera lunch"):
+                if self._current_href.startswith(
+                    "/ui/kitchen/planering?ui=product2&"
+                ) and f"year={year}" in self._current_href and f"week={week}" in self._current_href and f"day={day}" in self._current_href:
                     self.href = self._current_href
                 self._current_href = None
                 self._current_text = []
 
-    parser = _PlaneraLunchLinkParser()
+    parser = _Product2DayLinkParser()
     parser.feed(html)
     assert parser.href is not None
     return parser.href
@@ -304,15 +306,25 @@ def test_seed_product2_e2e_normal_html_auth_and_page_flow(tmp_path, monkeypatch)
             assert "Centralköket E2E" in page1_html
             assert "Vardagsgryta med rotfrukter" in page1_html
             assert "Ugnsbakad fisk med dill" in page1_html
-            assert "Planera lunch" in page1_html
+            assert "Planera" in page1_html
 
-            href = _extract_planera_lunch_href(page1_html)
-            assert href.startswith("/ui/kitchen/planering/day?ui=product2&site_id=")
+            href = _extract_product2_day_href(page1_html, year=YEAR, week=WEEK, day=1)
+            assert href.startswith("/ui/kitchen/planering?ui=product2&site_id=")
 
-            page2_response = client.get(href)
+            selected_day_response = client.get(href)
+            assert selected_day_response.status_code == 200
+            assert urlsplit(href).path == "/ui/kitchen/planering"
+            assert urlsplit(href).query == f"ui=product2&site_id={SITE_ID}&year={YEAR}&week={WEEK}&day=1"
+            assert "Tisdag" in selected_day_response.get_data(as_text=True)
+
+            page2_href = (
+                f"/ui/kitchen/planering/day?ui=product2&site_id={SITE_ID}"
+                "&date=2026-09-08&meal=lunch"
+            )
+            page2_response = client.get(page2_href)
             assert page2_response.status_code == 200
-            assert urlsplit(href).path == "/ui/kitchen/planering/day"
-            assert urlsplit(href).query == f"ui=product2&site_id={SITE_ID}&date=2026-09-08&meal=lunch"
+            assert urlsplit(page2_href).path == "/ui/kitchen/planering/day"
+            assert urlsplit(page2_href).query == f"ui=product2&site_id={SITE_ID}&date=2026-09-08&meal=lunch"
 
             page2_html = page2_response.get_data(as_text=True)
             assert "Centralköket E2E" in page2_html

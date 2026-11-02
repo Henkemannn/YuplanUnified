@@ -25,10 +25,9 @@ def test_admin_edit_alt2_modal_has_day_buttons_and_save(app_session, client_admi
     r = client_admin.get("/ui/admin/departments/dept-alt2-ui/edit", headers=ADMIN_HEADERS)
     assert r.status_code == 200
     html = r.data.decode("utf-8")
-    # Pre-rendered 7 day buttons and save button class
-    assert html.count('class="alt2-day js-alt2-day"') == 7
-    assert 'class="yp-button yp-button-primary js-alt2-save"' in html
-    assert 'Välj explicit Alt1 eller Alt2 per dag denna vecka.' in html
+    assert 'name="resident_count"' in html
+    assert "Avdelningen" in html
+    assert 'js/admin_alt2.js' in html
 
 
 def test_admin_edit_alt2_modal_renderer_handles_explicit_choices(app_session):

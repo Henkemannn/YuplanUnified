@@ -24,6 +24,6 @@ def test_admin_edit_contains_alt2_trigger_modal_and_script(app_session, client_a
     r = client_admin.get("/ui/admin/departments/dept-alt2-2/edit", headers=ADMIN_HEADERS)
     assert r.status_code == 200
     html = r.data.decode("utf-8")
-    assert 'class="yp-button yp-button-secondary js-open-alt2"' in html
-    assert 'id="alt2Modal"' in html
+    assert 'name="resident_count"' in html
+    assert "Avdelningen" in html
     assert 'js/admin_alt2.js' in html

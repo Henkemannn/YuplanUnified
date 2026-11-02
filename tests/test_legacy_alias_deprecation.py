@@ -10,9 +10,27 @@ def _app():
 
 
 def _login(client):
+    from core.db import get_session
+    from core.models import User
+
+    db = get_session()
+    try:
+        user = db.query(User).filter(User.id == 1).first()
+        if user is None:
+            user = User(id=1, tenant_id=1, username="legacy-admin", email="legacy-admin@example.test", password_hash="!", role="admin", is_active=True, auth_version=1)
+            db.add(user)
+        else:
+            user.tenant_id = 1
+            user.role = "admin"
+            user.is_active = True
+            user.auth_version = 1
+        db.commit()
+    finally:
+        db.close()
     with client.session_transaction() as sess:
         sess["tenant_id"] = 1
         sess["user_id"] = 1
+        sess["auth_version"] = 1
         sess["role"] = "admin"
 
 

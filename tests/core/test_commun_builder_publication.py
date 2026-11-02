@@ -28,6 +28,28 @@ from core.commun_builder_publication import CommunBuilderPublicationService
 from core.commun_builder_projection import get_shadow_projection_reader
 
 
+def _clear_publication_state(app_session):
+    with app_session.app_context():
+        from core.db import get_session
+
+        current_app.extensions.pop("builder_menu_context_flow", None)
+        current_app.extensions.pop("commun_builder_projection_reader", None)
+        db = get_session()
+        try:
+            for table in (
+                "menu_variants",
+                "commun_builder_publication_revisions",
+                "commun_builder_publication_pins",
+                "commun_builder_menu_links",
+                "menus",
+                "dishes",
+            ):
+                db.execute(text(f"DELETE FROM {table}"))
+            db.commit()
+        finally:
+            db.close()
+
+
 def _seed_site(app_session, site_id: str = "site-publication-1", tenant_id: int = 1) -> None:
     from core.db import get_new_session
 
@@ -619,6 +641,7 @@ def test_publish_legacy_published_menu_with_link_but_no_pin_creates_first_pin_an
 
 
 def test_publish_projection_failure_keeps_legacy_draft_and_no_pin(app_session, monkeypatch):
+    _clear_publication_state(app_session)
     site_id = "site-publication-2"
     year = 2025
     week = 49
@@ -795,7 +818,7 @@ def test_legacy_commit_failure_rolls_back_pin_and_status(app_session, monkeypatc
             text("SELECT 1 FROM commun_builder_publication_pins WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week"),
             {"tid": 1, "sid": site_id, "year": year, "week": week},
         ).fetchone()
-        assert menu_status is not None and menu_status[0] == "published"
+        assert menu_status is not None and menu_status[0] == "draft"
         assert pin is None
     finally:
         db.close()

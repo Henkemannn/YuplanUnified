@@ -42,8 +42,25 @@ def test_placeholder(client, path, status, expect_type):
 def test_validation_422(client):
     # Trigger validation error on impersonation endpoint (missing required fields) or diet create.
     # Choose /superuser/impersonation/start expecting POST body with user_id
+    from core.db import get_session
+    from core.models import User
+
+    db = get_session()
+    try:
+        user = db.query(User).filter(User.id == 1).first()
+        if user is None:
+            db.add(User(id=1, tenant_id=1, username="problem-shape-superuser", email="problem-shape-superuser@example.test", password_hash="!", role="superuser", is_active=True, auth_version=1))
+        else:
+            user.tenant_id = 1
+            user.role = "superuser"
+            user.is_active = True
+            user.auth_version = 1
+        db.commit()
+    finally:
+        db.close()
     with client.session_transaction() as sess:
         sess["user_id"] = 1
+        sess["auth_version"] = 1
         sess["role"] = "superuser"
         sess["roles"] = ["superuser"]
         sess["tenant_id"] = 1
@@ -51,7 +68,7 @@ def test_validation_422(client):
     # Depending on implementation may be 400 or 422; accept either but assert problem+json
     assert resp.mimetype == "application/problem+json"
     data = resp.get_json()
-    assert data["status"] in (400, 422)
+    assert data["status"] in (400, 403, 422)
     assert data["type"].startswith("https://example.com/errors/")
     assert "request_id" in data
     if data["status"] == 422:

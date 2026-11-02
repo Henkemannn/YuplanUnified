@@ -4,9 +4,27 @@ from core import metrics as metrics_mod
 
 
 def _login_viewer(client):
+    from core.db import get_session
+    from core.models import User
+
+    db = get_session()
+    try:
+        user = db.query(User).filter(User.id == 1).first()
+        if user is None:
+            user = User(id=1, tenant_id=1, username="deprecation-viewer", email="deprecation-viewer@example.test", password_hash="!", role="viewer", is_active=True, auth_version=1)
+            db.add(user)
+        else:
+            user.tenant_id = 1
+            user.role = "viewer"
+            user.is_active = True
+            user.auth_version = 1
+        db.commit()
+    finally:
+        db.close()
     with client.session_transaction() as sess:
         sess["tenant_id"] = 1
         sess["user_id"] = 1
+        sess["auth_version"] = 1
         sess["role"] = "viewer"
 
 

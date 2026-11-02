@@ -183,10 +183,16 @@ def _clear_builder_context_after_test(parity_app):
         current_app.extensions.pop("commun_builder_projection_reader", None)
         if original_reader is not None:
             current_app.feature_registry.set("commun.builder.reader_v0", original_reader)
+        else:
+            current_app.feature_registry.unset("commun.builder.reader_v0")
         if original_projection_shadow is not None:
             current_app.feature_registry.set("commun.builder.projection_shadow_v0", original_projection_shadow)
+        else:
+            current_app.feature_registry.unset("commun.builder.projection_shadow_v0")
         if original_linkage is not None:
             current_app.feature_registry.set("commun.builder.linkage_v0", original_linkage)
+        else:
+            current_app.feature_registry.unset("commun.builder.linkage_v0")
 
 
 def test_parity_inventory_and_runbook(parity_app):
@@ -449,14 +455,12 @@ def test_parity_status_matrix(parity_app, monkeypatch, setup_name, expected_stat
             )
             _mark_menu_published(legacy_menu_id)
             if setup_name == "difference":
-                from core.db import get_session
-
-                db = get_session()
-                try:
-                    db.execute(text("UPDATE dishes SET name='Different Fish' WHERE name='Fish Plate'"))
-                    db.commit()
-                finally:
-                    db.close()
+                flow = current_app.extensions["builder_menu_context_flow"]
+                flow._library_flow._composition_service.update_composition_metadata(
+                    "comp_main",
+                    composition_name="Different Fish",
+                    menu_name="Different Fish",
+                )
 
         result = evaluator.evaluate_week(tenant_id=tenant_id, site_id=site_id, year=year, week=week)
 

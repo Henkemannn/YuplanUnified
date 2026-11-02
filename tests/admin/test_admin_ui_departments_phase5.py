@@ -75,7 +75,7 @@ def test_admin_department_edit_get_shows_form(app_with_departments: Flask, clien
     resp = client_admin.get("/ui/admin/departments/dept-test-1/edit", headers=ADMIN_HEADERS)
     assert resp.status_code == 200
     html = resp.data.decode()
-    assert "Redigera Avdelning" in html
+    assert "Avdelningen" in html
     assert 'value="Test Avdelning"' in html
     assert 'value="10"' in html
     assert "Test faktaruta" in html

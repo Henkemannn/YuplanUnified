@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from core.app_factory import create_app
-from core.db import create_all
+from core.db import create_all, get_session
 from core.offshore_builder_bridge import _service as builder_bridge_service
 from core.planera_v2.contracts import PlanningComponentReference, PlanningCompositionReference
+from core.models import User
 
 
 def _mk_app():
@@ -75,10 +76,42 @@ def test_builder_ui_deep_links_are_user_facing_and_role_protected() -> None:
     app = _mk_app()
     client = app.test_client()
 
+    with app.app_context():
+        db = get_session()
+        try:
+            db.add(
+                User(
+                    id=42,
+                    tenant_id=1,
+                    email="builder-admin@example.test",
+                    username="builder-admin@example.test",
+                    password_hash="test-only",
+                    role="admin",
+                    is_active=True,
+                    auth_version=1,
+                )
+            )
+            db.add(
+                User(
+                    id=43,
+                    tenant_id=1,
+                    email="builder-viewer@example.test",
+                    username="builder-viewer@example.test",
+                    password_hash="test-only",
+                    role="viewer",
+                    is_active=True,
+                    auth_version=1,
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
     with client.session_transaction() as sess:
         sess["user_id"] = 42
         sess["role"] = "admin"
         sess["tenant_id"] = 1
+        sess["auth_version"] = 1
 
     rv = client.get("/builder-editor-host?composition_id=boeuf_bourguignon_potatismos")
     assert rv.status_code == 200
@@ -90,7 +123,9 @@ def test_builder_ui_deep_links_are_user_facing_and_role_protected() -> None:
     assert 'id="resolveModal"' in html
 
     with client.session_transaction() as sess:
+        sess["user_id"] = 43
         sess["role"] = "viewer"
+        sess["auth_version"] = 1
 
     forbidden = client.get("/builder-editor-host?component_id=potatismos")
     assert forbidden.status_code == 403
