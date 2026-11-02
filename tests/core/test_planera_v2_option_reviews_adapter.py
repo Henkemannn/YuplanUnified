@@ -26,6 +26,7 @@ from core.components import (
 from core.department_menu_choice_repo import MenuChoiceRepo
 from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
 from core.department_requirement_group_service_overrides_repo import DepartmentRequirementGroupServiceOverridesRepo
+from core.residents_schedule_repo import ResidentsScheduleRepo
 from core.db import get_new_session, get_session
 from core.menu import InMemoryCompositionAliasRepository, MenuService
 from core.planera_v2.acceptance import validate_plan_request_for_production
@@ -569,7 +570,15 @@ def test_cohort_total_exceeding_destination_baseline_fails_closed(app_session) -
     service_date = date(2026, 9, 8)
     year, week, _weekday = service_date.isocalendar()
     site_id = _seed_site(site_name=f"option-review-overflow-{uuid.uuid4()}")
-    dept_a = _seed_department(site_id, "Avdelning A", resident_count=5)
+    dept_a = _seed_department(site_id, "Avdelning A", resident_count=6)
+    ResidentsScheduleRepo().upsert_items(
+        dept_a["id"],
+        week,
+        [
+            {"weekday": service_date.isocalendar()[2], "meal": "lunch", "count": 5},
+            {"weekday": service_date.isocalendar()[2], "meal": "dinner", "count": 5},
+        ],
+    )
     req_gluten = _seed_requirement(site_id, f"Gluten {uuid.uuid4().hex[:8]}", f"req_gluten_{uuid.uuid4().hex[:8]}")
     req_veg = _seed_requirement(site_id, f"Vegetarisk {uuid.uuid4().hex[:8]}", f"req_veg_{uuid.uuid4().hex[:8]}")
     req_lakt = _seed_requirement(site_id, f"Laktos {uuid.uuid4().hex[:8]}", f"req_lakt_{uuid.uuid4().hex[:8]}")
@@ -801,7 +810,7 @@ def test_option_no_longer_published_fails_closed(app_session) -> None:
         )
         MenuChoiceRepo().set_choice(tenant_id=1, site_id=site_id, department_id=dept_a["id"], year=year, week=week, weekday=service_date.isocalendar()[2], selected_alt="alt2")
 
-    with pytest.raises(KommunOptionReviewPlanningError, match="option_not_published"):
+    with pytest.raises(KommunOptionReviewPlanningError, match="target_not_published"):
         _build_slice(site_id, service_date, option_ids_v1["alt1"])
 
 

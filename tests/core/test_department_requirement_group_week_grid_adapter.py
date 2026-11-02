@@ -14,7 +14,7 @@ from core.department_requirement_group_week_grid_adapter import build_week_grid_
 from core.department_requirement_group_weekday_overrides_repo import DepartmentRequirementGroupWeekdayOverridesRepo
 
 
-def _seed_site_department(app_session, *, site_id: str, department_id: str, department_name: str) -> None:
+def _seed_site_department(app_session, *, site_id: str, department_id: str, department_name: str, resident_count: int = 5) -> None:
     from core.db import get_session
 
     conn = get_session()
@@ -25,9 +25,9 @@ def _seed_site_department(app_session, *, site_id: str, department_id: str, depa
         )
         conn.execute(
             text(
-                "INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed) VALUES(:id, :site_id, :name, 'fixed', 5) ON CONFLICT(id) DO UPDATE SET site_id=excluded.site_id, name=excluded.name, resident_count_mode='fixed', resident_count_fixed=5"
+                "INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed) VALUES(:id, :site_id, :name, 'fixed', :resident_count) ON CONFLICT(id) DO UPDATE SET site_id=excluded.site_id, name=excluded.name, resident_count_mode='fixed', resident_count_fixed=:resident_count"
             ),
-            {"id": department_id, "site_id": site_id, "name": department_name},
+            {"id": department_id, "site_id": site_id, "name": department_name, "resident_count": resident_count},
         )
         conn.commit()
     finally:
@@ -203,7 +203,7 @@ def test_lunch_and_dinner_cells_follow_projection_and_marked_state(app_session):
 def test_weekday_and_exact_service_overrides_are_respected(app_session):
     site_id = "00000000-0000-0000-0000-00000000af01"
     department_id = "00000000-0000-0000-0000-00000000af02"
-    _seed_site_department(app_session, site_id=site_id, department_id=department_id, department_name="Override Avd")
+    _seed_site_department(app_session, site_id=site_id, department_id=department_id, department_name="Override Avd", resident_count=7)
     ids = _seed_requirements(site_id, ["Timbal", "Glutenfri"])
     group = DepartmentRequirementGroupsRepo().create_group(department_id, 2, [ids["Timbal"], ids["Glutenfri"]], label=None, primary_requirement_id=ids["Timbal"])
     weekday_repo = DepartmentRequirementGroupWeekdayOverridesRepo()

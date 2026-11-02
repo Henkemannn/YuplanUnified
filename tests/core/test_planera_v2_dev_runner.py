@@ -7,6 +7,7 @@ from core.department_requirement_group_repo import DepartmentRequirementGroupsRe
 from core.department_requirement_group_service_overrides_repo import (
     DepartmentRequirementGroupServiceOverridesRepo,
 )
+from core.residents_schedule_repo import ResidentsScheduleRepo
 from core.planera_v2.dev_runner import (
     format_dev_run_report,
     run_planera_v2_from_canonical_requirement_groups,
@@ -235,19 +236,27 @@ def test_canonical_runner_uses_requirement_groups_and_preserves_canonical_meal_k
             site_id=site["id"],
             name=f"Department {uuid.uuid4()}",
             resident_count_mode="fixed",
-            resident_count_fixed=10,
+            resident_count_fixed=100,
         )
         group_id = _seed_canonical_group(site["id"], department["id"], quantity=2, label="Group A")
-        DepartmentRequirementGroupServiceOverridesRepo().set_override(group_id, "2026-04-16", "evening", 4)
+        ResidentsScheduleRepo().upsert_items(
+            department["id"],
+            16,
+            [
+                {"weekday": 4, "meal": "lunch", "count": 10},
+                {"weekday": 4, "meal": "dinner", "count": 10},
+            ],
+        )
+        DepartmentRequirementGroupServiceOverridesRepo().set_override(group_id, "2026-04-16", "dinner", 4)
 
         run = run_planera_v2_from_canonical_requirement_groups(
             site_id=site["id"],
             service_date="2026-04-16",
-            meal_key=" EVENING ",
+            meal_key=" DINNER ",
             unit_baselines={department["id"]: 10},
         )
 
-        assert run.request.context["meal_key"] == "evening"
+        assert run.request.context["meal_key"] == "dinner"
         assert run.request.context["compatibility_source_precision"] == "canonical_atomic_groups"
         assert run.request.units == [UnitInput(unit_id=department["id"], baseline_total=10)]
         assert run.request.deviations[0].quantity == 4

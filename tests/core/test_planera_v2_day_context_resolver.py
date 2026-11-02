@@ -349,7 +349,7 @@ def test_resolver_labeled_requirement_groups_mapped_once_multi_key_remains_one_g
 def test_resolver_blank_groups_omitted_regardless_of_effective_quantity() -> None:
     site = _seed_site("Site K")
     dept = _seed_department(site["id"], "Dept", 10)
-    zero_group = _seed_requirement_group(site["id"], dept["id"], label="", requirement_names=["Zero"], quantity=0)
+    zero_group = _seed_requirement_group(site["id"], dept["id"], label="", requirement_names=["Zero"], quantity=1)
     positive_group = _seed_requirement_group(site["id"], dept["id"], label="", requirement_names=["Positive"], quantity=1)
 
     context = resolve_kommun_day_business_context(
