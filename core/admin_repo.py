@@ -189,7 +189,7 @@ def _ensure_department_diet_overrides_table(db) -> None:
         )
 
 
-def _ensure_service_addons_tables(db) -> None:
+def _ensure_service_addons_tables(db, *, site_id: str | None = None) -> None:
     if _is_sqlite(db):
         _ensure_service_addons_sqlite_scoped_uniqueness(db)
         db.execute(
@@ -267,8 +267,8 @@ def _ensure_service_addons_tables(db) -> None:
             db.execute(text("ALTER TABLE department_service_addons ADD COLUMN quantity_mode TEXT"))
     except Exception:
         pass
-    _backfill_service_addons_site_scope(db)
-    _backfill_service_addon_semantics(db)
+    _backfill_service_addons_site_scope(db, site_id=site_id)
+    _backfill_service_addon_semantics(db, site_id=site_id)
 
 
 def _ensure_service_addons_sqlite_scoped_uniqueness(db) -> None:
@@ -354,24 +354,46 @@ def _site_id_for_department(db, dept_id: str) -> str | None:
     return str(row[0]) if row[0] is not None else None
 
 
-def _backfill_service_addons_site_scope(db) -> None:
+def _backfill_service_addons_site_scope(db, *, site_id: str | None = None) -> None:
     if not _table_has_column(db, "service_addons", "site_id"):
         return
 
     has_family_col = _table_has_column(db, "service_addons", "addon_family")
 
-    addon_rows = db.execute(
-        text(
-            """
-            SELECT id, name,
-                   COALESCE(addon_family, 'ovrigt') AS addon_family,
-                   COALESCE(is_active, 1) AS is_active,
-                   created_at,
-                   site_id
-            FROM service_addons
-            """
-        )
-    ).fetchall()
+    if site_id is None:
+        addon_rows = db.execute(
+            text(
+                """
+                SELECT id, name,
+                       COALESCE(addon_family, 'ovrigt') AS addon_family,
+                       COALESCE(is_active, 1) AS is_active,
+                       created_at,
+                       site_id
+                FROM service_addons
+                """
+            )
+        ).fetchall()
+    else:
+        addon_rows = db.execute(
+            text(
+                """
+                SELECT id, name,
+                       COALESCE(addon_family, 'ovrigt') AS addon_family,
+                       COALESCE(is_active, 1) AS is_active,
+                       created_at,
+                       site_id
+                FROM service_addons
+                WHERE site_id IS NULL
+                  AND id IN (
+                      SELECT dsa.addon_id
+                      FROM department_service_addons dsa
+                      JOIN departments d ON d.id=dsa.department_id
+                      WHERE d.site_id=:site_id
+                  )
+                """
+            ),
+            {"site_id": str(site_id)},
+        ).fetchall()
 
     for row in addon_rows:
         addon_id = str(row[0])
@@ -397,6 +419,13 @@ def _backfill_service_addons_site_scope(db) -> None:
             {"addon_id": addon_id},
         ).fetchall()
         site_ids = [str(r[0]) for r in site_rows if r and r[0] is not None]
+        if site_id is not None:
+            if len(site_ids) == 1 and site_ids[0] == str(site_id):
+                db.execute(
+                    text("UPDATE service_addons SET site_id=:sid WHERE id=:id"),
+                    {"sid": str(site_id), "id": addon_id},
+                )
+            continue
 
         if len(site_ids) == 1:
             db.execute(
@@ -479,15 +508,15 @@ def _backfill_service_addons_site_scope(db) -> None:
                     },
                 )
 
-    # Any remaining NULL site rows are anchored to the first available site to avoid global leakage.
-    default_site = db.execute(
-        text("SELECT id FROM sites WHERE id IS NOT NULL ORDER BY id LIMIT 1")
-    ).fetchone()
-    if default_site and default_site[0] is not None:
-        db.execute(
-            text("UPDATE service_addons SET site_id=:sid WHERE site_id IS NULL"),
-            {"sid": str(default_site[0])},
-        )
+    if site_id is None:
+        default_site = db.execute(
+            text("SELECT id FROM sites WHERE id IS NOT NULL ORDER BY id LIMIT 1")
+        ).fetchone()
+        if default_site and default_site[0] is not None:
+            db.execute(
+                text("UPDATE service_addons SET site_id=:sid WHERE site_id IS NULL"),
+                {"sid": str(default_site[0])},
+            )
 
 
 def _resolve_default_tenant_id(db) -> int | None:
@@ -565,18 +594,32 @@ class ServiceAddonDataIntegrityError(ValueError):
         super().__init__("service_addon_data_invalid")
 
 
-def _backfill_service_addon_semantics(db) -> None:
+def _backfill_service_addon_semantics(db, *, site_id: str | None = None) -> None:
     if not _table_has_column(db, "department_service_addons", "service_scope") or not _table_has_column(db, "department_service_addons", "quantity_mode"):
         return
 
-    rows = db.execute(
-        text(
-            """
-            SELECT id, lunch_count, dinner_count, service_scope, quantity_mode
-            FROM department_service_addons
-            """
-        )
-    ).fetchall()
+    if site_id is None:
+        rows = db.execute(
+            text(
+                """
+                SELECT id, lunch_count, dinner_count, service_scope, quantity_mode
+                FROM department_service_addons
+                """
+            )
+        ).fetchall()
+    else:
+        rows = db.execute(
+            text(
+                """
+                SELECT dsa.id, dsa.lunch_count, dsa.dinner_count,
+                       dsa.service_scope, dsa.quantity_mode
+                FROM department_service_addons dsa
+                JOIN departments d ON d.id=dsa.department_id
+                WHERE d.site_id=:site_id
+                """
+            ),
+            {"site_id": str(site_id)},
+        ).fetchall()
     for row in rows:
         row_id = str(row[0])
         lunch_count = row[1]
@@ -1665,7 +1708,8 @@ class ServiceAddonsRepo:
     def list_active(self, site_id: str) -> list[dict]:
         db = get_session()
         try:
-            _ensure_service_addons_tables(db)
+            _ensure_service_addons_tables(db, site_id=str(site_id))
+            db.commit()
             has_family_col = _table_has_column(db, "service_addons", "addon_family")
             has_site_col = _table_has_column(db, "service_addons", "site_id")
             if has_family_col:
@@ -1715,7 +1759,7 @@ class ServiceAddonsRepo:
         family = normalize_addon_family(addon_family)
         db = get_session()
         try:
-            _ensure_service_addons_tables(db)
+            _ensure_service_addons_tables(db, site_id=str(site_id))
             has_site_col = _table_has_column(db, "service_addons", "site_id")
             if has_site_col:
                 row = db.execute(
@@ -1825,7 +1869,7 @@ class ServiceAddonsRepo:
     def set_family(self, addon_id: str, site_id: str, addon_family: str | None) -> None:
         db = get_session()
         try:
-            _ensure_service_addons_tables(db)
+            _ensure_service_addons_tables(db, site_id=str(site_id))
             if not _table_has_column(db, "service_addons", "addon_family"):
                 return
             if _table_has_column(db, "service_addons", "site_id"):
@@ -1883,7 +1927,7 @@ class DepartmentServiceAddonsRepo:
     def get_for_department_row(self, row_id: str, dept_id: str, site_id: str | None = None) -> dict | None:
         db = get_session()
         try:
-            _ensure_service_addons_tables(db)
+            _ensure_service_addons_tables(db, site_id=site_id)
             has_family_col = _table_has_column(db, "service_addons", "addon_family")
             has_site_col = _table_has_column(db, "service_addons", "site_id")
             has_semantic_cols = _table_has_column(db, "department_service_addons", "service_scope") and _table_has_column(db, "department_service_addons", "quantity_mode")
@@ -1929,7 +1973,7 @@ class DepartmentServiceAddonsRepo:
     def list_for_department(self, dept_id: str, site_id: str | None = None) -> list[dict]:
         db = get_session()
         try:
-            _ensure_service_addons_tables(db)
+            _ensure_service_addons_tables(db, site_id=site_id)
             has_family_col = _table_has_column(db, "service_addons", "addon_family")
             has_site_col = _table_has_column(db, "service_addons", "site_id")
             has_semantic_cols = _table_has_column(db, "department_service_addons", "service_scope") and _table_has_column(db, "department_service_addons", "quantity_mode")
@@ -2240,7 +2284,7 @@ class DepartmentServiceAddonsRepo:
         col = "lunch_count" if meal_key == "lunch" else "dinner_count"
         db = get_session()
         try:
-            _ensure_service_addons_tables(db)
+            _ensure_service_addons_tables(db, site_id=str(site_id))
             has_family_col = _table_has_column(db, "service_addons", "addon_family")
             has_site_col = _table_has_column(db, "service_addons", "site_id")
             if has_family_col:
@@ -2334,7 +2378,7 @@ class DepartmentServiceAddonsRepo:
         meal_key = str(meal or "").strip().lower()
         db = get_session()
         try:
-            _ensure_service_addons_tables(db)
+            _ensure_service_addons_tables(db, site_id=str(site_id))
             has_family_col = _table_has_column(db, "service_addons", "addon_family")
             has_site_col = _table_has_column(db, "service_addons", "site_id")
             has_semantic_cols = _table_has_column(db, "department_service_addons", "service_scope") and _table_has_column(db, "department_service_addons", "quantity_mode")

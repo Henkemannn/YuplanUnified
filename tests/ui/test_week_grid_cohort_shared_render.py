@@ -196,7 +196,7 @@ def test_kitchen_weekview_fails_closed_for_invalid_service_addon_scope(client_co
 
     db = get_session()
     try:
-        _ensure_service_addons_tables(db)
+        _ensure_service_addons_tables(db, site_id=site_id)
         db.execute(
             text(
                 "INSERT INTO service_addons(id, site_id, name, addon_family, is_active, created_at) "
@@ -247,6 +247,100 @@ def test_kitchen_weekview_fails_closed_for_invalid_service_addon_scope(client_co
                 {"department": department_id},
             )
             cleanup.execute(text("DELETE FROM sites WHERE id=:site"), {"site": site_id})
+            cleanup.commit()
+        finally:
+            cleanup.close()
+
+
+def test_kitchen_weekview_site_isolation_ignores_invalid_addon_on_other_site(client_cook):
+    site_a = "site-invalid-cross-site"
+    site_b = "site-valid-cross-site"
+    department_a = "dept-invalid-cross-site"
+    department_b = "dept-valid-cross-site"
+
+    _seed_site(client_cook.application, site_id=site_a, site_name="Invalid Cross Site")
+    _seed_site(client_cook.application, site_id=site_b, site_name="Valid Cross Site")
+    _seed_department(site_a, department_a, "Invalid Cross Department")
+    _seed_department(site_b, department_b, "Valid Cross Department")
+
+    from core.admin_repo import _ensure_service_addons_tables
+    from core.db import get_session
+
+    db = get_session()
+    try:
+        _ensure_service_addons_tables(db)
+        db.execute(
+            text(
+                "INSERT INTO service_addons(id, site_id, name, addon_family, is_active, created_at) "
+                "VALUES('addon-invalid-cross-site', :site, 'Invalid cross-site addon', 'ovrigt', 1, CURRENT_TIMESTAMP), "
+                "('addon-valid-cross-site', :site_b, 'Valid cross-site addon', 'ovrigt', 1, CURRENT_TIMESTAMP)"
+            ),
+            {"site": site_a, "site_b": site_b},
+        )
+        db.execute(
+            text(
+                "INSERT INTO department_service_addons("
+                "id, department_id, addon_id, service_scope, quantity_mode, lunch_count, dinner_count"
+                ") VALUES"
+                "('row-invalid-cross-site', :department_a, 'addon-invalid-cross-site', 'breakfast', 'custom', 1, NULL), "
+                "('row-valid-cross-site', :department_b, 'addon-valid-cross-site', 'all_services', 'custom', 1, 1)"
+            ),
+            {"department_a": department_a, "department_b": department_b},
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    try:
+        _login(client_cook, role="cook", site_id=site_b)
+        valid_response = client_cook.get(
+            f"/ui/kitchen/week?site_id={site_b}&year=2026&week=37",
+            headers={"X-User-Role": "cook", "X-Tenant-Id": "1"},
+        )
+        assert valid_response.status_code == 200
+        verification = get_session()
+        try:
+            row = verification.execute(
+                text(
+                    "SELECT dsa.service_scope, sa.site_id "
+                    "FROM department_service_addons dsa "
+                    "JOIN service_addons sa ON sa.id=dsa.addon_id "
+                    "WHERE dsa.id='row-invalid-cross-site'"
+                )
+            ).fetchone()
+            assert row == ("breakfast", site_a)
+        finally:
+            verification.close()
+
+        _login(client_cook, role="cook", site_id=site_a)
+        invalid_response = client_cook.get(
+            f"/ui/kitchen/week?site_id={site_a}&year=2026&week=37",
+            headers={"X-User-Role": "cook", "X-Tenant-Id": "1"},
+        )
+        assert invalid_response.status_code == 503
+    finally:
+        cleanup = get_session()
+        try:
+            cleanup.execute(
+                text(
+                    "DELETE FROM department_service_addons "
+                    "WHERE id IN ('row-invalid-cross-site', 'row-valid-cross-site')"
+                )
+            )
+            cleanup.execute(
+                text(
+                    "DELETE FROM service_addons "
+                    "WHERE id IN ('addon-invalid-cross-site', 'addon-valid-cross-site')"
+                )
+            )
+            cleanup.execute(
+                text("DELETE FROM departments WHERE id IN (:department_a, :department_b)"),
+                {"department_a": department_a, "department_b": department_b},
+            )
+            cleanup.execute(
+                text("DELETE FROM sites WHERE id IN (:site_a, :site_b)"),
+                {"site_a": site_a, "site_b": site_b},
+            )
             cleanup.commit()
         finally:
             cleanup.close()

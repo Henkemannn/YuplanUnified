@@ -225,12 +225,35 @@ def test_service_addon_scope_mode_and_whole_department_resolution(app_session):
     }
 
 
-def test_invalid_legacy_scope_is_reported_with_row_context(app_session):
+def test_invalid_legacy_scope_is_reported_with_row_context(app_session, request):
     from core.db import get_session
 
     site_id = f"site-invalid-{uuid.uuid4()}"
     department_id = f"dept-invalid-{uuid.uuid4()}"
     row_id = f"row-invalid-{uuid.uuid4()}"
+    addon_id = f"addon-invalid-{uuid.uuid4()}"
+
+    def cleanup_invalid_rows() -> None:
+        cleanup = get_session()
+        try:
+            cleanup.execute(
+                text("DELETE FROM department_service_addons WHERE id=:id"),
+                {"id": row_id},
+            )
+            cleanup.execute(
+                text("DELETE FROM service_addons WHERE id=:id"),
+                {"id": addon_id},
+            )
+            cleanup.execute(
+                text("DELETE FROM departments WHERE id=:id"),
+                {"id": department_id},
+            )
+            cleanup.execute(text("DELETE FROM sites WHERE id=:id"), {"id": site_id})
+            cleanup.commit()
+        finally:
+            cleanup.close()
+
+    request.addfinalizer(cleanup_invalid_rows)
     db = get_session()
     try:
         _ensure_service_addons_tables(db)
@@ -252,7 +275,7 @@ def test_invalid_legacy_scope_is_reported_with_row_context(app_session):
                 "INSERT INTO service_addons(id, site_id, name, addon_family, is_active, created_at) "
                 "VALUES(:addon, :site, 'Invalid scope addon', 'ovrigt', 1, CURRENT_TIMESTAMP)"
             ),
-            {"addon": f"addon-{uuid.uuid4()}", "site": site_id},
+            {"addon": addon_id, "site": site_id},
         )
         addon_id = db.execute(
             text("SELECT id FROM service_addons WHERE site_id=:site ORDER BY created_at DESC LIMIT 1"),
@@ -279,21 +302,269 @@ def test_invalid_legacy_scope_is_reported_with_row_context(app_session):
     assert error.site_id == site_id
     assert error.service_scope == "breakfast"
 
-    cleanup = get_session()
+
+def test_legacy_null_site_and_scope_are_scoped_without_ambiguous_repair(app_session, request):
+    from core.db import get_session
+
+    site_a = f"site-legacy-a-{uuid.uuid4()}"
+    site_b = f"site-legacy-b-{uuid.uuid4()}"
+    department_a = f"dept-legacy-a-{uuid.uuid4()}"
+    department_b = f"dept-legacy-b-{uuid.uuid4()}"
+    addon_unique = f"addon-legacy-unique-{uuid.uuid4()}"
+    addon_ambiguous = f"addon-legacy-ambiguous-{uuid.uuid4()}"
+    addon_null_scope = f"addon-legacy-null-scope-{uuid.uuid4()}"
+
+    def cleanup_legacy_rows() -> None:
+        cleanup = get_session()
+        try:
+            cleanup.execute(
+                text(
+                    "DELETE FROM department_service_addons "
+                    "WHERE department_id IN (:department_a, :department_b)"
+                ),
+                {"department_a": department_a, "department_b": department_b},
+            )
+            cleanup.execute(
+                text(
+                    "DELETE FROM service_addons "
+                    "WHERE id IN (:unique, :ambiguous, :null_scope)"
+                ),
+                {
+                    "unique": addon_unique,
+                    "ambiguous": addon_ambiguous,
+                    "null_scope": addon_null_scope,
+                },
+            )
+            cleanup.execute(
+                text("DELETE FROM departments WHERE id IN (:department_a, :department_b)"),
+                {"department_a": department_a, "department_b": department_b},
+            )
+            cleanup.execute(
+                text("DELETE FROM sites WHERE id IN (:site_a, :site_b)"),
+                {"site_a": site_a, "site_b": site_b},
+            )
+            cleanup.commit()
+        finally:
+            cleanup.close()
+
+    request.addfinalizer(cleanup_legacy_rows)
+    db = get_session()
     try:
-        cleanup.execute(
-            text("DELETE FROM department_service_addons WHERE id=:id"),
-            {"id": row_id},
+        _ensure_service_addons_tables(db)
+        db.execute(
+            text(
+                "INSERT INTO sites(id, tenant_id, name) VALUES(:site_a, 1, 'Legacy A'), (:site_b, 1, 'Legacy B')"
+            ),
+            {"site_a": site_a, "site_b": site_b},
         )
-        cleanup.execute(
-            text("DELETE FROM service_addons WHERE site_id=:site"),
-            {"site": site_id},
+        db.execute(
+            text(
+                "INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed) "
+                "VALUES(:department_a, :site_a, 'Legacy Dept A', 'fixed', 10), "
+                "(:department_b, :site_b, 'Legacy Dept B', 'fixed', 10)"
+            ),
+            {
+                "department_a": department_a,
+                "department_b": department_b,
+                "site_a": site_a,
+                "site_b": site_b,
+            },
         )
-        cleanup.execute(
-            text("DELETE FROM departments WHERE id=:department"),
-            {"department": department_id},
+        db.execute(
+            text(
+                "INSERT INTO service_addons(id, site_id, name, addon_family, is_active, created_at) "
+                "VALUES(:unique, NULL, 'Legacy unique', 'ovrigt', 1, CURRENT_TIMESTAMP), "
+                "(:ambiguous, NULL, 'Legacy ambiguous', 'ovrigt', 1, CURRENT_TIMESTAMP), "
+                "(:null_scope, :site_a, 'Legacy null scope', 'ovrigt', 1, CURRENT_TIMESTAMP)"
+            ),
+            {
+                "unique": addon_unique,
+                "ambiguous": addon_ambiguous,
+                "null_scope": addon_null_scope,
+                "site_a": site_a,
+            },
         )
-        cleanup.execute(text("DELETE FROM sites WHERE id=:site"), {"site": site_id})
-        cleanup.commit()
+        db.execute(
+            text(
+                "INSERT INTO department_service_addons("
+                "id, department_id, addon_id, service_scope, quantity_mode, lunch_count, dinner_count"
+                ") VALUES"
+                "(:unique_row, :department_a, :unique, 'lunch', 'custom', 2, NULL), "
+                "(:ambiguous_a, :department_a, :ambiguous, 'lunch', 'custom', 2, NULL), "
+                "(:ambiguous_b, :department_b, :ambiguous, 'dinner', 'custom', NULL, 3), "
+                "(:null_scope_row, :department_a, :null_scope, NULL, 'custom', 4, NULL)"
+            ),
+            {
+                "unique_row": f"row-unique-{uuid.uuid4()}",
+                "ambiguous_a": f"row-ambiguous-a-{uuid.uuid4()}",
+                "ambiguous_b": f"row-ambiguous-b-{uuid.uuid4()}",
+                "null_scope_row": f"row-null-scope-{uuid.uuid4()}",
+                "department_a": department_a,
+                "department_b": department_b,
+                "unique": addon_unique,
+                "ambiguous": addon_ambiguous,
+                "null_scope": addon_null_scope,
+            },
+        )
+        db.commit()
     finally:
-        cleanup.close()
+        db.close()
+
+    rows = ServiceAddonsRepo().list_active(site_a)
+    names = {row["name"] for row in rows}
+    assert "Legacy unique" in names
+    assert "Legacy ambiguous" not in names, names
+
+    scoped_rows = DepartmentServiceAddonsRepo().list_for_department(department_a, site_id=site_a)
+    null_scope_row = _row_by_name(scoped_rows, "Legacy null scope")
+    assert null_scope_row["service_scope"] == "lunch"
+    assert null_scope_row["lunch_count"] == 4
+
+    verification = get_session()
+    try:
+        assert verification.execute(
+            text("SELECT site_id FROM service_addons WHERE id=:id"),
+            {"id": addon_unique},
+        ).scalar_one() == site_a
+        assert verification.execute(
+            text("SELECT site_id FROM service_addons WHERE id=:id"),
+            {"id": addon_ambiguous},
+        ).scalar_one_or_none() is None
+    finally:
+        verification.close()
+
+
+def test_k26_totals_are_site_scoped_for_invalid_and_valid_sites(app_session, request):
+    from core.db import get_session
+
+    site_a = f"site-k26-a-{uuid.uuid4()}"
+    site_b = f"site-k26-b-{uuid.uuid4()}"
+    department_a = f"dept-k26-a-{uuid.uuid4()}"
+    department_b = f"dept-k26-b-{uuid.uuid4()}"
+    addon_a = f"addon-k26-a-{uuid.uuid4()}"
+    addon_b = f"addon-k26-b-{uuid.uuid4()}"
+    row_a = f"row-k26-a-{uuid.uuid4()}"
+    row_b = f"row-k26-b-{uuid.uuid4()}"
+
+    def cleanup_k26_rows() -> None:
+        cleanup = get_session()
+        try:
+            cleanup.execute(
+                text("DELETE FROM department_service_addons WHERE id IN (:row_a, :row_b)"),
+                {"row_a": row_a, "row_b": row_b},
+            )
+            cleanup.execute(
+                text("DELETE FROM service_addons WHERE id IN (:addon_a, :addon_b)"),
+                {"addon_a": addon_a, "addon_b": addon_b},
+            )
+            cleanup.execute(
+                text(
+                    "DELETE FROM departments WHERE id IN (:department_a, :department_b)"
+                ),
+                {"department_a": department_a, "department_b": department_b},
+            )
+            cleanup.execute(
+                text("DELETE FROM sites WHERE id IN (:site_a, :site_b)"),
+                {"site_a": site_a, "site_b": site_b},
+            )
+            cleanup.commit()
+        finally:
+            cleanup.close()
+
+    request.addfinalizer(cleanup_k26_rows)
+    db = get_session()
+    try:
+        _ensure_service_addons_tables(db)
+        db.execute(
+            text(
+                "INSERT INTO sites(id, tenant_id, name) VALUES"
+                "(:site_a, 1, 'K26 A'), (:site_b, 1, 'K26 B')"
+            ),
+            {"site_a": site_a, "site_b": site_b},
+        )
+        db.execute(
+            text(
+                "INSERT INTO departments("
+                "id, site_id, name, resident_count_mode, resident_count_fixed"
+                ") VALUES"
+                "(:department_a, :site_a, 'K26 Dept A', 'fixed', 10),"
+                "(:department_b, :site_b, 'K26 Dept B', 'fixed', 10)"
+            ),
+            {
+                "department_a": department_a,
+                "department_b": department_b,
+                "site_a": site_a,
+                "site_b": site_b,
+            },
+        )
+        db.execute(
+            text(
+                "INSERT INTO service_addons("
+                "id, site_id, name, addon_family, is_active, created_at"
+                ") VALUES"
+                "(:addon_a, :site_a, 'K26 Invalid', 'ovrigt', 1, CURRENT_TIMESTAMP),"
+                "(:addon_b, :site_b, 'K26 Valid', 'ovrigt', 1, CURRENT_TIMESTAMP)"
+            ),
+            {
+                "addon_a": addon_a,
+                "addon_b": addon_b,
+                "site_a": site_a,
+                "site_b": site_b,
+            },
+        )
+        db.execute(
+            text(
+                "INSERT INTO department_service_addons("
+                "id, department_id, addon_id, service_scope, quantity_mode,"
+                "lunch_count, dinner_count"
+                ") VALUES"
+                "(:row_a, :department_a, :addon_a, 'breakfast', 'custom', 5, NULL),"
+                "(:row_b, :department_b, :addon_b, 'lunch', 'custom', 4, NULL)"
+            ),
+            {
+                "row_a": row_a,
+                "row_b": row_b,
+                "department_a": department_a,
+                "department_b": department_b,
+                "addon_a": addon_a,
+                "addon_b": addon_b,
+            },
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    totals_repo = DepartmentServiceAddonsRepo()
+    for totals in (
+        totals_repo.list_totals_for_site_meal(site_b, "lunch"),
+        totals_repo.list_totals_for_site_meal_with_context(
+            site_b, "lunch", year=2026, week=40, weekday=2
+        ),
+    ):
+        assert [(row["addon_name"], row["total_count"]) for row in totals] == [
+            ("K26 Valid", 4)
+        ]
+
+    for method in (
+        lambda: totals_repo.list_totals_for_site_meal(site_a, "lunch"),
+        lambda: totals_repo.list_totals_for_site_meal_with_context(
+            site_a, "lunch", year=2026, week=40, weekday=2
+        ),
+    ):
+        with pytest.raises(ServiceAddonDataIntegrityError) as exc_info:
+            method()
+        assert exc_info.value.row_id == row_a
+        assert exc_info.value.site_id == site_a
+
+    verification = get_session()
+    try:
+        assert verification.execute(
+            text("SELECT site_id FROM service_addons WHERE id=:id"),
+            {"id": addon_b},
+        ).scalar_one() == site_b
+        assert verification.execute(
+            text("SELECT service_scope FROM department_service_addons WHERE id=:id"),
+            {"id": row_a},
+        ).scalar_one() == "breakfast"
+    finally:
+        verification.close()
