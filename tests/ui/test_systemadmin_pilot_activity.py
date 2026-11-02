@@ -86,6 +86,7 @@ def test_systemadmin_dashboard_shows_pilot_activity(app_session):
             sess["user_id"] = superuser_id
             sess["role"] = "superuser"
             sess["tenant_id"] = tenant.id
+            sess["auth_version"] = 1
     finally:
         db.close()
 
