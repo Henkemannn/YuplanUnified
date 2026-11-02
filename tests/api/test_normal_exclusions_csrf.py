@@ -3,6 +3,8 @@ from sqlalchemy import text
 
 from core import create_app
 from core.db import create_all
+from core.db import get_session
+from core.models import Site, Tenant, User
 
 
 def _make_app(tmp_path):
@@ -18,6 +20,36 @@ def _make_app(tmp_path):
     })
     with app.app_context():
         create_all()
+        db = get_session()
+        try:
+            tenant = db.query(Tenant).filter_by(id=1).first()
+            if tenant is None:
+                tenant = Tenant(id=1, name="CSRF Test Tenant", active=True)
+                db.add(tenant)
+            if db.query(Site).filter_by(id="site-csrf-1").first() is None:
+                db.add(Site(id="site-csrf-1", name="CSRF Test Site", tenant_id=1))
+            user = db.query(User).filter_by(id=1).first()
+            if user is None:
+                user = User(
+                    id=1,
+                    tenant_id=1,
+                    email="csrf-test@example.test",
+                    username="csrf-test",
+                    password_hash="test-only",
+                    auth_version=1,
+                    role="admin",
+                    full_name="CSRF Test User",
+                    is_active=True,
+                )
+                db.add(user)
+            else:
+                user.tenant_id = 1
+                user.auth_version = 1
+                user.role = "admin"
+                user.is_active = True
+            db.commit()
+        finally:
+            db.close()
     return app
 
 
@@ -41,6 +73,7 @@ def test_toggle_without_csrf_is_forbidden(tmp_path):
         sess["user_id"] = 1
         sess["role"] = "admin"
         sess["tenant_id"] = "1"
+        sess["auth_version"] = 1
     r = client.post(
         "/api/kitchen/planering/normal_exclusions/toggle",
         json=_payload(),
@@ -56,6 +89,7 @@ def test_toggle_with_csrf_passes(tmp_path):
         sess["user_id"] = 1
         sess["role"] = "admin"
         sess["tenant_id"] = "1"
+        sess["auth_version"] = 1
         sess["CSRF_TOKEN"] = "tok123"
     r = client.post(
         "/api/kitchen/planering/normal_exclusions/toggle",
