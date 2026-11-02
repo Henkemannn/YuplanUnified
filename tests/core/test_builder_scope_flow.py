@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import gc
+import os
 from pathlib import Path
 
 import pytest
@@ -16,6 +18,7 @@ from core.components import CompositionService
 from core.components import InMemoryComponentAliasRepository
 from core.components import InMemoryComponentRepository
 from core.components import InMemoryCompositionRepository
+from core.db import create_all
 from core.menu import InMemoryCompositionAliasRepository
 
 
@@ -80,9 +83,44 @@ def _build_flow(scope_repository: object | None = None) -> BuilderFlow:
 
 def _sqlite_client(tmp_path: Path):
     db_path = tmp_path / "builder_scope_flow.db"
-    app = create_app({"TESTING": True, "BUILDER_DB_PATH": str(db_path)})
+    main_db_path = tmp_path / "main.db"
+    previous_database_url = os.environ.get("DATABASE_URL")
+    previous_builder_db_path = os.environ.get("BUILDER_DB_PATH")
+    os.environ["DATABASE_URL"] = f"sqlite:///{main_db_path}"
+    os.environ["BUILDER_DB_PATH"] = str(db_path)
+    try:
+        app = create_app(
+            {
+                "TESTING": True,
+                "DATABASE_URL": f"sqlite:///{main_db_path}",
+                "BUILDER_DB_PATH": str(db_path),
+            }
+        )
+    finally:
+        if previous_database_url is None:
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = previous_database_url
+        if previous_builder_db_path is None:
+            os.environ.pop("BUILDER_DB_PATH", None)
+        else:
+            os.environ["BUILDER_DB_PATH"] = previous_builder_db_path
+    with app.app_context():
+        create_all()
     initialize_builder_sqlite(str(db_path))
     return app.test_client(), str(db_path)
+
+
+def teardown_module() -> None:
+    from core import db as db_mod
+
+    if db_mod._SessionFactory is not None:
+        db_mod._SessionFactory.remove()
+    if db_mod._engine is not None:
+        db_mod._engine.dispose()
+    db_mod._SessionFactory = None
+    db_mod._engine = None
+    gc.collect()
 
 
 def test_create_scoped_component_persists_organisation_scope() -> None:
