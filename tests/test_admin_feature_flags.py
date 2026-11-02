@@ -3,13 +3,40 @@ from flask import Flask
 from werkzeug.security import generate_password_hash
 
 from core.app_factory import create_app
-from core.db import get_session
+from core import db as db_mod
+from core.db import create_all, get_session
 from core.models import Tenant, User
 
 
 @pytest.fixture()
-def app():
-    return create_app({"TESTING": True, "SECRET_KEY": "test"})
+def app(tmp_path, monkeypatch):
+    previous_engine = db_mod._engine
+    previous_session_factory = db_mod._SessionFactory
+    database_url = f"sqlite:///{(tmp_path / 'feature_flags_main.db').as_posix()}"
+    builder_db_path = tmp_path / "feature_flags_builder.db"
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("BUILDER_DB_PATH", str(builder_db_path))
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "test",
+            "database_url": database_url,
+            "BUILDER_DB_PATH": str(builder_db_path),
+        }
+    )
+    with app.app_context():
+        create_all()
+    try:
+        yield app
+    finally:
+        current_session_factory = db_mod._SessionFactory
+        if current_session_factory is not None:
+            current_session_factory.remove()
+        current_engine = db_mod._engine
+        if current_engine is not None and current_engine is not previous_engine:
+            current_engine.dispose()
+        db_mod._engine = previous_engine
+        db_mod._SessionFactory = previous_session_factory
 
 
 @pytest.fixture()
