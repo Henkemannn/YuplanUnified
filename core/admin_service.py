@@ -256,6 +256,7 @@ class AdminService:
             if rcf < 0:
                 raise ValueError("resident_count_fixed_negative")
             from .department_requirement_group_invariant import validate_special_diet_total_in_session
+            from .db import get_session
 
             db = get_session()
             try:

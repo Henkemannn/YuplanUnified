@@ -193,7 +193,8 @@ def test_edit_form_renders_compact_desktop_profile_and_section_closure(client_ad
     assert "dialog.ua-modal::backdrop" in admin_css
     assert "backdrop-filter: blur(12px) saturate(120%);" in admin_css
     assert "Solrosen" in html
-    assert "12 · Varierat" in html
+    assert "12 boende" in html
+    assert "Varierat boendeantal" in html
     assert "Avdelningschefen är sur på måndagar" in html
     assert "Tis lunch 11" not in html
     assert "Serveringsanpassningar" in html
