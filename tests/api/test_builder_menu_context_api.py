@@ -1,21 +1,63 @@
 from __future__ import annotations
 
+import gc
 import os
+import shutil
 import tempfile
 
 from core.app_factory import create_app
 from core.db import create_all
 
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
+_TEMP_DB_DIRS: list[str] = []
 
 
 def _client():
     db_dir = tempfile.mkdtemp(prefix="builder_menu_context_api_")
+    _TEMP_DB_DIRS.append(db_dir)
     db_path = os.path.join(db_dir, "test_app.db")
-    app = create_app({"TESTING": True, "database_url": f"sqlite:///{db_path}", "SECRET_KEY": "test", "FORCE_DB_REINIT": True})
+    builder_db_path = os.path.join(db_dir, "builder.db")
+    previous_builder_db_path = os.environ.get("BUILDER_DB_PATH")
+    os.environ["BUILDER_DB_PATH"] = builder_db_path
+    try:
+        app = create_app(
+            {
+                "TESTING": True,
+                "database_url": f"sqlite:///{db_path}",
+                "BUILDER_DB_PATH": builder_db_path,
+                "SECRET_KEY": "test",
+                "FORCE_DB_REINIT": True,
+            }
+        )
+    finally:
+        if previous_builder_db_path is None:
+            os.environ.pop("BUILDER_DB_PATH", None)
+        else:
+            os.environ["BUILDER_DB_PATH"] = previous_builder_db_path
     with app.app_context():
         create_all()
-    return app.test_client()
+    client = app.test_client()
+    with client.session_transaction() as session:
+        session["user_id"] = 1
+        session["tenant_id"] = 1
+        session["role"] = "admin"
+        session["site_id"] = "site_1"
+    return client
+
+
+def teardown_module() -> None:
+    from core import db as db_mod
+
+    if db_mod._SessionFactory is not None:
+        db_mod._SessionFactory.remove()
+    if db_mod._engine is not None:
+        db_mod._engine.dispose()
+    db_mod._SessionFactory = None
+    db_mod._engine = None
+    gc.collect()
+    for db_dir in _TEMP_DB_DIRS:
+        shutil.rmtree(db_dir)
+    _TEMP_DB_DIRS.clear()
 
 
 def test_create_menu_endpoint() -> None:
