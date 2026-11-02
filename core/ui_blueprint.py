@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from flask import Blueprint, render_template, session, request, jsonify, redirect, url_for, flash, g, abort
+from flask import Blueprint, current_app, render_template, session, request, jsonify, redirect, url_for, flash, g, abort
 from sqlalchemy import text
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -4936,12 +4936,33 @@ def kitchen_veckovy_week():
         finally:
             db.close()
         svc = WeekviewService()
-        from core.admin_repo import DepartmentServiceAddonsRepo, ServiceAddonsRepo
+        from core.admin_repo import (
+            DepartmentServiceAddonsRepo,
+            ServiceAddonDataIntegrityError,
+            ServiceAddonsRepo,
+        )
+        from core.http_errors import problem
 
-        active_addon_ids = {
-            str(addon["id"])
-            for addon in ServiceAddonsRepo().list_active(str(site_id))
-        }
+        try:
+            active_addon_ids = {
+                str(addon["id"])
+                for addon in ServiceAddonsRepo().list_active(str(site_id))
+            }
+        except ServiceAddonDataIntegrityError as exc:
+            current_app.logger.error(
+                "Invalid service-addon data blocked Kitchen Weekview: row_id=%s department_id=%s site_id=%s scope=%r quantity_mode=%r",
+                exc.row_id,
+                exc.department_id,
+                exc.site_id,
+                exc.service_scope,
+                exc.quantity_mode,
+            )
+            return problem(
+                503,
+                "https://example.com/errors/service_addon_data_invalid",
+                "Service addon data unavailable",
+                "service_addon_data_invalid",
+            )
         department_addons_repo = DepartmentServiceAddonsRepo()
         deps_out = []
         for dep in departments:

@@ -183,3 +183,69 @@ def test_kitchen_legacy_row_keeps_clickable_contract_while_cohort_row_is_read_on
     assert 'Inga specialkoster kopplade' not in html
 
 
+def test_kitchen_weekview_fails_closed_for_invalid_service_addon_scope(client_cook, caplog):
+    caplog.set_level("ERROR", logger="core.ui_blueprint")
+    site_id = "site-invalid-addon"
+    department_id = "dept-invalid-addon"
+    _seed_site(client_cook.application, site_id=site_id, site_name="Invalid Addon Site")
+    _seed_department(site_id, department_id, "Invalid Addon Department")
+    _login(client_cook, role="cook", site_id=site_id)
+
+    from core.admin_repo import _ensure_service_addons_tables
+    from core.db import get_session
+
+    db = get_session()
+    try:
+        _ensure_service_addons_tables(db)
+        db.execute(
+            text(
+                "INSERT INTO service_addons(id, site_id, name, addon_family, is_active, created_at) "
+                "VALUES('addon-invalid-scope', :site, 'Invalid scope addon', 'ovrigt', 1, CURRENT_TIMESTAMP)"
+            ),
+            {"site": site_id},
+        )
+        db.execute(
+            text(
+                "INSERT INTO department_service_addons("
+                "id, department_id, addon_id, service_scope, quantity_mode, lunch_count, dinner_count"
+                ") VALUES('row-invalid-scope', :department, 'addon-invalid-scope', 'breakfast', 'custom', 5, NULL)"
+            ),
+            {"department": department_id},
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client_cook.get(
+        f"/ui/kitchen/week?site_id={site_id}&year=2026&week=37",
+        headers={"X-User-Role": "cook", "X-Tenant-Id": "1"},
+    )
+    assert response.status_code == 503
+    assert response.content_type == "application/problem+json"
+    payload = response.get_json()
+    assert payload["type"] == "https://example.com/errors/service_addon_data_invalid"
+    assert payload["title"] == "Service addon data unavailable"
+    assert payload["detail"] == "service_addon_data_invalid"
+    assert "row-invalid-scope" not in response.get_data(as_text=True)
+    assert department_id not in response.get_data(as_text=True)
+    assert site_id not in response.get_data(as_text=True)
+    assert "<html" not in response.get_data(as_text=True).lower()
+    assert "row_id=row-invalid-scope" in caplog.text
+    assert f"site_id={site_id}" in caplog.text
+
+    cleanup = get_session()
+    try:
+        cleanup.execute(
+            text("DELETE FROM department_service_addons WHERE id='row-invalid-scope'")
+        )
+        cleanup.execute(
+            text("DELETE FROM service_addons WHERE id='addon-invalid-scope'")
+        )
+        cleanup.execute(
+            text("DELETE FROM departments WHERE id=:department"),
+            {"department": department_id},
+        )
+        cleanup.execute(text("DELETE FROM sites WHERE id=:site"), {"site": site_id})
+        cleanup.commit()
+    finally:
+        cleanup.close()

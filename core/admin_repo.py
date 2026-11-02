@@ -545,6 +545,26 @@ def tenant_exists(db, tenant_id: int | None) -> bool:
         return row is not None
     except Exception:
         return False
+
+
+class ServiceAddonDataIntegrityError(ValueError):
+    def __init__(
+        self,
+        *,
+        row_id: str,
+        department_id: str | None,
+        site_id: str | None,
+        service_scope: object,
+        quantity_mode: object,
+    ) -> None:
+        self.row_id = row_id
+        self.department_id = department_id
+        self.site_id = site_id
+        self.service_scope = service_scope
+        self.quantity_mode = quantity_mode
+        super().__init__("service_addon_data_invalid")
+
+
 def _backfill_service_addon_semantics(db) -> None:
     if not _table_has_column(db, "department_service_addons", "service_scope") or not _table_has_column(db, "department_service_addons", "quantity_mode"):
         return
@@ -563,12 +583,32 @@ def _backfill_service_addon_semantics(db) -> None:
         dinner_count = row[2]
         service_scope = row[3]
         quantity_mode = row[4]
-        canonical = canonicalize_service_addon_assignment(
-            service_scope=service_scope,
-            quantity_mode=quantity_mode,
-            lunch_count=lunch_count,
-            dinner_count=dinner_count,
-        )
+        try:
+            canonical = canonicalize_service_addon_assignment(
+                service_scope=service_scope,
+                quantity_mode=quantity_mode,
+                lunch_count=lunch_count,
+                dinner_count=dinner_count,
+            )
+        except ValueError as exc:
+            context = db.execute(
+                text(
+                    """
+                    SELECT dsa.department_id, d.site_id
+                    FROM department_service_addons dsa
+                    LEFT JOIN departments d ON d.id=dsa.department_id
+                    WHERE dsa.id=:id
+                    """
+                ),
+                {"id": row_id},
+            ).fetchone()
+            raise ServiceAddonDataIntegrityError(
+                row_id=row_id,
+                department_id=str(context[0]) if context and context[0] is not None else None,
+                site_id=str(context[1]) if context and context[1] is not None else None,
+                service_scope=service_scope,
+                quantity_mode=quantity_mode,
+            ) from exc
         db.execute(
             text(
                 """

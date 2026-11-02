@@ -2,7 +2,17 @@ from __future__ import annotations
 
 import uuid
 
-from core.admin_repo import DepartmentServiceAddonsRepo, DepartmentsRepo, ServiceAddonsRepo, SitesRepo
+import pytest
+from sqlalchemy import text
+
+from core.admin_repo import (
+    DepartmentServiceAddonsRepo,
+    DepartmentsRepo,
+    ServiceAddonDataIntegrityError,
+    ServiceAddonsRepo,
+    SitesRepo,
+    _ensure_service_addons_tables,
+)
 from core.residents_schedule_repo import ResidentsScheduleRepo
 from core.service_addon_contract import resolve_service_addon_quantity
 
@@ -120,6 +130,8 @@ def test_service_addon_scope_mode_and_whole_department_resolution(app_session):
         )
         == 10
     )
+
+
     assert (
         resolve_service_addon_quantity(
             fixed_whole,
@@ -211,3 +223,77 @@ def test_service_addon_scope_mode_and_whole_department_resolution(app_session):
         "Alla serveringar": 6,
         "Kväll endast": 2,
     }
+
+
+def test_invalid_legacy_scope_is_reported_with_row_context(app_session):
+    from core.db import get_session
+
+    site_id = f"site-invalid-{uuid.uuid4()}"
+    department_id = f"dept-invalid-{uuid.uuid4()}"
+    row_id = f"row-invalid-{uuid.uuid4()}"
+    db = get_session()
+    try:
+        _ensure_service_addons_tables(db)
+        db.execute(
+            text(
+                "INSERT INTO sites(id, tenant_id, name) VALUES(:site, 1, 'Invalid scope site')"
+            ),
+            {"site": site_id},
+        )
+        db.execute(
+            text(
+                "INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed) "
+                "VALUES(:department, :site, 'Invalid scope department', 'fixed', 10)"
+            ),
+            {"department": department_id, "site": site_id},
+        )
+        db.execute(
+            text(
+                "INSERT INTO service_addons(id, site_id, name, addon_family, is_active, created_at) "
+                "VALUES(:addon, :site, 'Invalid scope addon', 'ovrigt', 1, CURRENT_TIMESTAMP)"
+            ),
+            {"addon": f"addon-{uuid.uuid4()}", "site": site_id},
+        )
+        addon_id = db.execute(
+            text("SELECT id FROM service_addons WHERE site_id=:site ORDER BY created_at DESC LIMIT 1"),
+            {"site": site_id},
+        ).scalar_one()
+        db.execute(
+            text(
+                "INSERT INTO department_service_addons("
+                "id, department_id, addon_id, service_scope, quantity_mode, lunch_count, dinner_count"
+                ") VALUES(:row, :department, :addon, 'breakfast', 'custom', 5, NULL)"
+            ),
+            {"row": row_id, "department": department_id, "addon": addon_id},
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    with pytest.raises(ServiceAddonDataIntegrityError) as exc_info:
+        ServiceAddonsRepo().list_active(site_id)
+
+    error = exc_info.value
+    assert error.row_id == row_id
+    assert error.department_id == department_id
+    assert error.site_id == site_id
+    assert error.service_scope == "breakfast"
+
+    cleanup = get_session()
+    try:
+        cleanup.execute(
+            text("DELETE FROM department_service_addons WHERE id=:id"),
+            {"id": row_id},
+        )
+        cleanup.execute(
+            text("DELETE FROM service_addons WHERE site_id=:site"),
+            {"site": site_id},
+        )
+        cleanup.execute(
+            text("DELETE FROM departments WHERE id=:department"),
+            {"department": department_id},
+        )
+        cleanup.execute(text("DELETE FROM sites WHERE id=:site"), {"site": site_id})
+        cleanup.commit()
+    finally:
+        cleanup.close()
