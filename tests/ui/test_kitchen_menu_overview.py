@@ -15,10 +15,28 @@ from core.components import (
 )
 from core.app_factory import create_app
 from core.commun_builder_linkage import CommunBuilderMenuLinkService
-from core.db import get_session, get_new_session
+from core.db import create_all, get_session, get_new_session
 from core.menu import InMemoryCompositionAliasRepository, MenuService
 from core.menu_service import MenuServiceDB
 from core.models import Dish
+
+
+def _make_isolated_app(tmp_path, monkeypatch):
+    database_url = f"sqlite:///{(tmp_path / 'kitchen_menu_main.db').as_posix()}"
+    builder_db_path = tmp_path / "kitchen_menu_builder.db"
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("BUILDER_DB_PATH", str(builder_db_path))
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "test",
+            "database_url": database_url,
+            "BUILDER_DB_PATH": str(builder_db_path),
+        }
+    )
+    with app.app_context():
+        create_all()
+    return app
 
 
 def _seed_site(db, site_id: str):
@@ -27,9 +45,8 @@ def _seed_site(db, site_id: str):
         db.commit()
 
 
-def test_kitchen_menu_overview_renders():
-    app = create_app()
-    app.config.update({"TESTING": True})
+def test_kitchen_menu_overview_renders(tmp_path, monkeypatch):
+    app = _make_isolated_app(tmp_path, monkeypatch)
     with app.app_context():
         db = get_session()
         try:
@@ -79,9 +96,8 @@ def test_kitchen_menu_overview_renders():
     assert 'app-shell__nav-item">Admin<' not in html
 
 
-def test_kitchen_menu_overview_prefers_published_builder_projection():
-    app = create_app()
-    app.config.update({"TESTING": True})
+def test_kitchen_menu_overview_prefers_published_builder_projection(tmp_path, monkeypatch):
+    app = _make_isolated_app(tmp_path, monkeypatch)
     site_id = "site-menu-builder"
     year = 2026
     week = 42

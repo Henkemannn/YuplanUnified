@@ -3,7 +3,7 @@ import pytest
 from sqlalchemy import text
 
 from core.app_factory import create_app
-from core.db import get_session
+from core.db import create_all, get_session
 
 
 def _enable_weekview_feature(client_admin) -> None:
@@ -25,13 +25,29 @@ pytestmark = pytest.mark.usefixtures("enable_weekview")
 
 def _seed_site(db, site_id: str):
     if not db.execute(text("SELECT 1 FROM sites WHERE id=:i"), {"i": site_id}).fetchone():
-        db.execute(text("INSERT INTO sites(id,name) VALUES(:i,:n)"), {"i": site_id, "n": f"K3 {site_id}"})
+        db.execute(
+            text("INSERT INTO sites(id,name,tenant_id) VALUES(:i,:n,1)"),
+            {"i": site_id, "n": f"K3 {site_id}"},
+        )
         db.commit()
 
 
-def test_kitchen_weekpicker_renders_on_pages():
-    app = create_app()
-    app.config.update({"TESTING": True})
+def test_kitchen_weekpicker_renders_on_pages(tmp_path, monkeypatch):
+    database_url = f"sqlite:///{(tmp_path / 'kitchen_weekpicker_main.db').as_posix()}"
+    builder_db_path = tmp_path / "kitchen_weekpicker_builder.db"
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("BUILDER_DB_PATH", str(builder_db_path))
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "test",
+            "database_url": database_url,
+            "BUILDER_DB_PATH": str(builder_db_path),
+        }
+    )
+    with app.app_context():
+        create_all()
+    _enable_weekview_feature(app.test_client())
     with app.app_context():
         db = get_session()
         try:

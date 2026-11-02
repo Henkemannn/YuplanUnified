@@ -2,10 +2,28 @@ import pytest
 from sqlalchemy import text
 
 from core.app_factory import create_app
-from core.db import get_session
+from core.db import create_all, get_session
 from core.models import Dish
 
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
+
+
+def _make_isolated_app(tmp_path, monkeypatch):
+    database_url = f"sqlite:///{(tmp_path / 'kitchen_planering_main.db').as_posix()}"
+    builder_db_path = tmp_path / "kitchen_planering_builder.db"
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("BUILDER_DB_PATH", str(builder_db_path))
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "test",
+            "database_url": database_url,
+            "BUILDER_DB_PATH": str(builder_db_path),
+        }
+    )
+    with app.app_context():
+        create_all()
+    return app
 
 
 def _seed_site(db, site_id: str):
@@ -14,9 +32,8 @@ def _seed_site(db, site_id: str):
     db.commit()
 
 
-def test_planering_uses_menu_utils_titles_prefers_main_over_alt1():
-    app = create_app()
-    app.config.update({"TESTING": True})
+def test_planering_uses_menu_utils_titles_prefers_main_over_alt1(tmp_path, monkeypatch):
+    app = _make_isolated_app(tmp_path, monkeypatch)
     with app.app_context():
         db = get_session()
         from unittest.mock import patch

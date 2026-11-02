@@ -4,7 +4,7 @@ from flask.testing import FlaskClient
 from sqlalchemy import text
 
 from core.app_factory import create_app
-from core.db import get_session
+from core.db import create_all, get_session
 
 
 def _seed_site_with_departments(db, site_id: str, dep_pairs: list[tuple[str, str]]):
@@ -31,9 +31,21 @@ def _seed_site_with_departments(db, site_id: str, dep_pairs: list[tuple[str, str
     db.commit()
 
 
-def test_weekview_report_basic_structure():
-    app = create_app()
-    app.config.update({"TESTING": True})
+def test_weekview_report_basic_structure(tmp_path, monkeypatch):
+    database_url = f"sqlite:///{(tmp_path / 'weekview_report_main.db').as_posix()}"
+    builder_db_path = tmp_path / "weekview_report_builder.db"
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("BUILDER_DB_PATH", str(builder_db_path))
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "test",
+            "database_url": database_url,
+            "BUILDER_DB_PATH": str(builder_db_path),
+        }
+    )
+    with app.app_context():
+        create_all()
     with app.app_context():
         db = get_session()
         try:
