@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import io
-import tempfile
+import gc
 import os
+import shutil
+import tempfile
 from pathlib import Path
 
 from docx import Document
 from openpyxl import Workbook
 from core.app_factory import create_app
+from core.db import create_all
 
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-User-Id": "11"}
+_TEMP_DB_DIRS: list[str] = []
+_TEMP_DB_FILES: list[str] = []
 
 
 def _headers(*, role: str = "admin", tenant_id: int = 1, user_id: int = 11) -> dict[str, str]:
@@ -28,27 +33,100 @@ def _seed_session(client, *, role: str, tenant_id: int, user_id: int) -> None:
 
 
 def _app_with_builder_db(db_path: str):
+    db_dir = tempfile.mkdtemp(prefix="builder_api_main_")
+    _TEMP_DB_DIRS.append(db_dir)
+    main_db_path = os.path.join(db_dir, "main.db")
+    _TEMP_DB_FILES.append(db_path)
     previous = os.environ.get("BUILDER_DB_PATH")
     os.environ["BUILDER_DB_PATH"] = db_path
     try:
-        return create_app({"TESTING": True})
+        app = create_app(
+            {
+                "TESTING": True,
+                "database_url": f"sqlite:///{main_db_path}",
+                "BUILDER_DB_PATH": db_path,
+                "FORCE_DB_REINIT": True,
+            }
+        )
     finally:
         if previous is None:
             os.environ.pop("BUILDER_DB_PATH", None)
         else:
             os.environ["BUILDER_DB_PATH"] = previous
+    with app.app_context():
+        create_all()
+    return app
 
 
 def _client():
-    app = create_app({"TESTING": True})
+    db_dir = tempfile.mkdtemp(prefix="builder_api_")
+    _TEMP_DB_DIRS.append(db_dir)
+    main_db_path = os.path.join(db_dir, "main.db")
+    builder_db_path = os.path.join(db_dir, "builder.db")
+    previous = os.environ.get("BUILDER_DB_PATH")
+    os.environ["BUILDER_DB_PATH"] = builder_db_path
+    try:
+        app = create_app(
+            {
+                "TESTING": True,
+                "database_url": f"sqlite:///{main_db_path}",
+                "BUILDER_DB_PATH": builder_db_path,
+                "FORCE_DB_REINIT": True,
+            }
+        )
+    finally:
+        if previous is None:
+            os.environ.pop("BUILDER_DB_PATH", None)
+        else:
+            os.environ["BUILDER_DB_PATH"] = previous
+    with app.app_context():
+        create_all()
     return app.test_client()
 
 
 def _sqlite_client():
-    fd, db_path = tempfile.mkstemp(prefix="builder_import_session_", suffix=".db")
-    os.close(fd)
-    app = create_app({"TESTING": True, "BUILDER_DB_PATH": db_path})
+    db_dir = tempfile.mkdtemp(prefix="builder_import_session_")
+    _TEMP_DB_DIRS.append(db_dir)
+    main_db_path = os.path.join(db_dir, "main.db")
+    builder_db_path = os.path.join(db_dir, "builder.db")
+    previous = os.environ.get("BUILDER_DB_PATH")
+    os.environ["BUILDER_DB_PATH"] = builder_db_path
+    try:
+        app = create_app(
+            {
+                "TESTING": True,
+                "database_url": f"sqlite:///{main_db_path}",
+                "BUILDER_DB_PATH": builder_db_path,
+                "FORCE_DB_REINIT": True,
+            }
+        )
+    finally:
+        if previous is None:
+            os.environ.pop("BUILDER_DB_PATH", None)
+        else:
+            os.environ["BUILDER_DB_PATH"] = previous
+    with app.app_context():
+        create_all()
     return app.test_client()
+
+
+def teardown_module() -> None:
+    from core import db as db_mod
+
+    if db_mod._SessionFactory is not None:
+        db_mod._SessionFactory.remove()
+    if db_mod._engine is not None:
+        db_mod._engine.dispose()
+    db_mod._SessionFactory = None
+    db_mod._engine = None
+    gc.collect()
+    for db_file in _TEMP_DB_FILES:
+        if os.path.exists(db_file):
+            os.remove(db_file)
+    _TEMP_DB_FILES.clear()
+    for db_dir in _TEMP_DB_DIRS:
+        shutil.rmtree(db_dir)
+    _TEMP_DB_DIRS.clear()
 
 
 def _xlsx_bytes(rows: list[list[str]]) -> bytes:
