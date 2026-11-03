@@ -268,7 +268,7 @@ def test_kitchen_weekview_site_isolation_ignores_invalid_addon_on_other_site(cli
 
     db = get_session()
     try:
-        _ensure_service_addons_tables(db)
+        _ensure_service_addons_tables(db, site_id=site_a)
         db.execute(
             text(
                 "INSERT INTO service_addons(id, site_id, name, addon_family, is_active, created_at) "

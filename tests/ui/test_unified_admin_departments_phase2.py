@@ -1046,10 +1046,23 @@ def test_departments_delete_rejects_foreign_site_department(client_admin):
             db.close()
 
 
-def test_departments_delete_rolls_back_on_failure(client_admin):
+def test_departments_delete_rolls_back_on_failure(client_admin, request):
     """Test a cleanup failure rolls back parent and child changes."""
     app = client_admin.application
     ids = _seed_department_delete_fixture(app, include_contract_rows=True, add_delete_trigger=True)
+
+    def remove_failure_trigger() -> None:
+        from core.db import get_session
+        from sqlalchemy import text
+
+        db = get_session()
+        try:
+            db.execute(text("DROP TRIGGER IF EXISTS fail_department_service_addons_delete"))
+            db.commit()
+        finally:
+            db.close()
+
+    request.addfinalizer(remove_failure_trigger)
 
     with client_admin.session_transaction() as sess:
         sess["site_id"] = ids["site_id"]
