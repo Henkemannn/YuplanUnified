@@ -42,7 +42,50 @@ function createBuilderDishEditor(config) {
     if (key === "fisk" || key === "kott" || key === "dessert" || key === "ovrigt") {
       return key;
     }
+    const categorySelect = document.getElementById("dishOverviewCategorySelect");
+    if (categorySelect && [...categorySelect.options].some((option) => option.value === key)) {
+      return key;
+    }
     return "";
+  }
+
+  async function syncDishCategoryOptions(selectedKey) {
+    const categorySelect = document.getElementById("dishOverviewCategorySelect");
+    if (!categorySelect) {
+      return;
+    }
+    const key = normalizeDishCategoryKey(selectedKey);
+    if (key && ![...categorySelect.options].some((option) => option.value === key)) {
+      const option = document.createElement("option");
+      option.value = key;
+      option.textContent = key;
+      categorySelect.appendChild(option);
+    }
+    try {
+      const result = await _callApi("/api/builder/dish-categories", { method: "GET" });
+      const categories = result && result.data && Array.isArray(result.data.categories)
+        ? result.data.categories
+        : [];
+      for (const category of categories) {
+        const categoryKey = normalizeDishCategoryKey(category && category.key);
+        const label = String(category && (category.label || category.key) || categoryKey).trim();
+        if (!categoryKey || !label) {
+          continue;
+        }
+        let option = [...categorySelect.options].find((item) => item.value === categoryKey);
+        if (!option) {
+          option = document.createElement("option");
+          option.value = categoryKey;
+          categorySelect.appendChild(option);
+        }
+        option.textContent = label;
+      }
+      if (key) {
+        categorySelect.value = key;
+      }
+    } catch (error) {
+      // Keep the persisted key visible if category discovery is temporarily unavailable.
+    }
   }
 
   function syncDishMenuNameVisibility() {
@@ -788,7 +831,12 @@ function createBuilderDishEditor(config) {
       nameInput.value = String((composition && composition.composition_name) || "");
     }
     if (categorySelect) {
-      categorySelect.value = normalizeDishLibraryGroupValue((composition && composition.library_group) || "ovrigt") || "ovrigt";
+      const libraryGroup = String((composition && composition.library_group) || "ovrigt").trim() || "ovrigt";
+      const normalizedGroup = normalizeDishCategoryKey(libraryGroup);
+      categorySelect.value = normalizeDishLibraryGroupValue(libraryGroup) || "ovrigt";
+      if (normalizedGroup && normalizedGroup !== "ovrigt") {
+        void syncDishCategoryOptions(normalizedGroup);
+      }
     }
     if (useCustomMenuNameCheckbox) {
       useCustomMenuNameCheckbox.checked = Boolean(composition && composition.use_custom_menu_name);
@@ -806,6 +854,11 @@ function createBuilderDishEditor(config) {
     if (key === "kott") return "Kött";
     if (key === "dessert") return "Dessert";
     if (key === "ovrigt") return "Övrigt";
+    const categorySelect = document.getElementById("dishOverviewCategorySelect");
+    const selectedOption = categorySelect
+      ? [...categorySelect.options].find((option) => option.value === key)
+      : null;
+    if (selectedOption) return selectedOption.textContent || key;
     return rawValue || "Ej kategoriserad";
   }
 

@@ -1388,6 +1388,130 @@ def test_reviewed_composition_reuses_exact_and_alias_matches() -> None:
     assert components[0]["component_id"] == existing_id
 
 
+def test_reviewed_composition_can_create_an_explicit_new_variant() -> None:
+    client = _client()
+    detail_id = _create_review_row(client)
+    existing = client.post(
+        "/api/builder/components/site",
+        json={"component_name": "Potato"},
+        headers=HEADERS,
+    )
+    existing_id = (existing.get_json() or {}).get("component", {}).get("component_id")
+
+    rv = client.post(
+        "/api/builder/menus/review_menu/create-reviewed-composition",
+        json={
+            "menu_detail_id": detail_id,
+            "composition_name": "Variant dish",
+            "idempotency_key": "review-new-variant",
+            "components": [{"name": "Potato variant", "selection": "new"}],
+        },
+        headers=HEADERS,
+    )
+    retry = client.post(
+        "/api/builder/menus/review_menu/create-reviewed-composition",
+        json={
+            "menu_detail_id": detail_id,
+            "composition_name": "Variant dish",
+            "idempotency_key": "review-new-variant",
+            "components": [{"name": "Potato variant", "selection": "new"}],
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 201
+    assert retry.status_code == 201
+    component = ((rv.get_json() or {}).get("composition") or {}).get("components", [])[0]
+    retry_component = ((retry.get_json() or {}).get("composition") or {}).get("components", [])[0]
+    assert component["component_id"] != existing_id
+    assert component["component_name"] == "Potato variant"
+    assert retry_component["component_id"] == component["component_id"]
+
+    library = client.get("/api/builder/components", headers=HEADERS)
+    assert library.status_code == 200
+    names_by_id = {
+        item["component_id"]: item["component_name"]
+        for item in ((library.get_json() or {}).get("components") or [])
+    }
+    assert names_by_id[existing_id] == "Potato"
+    assert names_by_id[component["component_id"]] == "Potato variant"
+
+
+def test_reviewed_composition_new_variant_does_not_reuse_alias() -> None:
+    client = _client()
+    detail_id = _create_review_row(client)
+    existing = client.post(
+        "/api/builder/components/site",
+        json={"component_name": "Potato"},
+        headers=HEADERS,
+    )
+    existing_id = (existing.get_json() or {}).get("component", {}).get("component_id")
+    assert client.post(
+        f"/api/builder/components/{existing_id}/aliases",
+        json={"alias_text": "Knöl"},
+        headers=HEADERS,
+    ).status_code == 201
+
+    rv = client.post(
+        "/api/builder/menus/review_menu/create-reviewed-composition",
+        json={
+            "menu_detail_id": detail_id,
+            "composition_name": "Alias variant dish",
+            "idempotency_key": "review-new-alias-variant",
+            "components": [{"name": "Knöl", "selection": "new"}],
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 201
+    component = ((rv.get_json() or {}).get("composition") or {}).get("components", [])[0]
+    assert component["component_id"] != existing_id
+    assert component["component_name"] == "Knöl"
+
+
+def test_reviewed_composition_rejects_same_site_new_variant_name() -> None:
+    client = _client()
+    detail_id = _create_review_row(client)
+    assert client.post(
+        "/api/builder/components/site",
+        json={"component_name": "Potato"},
+        headers=HEADERS,
+    ).status_code == 201
+
+    rv = client.post(
+        "/api/builder/menus/review_menu/create-reviewed-composition",
+        json={
+            "menu_detail_id": detail_id,
+            "composition_name": "Duplicate variant dish",
+            "idempotency_key": "review-duplicate-variant",
+            "components": [{"name": "Potato", "selection": "new"}],
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 400
+    assert "already exists in this site" in str((rv.get_json() or {}).get("message"))
+
+
+def test_reviewed_composition_explicit_reuse_requires_accessible_component_id() -> None:
+    client = _client()
+    detail_id = _create_review_row(client)
+
+    rv = client.post(
+        "/api/builder/menus/review_menu/create-reviewed-composition",
+        json={
+            "menu_detail_id": detail_id,
+            "composition_name": "Missing reuse choice",
+            "idempotency_key": "review-missing-reuse-id",
+            "components": [{"name": "Potato", "selection": "reuse"}],
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 400
+    assert "component_id is required for reuse" in str((rv.get_json() or {}).get("message"))
+
+
 def test_reviewed_composition_retry_is_idempotent_and_payload_conflict_is_explicit() -> None:
     client = _client()
     detail_id = _create_review_row(client)

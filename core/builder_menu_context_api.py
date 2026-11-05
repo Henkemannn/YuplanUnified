@@ -625,7 +625,7 @@ def resolve_menu_detail(menu_id: str):
         flow = _get_menu_context_flow()
         actor: ActorContext | None = None
         if handoff_resolution:
-            from .builder_api import _get_builder_actor
+            from .builder_api import _get_builder_actor, _require_dish_library_group
 
             actor = _get_builder_actor()
         updated = flow.resolve_menu_detail(
@@ -655,7 +655,7 @@ def create_composition_from_row(menu_id: str):
         flow = _get_menu_context_flow()
         actor: ActorContext | None = None
         try:
-            from .builder_api import _get_builder_actor
+            from .builder_api import _get_builder_actor, _require_dish_library_group
 
             actor = _get_builder_actor()
         except Exception:
@@ -700,7 +700,7 @@ def create_reviewed_composition(menu_id: str):
         return payload
 
     try:
-        from .builder_api import _get_builder_actor
+        from .builder_api import _get_builder_actor, _require_dish_library_group
 
         actor = _get_builder_actor()
         if actor is None or not str(actor.site_id or "").strip():
@@ -718,6 +718,11 @@ def create_reviewed_composition(menu_id: str):
         if not isinstance(components, list):
             raise ValueError("components must be a list")
         library_group = _optional_str(payload, "library_group")
+        if library_group is not None and library_group.startswith("dishcat_"):
+            library_group = _require_dish_library_group(
+                {"library_group": library_group},
+                actor=actor,
+            )
         flow = _get_menu_context_flow()
         composition, updated_menu_detail = flow.create_reviewed_site_composition_from_unresolved_row(
             menu_id=str(menu_id),

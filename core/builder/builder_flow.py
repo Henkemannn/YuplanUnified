@@ -590,6 +590,7 @@ class BuilderFlow:
         category: str | None = None,
         actor: ActorContext | None = None,
         scope: ObjectScope | None = None,
+        force_new: bool = False,
     ) -> Component:
         category_value = str(category or "").strip().lower() or None
         name_value = self._normalize_component_name(component_name)
@@ -611,20 +612,23 @@ class BuilderFlow:
                 )
             return self._can_read_library_object("component", existing_id, actor=actor)
 
-        match = self.match_component_name(name_value, actor=actor)
-        if match.status in {"exact_match", "alias_match"} and match.component_id:
-            existing = self._component_service.get_component(match.component_id)
-            if existing is not None and can_reuse(existing.component_id):
-                if category_value and not list(existing.categories or []):
-                    return self._component_service.set_component_category(existing.component_id, category_value)
-                return existing
-
         normalized_key = self._normalize_component_key(name_value)
+        if not force_new:
+            match = self.match_component_name(name_value, actor=actor)
+            if match.status in {"exact_match", "alias_match"} and match.component_id:
+                existing = self._component_service.get_component(match.component_id)
+                if existing is not None and can_reuse(existing.component_id):
+                    if category_value and not list(existing.categories or []):
+                        return self._component_service.set_component_category(existing.component_id, category_value)
+                    return existing
+
         for existing_item in self.list_library_components(actor=actor):
             if (
                 self._normalize_component_key(existing_item.canonical_name) == normalized_key
                 and can_reuse(existing_item.component_id)
             ):
+                if force_new:
+                    raise ValueError("component variant name already exists in this site")
                 if category_value and not list(existing_item.categories or []):
                     return self._component_service.set_component_category(existing_item.component_id, category_value)
                 return existing_item
@@ -642,7 +646,7 @@ class BuilderFlow:
             existing = self._component_service.get_component(component_id)
             if existing is None:
                 break
-            if existing.canonical_name == name_value and can_reuse(existing.component_id):
+            if not force_new and existing.canonical_name == name_value and can_reuse(existing.component_id):
                 if category_value and not list(existing.categories or []):
                     return self._component_service.set_component_category(existing.component_id, category_value)
                 return existing

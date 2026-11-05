@@ -146,6 +146,85 @@ def teardown_module() -> None:
     _TEMP_DB_DIRS.clear()
 
 
+def test_custom_dish_categories_are_site_scoped_and_persisted() -> None:
+    client = _client()
+
+    builtins = client.get("/api/builder/dish-categories", headers=HEADERS)
+    assert builtins.status_code == 200
+    assert {item["key"] for item in (builtins.get_json() or {}).get("categories", [])} >= {
+        "fisk",
+        "kott",
+        "dessert",
+        "ovrigt",
+    }
+
+    created = client.post(
+        "/api/builder/dish-categories",
+        json={"name": "Temavecka"},
+        headers=HEADERS,
+    )
+    assert created.status_code == 201
+    category = (created.get_json() or {}).get("category") or {}
+    category_id = category.get("key")
+    assert category["label"] == "Temavecka"
+
+    duplicate = client.post(
+        "/api/builder/dish-categories",
+        json={"name": "  temavecka  "},
+        headers=HEADERS,
+    )
+    assert duplicate.status_code == 409
+
+    persisted = client.get("/api/builder/dish-categories", headers=HEADERS)
+    assert any(
+        item["key"] == category_id and item["label"] == "Temavecka"
+        for item in (persisted.get_json() or {}).get("categories", [])
+    )
+
+    composition = client.post(
+        "/api/builder/compositions/site",
+        json={
+            "composition_name": "Temaveckans rätt",
+            "library_group": category_id,
+            "seed_components": False,
+        },
+        headers=HEADERS,
+    )
+    assert composition.status_code == 201
+    assert ((composition.get_json() or {}).get("composition") or {}).get("library_group") == category_id
+
+    with client.session_transaction() as session:
+        session["site_id"] = "site-2"
+    foreign_listing = client.get("/api/builder/dish-categories", headers=HEADERS)
+    assert foreign_listing.status_code == 200
+    assert all(
+        item["key"] != category_id
+        for item in (foreign_listing.get_json() or {}).get("categories", [])
+    )
+    foreign_use = client.post(
+        "/api/builder/compositions/site",
+        json={
+            "composition_name": "Foreign category attempt",
+            "library_group": category_id,
+            "seed_components": False,
+        },
+        headers=HEADERS,
+    )
+    assert foreign_use.status_code == 400
+
+    with client.session_transaction() as session:
+        session["site_id"] = "site-1"
+        session["tenant_id"] = 2
+    foreign_tenant_use = client.post(
+        "/api/builder/compositions/site",
+        json={
+            "composition_name": "Foreign tenant category attempt",
+            "library_group": category_id,
+            "seed_components": False,
+        },
+        headers=_headers(tenant_id=2),
+    )
+    assert foreign_tenant_use.status_code == 400
 def _xlsx_bytes(rows: list[list[str]]) -> bytes:
     workbook = Workbook()
     sheet = workbook.active

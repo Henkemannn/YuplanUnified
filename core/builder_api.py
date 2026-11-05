@@ -145,19 +145,132 @@ def _matches_review_creation_scope(
     )
 
 
-VALID_DISH_LIBRARY_GROUPS = {"fisk", "kott", "dessert", "ovrigt"}
+BUILTIN_DISH_CATEGORIES = (
+    {"key": "fisk", "label": "Fisk"},
+    {"key": "kott", "label": "Kött"},
+    {"key": "dessert", "label": "Dessert"},
+    {"key": "ovrigt", "label": "Övrigt"},
+)
+VALID_DISH_LIBRARY_GROUPS = {item["key"] for item in BUILTIN_DISH_CATEGORIES}
 
 
-def _require_dish_library_group(payload: dict[str, Any]) -> str | None:
+def _normalize_dish_category_name(value: str) -> str:
+    return " ".join(str(value or "").strip().split()).casefold()
+
+
+def _builder_category_db_path() -> str | None:
+    configured_path = str(current_app.config.get("BUILDER_DB_PATH") or "").strip()
+    return initialize_builder_sqlite(configured_path) if configured_path else None
+
+
+def _custom_dish_category_exists(category_id: str, actor: ActorContext | None) -> bool:
+    if actor is None or not str(actor.site_id or "").strip():
+        return False
+    db_path = _builder_category_db_path()
+    if not db_path:
+        return False
+    with sqlite3.connect(db_path) as conn:
+        return conn.execute(
+            """
+            SELECT 1
+            FROM builder_dish_categories
+            WHERE category_id = ? AND tenant_id = ? AND site_id = ?
+            """,
+            (str(category_id).strip(), actor.tenant_id, str(actor.site_id).strip()),
+        ).fetchone() is not None
+
+
+def _require_dish_library_group(
+    payload: dict[str, Any],
+    *,
+    actor: ActorContext | None = None,
+) -> str | None:
     if "library_group" not in payload:
         return None
 
     library_group_value = _optional_str(payload, "library_group")
     if library_group_value is None:
         raise ValueError("library_group is required")
-    if library_group_value not in VALID_DISH_LIBRARY_GROUPS:
-        raise ValueError("library_group must be one of fisk, kott, dessert, ovrigt")
+    if (
+        library_group_value not in VALID_DISH_LIBRARY_GROUPS
+        and not _custom_dish_category_exists(library_group_value, actor)
+    ):
+        raise ValueError("library_group is not available in the authenticated site")
     return library_group_value
+
+
+@bp.get("/dish-categories")
+@require_roles("cook", "editor", "admin", "superuser")
+def list_dish_categories():
+    categories = [dict(item) for item in BUILTIN_DISH_CATEGORIES]
+    actor = _get_builder_actor()
+    db_path = _builder_category_db_path()
+    if actor is not None and db_path and str(actor.site_id or "").strip():
+        with sqlite3.connect(db_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT category_id, display_name
+                FROM builder_dish_categories
+                WHERE tenant_id = ? AND site_id = ?
+                ORDER BY display_name COLLATE NOCASE, category_id
+                """,
+                (actor.tenant_id, str(actor.site_id).strip()),
+            ).fetchall()
+        categories.extend({"key": str(row[0]), "label": str(row[1])} for row in rows)
+    return jsonify({"ok": True, "categories": categories})
+
+
+@bp.post("/dish-categories")
+@require_roles("admin", "superuser")
+def create_dish_category():
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+    try:
+        actor = _get_builder_actor()
+        if actor is None or not str(actor.site_id or "").strip():
+            return _bad_request("authenticated site is required")
+        display_name = _require_str(payload, "name")
+        name_norm = _normalize_dish_category_name(display_name)
+        if not name_norm:
+            raise ValueError("category name is required")
+        if name_norm in {
+            _normalize_dish_category_name(item["label"])
+            for item in BUILTIN_DISH_CATEGORIES
+        }:
+            return _conflict("category already exists")
+        db_path = _builder_category_db_path()
+        if not db_path:
+            return _bad_request("Builder database is required for custom categories")
+        category_id = "dishcat_" + uuid.uuid4().hex
+        with sqlite3.connect(db_path) as conn:
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO builder_dish_categories (
+                        category_id, tenant_id, site_id, display_name, name_norm
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        category_id,
+                        actor.tenant_id,
+                        str(actor.site_id).strip(),
+                        display_name,
+                        name_norm,
+                    ),
+                )
+                conn.commit()
+            except sqlite3.IntegrityError:
+                conn.rollback()
+                return _conflict("category already exists")
+    except ValueError as exc:
+        return _bad_request(str(exc))
+    return jsonify(
+        {
+            "ok": True,
+            "category": {"key": category_id, "label": display_name},
+        }
+    ), 201
 
 
 def _optional_bool(payload: dict[str, Any], field: str) -> bool | None:
@@ -1797,6 +1910,8 @@ def create_composition():
         composition_name = _require_str(payload, "composition_name")
         composition_id = _optional_str(payload, "composition_id")
         library_group = _optional_str(payload, "library_group")
+        if library_group and library_group.startswith("dishcat_"):
+            library_group = _require_dish_library_group(payload, actor=actor)
         seed_components = _optional_bool(payload, "seed_components")
 
         if composition_id:
@@ -1837,7 +1952,7 @@ def create_private_composition():
         if "seed_components" in payload:
             return _bad_request("seed_components is not allowed")
         composition_name = _require_str(payload, "composition_name")
-        library_group = _require_dish_library_group(payload)
+        library_group = _require_dish_library_group(payload, actor=actor)
         composition = flow.create_private_composition_with_generated_id(
             composition_name=composition_name,
             library_group=library_group,
@@ -1870,7 +1985,7 @@ def create_site_composition():
         if "composition_id" in payload:
             return _bad_request("composition_id is not allowed")
         composition_name = _require_str(payload, "composition_name")
-        library_group = _require_dish_library_group(payload)
+        library_group = _require_dish_library_group(payload, actor=actor)
         seed_components = _optional_bool(payload, "seed_components")
         composition = flow.create_site_composition_with_generated_id(
             composition_name=composition_name,
@@ -1937,7 +2052,7 @@ def update_composition_metadata(composition_id: str):
         if "composition_name" in payload:
             composition_name = _require_str(payload, "composition_name")
 
-        library_group = _require_dish_library_group(payload)
+        library_group = _require_dish_library_group(payload, actor=_get_builder_actor())
         use_custom_menu_name = _optional_bool(payload, "use_custom_menu_name") if "use_custom_menu_name" in payload else None
         menu_name = _optional_str(payload, "menu_name") if "menu_name" in payload else None
 
@@ -2387,12 +2502,23 @@ def preview_component_suggestions():
                 }
             ), 401
 
-        dish_name = sanitize_builder_import_text(_require_str(payload, "dish_name"))
-        if not dish_name:
-            raise ValueError("dish_name is required")
+        requested_dish_name = payload.get("dish_name")
+        requested_component_name = payload.get("component_name")
+        if requested_dish_name is not None and requested_component_name is not None:
+            raise ValueError("provide either dish_name or component_name")
+        if requested_component_name is not None:
+            component_name = sanitize_builder_import_text(_require_str(payload, "component_name"))
+            if not component_name:
+                raise ValueError("component_name is required")
+            dish_name = component_name
+            suggestions = [component_name]
+        else:
+            dish_name = sanitize_builder_import_text(_require_str(payload, "dish_name"))
+            if not dish_name:
+                raise ValueError("dish_name is required")
+            suggestions = suggest_components_from_import_dish_name(dish_name)
 
         flow = _get_builder_flow()
-        suggestions = suggest_components_from_import_dish_name(dish_name)
         preview_items: list[dict[str, Any]] = []
         for suggested_name in suggestions:
             match = flow.match_component_name(suggested_name, actor=actor)

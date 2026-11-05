@@ -553,13 +553,27 @@ class BuilderMenuContextFlow:
             if not component_name:
                 raise ValueError(f"components[{index}].name is required")
             component_id = str(selection.get("component_id") or "").strip() or None
-            normalized_selections.append(
-                {
-                    "name": component_name,
-                    "component_id": component_id,
-                    "role": str(selection.get("role") or "component").strip() or "component",
-                }
-            )
+            selection_mode = str(selection.get("selection") or "").strip().lower() or None
+            if selection_mode not in {None, "reuse", "new"}:
+                raise ValueError(
+                    f"components[{index}].selection must be reuse or new"
+                )
+            if selection_mode == "reuse" and not component_id:
+                raise ValueError(
+                    f"components[{index}].component_id is required for reuse"
+                )
+            if selection_mode == "new" and component_id:
+                raise ValueError(
+                    f"components[{index}].component_id must be empty for new variant"
+                )
+            normalized_selection: dict[str, str | None] = {
+                "name": component_name,
+                "component_id": component_id,
+                "role": str(selection.get("role") or "component").strip() or "component",
+            }
+            if selection_mode is not None:
+                normalized_selection["selection"] = selection_mode
+            normalized_selections.append(normalized_selection)
 
         payload_hash = hashlib.sha256(
             json.dumps(
@@ -651,6 +665,7 @@ class BuilderMenuContextFlow:
             for index, selection in enumerate(normalized_selections):
                 component_name = str(selection["name"])
                 component_id = selection["component_id"]
+                selection_mode = selection.get("selection")
                 if component_id:
                     component = self._library_flow.get_library_component(
                         component_id,
@@ -663,6 +678,10 @@ class BuilderMenuContextFlow:
                     resolved_components.append(
                         (component.component_id, component.canonical_name, str(selection["role"]))
                     )
+                    continue
+
+                if selection_mode == "new":
+                    resolved_components.append(("", component_name, str(selection["role"])))
                     continue
 
                 match = self._library_flow.match_component_name(
@@ -697,6 +716,7 @@ class BuilderMenuContextFlow:
                         component_name,
                         actor=actor,
                         scope=site_scope,
+                        force_new=selection.get("selection") == "new",
                     )
                     component_id = component.component_id
                     component_name = component.canonical_name

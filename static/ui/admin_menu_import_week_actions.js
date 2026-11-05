@@ -515,6 +515,8 @@
         title: 'Skapa rätt',
         createEndpoint: atomicEndpoint || '/api/builder/compositions/site',
         previewEndpoint: '/api/builder/components/preview',
+        componentLibraryEndpoint: '/api/builder/components',
+        categoryEndpoint: '/api/builder/dish-categories',
         reviewEndpoint: atomicEndpoint,
         menuDetailId: targetContext && targetContext.menuDetailId,
         previewOutputId: 'createDishPreview',

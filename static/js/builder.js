@@ -1915,7 +1915,7 @@ function currentComponentTagFilter() {
   return value || "all";
 }
 
-const DISH_LIBRARY_GROUPS = [
+let DISH_LIBRARY_GROUPS = [
   { key: "all", label: "Alla" },
   { key: "fisk", label: "Fisk" },
   { key: "kott", label: "Kött" },
@@ -1928,6 +1928,10 @@ let _dishCategoryFilter = "all";
 const normalizeCategoryThemeValue = BuilderComponentTheme.normalizeCategoryThemeValue;
 
 function normalizeDishCategoryKey(value) {
+  const rawValue = String(value || "").trim().toLowerCase();
+  if (rawValue.startsWith("dishcat_")) {
+    return rawValue;
+  }
   const folded = normalizeCategoryThemeValue(value).replace(/[^a-z0-9]+/g, "");
   if (!folded) {
     return "";
@@ -3008,11 +3012,32 @@ async function loadLibrary() {
   const [result] = await Promise.all([
     callApi("/api/builder/library", { method: "GET" }),
     runtime.loadAllComponents(),
+    loadDishCategoryGroups(),
   ]);
   renderLibrary(result);
   updateRecentComponentsFromSnapshot(previousComponentIds);
   updateRecentCompositionsFromSnapshot(previousCompositionIds);
   await refreshWorkspaceOverviewCounts(result);
+}
+
+async function loadDishCategoryGroups() {
+  try {
+    const result = await callApi("/api/builder/dish-categories", { method: "GET" });
+    const categories = result && result.data && Array.isArray(result.data.categories)
+      ? result.data.categories
+      : [];
+    if (result && result.status < 400 && categories.length) {
+      DISH_LIBRARY_GROUPS = [
+        { key: "all", label: "Alla" },
+        ...categories.map((category) => ({
+          key: String(category.key || "").trim(),
+          label: String(category.label || category.key || "").trim(),
+        })).filter((category) => category.key && category.label),
+      ];
+    }
+  } catch (error) {
+    // Keep the built-in filters available if category discovery is unavailable.
+  }
 }
 
 let componentLibraryRuntime = null;
@@ -3040,7 +3065,7 @@ function componentEntryKey(component) {
 
 function normalizeDishLibraryGroupValue(value) {
   const key = normalizeDishCategoryKey(value);
-  return VALID_DISH_LIBRARY_GROUPS.has(key) ? key : "";
+  return DISH_LIBRARY_GROUPS.some((entry) => entry.key === key) ? key : "";
 }
 
 function setDishOverviewStatus(message, isError = false) {
@@ -4522,6 +4547,7 @@ function openBuilderDishCreateModal() {
     createController.open({
       title: "Skapa rätt",
       createEndpoint: "/api/builder/compositions",
+      categoryEndpoint: "/api/builder/dish-categories",
       includeSeedComponents: true,
       onSuccess: async (composition) => {
         closeSimpleModal("dishesLibraryModal");

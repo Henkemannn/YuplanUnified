@@ -1760,6 +1760,174 @@ body.modal-open {
   color: var(--text);
 }
 
+.create-dish-component-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.create-dish-component-row {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.create-dish-component-row-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  min-height: 40px;
+}
+
+.create-dish-component-row-copy {
+  flex: 1 1 auto;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.create-dish-component-name {
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-weight: 650;
+}
+
+.create-dish-component-status {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.create-dish-component-status[data-state="reusable"] {
+  color: #1f5d41;
+}
+
+.create-dish-component-status[data-state="ambiguous"] {
+  color: #7a4e00;
+  font-weight: 600;
+}
+
+.create-dish-component-overflow {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.create-dish-component-overflow summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0 8px;
+  border-color: var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 700;
+  background: var(--surface);
+  cursor: pointer;
+  list-style: none;
+}
+
+.create-dish-component-overflow .component-overflow-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  box-sizing: border-box;
+  width: min(240px, calc(100vw - 48px));
+  min-width: min(190px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
+  overflow: hidden;
+  padding: 6px;
+  gap: 3px;
+  border-color: var(--border-subtle);
+  border-radius: 8px;
+  box-shadow: 0 8px 22px rgb(0 0 0 / 12%);
+}
+
+.create-dish-component-overflow .component-overflow-menu button {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--surface);
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.create-dish-component-overflow .component-overflow-menu button:hover,
+.create-dish-component-overflow .component-overflow-menu button:focus-visible {
+  background: var(--surface-2);
+}
+
+.create-dish-component-inline-editor,
+.create-dish-component-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.create-dish-component-inline-editor input,
+.create-dish-component-picker select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.create-dish-component-inline-editor button,
+.create-dish-component-picker button {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.create-dish-component-picker {
+  flex-wrap: wrap;
+  padding-top: 6px;
+}
+
+.create-dish-component-picker span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.create-dish-category-inline-editor {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: -4px;
+}
+
+.create-dish-category-inline-editor input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.create-dish-category-inline-editor button {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  white-space: nowrap;
+}
+
 .yp-weekpicker {
   display: inline-flex;
   align-items: center;

@@ -131,6 +131,18 @@ def initialize_builder_sqlite(path: str) -> str:
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
 
+            CREATE TABLE IF NOT EXISTS builder_dish_categories (
+                category_id TEXT PRIMARY KEY,
+                tenant_id INTEGER NOT NULL,
+                site_id TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                name_norm TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(tenant_id, site_id, name_norm)
+            );
+            CREATE INDEX IF NOT EXISTS idx_builder_dish_categories_scope
+                ON builder_dish_categories(tenant_id, site_id, display_name COLLATE NOCASE);
+
             CREATE TABLE IF NOT EXISTS builder_object_scopes (
                 object_type TEXT NOT NULL,
                 object_id TEXT NOT NULL,
