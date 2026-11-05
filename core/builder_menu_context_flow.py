@@ -661,7 +661,7 @@ class BuilderMenuContextFlow:
             if detail.composition_ref_type != "unresolved":
                 raise ReviewedCompositionConflict("menu row is no longer unresolved")
 
-            resolved_components: list[tuple[str, str, str]] = []
+            resolved_components: list[tuple[str, str, str, str | None]] = []
             for index, selection in enumerate(normalized_selections):
                 component_name = str(selection["name"])
                 component_id = selection["component_id"]
@@ -676,12 +676,19 @@ class BuilderMenuContextFlow:
                             f"components[{index}].component_id is not accessible"
                         )
                     resolved_components.append(
-                        (component.component_id, component.canonical_name, str(selection["role"]))
+                        (
+                            component.component_id,
+                            component.canonical_name,
+                            str(selection["role"]),
+                            selection_mode,
+                        )
                     )
                     continue
 
                 if selection_mode == "new":
-                    resolved_components.append(("", component_name, str(selection["role"])))
+                    resolved_components.append(
+                        ("", component_name, str(selection["role"]), selection_mode)
+                    )
                     continue
 
                 match = self._library_flow.match_component_name(
@@ -699,10 +706,17 @@ class BuilderMenuContextFlow:
                     )
                     if component is not None:
                         resolved_components.append(
-                            (component.component_id, component.canonical_name, str(selection["role"]))
+                            (
+                                component.component_id,
+                                component.canonical_name,
+                                str(selection["role"]),
+                                selection_mode,
+                            )
                         )
                         continue
-                resolved_components.append(("", component_name, str(selection["role"])))
+                resolved_components.append(
+                    ("", component_name, str(selection["role"]), selection_mode)
+                )
 
             composition = self._library_flow.create_site_composition_with_generated_id(
                 composition_name=name_value,
@@ -710,13 +724,13 @@ class BuilderMenuContextFlow:
                 seed_components=False,
                 actor=actor,
             )
-            for component_id, component_name, role in resolved_components:
+            for component_id, component_name, role, selection_mode in resolved_components:
                 if not component_id:
                     component = self._library_flow.create_standalone_component(
                         component_name,
                         actor=actor,
                         scope=site_scope,
-                        force_new=selection.get("selection") == "new",
+                        force_new=selection_mode == "new",
                     )
                     component_id = component.component_id
                     component_name = component.canonical_name

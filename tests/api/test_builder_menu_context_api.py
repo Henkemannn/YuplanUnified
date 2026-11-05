@@ -1388,6 +1388,84 @@ def test_reviewed_composition_reuses_exact_and_alias_matches() -> None:
     assert components[0]["component_id"] == existing_id
 
 
+def test_reviewed_composition_preserves_mixed_selection_modes_per_component() -> None:
+    client = _client()
+    existing_ids = []
+    for component_name in ("Shared potato", "Shared carrot"):
+        existing = client.post(
+            "/api/builder/components/site",
+            json={"component_name": component_name},
+            headers=HEADERS,
+        )
+        assert existing.status_code == 201
+        existing_ids.append(
+            (existing.get_json() or {}).get("component", {}).get("component_id")
+        )
+
+    orders = [
+        ("new", "reuse"),
+        ("reuse", "new"),
+        ("new", "reuse", "new"),
+        ("reuse", "new", "reuse"),
+    ]
+    for order_index, order in enumerate(orders):
+        menu_id = f"review_mixed_{order_index}"
+        detail_id = _create_review_row(client, menu_id=menu_id)
+        components = []
+        expected_new_names = []
+        reuse_index = 0
+        for component_index, mode in enumerate(order):
+            if mode == "reuse":
+                existing_id = existing_ids[reuse_index % len(existing_ids)]
+                reuse_index += 1
+                components.append(
+                    {
+                        "name": "Shared potato"
+                        if existing_id == existing_ids[0]
+                        else "Shared carrot",
+                        "selection": "reuse",
+                        "component_id": existing_id,
+                    }
+                )
+            else:
+                variant_name = f"Mixed variant {order_index}-{component_index}"
+                components.append({"name": variant_name, "selection": "new"})
+                expected_new_names.append(variant_name)
+
+        response = client.post(
+            f"/api/builder/menus/{menu_id}/create-reviewed-composition",
+            json={
+                "menu_detail_id": detail_id,
+                "composition_name": f"Mixed selection dish {order_index}",
+                "idempotency_key": f"review-mixed-{order_index}",
+                "components": components,
+            },
+            headers=HEADERS,
+        )
+
+        assert response.status_code == 201, response.get_json()
+        saved = ((response.get_json() or {}).get("composition") or {}).get("components") or []
+        assert len(saved) == len(order)
+        expected_ids = []
+        reuse_index = 0
+        for mode in order:
+            if mode == "reuse":
+                expected_ids.append(existing_ids[reuse_index % len(existing_ids)])
+                reuse_index += 1
+            else:
+                expected_ids.append(None)
+        assert [
+            item["component_id"] if mode == "reuse" else None
+            for item, mode in zip(saved, order)
+        ] == expected_ids
+        new_components = [
+            item for item in saved
+            if item["component_id"] not in existing_ids
+        ]
+        assert [item["component_name"] for item in new_components] == expected_new_names
+        assert len({item["component_id"] for item in new_components}) == len(new_components)
+
+
 def test_reviewed_composition_can_create_an_explicit_new_variant() -> None:
     client = _client()
     detail_id = _create_review_row(client)
