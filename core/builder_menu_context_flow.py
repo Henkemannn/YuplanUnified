@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
+import json
 import logging
 
 from .builder import BuilderFlow
-from .builder.library_scope import ActorContext
+from .builder.library_scope import ActorContext, ObjectScope
 from .builder.declaration_readiness import (
     ComponentDeclarationReadiness,
     MenuDeclarationReadiness,
     MenuRowDeclarationReadiness,
 )
 from .builder.diet_conflict_preview import DietConflictPreview, merge_diet_conflict_previews
+from .builder_sqlite import builder_transaction
 from .components import (
     Composition,
     InMemoryCompositionRepository,
@@ -35,6 +38,10 @@ logger = logging.getLogger(__name__)
 
 
 _MISSING = object()
+
+
+class ReviewedCompositionConflict(ValueError):
+    """Raised when a reviewed creation retry conflicts with persisted state."""
 
 
 @dataclass(frozen=True)
@@ -442,11 +449,28 @@ class BuilderMenuContextFlow:
         menu_id: str,
         menu_detail_id: str,
         composition_id: str,
+        *,
+        actor: ActorContext | None = None,
+        require_site_scope: bool = False,
     ) -> MenuDetail:
+        menu = self._menu_service.get_menu(str(menu_id))
+        if menu is None:
+            raise ValueError("menu not found")
         details = self._menu_service.list_menu_details(menu_id)
         match = next((detail for detail in details if detail.menu_detail_id == menu_detail_id), None)
         if match is None:
             raise ValueError("menu_detail_id not found for menu")
+        if require_site_scope:
+            if actor is None or not actor.site_id or str(menu.site_id or "") != str(actor.site_id):
+                raise ValueError("menu row is outside the authenticated site")
+            if str(menu.status or "").lower() == "published":
+                raise ValueError("published menu rows cannot be resolved")
+            composition = self._library_flow.get_library_composition(
+                str(composition_id),
+                actor=actor,
+            )
+            if composition is None:
+                raise ValueError("composition is outside the authenticated site")
 
         return self._menu_service.update_menu_detail(
             menu_detail_id=menu_detail_id,
@@ -498,6 +522,216 @@ class BuilderMenuContextFlow:
             composition_id=composition.composition_id,
         )
         return composition, updated, warnings
+
+    def create_reviewed_site_composition_from_unresolved_row(
+        self,
+        menu_id: str,
+        menu_detail_id: str,
+        composition_name: str,
+        component_selections: list[dict[str, object]],
+        *,
+        idempotency_key: str,
+        actor: ActorContext,
+        library_group: str | None = None,
+    ) -> tuple[Composition, MenuDetail]:
+        if not str(actor.site_id or "").strip():
+            raise ValueError("authenticated site is required")
+        name_value = str(composition_name or "").strip()
+        if not name_value:
+            raise ValueError("composition_name is required")
+        key_value = str(idempotency_key or "").strip()
+        if not key_value:
+            raise ValueError("idempotency_key is required")
+        if not isinstance(component_selections, list):
+            raise ValueError("components must be a list")
+
+        normalized_selections: list[dict[str, str | None]] = []
+        for index, selection in enumerate(component_selections):
+            if not isinstance(selection, dict):
+                raise ValueError(f"components[{index}] must be an object")
+            component_name = str(selection.get("name") or "").strip()
+            if not component_name:
+                raise ValueError(f"components[{index}].name is required")
+            component_id = str(selection.get("component_id") or "").strip() or None
+            normalized_selections.append(
+                {
+                    "name": component_name,
+                    "component_id": component_id,
+                    "role": str(selection.get("role") or "component").strip() or "component",
+                }
+            )
+
+        payload_hash = hashlib.sha256(
+            json.dumps(
+                {
+                    "menu_id": str(menu_id),
+                    "menu_detail_id": str(menu_detail_id),
+                    "composition_name": name_value,
+                    "library_group": library_group,
+                    "components": normalized_selections,
+                },
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+
+        site_scope = ObjectScope(
+            tenant_id=actor.tenant_id,
+            owner_scope="site",
+            owner_site_id=str(actor.site_id).strip(),
+            owner_user_id=None,
+            visibility="site",
+            source_object_id=None,
+        )
+
+        with builder_transaction(self._library_flow.database_path) as conn:
+            menu = self._menu_service.get_menu(str(menu_id))
+            if menu is None:
+                raise ValueError("menu not found")
+            if str(menu.site_id or "") != str(actor.site_id):
+                raise ValueError("menu is outside the authenticated site")
+            if str(menu.status or "").lower() == "published":
+                raise ValueError("published menus cannot be changed")
+
+            details = self._menu_service.list_menu_details(str(menu_id))
+            detail = next(
+                (item for item in details if item.menu_detail_id == str(menu_detail_id)),
+                None,
+            )
+            if detail is None:
+                raise ValueError("menu_detail_id not found for menu")
+
+            existing_request = conn.execute(
+                """
+                SELECT idempotency_key, payload_hash, composition_id
+                FROM builder_review_idempotency
+                WHERE tenant_id = ?
+                  AND site_id = ?
+                  AND menu_id = ?
+                  AND menu_detail_id = ?
+                """,
+                (
+                    actor.tenant_id,
+                    str(actor.site_id),
+                    str(menu_id),
+                    str(menu_detail_id),
+                ),
+            ).fetchone()
+            if existing_request is not None:
+                if str(existing_request["idempotency_key"]) != key_value:
+                    raise ReviewedCompositionConflict(
+                        "menu row already has a reviewed creation with a different idempotency key"
+                    )
+                if str(existing_request["payload_hash"]) != payload_hash:
+                    raise ReviewedCompositionConflict(
+                        "idempotency key was already used with a different payload"
+                    )
+                if (
+                    detail.composition_ref_type != "composition"
+                    or str(detail.composition_id or "") != str(existing_request["composition_id"])
+                ):
+                    raise ReviewedCompositionConflict(
+                        "menu row state conflicts with the original reviewed creation"
+                    )
+                composition = self._library_flow.get_library_composition(
+                    str(existing_request["composition_id"]),
+                    actor=actor,
+                )
+                if composition is None:
+                    raise ReviewedCompositionConflict(
+                        "original reviewed composition is no longer available"
+                    )
+                return composition, detail
+
+            if detail.composition_ref_type != "unresolved":
+                raise ReviewedCompositionConflict("menu row is no longer unresolved")
+
+            resolved_components: list[tuple[str, str, str]] = []
+            for index, selection in enumerate(normalized_selections):
+                component_name = str(selection["name"])
+                component_id = selection["component_id"]
+                if component_id:
+                    component = self._library_flow.get_library_component(
+                        component_id,
+                        actor=actor,
+                    )
+                    if component is None:
+                        raise ValueError(
+                            f"components[{index}].component_id is not accessible"
+                        )
+                    resolved_components.append(
+                        (component.component_id, component.canonical_name, str(selection["role"]))
+                    )
+                    continue
+
+                match = self._library_flow.match_component_name(
+                    component_name,
+                    actor=actor,
+                )
+                if match.status == "possible_match":
+                    raise ReviewedCompositionConflict(
+                        f"components[{index}] requires an explicit match selection"
+                    )
+                if match.status in {"exact_match", "alias_match"} and match.component_id:
+                    component = self._library_flow.get_library_component(
+                        match.component_id,
+                        actor=actor,
+                    )
+                    if component is not None:
+                        resolved_components.append(
+                            (component.component_id, component.canonical_name, str(selection["role"]))
+                        )
+                        continue
+                resolved_components.append(("", component_name, str(selection["role"])))
+
+            composition = self._library_flow.create_site_composition_with_generated_id(
+                composition_name=name_value,
+                library_group=library_group,
+                seed_components=False,
+                actor=actor,
+            )
+            for component_id, component_name, role in resolved_components:
+                if not component_id:
+                    component = self._library_flow.create_standalone_component(
+                        component_name,
+                        actor=actor,
+                        scope=site_scope,
+                    )
+                    component_id = component.component_id
+                    component_name = component.canonical_name
+                composition = self._library_flow.attach_existing_component_to_composition(
+                    composition_id=composition.composition_id,
+                    component_id=component_id,
+                    role=role,
+                    actor=actor,
+                )
+
+            updated = self.resolve_menu_detail(
+                menu_id=str(menu_id),
+                menu_detail_id=str(menu_detail_id),
+                composition_id=composition.composition_id,
+                actor=actor,
+                require_site_scope=True,
+            )
+            conn.execute(
+                """
+                INSERT INTO builder_review_idempotency (
+                    idempotency_key, tenant_id, site_id, menu_id, menu_detail_id,
+                    payload_hash, composition_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    key_value,
+                    actor.tenant_id,
+                    str(actor.site_id),
+                    str(menu_id),
+                    str(menu_detail_id),
+                    payload_hash,
+                    composition.composition_id,
+                ),
+            )
+            return composition, updated
 
     def get_menu_cost_overview(
         self,

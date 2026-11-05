@@ -4,10 +4,24 @@ import datetime
 import re
 
 from docx import Document  # type: ignore
+from docx.table import Table  # type: ignore
+from docx.text.paragraph import Paragraph  # type: ignore
+from docx.oxml.ns import qn  # type: ignore
 
 from .base import ImportedMenuItem, MenuImporter, MenuImportResult, WeekImport, normalize_day
 
-_WEEK_PATTERNS = [r"vecka\s*[:\.]?\s*(\d+)", r"v[\.:\s]*(\d+)", r"week\s+(\d+)"]
+_WEEK_HEADING_RE = re.compile(
+    r"^\s*(?:vecka|week)\s*[:.]?\s*(\d{1,2})"
+    r"(?:\s*(?:·|[-.])\s*(\d{4})|\s+(\d{4}))?",
+    re.IGNORECASE,
+)
+_TABLE_HEADERS = {
+    "dag": "day",
+    "lunch alt 1": "alt1",
+    "lunch alt 2": "alt2",
+    "dessert": "dessert",
+    "kvallsmat": "evening",
+}
 _NON_DISH_PHRASES = [
     "med reservation för ändringar",
     "ni når oss på telefon",
@@ -28,59 +42,134 @@ class DocxMenuImporter(MenuImporter):
         from io import BytesIO
 
         doc = Document(BytesIO(file_bytes))
-        content: list[str] = []
-        for p in doc.paragraphs:
-            txt = p.text.strip()
-            if txt:
-                for line in txt.split("\n"):
-                    if line.strip():
-                        content.append(line.strip())
-        for table in doc.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    ctext = cell.text.strip()
-                    if ctext:
-                        for line in ctext.split("\n"):
-                            if line.strip():
-                                content.append(line.strip())
-        # Split into weeks (may be multi-week)
-        week_sections = self._split_content_by_weeks(content)
-        if not week_sections:
+        sections = self._collect_ordered_sections(doc)
+        if not sections:
             return MenuImportResult(
                 weeks=[],
                 errors=["Could not detect any week number; supply week manually."],
                 warnings=[],
             )
-        results: list[WeekImport] = []
-        current_year = datetime.date.today().year
-        for week, lines in week_sections:
-            items = self._extract_items(lines, current_year, week)
-            results.append(WeekImport(year=current_year, week=week, items=items))
-        return MenuImportResult(weeks=results)
 
-    def _split_content_by_weeks(self, content: list[str]):
-        out = []
-        current_week = None
-        current_lines: list[str] = []
-        for line in content:
-            lw = line.lower()
-            matched = False
-            for pattern in _WEEK_PATTERNS:
-                m = re.search(pattern, lw)
-                if m:
-                    w = int(m.group(1))
-                    if 1 <= w <= 52:
-                        if current_week is not None and current_lines:
-                            out.append((current_week, current_lines))
-                        current_week = w
-                        current_lines = []
-                        matched = True
-                        break
-            if not matched and current_week is not None:
-                current_lines.append(line)
-        if current_week is not None and current_lines:
-            out.append((current_week, current_lines))
-        return out
+        results: list[WeekImport] = []
+        warnings: list[str] = []
+        errors: list[str] = []
+        for section in sections:
+            items = list(section["table_items"])
+            items.extend(self._extract_items(section["lines"], section["year"], section["week"]))
+            if items:
+                results.append(WeekImport(year=section["year"], week=section["week"], items=items))
+            else:
+                warnings.append(
+                    f"No menu items recognized for week {section['week']}/{section['year']}."
+                )
+
+        if not results:
+            errors.append("No menu items recognized; no menus were created.")
+        return MenuImportResult(weeks=results, warnings=warnings, errors=errors)
+
+    def _collect_ordered_sections(self, document: Document) -> list[dict[str, object]]:
+        sections: list[dict[str, object]] = []
+        current: dict[str, object] | None = None
+        current_year = datetime.date.today().year
+
+        for child in document.element.body.iterchildren():
+            if child.tag == qn("w:p"):
+                block = Paragraph(child, document).text.strip()
+                if not block:
+                    continue
+                heading = _WEEK_HEADING_RE.match(block)
+                if heading:
+                    current = self._start_section(
+                        sections,
+                        week=int(heading.group(1)),
+                        year=int(heading.group(2) or heading.group(3) or current_year),
+                    )
+                elif current is not None:
+                    current["lines"].extend(
+                        line.strip() for line in block.splitlines() if line.strip()
+                    )
+            elif child.tag == qn("w:tbl") and current is not None:
+                table = Table(child, document)
+                table_items = self._parse_menu_table(table)
+                if table_items is None:
+                    for row in table.rows:
+                        for cell in row.cells:
+                            current["lines"].extend(
+                                line.strip()
+                                for line in cell.text.splitlines()
+                                if line.strip()
+                            )
+                else:
+                    current["table_items"].extend(table_items)
+
+        return sections
+
+    def _start_section(
+        self,
+        sections: list[dict[str, object]],
+        *,
+        week: int,
+        year: int,
+    ) -> dict[str, object]:
+        if not 1 <= week <= 53:
+            raise ValueError(f"invalid ISO week {week}/{year}")
+        try:
+            datetime.date.fromisocalendar(year, week, 1)
+        except ValueError as exc:
+            raise ValueError(f"invalid ISO week {week}/{year}") from exc
+        section: dict[str, object] = {
+            "week": week,
+            "year": year,
+            "lines": [],
+            "table_items": [],
+        }
+        sections.append(section)
+        return section
+
+    def _parse_menu_table(self, table: Table) -> list[ImportedMenuItem] | None:
+        if not table.rows:
+            return None
+
+        def normalize_header(value: str) -> str:
+            value = re.sub(r"\s+", " ", value.strip().casefold())
+            return value.replace("å", "a").replace("ä", "a").replace("ö", "o")
+
+        headers = [normalize_header(cell.text) for cell in table.rows[0].cells]
+        if len(headers) != 5 or any(header not in _TABLE_HEADERS for header in headers):
+            return None
+        if headers[0] != "dag" or len(set(headers)) != len(headers):
+            return None
+
+        items: list[ImportedMenuItem] = []
+        for row in table.rows[1:]:
+            cells = [re.sub(r"\s+", " ", cell.text.replace("\u00a0", " ").strip()) for cell in row.cells]
+            if len(cells) < len(headers):
+                cells.extend([""] * (len(headers) - len(cells)))
+            day_text = row.cells[0].text.replace("\u00a0", " ").strip()
+            day = normalize_day(re.split(r"[\r\n]", day_text, maxsplit=1)[0].strip())
+            if day is None:
+                continue
+            for index, value in enumerate(cells[: len(headers)]):
+                variant = _TABLE_HEADERS[headers[index]]
+                if variant == "day" or value.strip().casefold() in {"", "-", "–", "—"}:
+                    continue
+                if variant == "evening":
+                    meal, variant_type, category = "dinner", "main", "evening"
+                elif variant == "dessert":
+                    meal, variant_type, category = "lunch", "dessert", "dessert"
+                else:
+                    meal, variant_type, category = "lunch", variant, "main"
+                items.append(
+                    ImportedMenuItem(
+                        day=day,
+                        meal=meal,
+                        variant_type=variant_type,
+                        dish_name=value,
+                        category=category,
+                        source_labels=[variant],
+                    )
+                )
+        return items
 
     def _extract_items(self, lines: list[str], year: int, week: int) -> list[ImportedMenuItem]:
         items: list[ImportedMenuItem] = []

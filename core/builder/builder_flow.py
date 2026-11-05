@@ -119,6 +119,13 @@ class BuilderFlow:
         self._recipe_service = recipe_service or RecipeService()
         self._object_scope_repository = object_scope_repository
 
+    @property
+    def database_path(self) -> str:
+        path = getattr(self._composition_repository, "db_path", None)
+        if not path:
+            raise RuntimeError("transactional Builder persistence requires SQLite")
+        return str(path)
+
     def _can_read_library_object(
         self,
         object_type: str,
@@ -582,23 +589,42 @@ class BuilderFlow:
         *,
         category: str | None = None,
         actor: ActorContext | None = None,
+        scope: ObjectScope | None = None,
     ) -> Component:
         category_value = str(category or "").strip().lower() or None
         name_value = self._normalize_component_name(component_name)
         if not name_value:
             raise ValueError("component_name must be non-empty")
 
+        def can_reuse(existing_id: str) -> bool:
+            if scope is not None and scope.owner_scope == "site":
+                if self._object_scope_repository is None:
+                    return False
+                existing_scope = self._object_scope_repository.get_scope("component", existing_id)
+                return (
+                    existing_scope is not None
+                    and existing_scope.tenant_id == scope.tenant_id
+                    and existing_scope.owner_scope == "site"
+                    and existing_scope.owner_site_id == scope.owner_site_id
+                    and existing_scope.owner_user_id is None
+                    and existing_scope.visibility == "site"
+                )
+            return self._can_read_library_object("component", existing_id, actor=actor)
+
         match = self.match_component_name(name_value, actor=actor)
         if match.status in {"exact_match", "alias_match"} and match.component_id:
             existing = self._component_service.get_component(match.component_id)
-            if existing is not None and self._can_read_library_object("component", existing.component_id, actor=actor):
+            if existing is not None and can_reuse(existing.component_id):
                 if category_value and not list(existing.categories or []):
                     return self._component_service.set_component_category(existing.component_id, category_value)
                 return existing
 
         normalized_key = self._normalize_component_key(name_value)
         for existing_item in self.list_library_components(actor=actor):
-            if self._normalize_component_key(existing_item.canonical_name) == normalized_key:
+            if (
+                self._normalize_component_key(existing_item.canonical_name) == normalized_key
+                and can_reuse(existing_item.component_id)
+            ):
                 if category_value and not list(existing_item.categories or []):
                     return self._component_service.set_component_category(existing_item.component_id, category_value)
                 return existing_item
@@ -616,7 +642,7 @@ class BuilderFlow:
             existing = self._component_service.get_component(component_id)
             if existing is None:
                 break
-            if existing.canonical_name == name_value:
+            if existing.canonical_name == name_value and can_reuse(existing.component_id):
                 if category_value and not list(existing.categories or []):
                     return self._component_service.set_component_category(existing.component_id, category_value)
                 return existing
@@ -633,7 +659,8 @@ class BuilderFlow:
                 self._set_object_scope(
                     "component",
                     created.component_id,
-                    ObjectScope(
+                    scope
+                    or ObjectScope(
                         tenant_id=actor.tenant_id,
                         owner_scope="organisation",
                         owner_site_id=None,
@@ -649,6 +676,19 @@ class BuilderFlow:
                     pass
                 raise
         return created
+
+    def is_component_owned_by_site(self, component_id: str, *, actor: ActorContext) -> bool:
+        if self._object_scope_repository is None or not str(actor.site_id or "").strip():
+            return False
+        scope = self._object_scope_repository.get_scope("component", str(component_id).strip())
+        return (
+            scope is not None
+            and scope.tenant_id == actor.tenant_id
+            and scope.owner_scope == "site"
+            and scope.owner_site_id == str(actor.site_id).strip()
+            and scope.owner_user_id is None
+            and scope.visibility == "site"
+        )
 
     def create_private_standalone_component(
         self,
@@ -814,6 +854,7 @@ class BuilderFlow:
         use_custom_menu_name: bool = False,
         menu_name: str | None = None,
         actor: ActorContext | None = None,
+        scope: ObjectScope | None = None,
     ) -> Composition:
         if self._object_scope_repository is not None and actor is None:
             raise ValueError("actor is required for scoped composition creation")
@@ -830,7 +871,8 @@ class BuilderFlow:
                 self._set_object_scope(
                     "composition",
                     composition.composition_id,
-                    ObjectScope(
+                    scope
+                    or ObjectScope(
                         tenant_id=actor.tenant_id,
                         owner_scope="organisation",
                         owner_site_id=None,
@@ -1225,6 +1267,7 @@ class BuilderFlow:
         library_group: str | None = None,
         seed_components: bool = False,
         actor: ActorContext | None = None,
+        creation_scope: ObjectScope | None = None,
     ) -> Composition:
         composition, _, _ = self.create_library_composition_from_text(
             raw_text=composition_name,
@@ -1232,6 +1275,35 @@ class BuilderFlow:
             seed_components=seed_components,
             learn_alias=False,
             actor=actor,
+            creation_scope=creation_scope,
+        )
+        return composition
+
+    def create_site_composition_with_generated_id(
+        self,
+        composition_name: str,
+        *,
+        library_group: str | None = None,
+        seed_components: bool = False,
+        actor: ActorContext | None = None,
+    ) -> Composition:
+        if actor is None or not str(actor.site_id or "").strip():
+            raise ValueError("authenticated site is required for site creation")
+        site_scope = ObjectScope(
+            tenant_id=actor.tenant_id,
+            owner_scope="site",
+            owner_site_id=str(actor.site_id).strip(),
+            owner_user_id=None,
+            visibility="site",
+            source_object_id=None,
+        )
+        composition, _, _ = self.create_library_composition_from_text(
+            raw_text=composition_name,
+            library_group=library_group,
+            seed_components=seed_components,
+            learn_alias=False,
+            actor=actor,
+            creation_scope=site_scope,
         )
         return composition
 
@@ -1804,6 +1876,7 @@ class BuilderFlow:
         alias_text: str | None = None,
         composition_name_override: str | None = None,
         actor: ActorContext | None = None,
+        creation_scope: ObjectScope | None = None,
     ) -> tuple[Composition, list[str], list[dict[str, object]]]:
         chosen_name = composition_name_override if composition_name_override is not None else raw_text
         composition_name = self._normalize_component_name(chosen_name)
@@ -1816,6 +1889,7 @@ class BuilderFlow:
             composition_name=composition_name,
             library_group=library_group,
             actor=actor,
+            scope=creation_scope,
         )
         warnings: list[str] = []
         review_items: list[dict[str, object]] = []
@@ -1825,7 +1899,11 @@ class BuilderFlow:
             if seed_components:
                 for suggestion in self._suggest_components_from_unresolved_text(raw_text):
                     match = self.match_component_name(suggestion, actor=actor)
-                    component = self.create_standalone_component(suggestion, actor=actor)
+                    component = self.create_standalone_component(
+                        suggestion,
+                        actor=actor,
+                        scope=creation_scope,
+                    )
                     if component.component_id not in visible_component_ids:
                         created_component_ids.append(component.component_id)
                         visible_component_ids.add(component.component_id)
@@ -2047,4 +2125,3 @@ class BuilderFlow:
             if candidate:
                 suggestions.append(candidate)
         return suggestions
-

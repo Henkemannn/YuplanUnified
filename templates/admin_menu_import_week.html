@@ -69,7 +69,11 @@
     {% set is_edit_mode = vm.edit_mode if vm.edit_mode is defined else false %}
     {% set slot_order = vm.slot_order if vm.slot_order is defined else ['lunch_alt1', 'lunch_alt2', 'dessert', 'dinner'] %}
 
-    <section class="menu-week__grid menu-editor-grid" data-builder-menu-id="{{ vm.builder_menu_id or '' }}" data-site-id="{{ vm.site_id or '' }}">
+    <section
+        class="menu-week__grid menu-editor-grid"
+        data-builder-menu-id="{{ vm.builder_menu_id or '' }}"
+        data-site-id="{{ vm.site_id or '' }}"
+    >
         <article class="app-shell__card menu-editor-card menu-week__status admin-status-banner">
             <div class="menu-editor-card__header">
                 <h2 class="app-shell__card-title">Status</h2>
@@ -153,7 +157,12 @@
                                                 aria-label="Öppna {{ slot.get('dish_name') or 'rätt' }} i redigeraren"
                                             >{{ slot.get('dish_name') or '—' }}</button>
                                         {% elif slot.get('unresolved_text') or slot.get('dish_name') %}
-                                            <div class="menu-editor-meal-dish menu-editor-readonly-field">{{ slot.get('unresolved_text') or slot.get('dish_name') }}</div>
+                                            <button
+                                                type="button"
+                                                class="menu-editor-meal-dish menu-editor-readonly-field menu-editor-meal-dish--link"
+                                                data-admin-week-builder-review-open
+                                                aria-label="Öppna {{ slot.get('unresolved_text') or slot.get('dish_name') }} i Builder-granskningen"
+                                            >{{ slot.get('unresolved_text') or slot.get('dish_name') }}</button>
                                         {% else %}
                                             <div class="menu-editor-meal-dish menu-editor-readonly-field">{{ slot.get('dish_name') or '—' }}</div>
                                         {% endif %}
@@ -211,7 +220,12 @@
                                                 aria-label="Öppna {{ row.get('dish_name') or 'rätt' }} i redigeraren"
                                             >{{ row.get('dish_name') or '—' }}</button>
                                         {% elif row.get('unresolved_text') %}
-                                            <div class="menu-editor-meal-dish menu-editor-readonly-field">{{ row.get('unresolved_text') }}</div>
+                                            <button
+                                                type="button"
+                                                class="menu-editor-meal-dish menu-editor-readonly-field menu-editor-meal-dish--link"
+                                                data-admin-week-builder-review-open
+                                                aria-label="Öppna {{ row.get('unresolved_text') }} i Builder-granskningen"
+                                            >{{ row.get('unresolved_text') }}</button>
                                         {% else %}
                                             <div class="menu-editor-meal-dish menu-editor-readonly-field">—</div>
                                         {% endif %}
@@ -346,6 +360,7 @@
                         <option value="dessert">Dessert</option>
                     </select>
                 </label>
+                <div id="createDishPreview" class="workspace-feedback" hidden aria-live="polite"></div>
                 <button id="btnCreateDish" type="button">Skapa rätt</button>
                 <div id="createDishOut" class="workspace-feedback" aria-live="polite"></div>
             </section>

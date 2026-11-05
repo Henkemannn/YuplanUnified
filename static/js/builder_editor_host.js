@@ -169,7 +169,7 @@
     if (createController && typeof createController.open === 'function') {
       createController.open({
         title: 'Skapa komponent',
-        createEndpoint: '/api/builder/components/private',
+        createEndpoint: '/api/builder/components/site',
         onSuccess: async (createdComponent) => {
           const createdComponentId = normalizeId(createdComponent && createdComponent.component_id);
           if (createdComponent) {

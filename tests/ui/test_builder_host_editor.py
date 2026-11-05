@@ -223,7 +223,7 @@ def test_builder_composition_picker_is_a_separate_selector_host(client_admin) ->
     picker_js = Path("static/ui/builder_composition_picker.js").read_text(encoding="utf-8")
     assert "'/api/builder/compositions'" in picker_js
     assert "BuilderCompositionSearchRuntime.filterCompositionsBySearch" in picker_js
-    assert "createEndpoint: '/api/builder/compositions/private'" in picker_js
+    assert "createEndpoint: '/api/builder/compositions/site'" in picker_js
     assert "BuilderDishCreateModal.open" in picker_js
     assert "sendToParent('menu-picker-selected', { composition_id: id });" in picker_js
     assert "composition: " not in picker_js

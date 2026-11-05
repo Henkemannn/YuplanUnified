@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import gc
 import os
+import sqlite3
 import shutil
 import tempfile
 from pathlib import Path
@@ -10,9 +11,16 @@ from pathlib import Path
 from docx import Document
 from openpyxl import Workbook
 from core.app_factory import create_app
-from core.db import create_all
+from core.builder_sqlite import initialize_builder_sqlite
+from core.db import create_all, get_session
+from sqlalchemy import text
 
-HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-User-Id": "11"}
+HEADERS = {
+    "X-User-Role": "admin",
+    "X-Tenant-Id": "1",
+    "X-User-Id": "11",
+    "X-Site-Id": "site-1",
+}
 _TEMP_DB_DIRS: list[str] = []
 _TEMP_DB_FILES: list[str] = []
 
@@ -22,6 +30,7 @@ def _headers(*, role: str = "admin", tenant_id: int = 1, user_id: int = 11) -> d
         "X-User-Role": role,
         "X-Tenant-Id": str(tenant_id),
         "X-User-Id": str(user_id),
+        "X-Site-Id": "site-1",
     }
 
 
@@ -81,7 +90,11 @@ def _client():
             os.environ["BUILDER_DB_PATH"] = previous
     with app.app_context():
         create_all()
-    return app.test_client()
+    client = app.test_client()
+    _seed_session(client, role="admin", tenant_id=1, user_id=11)
+    with client.session_transaction() as sess:
+        sess["site_id"] = "site-1"
+    return client
 
 
 def _sqlite_client():
@@ -107,7 +120,11 @@ def _sqlite_client():
             os.environ["BUILDER_DB_PATH"] = previous
     with app.app_context():
         create_all()
-    return app.test_client()
+    client = app.test_client()
+    _seed_session(client, role="admin", tenant_id=1, user_id=11)
+    with client.session_transaction() as sess:
+        sess["site_id"] = "site-1"
+    return client
 
 
 def teardown_module() -> None:
@@ -262,7 +279,7 @@ def test_create_private_component_endpoint_limits_visibility_to_owner() -> None:
 def test_private_component_endpoint_delegates_matching_to_builder_flow() -> None:
     api_source = Path("core/builder_api.py").read_text(encoding="utf-8")
     private_route_start = api_source.index('@bp.post("/components/private")')
-    private_route_end = api_source.index('@bp.patch("/components/<component_id>")', private_route_start)
+    private_route_end = api_source.index('@bp.post("/components/site")', private_route_start)
     private_route_block = api_source[private_route_start:private_route_end]
 
     assert "create_private_component(" in private_route_block
@@ -1020,6 +1037,177 @@ def test_create_standalone_component_endpoint_rejects_empty_name() -> None:
     assert body.get("error") == "bad_request"
 
 
+def test_site_component_creation_isolated_collision_and_same_site_duplicate() -> None:
+    db_dir = tempfile.mkdtemp(prefix="builder_site_collision_")
+    _TEMP_DB_DIRS.append(db_dir)
+    builder_db_path = os.path.join(db_dir, "builder.db")
+    initialize_builder_sqlite(builder_db_path)
+    app = _app_with_builder_db(builder_db_path)
+
+    with app.app_context():
+        db = get_session()
+        db.execute(text("insert into tenants (id, name, active) values (1, 'Tenant 1', 1), (2, 'Tenant 2', 1)"))
+        db.execute(
+            text(
+                "insert into sites (id, name, tenant_id, version) values "
+                "('site-a', 'Site A', 1, 0), ('site-b', 'Site B', 1, 0), "
+                "('site-c', 'Site C', 2, 0)"
+            )
+        )
+        db.commit()
+        db.close()
+
+    def site_client(user_id: int, tenant_id: int, site_id: str):
+        client = app.test_client()
+        with client.session_transaction() as session:
+            session.update(
+                {
+                    "role": "editor",
+                    "tenant_id": tenant_id,
+                    "user_id": user_id,
+                    "site_id": site_id,
+                }
+            )
+        return client, _headers(role="editor", tenant_id=tenant_id, user_id=user_id)
+
+    site_a, site_a_headers = site_client(1, 1, "site-a")
+    site_b, site_b_headers = site_client(2, 1, "site-b")
+    site_c, site_c_headers = site_client(3, 2, "site-c")
+
+    component_ids = []
+    for client, headers in (
+        (site_a, site_a_headers),
+        (site_b, site_b_headers),
+        (site_c, site_c_headers),
+    ):
+        response = client.post(
+            "/api/builder/components/site",
+            json={"component_name": "Potatismos", "category": "side"},
+            headers=headers,
+        )
+        assert response.status_code == 201
+        component_ids.append(response.get_json()["component"]["component_id"])
+
+    assert len(set(component_ids)) == 3
+
+    duplicate = site_b.post(
+        "/api/builder/components/site",
+        json={"component_name": "Potatismos", "category": "side"},
+        headers=site_b_headers,
+    )
+    assert duplicate.status_code == 200
+    duplicate_body = duplicate.get_json()
+    assert duplicate_body["duplicate"] is True
+    assert duplicate_body["component"]["component_id"] == component_ids[1]
+
+    assert site_a.get(
+        f"/api/builder/components/{component_ids[1]}",
+        headers=site_a_headers,
+    ).status_code == 400
+    assert site_b.get(
+        f"/api/builder/components/{component_ids[0]}",
+        headers=site_b_headers,
+    ).status_code == 400
+
+    builder_db = sqlite3.connect(builder_db_path)
+    assert builder_db.execute(
+        "select count(*) from builder_composition_components"
+    ).fetchone()[0] == 0
+    assert builder_db.execute("pragma integrity_check").fetchone()[0] == "ok"
+    builder_db.close()
+
+
+def test_reviewed_dish_publication_is_site_scoped_and_does_not_reuse_foreign_components() -> None:
+    db_dir = tempfile.mkdtemp(prefix="builder_review_site_scope_")
+    _TEMP_DB_DIRS.append(db_dir)
+    builder_db_path = os.path.join(db_dir, "builder.db")
+    initialize_builder_sqlite(builder_db_path)
+    app = _app_with_builder_db(builder_db_path)
+
+    def site_client(user_id: int, tenant_id: int, site_id: str):
+        client = app.test_client()
+        with client.session_transaction() as session:
+            session.update(
+                {
+                    "role": "editor",
+                    "tenant_id": tenant_id,
+                    "user_id": user_id,
+                    "site_id": site_id,
+                }
+            )
+        return client, _headers(role="editor", tenant_id=tenant_id, user_id=user_id)
+
+    site_a, site_a_headers = site_client(1, 1, "site-a")
+    site_b, site_b_headers = site_client(2, 1, "site-b")
+    tenant_two, tenant_two_headers = site_client(3, 2, "site-c")
+
+    foreign_component = site_b.post(
+        "/api/builder/components/site",
+        json={"component_name": "Potatismos"},
+        headers=site_b_headers,
+    )
+    assert foreign_component.status_code == 201
+    foreign_component_id = str(
+        ((foreign_component.get_json() or {}).get("component") or {}).get("component_id") or ""
+    )
+    assert foreign_component_id
+
+    published = site_a.post(
+        "/api/builder/import/publish-drafts",
+        json={
+            "items": [
+                {
+                    "selected": True,
+                    "item_type": "dish",
+                    "raw_text": "Köttbullar med potatismos",
+                    "name": "Köttbullar med potatismos",
+                    "components": [{"name": "Köttbullar"}, {"name": "Potatismos"}],
+                }
+            ]
+        },
+        headers=site_a_headers,
+    )
+    assert published.status_code == 200
+    row_results = ((published.get_json() or {}).get("summary") or {}).get("row_results") or []
+    composition_id = str((row_results[0] or {}).get("composition_id") or "")
+    assert composition_id
+
+    with sqlite3.connect(builder_db_path) as connection:
+        composition_scope = connection.execute(
+            "SELECT tenant_id, owner_scope, owner_site_id, owner_user_id, visibility "
+            "FROM builder_object_scopes WHERE object_type = 'composition' AND object_id = ?",
+            (composition_id,),
+        ).fetchone()
+        component_scopes = connection.execute(
+            "SELECT c.component_id, s.tenant_id, s.owner_scope, s.owner_site_id, s.owner_user_id, s.visibility "
+            "FROM builder_composition_components c "
+            "JOIN builder_object_scopes s ON s.object_type = 'component' AND s.object_id = c.component_id "
+            "WHERE c.composition_id = ?",
+            (composition_id,),
+        ).fetchall()
+
+    assert composition_scope == (1, "site", "site-a", None, "site")
+    assert component_scopes
+    assert all(row[1:] == (1, "site", "site-a", None, "site") for row in component_scopes)
+    assert foreign_component_id not in {row[0] for row in component_scopes}
+
+    site_a_compositions = site_a.get("/api/builder/compositions", headers=site_a_headers)
+    site_b_compositions = site_b.get("/api/builder/compositions", headers=site_b_headers)
+    tenant_two_compositions = tenant_two.get("/api/builder/compositions", headers=tenant_two_headers)
+    assert composition_id in {
+        item.get("composition_id")
+        for item in (site_a_compositions.get_json() or {}).get("compositions", [])
+    }
+    assert composition_id not in {
+        item.get("composition_id")
+        for item in (site_b_compositions.get_json() or {}).get("compositions", [])
+    }
+    assert composition_id not in {
+        item.get("composition_id")
+        for item in (tenant_two_compositions.get_json() or {}).get("compositions", [])
+    }
+
+
 def test_delete_component_endpoint_removes_unreferenced_component() -> None:
     client = _client()
     created = client.post(
@@ -1170,6 +1358,114 @@ def test_list_reusable_components_endpoint_supports_listing_and_search() -> None
     summary = first.get("detail_summary") or {}
     assert set(summary.keys()) == {"has_method_data", "has_calculation_data", "has_allergen_data"}
     assert [item.get("component_name") for item in (search_body.get("components") or [])] == ["Fish Sauce"]
+
+
+def test_component_preview_suggests_and_matches_only_authenticated_site_components() -> None:
+    client = _client()
+    created = client.post(
+        "/api/builder/components/site",
+        json={"component_name": "Potatismos"},
+        headers=HEADERS,
+    )
+    assert created.status_code == 201
+    component_id = str(((created.get_json() or {}).get("component") or {}).get("component_id") or "")
+    assert component_id
+
+    alias = client.post(
+        f"/api/builder/components/{component_id}/aliases",
+        json={"alias_text": "potatis kokt"},
+        headers=HEADERS,
+    )
+    assert alias.status_code == 201
+
+    before = client.get("/api/builder/components", headers=HEADERS).get_json() or {}
+    preview = client.post(
+        "/api/builder/components/preview",
+        json={"dish_name": "Falukorv i ugn med potatismos"},
+        headers=HEADERS,
+    )
+    assert preview.status_code == 200
+    body = preview.get_json() or {}
+    assert body.get("ok") is True
+    suggestions = body.get("suggestions") or []
+    assert [item.get("suggested_name") for item in suggestions] == ["Falukorv i ugn", "Potatismos"]
+    assert suggestions[0].get("resolution") == "new"
+    assert suggestions[0].get("reusable") is False
+    assert suggestions[1].get("resolution") == "reusable"
+    assert suggestions[1].get("reusable") is True
+    assert (suggestions[1].get("match") or {}).get("component_id") == component_id
+    assert (suggestions[1].get("match") or {}).get("status") == "exact_match"
+
+    alias_preview = client.post(
+        "/api/builder/components/preview",
+        json={"dish_name": "potatis kokt"},
+        headers=HEADERS,
+    )
+    alias_body = alias_preview.get_json() or {}
+    alias_item = (alias_body.get("suggestions") or [])[0]
+    assert alias_preview.status_code == 200
+    assert alias_item.get("resolution") == "reusable"
+    assert (alias_item.get("match") or {}).get("status") == "alias_match"
+    assert (alias_item.get("match") or {}).get("component_id") == component_id
+
+    unknown = client.post(
+        "/api/builder/components/preview",
+        json={"dish_name": "Raggmunk"},
+        headers=HEADERS,
+    )
+    unknown_item = ((unknown.get_json() or {}).get("suggestions") or [])[0]
+    assert unknown.status_code == 200
+    assert unknown_item.get("resolution") == "new"
+    assert unknown_item.get("reusable") is False
+    assert (unknown_item.get("match") or {}).get("status") == "no_match"
+
+    after = client.get("/api/builder/components", headers=HEADERS).get_json() or {}
+    assert after.get("components") == before.get("components")
+
+    with client.session_transaction() as session_data:
+        session_data["site_id"] = "site-2"
+    foreign_site = client.post(
+        "/api/builder/components/preview",
+        json={"dish_name": "Potatismos"},
+        headers=HEADERS,
+    )
+    foreign_site_item = ((foreign_site.get_json() or {}).get("suggestions") or [])[0]
+    assert foreign_site.status_code == 200
+    assert foreign_site_item.get("reusable") is False
+    assert (foreign_site_item.get("match") or {}).get("component_id") is None
+
+    with client.session_transaction() as session_data:
+        session_data["tenant_id"] = 2
+        session_data["site_id"] = "site-1"
+    foreign_tenant_headers = dict(HEADERS)
+    foreign_tenant_headers["X-Tenant-Id"] = "2"
+    foreign_tenant = client.post(
+        "/api/builder/components/preview",
+        json={"dish_name": "Potatismos"},
+        headers=foreign_tenant_headers,
+    )
+    foreign_tenant_item = ((foreign_tenant.get_json() or {}).get("suggestions") or [])[0]
+    assert foreign_tenant.status_code == 200
+    assert foreign_tenant_item.get("reusable") is False
+    assert (foreign_tenant_item.get("match") or {}).get("component_id") is None
+
+
+def test_component_preview_rejects_empty_name_without_persistence() -> None:
+    client = _client()
+    before = client.get("/api/builder/components", headers=HEADERS).get_json() or {}
+
+    empty = client.post(
+        "/api/builder/components/preview",
+        json={"dish_name": "   "},
+        headers=HEADERS,
+    )
+    assert empty.status_code == 400
+    assert (empty.get_json() or {}).get("error") == "bad_request"
+
+    malformed = client.post("/api/builder/components/preview", json={}, headers=HEADERS)
+    assert malformed.status_code == 400
+    after = client.get("/api/builder/components", headers=HEADERS).get_json() or {}
+    assert after.get("components") == before.get("components")
 
 
 def test_component_list_includes_detail_summary_flags_from_component_details() -> None:
@@ -2419,7 +2715,7 @@ def test_import_review_publish_reuses_existing_component_and_avoids_duplicates()
     client = _client()
 
     created = client.post(
-        "/api/builder/components",
+        "/api/builder/components/site",
         json={"component_name": "Potatismos"},
         headers=HEADERS,
     )

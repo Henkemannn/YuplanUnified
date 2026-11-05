@@ -289,10 +289,19 @@ def test_admin_menu_import_upload_creates_builder_link_publication_and_portal_pa
     assert 'data-modal-host-mode="child-owned-card"' in html
     assert 'data-admin-week-builder-open' in html
     assert 'data-builder-composition-id="comp_monday_alt1"' in html
+    assert 'data-builder-composition-id="comp_monday_alt2"' in html
+    assert 'data-builder-composition-id="comp_monday_dessert"' in html
+    assert 'data-builder-composition-id="comp_monday_dinner"' in html
     assert 'data-menu-detail-id="' in html
     assert 'data-day-key="monday"' in html
     assert 'data-meal-slot="lunch_alt1"' in html
     assert html.count('data-admin-week-builder-open') == 4
+    assert set(re.findall(r'data-builder-composition-id="([^"]+)"', html)) == {
+        "comp_monday_alt1",
+        "comp_monday_alt2",
+        "comp_monday_dessert",
+        "comp_monday_dinner",
+    }
     assert '/builder-editor-host?composition_id=' not in html
     assert 'id="resolveModal"' not in html
     assert 'id="componentDetailEditorModal"' not in html
@@ -359,6 +368,8 @@ def test_admin_menu_import_upload_creates_builder_link_publication_and_portal_pa
     assert "'/builder-editor-host?composition_id='" in controller_js
     assert "BuilderCompositionSearchRuntime.filterCompositionsBySearch" in actions_js
     assert "BuilderDishCreateModal.open" in actions_js
+    assert "previewEndpoint: '/api/builder/components/preview'" in actions_js
+    assert "previewOutputId: 'createDishPreview'" in actions_js
     assert "closeMenus()" in actions_js
     assert "closeAllOverlays()" in actions_js
     assert "document.addEventListener('keydown'" in actions_js
@@ -367,6 +378,10 @@ def test_admin_menu_import_upload_creates_builder_link_publication_and_portal_pa
     assert "openInlinePicker(context);" in actions_js
     assert "function openExistingDish(compositionId, triggerElement)" in actions_js
     assert "globalThis.AdminWeekBuilderHost.openComposition(resolvedCompositionId, triggerElement);" in actions_js
+    assert "function openPendingCompositionAfterReload()" in actions_js
+    assert "params.get('open_composition_id')" in actions_js
+    assert "nextUrl.searchParams.set('open_composition_id', targetCompositionId);" in actions_js
+    assert "openExistingDish(compositionId);" in actions_js
     assert "composition_id: targetCompositionId" in actions_js
     assert "async function clearRowComposition()" in actions_js
     assert "context.rowKind === 'dynamic'" in actions_js

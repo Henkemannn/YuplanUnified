@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from contextvars import ContextVar
 from contextlib import contextmanager
 from dataclasses import dataclass
 from decimal import Decimal
@@ -18,6 +19,12 @@ from .menu import Menu
 from .menu import MenuDetail
 
 
+_active_transaction: ContextVar[tuple[str, sqlite3.Connection] | None] = ContextVar(
+    "builder_sqlite_active_transaction",
+    default=None,
+)
+
+
 def _to_bool(value: object) -> bool:
     return bool(int(value)) if value is not None else False
 
@@ -31,13 +38,38 @@ def _normalize_path(path: str) -> str:
 
 @contextmanager
 def _connect(path: str) -> Iterator[sqlite3.Connection]:
-    conn = sqlite3.connect(path)
+    normalized_path = _normalize_path(path)
+    active = _active_transaction.get()
+    if active is not None and active[0] == normalized_path:
+        yield active[1]
+        return
+
+    conn = sqlite3.connect(normalized_path)
     try:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         yield conn
         conn.commit()
     finally:
+        conn.close()
+
+
+@contextmanager
+def builder_transaction(path: str) -> Iterator[sqlite3.Connection]:
+    normalized_path = _normalize_path(path)
+    conn = sqlite3.connect(normalized_path)
+    token = _active_transaction.set((normalized_path, conn))
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("BEGIN IMMEDIATE")
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        _active_transaction.reset(token)
         conn.close()
 
 
@@ -128,6 +160,18 @@ def initialize_builder_sqlite(path: str) -> str:
                     created_at DESC,
                     object_id
                 );
+            CREATE TABLE IF NOT EXISTS builder_review_idempotency (
+                idempotency_key TEXT PRIMARY KEY,
+                tenant_id INTEGER NOT NULL,
+                site_id TEXT NOT NULL,
+                menu_id TEXT NOT NULL,
+                menu_detail_id TEXT NOT NULL,
+                payload_hash TEXT NOT NULL,
+                composition_id TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_builder_review_idempotency_row
+                ON builder_review_idempotency(tenant_id, site_id, menu_id, menu_detail_id);
 
             CREATE TABLE IF NOT EXISTS builder_composition_components (
                 composition_id TEXT NOT NULL,
@@ -221,6 +265,29 @@ def initialize_builder_sqlite(path: str) -> str:
 
             CREATE INDEX IF NOT EXISTS idx_builder_import_items_session
                 ON builder_import_session_items(session_id, item_order);
+            """
+        )
+
+        session_columns = {
+            str(row["name"])
+            for row in conn.execute("PRAGMA table_info('builder_import_sessions')").fetchall()
+        }
+        for column, definition in {
+            "source_tenant_id": "INTEGER NULL",
+            "source_site_id": "TEXT NULL",
+            "source_menu_id": "TEXT NULL",
+            "source_menu_detail_id": "TEXT NULL",
+        }.items():
+            if column not in session_columns:
+                conn.execute(f"ALTER TABLE builder_import_sessions ADD COLUMN {column} {definition}")
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_builder_import_active_source
+            ON builder_import_sessions(
+                source_tenant_id, source_site_id, source_menu_id, source_menu_detail_id
+            )
+            WHERE source_menu_id IS NOT NULL
+              AND status NOT IN ('published', 'ignored', 'cancelled')
             """
         )
 
@@ -1087,6 +1154,7 @@ class SQLiteMenuDetailRepository:
 
 __all__ = [
     "BuilderObjectScopeRecord",
+    "builder_transaction",
     "initialize_builder_sqlite",
     "SQLiteBuilderObjectScopeRepository",
     "SQLiteComponentRepository",

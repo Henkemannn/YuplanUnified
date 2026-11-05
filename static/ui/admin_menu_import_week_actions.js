@@ -238,6 +238,20 @@
       globalThis.AdminWeekBuilderHost.openComposition(resolvedCompositionId, triggerElement);
     }
 
+    function openPendingCompositionAfterReload() {
+      const params = new URLSearchParams(window.location.search);
+      const compositionId = normalize(params.get('open_composition_id'));
+      if (!compositionId) {
+        return;
+      }
+
+      params.delete('open_composition_id');
+      const query = params.toString();
+      const nextUrl = window.location.pathname + (query ? '?' + query : '') + window.location.hash;
+      window.history.replaceState(window.history.state, '', nextUrl);
+      openExistingDish(compositionId);
+    }
+
     function openInlinePicker(context, initialName, actionMode) {
       const pickerContext = context || rowContext(state.activeRow);
       if (!pickerContext) {
@@ -395,7 +409,7 @@
         return;
       }
       closeInlinePicker();
-      window.location.reload();
+      reloadAndOpenComposition(targetCompositionId);
     }
 
     async function callJson(url, options) {
@@ -475,23 +489,62 @@
       return openExistingDish(context.compositionId);
     }
 
+    function reloadAndOpenComposition(compositionId) {
+      const targetCompositionId = normalize(compositionId);
+      if (!targetCompositionId) {
+        return;
+      }
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.set('open_composition_id', targetCompositionId);
+      window.history.replaceState(window.history.state, '', nextUrl.toString());
+      window.location.reload();
+    }
+
     function openCreateFlow() {
       if (!globalThis.BuilderDishCreateModal || typeof globalThis.BuilderDishCreateModal.open !== 'function') {
         setStatus('Skapa rätt-flödet är inte tillgängligt.', true);
         return;
       }
+      const targetContext = state.activePickerContext;
+      const atomicEndpoint = targetContext
+        && targetContext.menuDetailId
+        && targetContext.unresolvedText
+        ? '/api/builder/menus/' + encodeURIComponent(builderMenuId) + '/create-reviewed-composition'
+        : '';
       globalThis.BuilderDishCreateModal.open({
         title: 'Skapa rätt',
-        createEndpoint: '/api/builder/compositions/private',
+        createEndpoint: atomicEndpoint || '/api/builder/compositions/site',
+        previewEndpoint: '/api/builder/components/preview',
+        reviewEndpoint: atomicEndpoint,
+        menuDetailId: targetContext && targetContext.menuDetailId,
+        previewOutputId: 'createDishPreview',
         includeSeedComponents: false,
-        initialName: normalize(inlineSearch.value || (state.activePickerContext && (state.activePickerContext.unresolvedText || state.activePickerContext.dishName))),
+        initialName: normalize(inlineSearch.value || (targetContext && (targetContext.unresolvedText || targetContext.dishName))),
         onSuccess(composition) {
           const id = normalize(composition && composition.composition_id);
-          if (id) {
+          if (!id) {
+            return;
+          }
+          if (atomicEndpoint) {
+            reloadAndOpenComposition(id);
+          } else {
             void applyPickedComposition(state.activePickerContext, id);
           }
         },
       });
+    }
+
+    function openManualCreateForUnresolved(context) {
+      if (!context) {
+        return;
+      }
+      closeMenus();
+      closeInlinePicker();
+      closeCreateRowDialog();
+      state.activeRow = context.row;
+      state.activePickerContext = context;
+      state.activePickerAction = 'add';
+      openCreateFlow();
     }
 
     function bindRowEvents() {
@@ -650,12 +703,21 @@
       if (!target) {
         return;
       }
+      const reviewTrigger = target.closest('[data-admin-week-builder-review-open]');
+      if (reviewTrigger) {
+        event.preventDefault();
+        event.stopPropagation();
+        const row = reviewTrigger.closest('[data-week-slot-row]');
+        openManualCreateForUnresolved(rowContext(row));
+        return;
+      }
       if (!target.closest('[data-week-slot-action-toggle]') && !target.closest('[data-week-slot-action-menu]')) {
         closeMenus();
       }
     });
 
     bindRowEvents();
+    openPendingCompositionAfterReload();
   }
 
   document.addEventListener('DOMContentLoaded', init);

@@ -14,7 +14,7 @@ from flask import Blueprint, current_app, g, has_request_context, jsonify, reque
 from .app_authz import require_roles
 from .app_sessions import get_session
 from .builder import BuilderFlow
-from .builder.library_scope import ActorContext
+from .builder.library_scope import ActorContext, ObjectScope
 from .builder_menu_context_flow import BuilderMenuContextFlow
 from .builder.file_import import (
     DEFAULT_COMPONENT_CATEGORIES,
@@ -109,6 +109,39 @@ def _get_builder_actor() -> ActorContext | None:
         user_id=int(session_data["user_id"]),
         site_id=site_id_value,
         role=str(session_data["role"]),
+    )
+
+
+def _review_creation_scope(actor: ActorContext | None) -> ObjectScope:
+    if actor is None or not str(actor.site_id or "").strip():
+        raise ValueError("authenticated site is required for reviewed publication")
+    return ObjectScope(
+        tenant_id=actor.tenant_id,
+        owner_scope="site",
+        owner_site_id=str(actor.site_id).strip(),
+        owner_user_id=None,
+        visibility="site",
+        source_object_id=None,
+    )
+
+
+def _matches_review_creation_scope(
+    flow: BuilderFlow,
+    object_type: str,
+    object_id: str,
+    creation_scope: ObjectScope,
+) -> bool:
+    repository = getattr(flow, "_object_scope_repository", None)
+    if repository is None:
+        return False
+    existing_scope = repository.get_scope(object_type, object_id)
+    return (
+        existing_scope is not None
+        and existing_scope.tenant_id == creation_scope.tenant_id
+        and existing_scope.owner_scope == "site"
+        and existing_scope.owner_site_id == creation_scope.owner_site_id
+        and existing_scope.owner_user_id is None
+        and existing_scope.visibility == "site"
     )
 
 
@@ -585,6 +618,9 @@ def _build_import_review_drafts(lines: list[str], *, actor: ActorContext | None 
 def _publish_review_drafts(items: list[dict[str, Any]], *, actor: ActorContext | None = None) -> dict[str, Any]:
     flow = _get_builder_flow()
     effective_actor = actor if actor is not None else _get_builder_actor()
+    creation_scope = _review_creation_scope(effective_actor)
+    if getattr(flow, "_object_scope_repository", None) is None:
+        raise ValueError("site scope storage is required for reviewed publication")
     known_component_ids = {
         str(component.component_id)
         for component in flow.list_library_components(actor=effective_actor)
@@ -627,6 +663,7 @@ def _publish_review_drafts(items: list[dict[str, Any]], *, actor: ActorContext |
                 name,
                 category=_normalize_component_category(suggest_component_category(name)),
                 actor=effective_actor,
+                scope=creation_scope,
             )
             if item_tags:
                 details = _load_component_details(component.component_id)
@@ -666,9 +703,16 @@ def _publish_review_drafts(items: list[dict[str, Any]], *, actor: ActorContext |
         item_warnings: list[str] = []
         if resolution.kind == "composition" and resolution.composition_id:
             composition = flow._composition_repository.get(resolution.composition_id)
-            if composition is not None:
+            if composition is not None and _matches_review_creation_scope(
+                flow,
+                "composition",
+                composition.composition_id,
+                creation_scope,
+            ):
                 matched_via = str(resolution.matched_via or "existing")
                 reused_composition_count += 1
+            else:
+                composition = None
 
         if composition is None:
             composition = flow.create_composition_with_generated_id(
@@ -676,6 +720,7 @@ def _publish_review_drafts(items: list[dict[str, Any]], *, actor: ActorContext |
                 library_group=None,
                 seed_components=False,
                 actor=effective_actor,
+                creation_scope=creation_scope,
             )
             created_composition_count += 1
             if source_text and sanitize_builder_import_text(source_text) != name:
@@ -711,6 +756,7 @@ def _publish_review_drafts(items: list[dict[str, Any]], *, actor: ActorContext |
                     component_name,
                     category=_normalize_component_category(suggest_component_category(component_name)),
                     actor=effective_actor,
+                    scope=creation_scope,
                 )
                 component_tags = suggest_component_tags(component_name)
                 if component_tags:
@@ -1286,7 +1332,13 @@ def _normalize_session_item(item: dict[str, Any], index: int, import_type: str) 
     }
 
 
-def _session_from_drafts(*, draft_items: list[dict[str, Any]], import_type: str, source_name: str | None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def _session_from_drafts(
+    *,
+    draft_items: list[dict[str, Any]],
+    import_type: str,
+    source_name: str | None,
+    source_context: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     session_id = f"imp_{uuid.uuid4().hex[:10]}"
     normalized_items: list[dict[str, Any]] = []
     for index, item in enumerate(draft_items):
@@ -1309,6 +1361,8 @@ def _session_from_drafts(*, draft_items: list[dict[str, Any]], import_type: str,
         "created_at": now,
         "updated_at": now,
     }
+    if source_context:
+        session.update(source_context)
     for index, item in enumerate(normalized_items):
         item["session_id"] = session_id
         # Keep session item IDs unique across repeated imports even when callers reuse temp IDs.
@@ -1327,8 +1381,9 @@ def _persist_import_session(session: dict[str, Any], items: list[dict[str, Any]]
                 INSERT INTO builder_import_sessions (
                     session_id, source_name, import_type, status,
                     total_rows, detected_dishes, detected_components, ignored_rows,
-                    pending_review_count, published_count, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    pending_review_count, published_count, created_at, updated_at,
+                    source_tenant_id, source_site_id, source_menu_id, source_menu_detail_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     session["session_id"],
@@ -1343,6 +1398,10 @@ def _persist_import_session(session: dict[str, Any], items: list[dict[str, Any]]
                     int(session["published_count"]),
                     session["created_at"],
                     session["updated_at"],
+                    session.get("source_tenant_id"),
+                    session.get("source_site_id"),
+                    session.get("source_menu_id"),
+                    session.get("source_menu_detail_id"),
                 ),
             )
             for item in items:
@@ -1377,6 +1436,92 @@ def _persist_import_session(session: dict[str, Any], items: list[dict[str, Any]]
     store = _session_store()
     store["sessions"][session["session_id"]] = dict(session)
     store["items"][session["session_id"]] = [dict(item) for item in items]
+
+
+def _validate_import_source_context(payload: dict[str, Any]) -> dict[str, Any] | None:
+    menu_id = str(payload.get("source_menu_id") or "").strip()
+    menu_detail_id = str(payload.get("source_menu_detail_id") or "").strip()
+    if not menu_id and not menu_detail_id:
+        return None
+    if not menu_id or not menu_detail_id:
+        raise ValueError("source_menu_id and source_menu_detail_id are required together")
+
+    actor = _get_builder_actor()
+    if not actor.site_id:
+        raise ValueError("authenticated site is required for a source menu row")
+
+    from .builder_menu_context_api import _get_menu_context_flow
+
+    flow = _get_menu_context_flow()
+    menu = flow._menu_service.get_menu(menu_id)
+    if menu is None or str(menu.site_id or "") != str(actor.site_id):
+        raise ValueError("source menu is outside the authenticated site")
+    detail = next(
+        (
+            item
+            for item in flow._menu_service.list_menu_details(menu_id)
+            if str(item.menu_detail_id or "") == menu_detail_id
+        ),
+        None,
+    )
+    if detail is None:
+        raise ValueError("source menu detail was not found")
+    if str(detail.composition_ref_type or "") != "unresolved":
+        raise ValueError("source menu detail is already resolved")
+
+    return {
+        "source_tenant_id": int(actor.tenant_id),
+        "source_site_id": str(actor.site_id),
+        "source_menu_id": menu_id,
+        "source_menu_detail_id": menu_detail_id,
+    }
+
+
+def _find_active_source_import_session(
+    source_context: dict[str, Any] | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
+    if not source_context:
+        return None
+
+    db_path = _builder_db_path()
+    if db_path:
+        sqlite_path = initialize_builder_sqlite(db_path)
+        with sqlite3.connect(sqlite_path) as conn:
+            row = conn.execute(
+                """
+                SELECT session_id
+                FROM builder_import_sessions
+                WHERE source_tenant_id = ?
+                  AND source_site_id = ?
+                  AND source_menu_id = ?
+                  AND source_menu_detail_id = ?
+                  AND status NOT IN ('published', 'ignored', 'cancelled')
+                ORDER BY created_at ASC, session_id ASC
+                LIMIT 1
+                """,
+                (
+                    source_context["source_tenant_id"],
+                    source_context["source_site_id"],
+                    source_context["source_menu_id"],
+                    source_context["source_menu_detail_id"],
+                ),
+            ).fetchone()
+        if row is None:
+            return None
+        session, items = _load_import_session(str(row[0]))
+        return (session, items) if session is not None else None
+
+    store = _session_store()
+    for session_id, session in store["sessions"].items():
+        if any(
+            session.get(key) != source_context.get(key)
+            for key in ("source_tenant_id", "source_site_id", "source_menu_id", "source_menu_detail_id")
+        ):
+            continue
+        if str(session.get("status") or "") in {"published", "ignored", "cancelled"}:
+            continue
+        return dict(session), [dict(item) for item in store["items"].get(session_id, [])]
+    return None
 
 
 def _list_import_sessions() -> list[dict[str, Any]]:
@@ -1704,6 +1849,41 @@ def create_private_composition():
     return jsonify({"ok": True, "composition": _serialize_composition(composition)}), 201
 
 
+@bp.post("/compositions/site")
+@require_roles("viewer", "editor", "admin", "superuser")
+def create_site_composition():
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+
+    try:
+        flow = _get_builder_flow()
+        actor = _get_builder_actor()
+        if actor is None or not str(actor.site_id or "").strip():
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": "unauthorized",
+                    "message": "authenticated site is required",
+                }
+            ), 401
+        if "composition_id" in payload:
+            return _bad_request("composition_id is not allowed")
+        composition_name = _require_str(payload, "composition_name")
+        library_group = _require_dish_library_group(payload)
+        seed_components = _optional_bool(payload, "seed_components")
+        composition = flow.create_site_composition_with_generated_id(
+            composition_name=composition_name,
+            library_group=library_group,
+            seed_components=False if seed_components is None else bool(seed_components),
+            actor=actor,
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True, "composition": _serialize_composition(composition)}), 201
+
+
 @bp.delete("/compositions/<composition_id>")
 @require_roles("editor", "admin", "superuser")
 def delete_composition(composition_id: str):
@@ -1877,6 +2057,60 @@ def create_private_component():
         response_body["duplicate"] = True
         response_body["message"] = f"Komponenten finns redan: {result.component.canonical_name}"
     return jsonify(response_body), status_code
+
+
+@bp.post("/components/site")
+@require_roles("viewer", "editor", "admin", "superuser")
+def create_site_component():
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+
+    try:
+        flow = _get_builder_flow()
+        actor = _get_builder_actor()
+        if actor is None or not str(actor.site_id or "").strip():
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": "unauthorized",
+                    "message": "authenticated site is required",
+                }
+            ), 401
+        component_name_value = _require_str(payload, "component_name")
+        normalized_key = flow._normalize_component_key(component_name_value)
+        for existing_component in flow.list_library_components(actor=actor):
+            if (
+                flow._normalize_component_key(str(existing_component.canonical_name or "")) == normalized_key
+                and flow.is_component_owned_by_site(existing_component.component_id, actor=actor)
+            ):
+                return jsonify(
+                    {
+                        "ok": True,
+                        "duplicate": True,
+                        "message": f"Komponenten finns redan: {existing_component.canonical_name}",
+                        "component": _serialize_component(existing_component),
+                    }
+                ), 200
+        category_value = _normalize_component_category(_optional_str(payload, "category"))
+        site_scope = ObjectScope(
+            tenant_id=actor.tenant_id,
+            owner_scope="site",
+            owner_site_id=str(actor.site_id).strip(),
+            owner_user_id=None,
+            visibility="site",
+            source_object_id=None,
+        )
+        component = flow.create_standalone_component(
+            component_name=component_name_value,
+            category=category_value,
+            actor=actor,
+            scope=site_scope,
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True, "component": _serialize_component(component)}), 201
 
 
 @bp.patch("/components/<component_id>")
@@ -2133,6 +2367,73 @@ def delete_component(component_id: str):
         return _bad_request(str(exc))
 
     return jsonify({"ok": True, "component_id": component_id_value})
+
+
+@bp.post("/components/preview")
+@require_roles("viewer", "editor", "admin", "superuser")
+def preview_component_suggestions():
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+
+    try:
+        actor = _get_builder_actor()
+        if actor is None or not str(actor.site_id or "").strip():
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": "unauthorized",
+                    "message": "authenticated site is required",
+                }
+            ), 401
+
+        dish_name = sanitize_builder_import_text(_require_str(payload, "dish_name"))
+        if not dish_name:
+            raise ValueError("dish_name is required")
+
+        flow = _get_builder_flow()
+        suggestions = suggest_components_from_import_dish_name(dish_name)
+        preview_items: list[dict[str, Any]] = []
+        for suggested_name in suggestions:
+            match = flow.match_component_name(suggested_name, actor=actor)
+            status = str(match.status or "no_match")
+            reusable = status in {"exact_match", "alias_match"} and bool(match.component_id)
+            preview_items.append(
+                {
+                    "suggested_name": suggested_name,
+                    "reusable": reusable,
+                    "resolution": "reusable" if reusable else (
+                        "ambiguous" if status == "possible_match" else "new"
+                    ),
+                    "match": {
+                        "status": status,
+                        "normalized_text": match.normalized_text,
+                        "component_id": match.component_id if reusable else None,
+                        "component_name": match.component_name if reusable else None,
+                        "confidence": float(match.confidence) if match.confidence is not None else None,
+                        "possible_matches": [
+                            {
+                                "component_id": candidate.component_id,
+                                "component_name": candidate.component_name,
+                                "matched_on": candidate.matched_on,
+                                "normalized_text": candidate.normalized_text,
+                                "score": candidate.score,
+                            }
+                            for candidate in match.possible_matches
+                        ],
+                    },
+                }
+            )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify(
+        {
+            "ok": True,
+            "dish_name": dish_name,
+            "suggestions": preview_items,
+        }
+    )
 
 
 @bp.get("/components")
@@ -2411,6 +2712,10 @@ def create_import_session():
 
     import_type = str(payload.get("import_type") or "menu").strip() or "menu"
     source_name = _optional_str(payload, "source_name")
+    try:
+        source_context = _validate_import_source_context(payload)
+    except ValueError as exc:
+        return _bad_request(str(exc))
 
     draft_items: list[dict[str, Any]] = []
     raw_items = payload.get("items")
@@ -2457,14 +2762,25 @@ def create_import_session():
                 "details": str(exc),
             }), 400
 
+    existing = _find_active_source_import_session(source_context)
+    if existing is not None:
+        session, items = existing
+        return jsonify({"ok": True, "reused": True, "session": session, "items": items}), 200
+
     try:
         session, items = _session_from_drafts(
             draft_items=draft_items,
             import_type=import_type,
             source_name=source_name,
+            source_context=source_context,
         )
         _persist_import_session(session, items)
     except (ValueError, sqlite3.IntegrityError) as exc:
+        if source_context and isinstance(exc, sqlite3.IntegrityError):
+            existing = _find_active_source_import_session(source_context)
+            if existing is not None:
+                session, items = existing
+                return jsonify({"ok": True, "reused": True, "session": session, "items": items}), 200
         return jsonify({
             "ok": False,
             "error": "bad_request",
@@ -2591,7 +2907,10 @@ def publish_import_session_selected(session_id: str):
         if bool(item.get("selected")) and str(item.get("item_type") or "") != "ignore"
     ]
 
-    summary = _publish_review_drafts(selected_items)
+    try:
+        summary = _publish_review_drafts(selected_items)
+    except ValueError as exc:
+        return _bad_request(str(exc))
 
     published_raw = {
         str(entry.get("raw_text") or "").strip().lower()
@@ -2635,7 +2954,10 @@ def import_publish_review_drafts():
             for item in items
             if bool(item.get("selected")) and str(item.get("item_type") or "") != "ignore"
         ]
-        summary = _publish_review_drafts(selected_items)
+        try:
+            summary = _publish_review_drafts(selected_items)
+        except ValueError as exc:
+            return _bad_request(str(exc))
 
         published_raw = {
             str(entry.get("raw_text") or "").strip().lower()
@@ -2659,7 +2981,10 @@ def import_publish_review_drafts():
         return _bad_request("items must be a list")
 
     items = [item for item in raw_items if isinstance(item, dict)]
-    summary = _publish_review_drafts(items)
+    try:
+        summary = _publish_review_drafts(items)
+    except ValueError as exc:
+        return _bad_request(str(exc))
     return jsonify({"ok": True, "summary": summary})
 
 

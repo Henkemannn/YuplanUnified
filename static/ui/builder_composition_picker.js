@@ -125,7 +125,7 @@
       }
       globalThis.BuilderDishCreateModal.open({
         title: 'Skapa rätt',
-        createEndpoint: '/api/builder/compositions/private',
+        createEndpoint: '/api/builder/compositions/site',
         includeSeedComponents: false,
         initialName: state.query,
         onSuccess(composition) {

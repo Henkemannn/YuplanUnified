@@ -20,6 +20,9 @@ class MenuImportService:
         self.menu_service = menu_service
 
     def apply(self, tenant_id: int, site_id: str, result: MenuImportResult) -> dict:
+        if not any(week_block.items for week_block in result.weeks):
+            raise ValueError("No menu items recognized; no menus were created.")
+
         summary = []
         legacy_menu_ids_by_week: dict[tuple[int, int], int] = {}
         db = get_session()
@@ -28,6 +31,8 @@ class MenuImportService:
             if effective_tenant_id is None:
                 raise ValueError("site_tenant_required")
             for week_block in result.weeks:
+                if not week_block.items:
+                    continue
                 created = 0
                 updated = 0
                 skipped = 0

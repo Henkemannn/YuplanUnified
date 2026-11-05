@@ -4,6 +4,9 @@ import gc
 import os
 import shutil
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
+
+import pytest
 
 from core.app_factory import create_app
 from core.db import create_all
@@ -115,7 +118,7 @@ def test_add_and_list_composition_menu_rows_endpoint() -> None:
             "composition_id": "plate_1",
             "note": "main",
         },
-        headers=HEADERS,
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "2"},
     )
     assert created.status_code == 201
     created_body = created.get_json() or {}
@@ -996,6 +999,128 @@ def test_resolve_menu_detail_endpoint() -> None:
     assert detail.get("unresolved_text") is None
 
 
+def test_admin_builder_handoff_resolves_only_site_owned_menu_row() -> None:
+    client = _client()
+    created = client.post(
+        "/api/builder/compositions/site",
+        json={"composition_name": "Köttbullar med potatismos"},
+        headers=HEADERS,
+    )
+    assert created.status_code == 201
+    composition_id = (created.get_json() or {}).get("composition", {}).get("composition_id")
+
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_1", "site_id": "site_1", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+    imported = client.post(
+        "/api/builder/menus/menu_1/import",
+        json={"rows": [{"day": "monday", "meal_slot": "lunch", "raw_text": "Köttbullar med potatismos"}]},
+        headers=HEADERS,
+    )
+    detail_id = (
+        (imported.get_json() or {}).get("summary", {}).get("row_results", [{}])[0].get("menu_detail_id")
+    )
+
+    resolved = client.post(
+        "/api/builder/menus/menu_1/resolve",
+        json={
+            "menu_detail_id": detail_id,
+            "composition_id": composition_id,
+            "admin_builder_handoff": True,
+        },
+        headers=HEADERS,
+    )
+    assert resolved.status_code == 200
+    assert (resolved.get_json() or {}).get("menu_detail", {}).get("composition_id") == composition_id
+
+    with client.session_transaction() as session:
+        session["site_id"] = "site_2"
+    foreign = client.post(
+        "/api/builder/compositions/site",
+        json={"composition_name": "Foreign dish"},
+        headers=HEADERS,
+    )
+    assert foreign.status_code == 201
+    foreign_id = (foreign.get_json() or {}).get("composition", {}).get("composition_id")
+
+    with client.session_transaction() as session:
+        session["site_id"] = "site_1"
+    unresolved = client.post(
+        "/api/builder/menus/menu_1/import",
+        json={"rows": [{"day": "tuesday", "meal_slot": "lunch", "raw_text": "Another dish"}]},
+        headers=HEADERS,
+    )
+    second_detail_id = (
+        (unresolved.get_json() or {}).get("summary", {}).get("row_results", [{}])[0].get("menu_detail_id")
+    )
+    denied = client.post(
+        "/api/builder/menus/menu_1/resolve",
+        json={
+            "menu_detail_id": second_detail_id,
+            "composition_id": foreign_id,
+            "admin_builder_handoff": True,
+        },
+        headers=HEADERS,
+    )
+    assert denied.status_code == 400
+    assert (denied.get_json() or {}).get("error") == "bad_request"
+
+
+def test_admin_builder_review_session_is_idempotent_per_source_row() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_1", "site_id": "site_1", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+    imported = client.post(
+        "/api/builder/menus/menu_1/import",
+        json={
+            "rows": [
+                {"day": "monday", "meal_slot": "lunch", "raw_text": "Raggmunk"},
+                {"day": "tuesday", "meal_slot": "lunch", "raw_text": "Linsbolognese"},
+            ]
+        },
+        headers=HEADERS,
+    )
+    row_results = (imported.get_json() or {}).get("summary", {}).get("row_results", [])
+    first_detail_id = row_results[0]["menu_detail_id"]
+    second_detail_id = row_results[1]["menu_detail_id"]
+
+    payload = {
+        "import_type": "menu",
+        "source_name": "Admin menu row review",
+        "source_menu_id": "menu_1",
+        "source_menu_detail_id": first_detail_id,
+        "items": [{
+            "item_type": "dish",
+            "selected": True,
+            "raw_text": "Raggmunk",
+            "name": "Raggmunk",
+            "components": [],
+        }],
+    }
+    first = client.post("/api/builder/import/sessions", json=payload, headers=HEADERS)
+    second = client.post("/api/builder/import/sessions", json=payload, headers=HEADERS)
+    assert first.status_code == 201
+    assert second.status_code == 200
+    assert (second.get_json() or {}).get("reused") is True
+    assert (first.get_json() or {}).get("session", {}).get("session_id") == (
+        (second.get_json() or {}).get("session", {}).get("session_id")
+    )
+
+    other = dict(payload)
+    other["source_menu_detail_id"] = second_detail_id
+    other["items"] = [dict(payload["items"][0], raw_text="Linsbolognese", name="Linsbolognese")]
+    third = client.post("/api/builder/import/sessions", json=other, headers=HEADERS)
+    assert third.status_code == 201
+    assert (third.get_json() or {}).get("session", {}).get("session_id") != (
+        (first.get_json() or {}).get("session", {}).get("session_id")
+    )
+
+
 def test_update_menu_row_requires_and_uses_canonical_day_and_meal_slot() -> None:
     client = _client()
     client.post(
@@ -1174,8 +1299,292 @@ def test_create_composition_from_row_requires_detail_belongs_to_menu() -> None:
     )
 
     assert rv.status_code == 400
+
+
+def _create_review_row(client, *, menu_id: str = "review_menu") -> str:
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": menu_id, "site_id": "site_1", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+    imported = client.post(
+        f"/api/builder/menus/{menu_id}/import",
+        json={"rows": [{"day": "monday", "meal_slot": "lunch", "raw_text": "Bönchili med ris"}]},
+        headers=HEADERS,
+    )
+    return str(
+        (imported.get_json() or {})
+        .get("summary", {})
+        .get("row_results", [{}])[0]
+        .get("menu_detail_id")
+    )
+
+
+def test_reviewed_composition_atomically_persists_components_and_row() -> None:
+    client = _client()
+    detail_id = _create_review_row(client)
+    existing = client.post(
+        "/api/builder/components/site",
+        json={"component_name": "Ris"},
+        headers=HEADERS,
+    )
+    existing_id = (existing.get_json() or {}).get("component", {}).get("component_id")
+
+    rv = client.post(
+        "/api/builder/menus/review_menu/create-reviewed-composition",
+        json={
+            "menu_detail_id": detail_id,
+            "composition_name": "Bönchili med ris",
+            "library_group": "lunch",
+            "idempotency_key": "review-1",
+            "components": [
+                {"name": "Bönchili"},
+                {"name": "Ris", "component_id": existing_id},
+            ],
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 201
     body = rv.get_json() or {}
+    assert body["ok"] is True
+    composition = body["composition"]
+    assert [item["component_name"] for item in composition["components"]] == ["Bönchili", "Ris"]
+    assert composition["components"][1]["component_id"] == existing_id
+    assert body["menu_detail"]["composition_id"] == composition["composition_id"]
+    assert body["menu_detail"]["composition_ref_type"] == "composition"
+
+
+def test_reviewed_composition_reuses_exact_and_alias_matches() -> None:
+    client = _client()
+    detail_id = _create_review_row(client)
+    existing = client.post(
+        "/api/builder/components/site",
+        json={"component_name": "Potato"},
+        headers=HEADERS,
+    )
+    existing_id = (existing.get_json() or {}).get("component", {}).get("component_id")
+    alias = client.post(
+        f"/api/builder/components/{existing_id}/aliases",
+        json={"alias_text": "Knöl"},
+        headers=HEADERS,
+    )
+    assert alias.status_code == 201
+
+    rv = client.post(
+        "/api/builder/menus/review_menu/create-reviewed-composition",
+        json={
+            "menu_detail_id": detail_id,
+            "composition_name": "Alias dish",
+            "idempotency_key": "review-alias",
+            "components": [{"name": "Knöl"}],
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 201
+    components = (rv.get_json() or {}).get("composition", {}).get("components") or []
+    assert len(components) == 1
+    assert components[0]["component_id"] == existing_id
+
+
+def test_reviewed_composition_retry_is_idempotent_and_payload_conflict_is_explicit() -> None:
+    client = _client()
+    detail_id = _create_review_row(client)
+    payload = {
+        "menu_detail_id": detail_id,
+        "composition_name": "Bönchili med ris",
+        "idempotency_key": "review-retry",
+        "components": [{"name": "Bönchili"}, {"name": "Ris"}],
+    }
+
+    first = client.post(
+        "/api/builder/menus/review_menu/create-reviewed-composition",
+        json=payload,
+        headers=HEADERS,
+    )
+    second = client.post(
+        "/api/builder/menus/review_menu/create-reviewed-composition",
+        json=payload,
+        headers=HEADERS,
+    )
+    conflict = client.post(
+        "/api/builder/menus/review_menu/create-reviewed-composition",
+        json={**payload, "composition_name": "Changed name"},
+        headers=HEADERS,
+    )
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert (
+        (first.get_json() or {})["composition"]["composition_id"]
+        == (second.get_json() or {})["composition"]["composition_id"]
+    )
+    assert conflict.status_code == 409
+
+
+def test_reviewed_composition_rejects_ambiguous_component_without_choice() -> None:
+    client = _client()
+    detail_id = _create_review_row(client)
+    for name in ("Tomato sauce", "Tomato soup"):
+        assert client.post(
+            "/api/builder/components/site",
+            json={"component_name": name},
+            headers=HEADERS,
+        ).status_code in {200, 201}
+
+    rv = client.post(
+        "/api/builder/menus/review_menu/create-reviewed-composition",
+        json={
+            "menu_detail_id": detail_id,
+            "composition_name": "Reviewed dish",
+            "idempotency_key": "review-ambiguous",
+            "components": [{"name": "Tomato sauce soup"}],
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 409
+    assert "explicit match" in str((rv.get_json() or {}).get("message"))
+
+
+def test_reviewed_composition_denies_foreign_site_and_published_menu() -> None:
+    client = _client()
+    detail_id = _create_review_row(client)
+    owned = client.post(
+        "/api/builder/components/site",
+        json={"component_name": "Tenant private"},
+        headers=HEADERS,
+    )
+    owned_id = (owned.get_json() or {}).get("component", {}).get("component_id")
+
+    with client.session_transaction() as session:
+        session["site_id"] = "site_2"
+        session["tenant_id"] = 2
+    foreign = client.post(
+        "/api/builder/menus/review_menu/create-reviewed-composition",
+        json={
+            "menu_detail_id": detail_id,
+            "composition_name": "Denied dish",
+            "idempotency_key": "review-foreign",
+            "components": [{"name": "Tenant private", "component_id": owned_id}],
+        },
+        headers=HEADERS,
+    )
+    assert foreign.status_code == 400
+
+    with client.session_transaction() as session:
+        session["site_id"] = "site_1"
+        session["tenant_id"] = 2
+    foreign_tenant = client.post(
+        "/api/builder/menus/review_menu/create-reviewed-composition",
+        json={
+            "menu_detail_id": detail_id,
+            "composition_name": "Denied dish",
+            "idempotency_key": "review-foreign-tenant",
+            "components": [{"name": "Tenant private", "component_id": owned_id}],
+        },
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "2"},
+    )
+    assert foreign_tenant.status_code == 400
+
+    with client.session_transaction() as session:
+        session["tenant_id"] = 1
+    from core.builder_menu_context_api import _get_menu_context_flow
+
+    with client.application.app_context():
+        flow = _get_menu_context_flow()
+        menu = flow._menu_service.get_menu("review_menu")
+        assert menu is not None
+        flow._menu_service.update_menu("review_menu", status="published")
+    published = client.post(
+        "/api/builder/menus/review_menu/create-reviewed-composition",
+        json={
+            "menu_detail_id": detail_id,
+            "composition_name": "Denied dish",
+            "idempotency_key": "review-published",
+            "components": [],
+        },
+        headers=HEADERS,
+    )
+    assert published.status_code == 400
+    body = published.get_json() or {}
     assert body.get("error") == "bad_request"
+
+
+def test_reviewed_composition_rolls_back_every_write_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client()
+    detail_id = _create_review_row(client)
+    from core.builder.builder_flow import BuilderFlow
+    from core.builder_menu_context_api import _get_menu_context_flow
+
+    original_attach = BuilderFlow.attach_existing_component_to_composition
+    calls = 0
+
+    def fail_on_second_attach(self, *args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise ValueError("injected attachment failure")
+        return original_attach(self, *args, **kwargs)
+
+    monkeypatch.setattr(BuilderFlow, "attach_existing_component_to_composition", fail_on_second_attach)
+    rv = client.post(
+        "/api/builder/menus/review_menu/create-reviewed-composition",
+        json={
+            "menu_detail_id": detail_id,
+            "composition_name": "Rollback dish",
+            "idempotency_key": "review-rollback",
+            "components": [{"name": "First"}, {"name": "Second"}],
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 400
+    with client.application.app_context():
+        flow = _get_menu_context_flow()
+        assert flow._library_flow.list_library_compositions() == []
+        detail = next(
+            item
+            for item in flow._menu_service.list_menu_details("review_menu")
+            if item.menu_detail_id == detail_id
+        )
+        assert detail is not None
+        assert detail.composition_ref_type == "unresolved"
+        assert detail.composition_id is None
+
+
+def test_reviewed_composition_concurrent_same_key_returns_one_composition() -> None:
+    client = _client()
+    detail_id = _create_review_row(client)
+    app = client.application
+    payload = {
+        "menu_detail_id": detail_id,
+        "composition_name": "Concurrent dish",
+        "idempotency_key": "review-concurrent",
+        "components": [{"name": "First"}, {"name": "Second"}],
+    }
+
+    def submit() -> tuple[int, str]:
+        request_client = app.test_client()
+        with request_client.session_transaction() as session:
+            session["user_id"] = 1
+            session["tenant_id"] = 1
+            session["role"] = "admin"
+            session["site_id"] = "site_1"
+        response = request_client.post(
+            "/api/builder/menus/review_menu/create-reviewed-composition",
+            json=payload,
+            headers=HEADERS,
+        )
+        body = response.get_json() or {}
+        return response.status_code, str((body.get("composition") or {}).get("composition_id") or "")
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: submit(), range(2)))
+
+    assert sorted(status for status, _ in results) == [201, 201]
+    assert len({composition_id for _, composition_id in results}) == 1
 
 
 def test_create_composition_from_row_requires_unresolved_row() -> None:

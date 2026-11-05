@@ -9,7 +9,10 @@ from flask import Blueprint, current_app, jsonify, request
 from .app_authz import require_roles
 from .builder import BuilderFlow
 from .builder.library_scope import ActorContext
-from .builder_menu_context_flow import BuilderMenuContextFlow
+from .builder_menu_context_flow import (
+    BuilderMenuContextFlow,
+    ReviewedCompositionConflict,
+)
 from .builder_sqlite import (
     initialize_builder_sqlite,
     SQLiteMenuDetailRepository,
@@ -26,6 +29,10 @@ _MISSING = object()
 
 def _bad_request(message: str):
     return jsonify({"ok": False, "error": "bad_request", "message": str(message)}), 400
+
+
+def _conflict(message: str):
+    return jsonify({"ok": False, "error": "conflict", "message": str(message)}), 409
 
 
 def _require_json_object() -> dict[str, Any] | tuple[Any, int]:
@@ -613,12 +620,20 @@ def resolve_menu_detail(menu_id: str):
     try:
         menu_detail_id = _require_str(payload, "menu_detail_id")
         composition_id = _require_str(payload, "composition_id")
+        handoff_resolution = bool(payload.get("admin_builder_handoff"))
 
         flow = _get_menu_context_flow()
+        actor: ActorContext | None = None
+        if handoff_resolution:
+            from .builder_api import _get_builder_actor
+
+            actor = _get_builder_actor()
         updated = flow.resolve_menu_detail(
             menu_id=str(menu_id),
             menu_detail_id=menu_detail_id,
             composition_id=composition_id,
+            actor=actor,
+            require_site_scope=handoff_resolution,
         )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -673,6 +688,69 @@ def create_composition_from_row(menu_id: str):
             },
             "menu_detail": _serialize_menu_detail(updated_menu_detail),
             "warnings": warnings,
+        }
+    ), 201
+
+
+@bp.post("/<menu_id>/create-reviewed-composition")
+@require_roles("editor", "admin", "superuser")
+def create_reviewed_composition(menu_id: str):
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+
+    try:
+        from .builder_api import _get_builder_actor
+
+        actor = _get_builder_actor()
+        if actor is None or not str(actor.site_id or "").strip():
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": "unauthorized",
+                    "message": "authenticated site is required",
+                }
+            ), 401
+        menu_detail_id = _require_str(payload, "menu_detail_id")
+        composition_name = _require_str(payload, "composition_name")
+        idempotency_key = _require_str(payload, "idempotency_key")
+        components = payload.get("components")
+        if not isinstance(components, list):
+            raise ValueError("components must be a list")
+        library_group = _optional_str(payload, "library_group")
+        flow = _get_menu_context_flow()
+        composition, updated_menu_detail = flow.create_reviewed_site_composition_from_unresolved_row(
+            menu_id=str(menu_id),
+            menu_detail_id=menu_detail_id,
+            composition_name=composition_name,
+            component_selections=components,
+            idempotency_key=idempotency_key,
+            actor=actor,
+            library_group=library_group,
+        )
+    except ReviewedCompositionConflict as exc:
+        return _conflict(str(exc))
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify(
+        {
+            "ok": True,
+            "composition": {
+                "composition_id": composition.composition_id,
+                "composition_name": composition.composition_name,
+                "library_group": composition.library_group,
+                "components": [
+                    {
+                        "component_id": item.component_id,
+                        "component_name": item.component_name or item.component_id,
+                        "role": item.role,
+                        "sort_order": item.sort_order,
+                    }
+                    for item in composition.components
+                ],
+            },
+            "menu_detail": _serialize_menu_detail(updated_menu_detail),
         }
     ), 201
 
