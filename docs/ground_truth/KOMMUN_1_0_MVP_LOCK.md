@@ -1,7 +1,10 @@
 Status: LOCKED
-Last reviewed: 2026-09-28
+Last reviewed: 2026-11-06 (status disclaimer only; product contract remains locked)
 
 # Kommun MVP Lock — Product2 / Kommun 1.1
+
+> **STATUS GOVERNANCE — 2026-11-06:** The product requirements and architecture decisions here remain LOCKED; the dated "Implementation Status", prior HEAD, Page3 completion todo and old packing milestones are **historical snapshots**, not today's work queue. As of development HEAD `a75f754c`, the product owner has accepted Planera Page1–3, completion, Kitchen Weekview and K25–K27 serving/production/packing views, including department addon packing and printing. Builder Gates 19–21E are closed. Current work order is **Admin Builder modal host frame → Department Portal menu-choice UX → login/password recovery → owner-led full-app acceptance and regression → Kommun 1.1 freeze**. Read [the one live status ledger](../KOMMUN_1_1_LIVE_ACCEPTANCE.md) before issuing tasks. Existing reporting/security questions remain **verification risks**, not authority to recreate the production/packing motor. Full release GO remains pending.
+
 
 
 ## Goal
@@ -17,7 +20,7 @@ This file keeps its historical path for continuity, but its active implementatio
 The MVP must preserve the useful working Kommun 1.0 behavior while moving production truth to the canonical Builder -> Business Context -> Planera 2.0 architecture. Reuse working Weekview, registration and admin surfaces before rewriting them.
 
 
-## Current Implementation Status
+## Historical Implementation Status — 2026-09-28
 
 As of 2026-09-28:
 
