@@ -1,5 +1,5 @@
 Status: LOCKED
-Last reviewed: 2026-08-29
+Last reviewed: 2026-11-06 (Kommun Menyval visual lock appended; portal architecture unchanged)
 
 # Portals Architecture Lock
 
@@ -64,6 +64,20 @@ Do not prematurely generalize away valid Kommun or Offshore domain models. Reuse
 - menu-facing Dish names use effective_menu_name.
 - portals must not read a cook's private Work Menu or COW Dish as external menu truth.
 - operational or private Work Menu changes only become external portal truth if they are deliberately promoted or published through the proper publication flow.
+
+## Kommun Department Menyval — visually accepted UI contract (2026-11-06)
+
+The product owner approved the authenticated Department Portal **desktop light and dark** menu-choice appearance at code checkpoint `1ff5dbef6336feac26943cafce09053ddc13dcd4`. This is a **visual/interaction layout lock**, not a claim that the entire portal is final pilot GO.
+
+- Canonical published menu, saved department choices, ETag/conflict/submit flow and scoped access remain the only truth; never replace them during visual work.
+- Seven days follow the page's normal vertical scroll, not a nested height-limited pane with invisible scrollbar.
+- On desktop, weekday Alt 1 / Alt 2 are two equally sized, clearly aligned choice areas; selected state is visibly distinct and must remain accessible.
+- A single-option day shows the noninteractive Alt 1 dish in the left choice column and an informational **"Endast ett lunchalternativ idag"** in the right column on the **same row** (one line at standard desktop width), not a second stacked full-width card. Mobile may stack naturally.
+- Dessert and Kvällsmat are clearly separated read-only entries in their own row beneath lunch, spanning the lunch content area; they are not part of Alt 2.
+- Use shared App Shell theme tokens for light/dark backgrounds/text; keep subtle borders and separation between days, readable status/progress and touch-sized controls. No extra nested card frames or large decorative shadows.
+- Preserve the accepted layout unless the product owner explicitly requests a change or a reproducible regression is proven. Changes require real before/after review at affected desktop/iPad widths and focused UI tests. Static CSS tests alone are insufficient.
+- Reference regression tests: `static/tests/portal_department_week_layout_contract.test.js`, `portal_department_week_scroll_contract.test.js` and `portal_department_week_theme_contract.test.js`. Product owner accepted desktop visuals; iPad/mobile live checks and choice/submit interactions remain in Kommun 1.1 final acceptance. Approved screenshots are in project conversation but have not been committed as a repository visual baseline.
+- The separate legacy standalone `static/tests/portal_department_week_choice.test.js` currently reports 9 failures against obsolete-looking DOM fixture markup; do not silently rewrite it or reopen the accepted layout. Investigate in the final regression gate. Current operational status belongs to `docs/KOMMUN_1_1_LIVE_ACCEPTANCE.md`.
 
 ## Mässportal
 - same general Portal Foundation where useful.
