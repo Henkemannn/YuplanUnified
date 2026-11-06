@@ -1460,20 +1460,25 @@ def test_component_preview_suggests_and_matches_only_authenticated_site_componen
     before = client.get("/api/builder/components", headers=HEADERS).get_json() or {}
     preview = client.post(
         "/api/builder/components/preview",
-        json={"dish_name": "Falukorv i ugn med potatismos"},
+        json={"dish_name": "Falukorv i ugn med potatismos & gräddsås"},
         headers=HEADERS,
     )
     assert preview.status_code == 200
     body = preview.get_json() or {}
     assert body.get("ok") is True
     suggestions = body.get("suggestions") or []
-    assert [item.get("suggested_name") for item in suggestions] == ["Falukorv i ugn", "Potatismos"]
+    assert [item.get("suggested_name") for item in suggestions] == [
+        "Falukorv i ugn",
+        "Potatismos",
+        "Gräddsås",
+    ]
     assert suggestions[0].get("resolution") == "new"
     assert suggestions[0].get("reusable") is False
     assert suggestions[1].get("resolution") == "reusable"
     assert suggestions[1].get("reusable") is True
     assert (suggestions[1].get("match") or {}).get("component_id") == component_id
     assert (suggestions[1].get("match") or {}).get("status") == "exact_match"
+    assert suggestions[2].get("resolution") == "new"
 
     alias_preview = client.post(
         "/api/builder/components/preview",

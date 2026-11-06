@@ -492,6 +492,33 @@ def test_swedish_suggestions_preserve_display_names_and_normalize_ids() -> None:
     assert component_names == ["Köttbullar", "Gräddsås", "Rödbetor"]
 
 
+@pytest.mark.parametrize(
+    ("raw_text", "expected"),
+    [
+        ("Stekt fläsk & lingonsylt", ["Stekt fläsk", "Lingonsylt"]),
+        (
+            "Köttbullar med potatis & gräddsås",
+            ["Köttbullar", "Potatis", "Gräddsås"],
+        ),
+        ("Köttbullar med potatis och gräddsås", ["Köttbullar", "Potatis", "Gräddsås"]),
+        ("R&B-sås", ["R&B-sås"]),
+        ("Fisk m potatis", ["Fisk", "Potatis"]),
+    ],
+)
+def test_builder_flow_uses_canonical_component_suggestions(
+    raw_text: str,
+    expected: list[str],
+) -> None:
+    flow = _build_flow()
+
+    assert flow._suggest_components_from_unresolved_text(raw_text) == expected
+    composition = flow.create_composition_with_generated_id(
+        composition_name=raw_text,
+        seed_components=True,
+    )
+    assert [item.component_name for item in composition.components] == expected
+
+
 def test_conflicting_alias_norm_does_not_overwrite_existing_mapping() -> None:
     flow = _build_flow()
     existing = flow.create_composition(composition_id="plate_existing", composition_name="Existing")

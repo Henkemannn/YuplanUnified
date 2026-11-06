@@ -40,6 +40,7 @@ from .declaration_readiness import (
     CompositionDeclarationReadiness,
     IngredientTraitSource,
 )
+from .file_import import suggest_components_from_import_dish_name
 from .diet_conflict_preview import (
     DietConflictPreview,
     build_diet_conflict_preview_from_traits,
@@ -2116,16 +2117,4 @@ class BuilderFlow:
         return text[:1].upper() + text[1:]
 
     def _suggest_components_from_unresolved_text(self, unresolved_text: str) -> list[str]:
-        text = str(unresolved_text or "").strip()
-        if not text:
-            return []
-
-        # Keep user-facing suggestion text intact (including Swedish characters).
-        # Normalization/transliteration is only applied later when generating component_id.
-        parts = re.split(r"\s+(?:med|och|m)\s+", text, flags=re.IGNORECASE)
-        suggestions: list[str] = []
-        for part in parts:
-            candidate = self._capitalize_first(part)
-            if candidate:
-                suggestions.append(candidate)
-        return suggestions
+        return suggest_components_from_import_dish_name(unresolved_text)

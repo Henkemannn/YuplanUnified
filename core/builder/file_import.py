@@ -155,8 +155,8 @@ _STRONG_COMPONENT_CONNECTOR_RE = re.compile(
     r"\b(?:serveras\s+med|serveres\s+med|servert\s+med|served\s+with|with|med)\b",
     flags=re.IGNORECASE,
 )
-_TOP_LEVEL_COMPONENT_CONNECTOR_RE = re.compile(r"\s+(?:och|og|samt)\s+", flags=re.IGNORECASE)
-_TAIL_COMPONENT_CONNECTOR_RE = re.compile(r"\s+(?:och|og|samt|and)\s+", flags=re.IGNORECASE)
+_TOP_LEVEL_COMPONENT_CONNECTOR_RE = re.compile(r"\s+(?:och|og|samt|m|&)\s+", flags=re.IGNORECASE)
+_TAIL_COMPONENT_CONNECTOR_RE = re.compile(r"\s+(?:och|og|samt|and|&)\s+", flags=re.IGNORECASE)
 _COMPONENT_NOISE_RE = re.compile(r"^(?:serveras(?:\s+med)?|served\s+with|with|med)$", flags=re.IGNORECASE)
 _LEADING_COMPONENT_FILLER_RE = re.compile(r"^(?:serveras(?:\s+med)?|served\s+with|with|med)\b\s*", flags=re.IGNORECASE)
 _TRAILING_COMPONENT_FILLER_RE = re.compile(r"\s*\b(?:serveras(?:\s+med)?|served\s+with|with|med)\b$", flags=re.IGNORECASE)

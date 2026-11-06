@@ -294,6 +294,25 @@ def test_component_decomposition_handles_serveras_med_and_och() -> None:
 @pytest.mark.parametrize(
     ("dish_name", "expected"),
     [
+        ("Stekt fläsk & lingonsylt", ["Stekt fläsk", "Lingonsylt"]),
+        (
+            "Köttbullar med potatis & gräddsås",
+            ["Köttbullar", "Potatis", "Gräddsås"],
+        ),
+        ("Fisk m potatis", ["Fisk", "Potatis"]),
+        ("R&B-sås", ["R&B-sås"]),
+    ],
+)
+def test_component_decomposition_supports_spaced_ampersand_without_splitting_embedded_names(
+    dish_name: str,
+    expected: list[str],
+) -> None:
+    assert suggest_components_from_import_dish_name(dish_name) == expected
+
+
+@pytest.mark.parametrize(
+    ("dish_name", "expected"),
+    [
         ("Asiatisk svineribbe med hoisinsås og ris", ["Asiatisk svineribbe", "Hoisinsås", "Ris"]),
         ("Köttbullar med potatismos och gräddsås", ["Köttbullar", "Potatismos", "Gräddsås"]),
         ("Laks med poteter og saus", ["Laks", "Poteter", "Saus"]),
