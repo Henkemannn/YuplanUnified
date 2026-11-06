@@ -1,6 +1,7 @@
 import io
 from pathlib import Path
 
+from docx import Document
 from sqlalchemy import text
 
 from core.app_factory import create_app
@@ -135,3 +136,20 @@ def test_docx_import_filters_footer_and_keeps_sunday_lunch():
     for week in result.weeks:
         for item in week.items:
             assert "Allt med röd text" not in item.dish_name
+
+
+def test_docx_import_accepts_shorthand_week_headings_without_matching_text():
+    document = Document()
+    document.add_paragraph("v. 8")
+    document.add_paragraph("v.10")
+    document.add_paragraph("Week 11")
+    document.add_paragraph("Vecka 12 - 2026")
+    document.add_paragraph("This text mentions v. 13 but is not a heading")
+
+    data = io.BytesIO()
+    document.save(data)
+
+    document = Document(io.BytesIO(data.getvalue()))
+    sections = DocxMenuImporter()._collect_ordered_sections(document)
+
+    assert [int(section["week"]) for section in sections] == [8, 10, 11, 12]

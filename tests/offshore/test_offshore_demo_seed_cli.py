@@ -127,16 +127,31 @@ def test_offshore_demo_seed_cli_creates_idempotent_demo_rows(tmp_path: Path) -> 
                 )
 
                 demo_composition_row = builder_db.execute(
-                    "SELECT object_id FROM builder_object_scopes WHERE object_type = 'composition' AND tenant_id = ? ORDER BY object_id LIMIT 1",
-                    (9001,),
+                    """
+                    SELECT DISTINCT rows.composition_id AS object_id
+                    FROM builder_menu_rows AS rows
+                    JOIN builder_menus AS menus ON menus.menu_id = rows.menu_id
+                    WHERE menus.menu_id LIKE 'builder-menu-9001-demo-offshore-%'
+                      AND menus.site_id = ?
+                      AND rows.composition_id IS NOT NULL
+                    ORDER BY rows.composition_id
+                    LIMIT 1
+                    """,
+                    ("demo-offshore",),
                 ).fetchone()
                 assert demo_composition_row is not None
                 assert (
-                    builder_db.execute(
-                        "SELECT COUNT(*) AS count FROM builder_object_scopes WHERE object_type = 'composition' AND object_id = ? AND tenant_id = ? AND owner_scope = 'organisation' AND visibility = 'organisation'",
-                        (str(demo_composition_row[0]), 9001),
-                    ).fetchone()["count"]
-                    == 1
+                    tuple(
+                        builder_db.execute(
+                        """
+                        SELECT tenant_id, owner_scope, owner_site_id, owner_user_id, visibility
+                        FROM builder_object_scopes
+                        WHERE object_type = 'composition' AND object_id = ?
+                        """,
+                        (str(demo_composition_row[0]),),
+                        ).fetchone()
+                    )
+                    == (9001, "site", "demo-offshore", None, "site")
                 )
         finally:
             db.close()

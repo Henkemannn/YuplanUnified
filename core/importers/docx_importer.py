@@ -11,8 +11,11 @@ from docx.oxml.ns import qn  # type: ignore
 from .base import ImportedMenuItem, MenuImporter, MenuImportResult, WeekImport, normalize_day
 
 _WEEK_HEADING_RE = re.compile(
-    r"^\s*(?:vecka|week)\s*[:.]?\s*(\d{1,2})"
-    r"(?:\s*(?:·|[-.])\s*(\d{4})|\s+(\d{4}))?",
+    r"^\s*(?:(?:vecka|week)\s*[:.]?\s*|v\.\s*)(\d{1,2})"
+    r"(?:\s*(?:·|[-.])\s*(\d{4})|\s+(\d{4}))?"
+    r"(?:\s*(?:\r?\n\s*)?"
+    r"(?:måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag|"
+    r"monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s*:?)?\s*$",
     re.IGNORECASE,
 )
 _TABLE_HEADERS = {
@@ -77,7 +80,7 @@ class DocxMenuImporter(MenuImporter):
                 block = Paragraph(child, document).text.strip()
                 if not block:
                     continue
-                heading = _WEEK_HEADING_RE.match(block)
+                heading = _WEEK_HEADING_RE.fullmatch(block)
                 if heading:
                     current = self._start_section(
                         sections,
