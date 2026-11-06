@@ -75,6 +75,13 @@ class AuthRateLimitLease:
     reservation_token: str | None = None
 
 
+@dataclass(frozen=True)
+class _LockedThrottleRows:
+    current: dict[str, AuthLoginThrottle]
+    all_rows: dict[tuple[str, str], AuthLoginThrottle]
+    expired_reservations: tuple[AuthLoginThrottleReservation, ...]
+
+
 def configured_hmac_secret(config: dict[str, object] | None = None) -> str:
     """Return the dedicated deployment secret without falling back to another secret."""
     configured = (config or {}).get("AUTH_RATE_LIMIT_HMAC_SECRET")
@@ -146,9 +153,9 @@ class AuthLoginRateLimitStore:
 
         def operation(session: Session) -> tuple[AuthRateLimitDecision, AuthRateLimitLease]:
             with session.begin():
-                rows = self._lock_rows(session, account_hash, ip_hash, now)
-                self._reclaim_expired_reservations(session, rows, account_hash, ip_hash, now)
-                decision = self._reserve(rows, now)
+                locked = self._lock_rows(session, account_hash, ip_hash, now)
+                self._reclaim_expired_reservations(session, locked)
+                decision = self._reserve(locked.current, now)
                 if not decision.allowed:
                     return decision, AuthRateLimitLease(account_hash, ip_hash, False)
                 token = secrets.token_urlsafe(32)
@@ -174,7 +181,8 @@ class AuthLoginRateLimitStore:
 
         def operation(session: Session) -> bool:
             with session.begin():
-                rows = self._lock_rows(session, lease.account_hash, lease.ip_hash, now)
+                locked = self._lock_rows(session, lease.account_hash, lease.ip_hash, now)
+                self._reclaim_expired_reservations(session, locked)
                 reservation = session.execute(
                     select(AuthLoginThrottleReservation)
                     .where(
@@ -188,9 +196,9 @@ class AuthLoginRateLimitStore:
                         "rate-limit reservation is unknown or already completed"
                     )
                 if reservation.expires_at <= now:
-                    self._remove_reservation(session, reservation, rows)
+                    self._remove_reservation(session, reservation, locked.all_rows)
                     return False
-                self._complete(rows, now, success=success)
+                self._complete(locked.current, now, success=success)
                 session.delete(reservation)
                 return True
 
@@ -234,10 +242,36 @@ class AuthLoginRateLimitStore:
         account_hash: str,
         ip_hash: str,
         now: int,
-    ) -> dict[str, AuthLoginThrottle]:
-        values = (
+    ) -> _LockedThrottleRows:
+        expired_reservations = session.execute(
+            select(AuthLoginThrottleReservation)
+            .where(
+                AuthLoginThrottleReservation.expires_at <= now,
+                (
+                    (AuthLoginThrottleReservation.account_hash == account_hash)
+                    | (AuthLoginThrottleReservation.ip_hash == ip_hash)
+                ),
+            )
+            .order_by(AuthLoginThrottleReservation.reservation_hash)
+            .with_for_update()
+        ).scalars().all()
+        keys = {
             ("account", account_hash),
             ("ip", ip_hash),
+            *(
+                (scope, key_hash)
+                for reservation in expired_reservations
+                for scope, key_hash in (
+                    ("account", reservation.account_hash),
+                    ("ip", reservation.ip_hash),
+                )
+            ),
+        }
+        values = tuple(
+            sorted(
+                keys,
+                key=lambda item: (0 if item[0] == "account" else 1, item[1]),
+            )
         )
         for scope, key_hash in values:
             session.execute(
@@ -257,7 +291,7 @@ class AuthLoginRateLimitStore:
                 },
             )
 
-        rows: dict[str, AuthLoginThrottle] = {}
+        rows: dict[tuple[str, str], AuthLoginThrottle] = {}
         for scope, key_hash in values:
             # The no-op UPDATE acquires SQLite's write lock; FOR UPDATE adds
             # row locking on PostgreSQL. Both operations use account-before-ip order.
@@ -279,41 +313,37 @@ class AuthLoginRateLimitStore:
                 )
                 .with_for_update()
             ).scalar_one()
-            rows[scope] = row
-        return rows
+            rows[(scope, key_hash)] = row
+        return _LockedThrottleRows(
+            current={
+                "account": rows[("account", account_hash)],
+                "ip": rows[("ip", ip_hash)],
+            },
+            all_rows=rows,
+            expired_reservations=tuple(expired_reservations),
+        )
 
     def _reclaim_expired_reservations(
         self,
         session: Session,
-        rows: dict[str, AuthLoginThrottle],
-        account_hash: str,
-        ip_hash: str,
-        now: int,
+        locked: _LockedThrottleRows,
     ) -> None:
-        expired = session.execute(
-            select(AuthLoginThrottleReservation)
-            .where(
-                AuthLoginThrottleReservation.expires_at <= now,
-                AuthLoginThrottleReservation.account_hash == account_hash,
-                AuthLoginThrottleReservation.ip_hash == ip_hash,
-            )
-        ).scalars().all()
-        for reservation in expired:
-            self._remove_reservation(session, reservation, rows)
+        for reservation in locked.expired_reservations:
+            self._remove_reservation(session, reservation, locked.all_rows)
 
     @staticmethod
     def _remove_reservation(
         session: Session,
         reservation: AuthLoginThrottleReservation,
-        rows: dict[str, AuthLoginThrottle],
+        rows: dict[tuple[str, str], AuthLoginThrottle],
     ) -> None:
-        for scope in rows:
-            if (
-                reservation.created_at >= rows[scope].window_started_at
-                and rows[scope].in_flight_count > 0
-            ):
-                rows[scope].in_flight_count -= 1
-            rows[scope].updated_at = _utc_now()
+        account_row = rows[("account", reservation.account_hash)]
+        ip_row = rows[("ip", reservation.ip_hash)]
+        for row in (account_row, ip_row):
+            if row.in_flight_count <= 0:
+                raise AuthRateLimitStoreError("rate-limit reservation counter invariant violated")
+            row.in_flight_count -= 1
+            row.updated_at = _utc_now()
         session.delete(reservation)
 
     def _reserve(
@@ -380,7 +410,7 @@ class AuthLoginRateLimitStore:
         if now - row.window_started_at >= policy.window_seconds:
             row.window_started_at = now
             row.failure_count = 0
-            # Reservation TTL is validated to be shorter than every window,
-            # so no valid reservation can survive into the next window.
-            row.in_flight_count = 0
-            row.locked_until = None
+            # A future lock and valid in-flight reservations are independent
+            # of the failure window and must survive the rollover.
+            if row.locked_until is not None and row.locked_until <= now:
+                row.locked_until = None

@@ -67,6 +67,78 @@ def test_account_counter_lock_and_expiry_use_only_hmac_keys(tmp_path: Path) -> N
         session.close()
 
 
+def test_future_lock_survives_failure_window_rollover(tmp_path: Path) -> None:
+    now = [1_000]
+    store = _make_store(tmp_path / "future-lock.db", lambda: now[0])
+
+    for _ in range(5):
+        decision, lease = store.begin_attempt("locked@example.com", "192.0.2.40")
+        assert decision.allowed
+        store.complete_attempt(lease, success=False)
+
+    now[0] = 1_301
+    decision, lease = store.begin_attempt("locked@example.com", "192.0.2.41")
+    assert not decision.allowed
+    assert decision.scope == "account"
+    assert decision.retry_after == 299
+    assert not lease.allowed
+
+
+def test_in_flight_reservation_survives_failure_window_rollover(tmp_path: Path) -> None:
+    now = [1_299]
+    store = _make_store(tmp_path / "boundary-reservation.db", lambda: now[0])
+
+    decision, original = store.begin_attempt("boundary@example.com", "192.0.2.42")
+    assert decision.allowed
+    now[0] = 1_300
+    decision, newer = store.begin_attempt("boundary@example.com", "192.0.2.43")
+    assert decision.allowed
+
+    store.complete_attempt(original, success=True)
+    store.complete_attempt(newer, success=False)
+
+    session = store._session_factory()
+    try:
+        account = session.execute(
+            select(AuthLoginThrottle).where(AuthLoginThrottle.scope == "account")
+        ).scalar_one()
+        assert account.in_flight_count == 0
+        assert account.failure_count == 1
+    finally:
+        session.close()
+
+
+@pytest.mark.parametrize("scenario", ["different_ip", "different_account"])
+def test_expired_reservation_reclaims_every_affected_row(
+    tmp_path: Path,
+    scenario: str,
+) -> None:
+    now = [1_000]
+    store = _make_store(tmp_path / f"reclaim-{scenario}.db", lambda: now[0])
+    decision, abandoned = store.begin_attempt("old@example.com", "192.0.2.44")
+    assert decision.allowed
+    now[0] = 1_031
+
+    if scenario == "different_ip":
+        decision, replacement = store.begin_attempt("old@example.com", "192.0.2.45")
+    else:
+        decision, replacement = store.begin_attempt("new@example.com", "192.0.2.44")
+    assert decision.allowed
+    store.complete_attempt(replacement, success=True)
+
+    session = store._session_factory()
+    try:
+        rows = session.execute(select(AuthLoginThrottle)).scalars().all()
+        assert all(row.in_flight_count == 0 for row in rows)
+        reservations = session.execute(select(AuthLoginThrottleReservation)).scalars().all()
+        assert reservations == []
+    finally:
+        session.close()
+
+    with pytest.raises(AuthRateLimitReservationError):
+        store.complete_attempt(abandoned, success=False)
+
+
 def test_accounts_share_ip_without_sharing_account_lock(tmp_path: Path) -> None:
     store = _make_store(tmp_path / "shared-ip.db", lambda: 1_000)
 
