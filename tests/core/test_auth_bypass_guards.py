@@ -62,6 +62,38 @@ def test_auth_bypass_policy_stays_closed_on_fly(monkeypatch):
     assert auth_bypass_allowed() is False
 
 
+@pytest.mark.parametrize(
+    "environment",
+    (
+        {"FLY_APP_NAME": "yuplan-unified-staging", "APP_ENV": "dev"},
+        {"DEPLOY_ENV": "pilot", "APP_ENV": "dev"},
+        {"DEPLOY_ENV": "production", "APP_ENV": "dev"},
+    ),
+)
+def test_deployed_environment_overrides_testing_and_blocks_bypass(
+    tmp_path, monkeypatch, environment
+):
+    for name in _BYPASS_ENV_VARS + ("FLY_APP_NAME",):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("DEMO_UI", "1")
+    monkeypatch.setenv("STAGING_SIMPLE_AUTH", "1")
+    monkeypatch.setenv("YUPLAN_DEV_HELPERS", "1")
+
+    assert auth_bypass_allowed(testing=True) is False
+    app = _isolated_app(tmp_path, monkeypatch, testing=True, DEMO_AUTH_ENABLED=True)
+    assert app.config["SESSION_COOKIE_SECURE"] is True
+
+    client = app.test_client()
+    assert client.post("/auth/login", json={"role": "admin"}).status_code != 200
+    assert client.get("/ui/dev-login", follow_redirects=False).status_code in (301, 302)
+    assert client.get("/test-login").status_code == 404
+    assert client.get("/ui/demo").status_code == 404
+    assert client.get("/demo").status_code == 404
+    assert client.get("/_routes").status_code == 404
+
+
 def test_staging_simple_auth_cannot_bypass_normal_login(tmp_path, monkeypatch):
     monkeypatch.setenv("DEPLOY_ENV", "staging")
     monkeypatch.setenv("STAGING_SIMPLE_AUTH", "1")
