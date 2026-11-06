@@ -28,6 +28,11 @@ from .jwt_utils import (
     select_signing_secret,
 )
 from .models import Tenant, User
+from .password_reset import (
+    PasswordResetDeliveryError,
+    PasswordResetService,
+    PasswordResetStoreError,
+)
 
 # Legacy error envelopes are used for auth endpoints to preserve compatibility with tests/clients.
 
@@ -52,6 +57,13 @@ def _json_error(msg: str, code: int = 400):
     if code == 401 and msg == "auth required":
         normalized = "authentication required"
     return jsonify({"error": normalized, "message": normalized}), code
+
+
+def _set_no_store_headers(response):
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
 
 
 def _jwt_primary_secret() -> str | None:
@@ -621,8 +633,80 @@ def login_get():  # pragma: no cover
 
 
 @bp.get("/forgot")
-def forgot_password():  # pragma: no cover
-    return render_template("auth_forgot.html")
+def forgot_password():
+    response = make_response(render_template("auth_forgot.html", message=None))
+    _set_no_store_headers(response)
+    return response
+
+
+@bp.post("/forgot")
+def forgot_password_request():
+    body = request.get_json(silent=True) or {}
+    email = str(body.get("email") or request.form.get("email") or "")
+    ip_address = request.remote_addr or "unknown"
+    message = "Om kontot finns skickas en återställningslänk till e-postadressen."
+    try:
+        service = PasswordResetService.from_config(get_new_session, current_app.config)
+        mailer = current_app.config.get("PASSWORD_RESET_MAILER")
+        public_base_url = str(current_app.config.get("PASSWORD_RESET_PUBLIC_BASE_URL") or "")
+        if not callable(mailer):
+            raise PasswordResetDeliveryError("PASSWORD_RESET_MAILER is not configured")
+        service.request_reset(
+            email,
+            ip_address,
+            mailer=mailer,
+            public_base_url=public_base_url,
+        )
+    except (PasswordResetStoreError, PasswordResetDeliveryError):
+        current_app.logger.warning("Password reset request could not be completed")
+    if request.is_json or request.accept_mimetypes.best == "application/json":
+        response = make_response(jsonify({"ok": True, "message": message}), 202)
+    else:
+        response = make_response(render_template("auth_forgot.html", message=message), 202)
+    _set_no_store_headers(response)
+    return response
+
+
+@bp.get("/reset")
+def reset_password_get():
+    token = str(request.args.get("token") or "")
+    response = make_response(render_template("auth_reset.html", token=token, error=None))
+    _set_no_store_headers(response)
+    return response
+
+
+@bp.post("/reset")
+def reset_password_post():
+    body = request.get_json(silent=True) or {}
+    token = str(body.get("token") or request.form.get("token") or "")
+    new_password = str(body.get("new_password") or request.form.get("new_password") or "")
+    confirm_password = str(body.get("confirm_password") or request.form.get("confirm_password") or "")
+    if new_password != confirm_password or len(new_password) < 6:
+        message = "Lösenordet måste vara minst 6 tecken och matcha bekräftelsen."
+        response = make_response(render_template("auth_reset.html", token=token, error=message), 400)
+        _set_no_store_headers(response)
+        return response
+    try:
+        service = PasswordResetService.from_config(get_new_session, current_app.config)
+        service.consume_reset(token, new_password)
+    except (PasswordResetStoreError, ValueError):
+        response = make_response(
+            render_template(
+                "auth_reset.html",
+                token="",
+                error="Återställningslänken är ogiltig eller har gått ut.",
+            ),
+            400,
+        )
+        _set_no_store_headers(response)
+        return response
+    session.clear()
+    if request.is_json or request.accept_mimetypes.best == "application/json":
+        response = make_response(jsonify({"ok": True, "message": "Lösenordet är uppdaterat."}), 200)
+    else:
+        response = make_response(render_template("login.html", vm={"error": None}, error_message="Lösenordet är uppdaterat. Logga in igen."))
+    _set_no_store_headers(response)
+    return response
 
 
 @bp.post("/logout")

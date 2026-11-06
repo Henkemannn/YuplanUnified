@@ -73,6 +73,8 @@ def _is_testing(app: Flask) -> bool:
 def _is_exempt(path: str, method: str, testing: bool) -> bool:
     if method in SAFE_METHODS:
         return True
+    if path in {"/auth/forgot", "/auth/reset"}:
+        return False
     base = TEST_EXEMPT if testing else PROD_EXEMPT
     # Normalize: ensure trailing slash check by adding slash to path if directory-like
     return any(path.startswith(p) for p in base)

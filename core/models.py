@@ -96,6 +96,47 @@ class AuthLoginThrottleReservation(Base):
     )
 
 
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_at: Mapped[int] = mapped_column(Integer, nullable=False)
+    expires_at: Mapped[int] = mapped_column(Integer, nullable=False)
+    used_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    revoked_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    __table_args__ = (
+        Index("ix_password_reset_tokens_user_active", "user_id", "expires_at"),
+        Index("ix_password_reset_tokens_expires_at", "expires_at"),
+    )
+
+
+class PasswordResetThrottle(Base):
+    __tablename__ = "password_reset_throttles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    scope: Mapped[str] = mapped_column(String(16), nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    window_started_at: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    locked_until: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+    __table_args__ = (
+        CheckConstraint("scope IN ('account', 'ip')", name="ck_password_reset_throttles_scope"),
+        CheckConstraint("request_count >= 0", name="ck_password_reset_throttles_request_count"),
+        UniqueConstraint("scope", "key_hash", name="uq_password_reset_throttles_scope_key"),
+        Index("ix_password_reset_throttles_locked_until", "locked_until"),
+    )
+
+
 class Unit(Base):
     __tablename__ = "units"
     id: Mapped[int] = mapped_column(primary_key=True)
