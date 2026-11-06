@@ -33,6 +33,7 @@ from .password_reset import (
     PasswordResetService,
     PasswordResetStoreError,
 )
+from .password_reset_mailer import smtp_mailer_from_config
 
 # Legacy error envelopes are used for auth endpoints to preserve compatibility with tests/clients.
 
@@ -648,6 +649,8 @@ def forgot_password_request():
     try:
         service = PasswordResetService.from_config(get_new_session, current_app.config)
         mailer = current_app.config.get("PASSWORD_RESET_MAILER")
+        if mailer is None:
+            mailer = smtp_mailer_from_config(current_app.config)
         public_base_url = str(current_app.config.get("PASSWORD_RESET_PUBLIC_BASE_URL") or "")
         if not callable(mailer):
             raise PasswordResetDeliveryError("PASSWORD_RESET_MAILER is not configured")

@@ -63,6 +63,7 @@ class PasswordResetService:
         clock: Callable[[], int] = _now_epoch,
         max_retries: int = 3,
         retry_delay_seconds: float = 0.02,
+        allow_insecure_public_url: bool = False,
     ) -> None:
         if not hmac_secret.strip():
             raise PasswordResetStoreError("PASSWORD_RESET_HMAC_SECRET is required")
@@ -71,6 +72,7 @@ class PasswordResetService:
         self._clock = clock
         self._max_retries = max_retries
         self._retry_delay_seconds = retry_delay_seconds
+        self._allow_insecure_public_url = allow_insecure_public_url
 
     @classmethod
     def from_config(
@@ -85,10 +87,24 @@ class PasswordResetService:
             or os.getenv("PASSWORD_RESET_HMAC_SECRET")
             or ""
         ).strip()
+        runtime_env = str(
+            config.get("APP_ENV")
+            or config.get("DEPLOY_ENV")
+            or os.getenv("APP_ENV")
+            or os.getenv("DEPLOY_ENV")
+            or ""
+        ).lower()
         return cls(
             session_factory,
             hmac_secret=secret,
             clock=clock,
+            allow_insecure_public_url=runtime_env in {
+                "local",
+                "dev",
+                "development",
+                "test",
+                "testing",
+            },
         )
 
     def request_reset(
@@ -152,7 +168,14 @@ class PasswordResetService:
         if not result.sent or token is None or token_hash is None:
             return result
         try:
-            mailer(str(normalized_email), self.build_reset_url(public_base_url, token))
+            mailer(
+                str(normalized_email),
+                self.build_reset_url(
+                    public_base_url,
+                    token,
+                    allow_insecure=self._allow_insecure_public_url,
+                ),
+            )
         except Exception as exc:
             self._revoke_token(token_hash, self._clock())
             raise PasswordResetDeliveryError("password reset delivery failed") from exc
@@ -221,9 +244,17 @@ class PasswordResetService:
         self._run(operation)
 
     @staticmethod
-    def build_reset_url(public_base_url: str, token: str) -> str:
+    def build_reset_url(
+        public_base_url: str,
+        token: str,
+        *,
+        allow_insecure: bool = False,
+    ) -> str:
         parts = urlsplit(public_base_url.strip())
-        if parts.scheme not in ("http", "https") or not parts.netloc:
+        allowed_schemes = {"https"}
+        if allow_insecure:
+            allowed_schemes.add("http")
+        if parts.scheme not in allowed_schemes or not parts.netloc:
             raise PasswordResetDeliveryError("PASSWORD_RESET_PUBLIC_BASE_URL is invalid")
         if parts.query or parts.fragment:
             raise PasswordResetDeliveryError("PASSWORD_RESET_PUBLIC_BASE_URL must not contain query or fragment")
