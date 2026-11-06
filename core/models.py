@@ -53,6 +53,49 @@ class User(Base):
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)
 
+
+class AuthLoginThrottle(Base):
+    __tablename__ = "auth_login_throttles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    scope: Mapped[str] = mapped_column(String(16), nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    failure_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    in_flight_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    window_started_at: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    locked_until: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+    __table_args__ = (
+        CheckConstraint("scope IN ('account', 'ip')", name="ck_auth_login_throttles_scope"),
+        CheckConstraint("failure_count >= 0", name="ck_auth_login_throttles_failure_count"),
+        CheckConstraint("in_flight_count >= 0", name="ck_auth_login_throttles_in_flight_count"),
+        UniqueConstraint("scope", "key_hash", name="uq_auth_login_throttles_scope_key"),
+        Index("ix_auth_login_throttles_locked_until", "locked_until"),
+    )
+
+
+class AuthLoginThrottleReservation(Base):
+    __tablename__ = "auth_login_throttle_reservations"
+
+    reservation_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    account_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    ip_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[int] = mapped_column(Integer, nullable=False)
+    expires_at: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    __table_args__ = (
+        Index("ix_auth_login_throttle_reservations_expires_at", "expires_at"),
+        Index("ix_auth_login_throttle_reservations_account_hash", "account_hash"),
+        Index("ix_auth_login_throttle_reservations_ip_hash", "ip_hash"),
+    )
+
+
 class Unit(Base):
     __tablename__ = "units"
     id: Mapped[int] = mapped_column(primary_key=True)
