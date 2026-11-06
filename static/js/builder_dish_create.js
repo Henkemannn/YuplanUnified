@@ -22,6 +22,8 @@
     pickerRowId: null,
     pickerOptions: [],
     categoryEditor: null,
+    categoryOptions: [],
+    pendingCategoryName: '',
     idempotencyKey: null,
     previewReady: false,
   };
@@ -120,7 +122,10 @@
       if (!(response.status < 400 && data && data.ok && Array.isArray(data.categories))) {
         throw new Error('Kategorier kunde inte laddas.');
       }
-      renderCategoryOptions(data.categories, state.categoryInput.value || 'ovrigt');
+      state.categoryOptions = data.categories;
+      renderCategoryOptions(data.categories, state.pendingCategoryName
+        ? '__new_dish_category__'
+        : state.categoryInput.value || 'ovrigt');
     } catch (error) {
       setOutput(String(error && error.message || error), true);
     }
@@ -132,55 +137,97 @@
     editor.className = 'create-dish-category-inline-editor';
     const input = document.createElement('input');
     input.type = 'text';
+    input.value = state.pendingCategoryName;
     input.placeholder = 'Ny kategoris namn';
     input.setAttribute('aria-label', 'Ny kategoris namn');
-    const save = document.createElement('button');
-    save.type = 'button';
-    save.textContent = 'Lägg till';
-    const cancel = document.createElement('button');
-    cancel.type = 'button';
-    cancel.textContent = 'Avbryt';
-    editor.append(input, save, cancel);
+    editor.append(input);
     state.categoryInput.insertAdjacentElement('afterend', editor);
     state.categoryEditor = editor;
     input.focus();
 
-    cancel.addEventListener('click', () => {
-      state.categoryInput.value = 'ovrigt';
-      closeCategoryEditor();
+    input.addEventListener('input', () => {
+      state.pendingCategoryName = input.value.trim();
     });
-    save.addEventListener('click', async () => {
-      const name = input.value.trim();
-      const endpoint = String(state.config && state.config.categoryEndpoint || '').trim();
-      if (!name || !endpoint) {
-        setOutput('Kategorinamn måste anges.', true);
-        input.focus();
+
+    input.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') {
         return;
       }
-      save.disabled = true;
-      try {
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify({ name }),
-        });
-        const data = await response.json().catch(() => ({ ok: false }));
-        if (!(response.status < 400 && data && data.ok && data.category)) {
-          throw new Error(String(data && (data.message || data.error) || 'Kategorin kunde inte skapas.'));
-        }
-        const option = document.createElement('option');
-        option.value = String(data.category.key);
-        option.textContent = String(data.category.label || name);
-        state.categoryInput.insertBefore(option, state.categoryInput.lastElementChild);
-        state.categoryInput.value = option.value;
-        closeCategoryEditor();
-        setOutput('', false);
-      } catch (error) {
-        setOutput(String(error && error.message || error), true);
-        save.disabled = false;
+      event.preventDefault();
+      state.pendingCategoryName = input.value.trim();
+      closeCategoryEditor();
+      if (state.nameInput) {
+        state.nameInput.focus();
       }
     });
+  }
+
+  function normalizedCategoryName(value) {
+    return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  }
+
+  async function resolveLibraryGroup() {
+    const pendingName = String(state.pendingCategoryName || '').trim();
+    if (!pendingName) {
+      const selectedValue = String(state.categoryInput ? state.categoryInput.value : 'ovrigt').trim();
+      if (selectedValue === '__new_dish_category__') {
+        throw new Error('Kategorinamn måste anges.');
+      }
+      return selectedValue || 'ovrigt';
+    }
+
+    const normalizedName = normalizedCategoryName(pendingName);
+    const existing = state.categoryOptions.find((category) => (
+      normalizedCategoryName(category && category.label) === normalizedName
+    ));
+    if (existing && String(existing.key || '').trim()) {
+      state.pendingCategoryName = '';
+      state.categoryInput.value = String(existing.key).trim();
+      closeCategoryEditor();
+      return state.categoryInput.value;
+    }
+
+    const endpoint = String(state.config && state.config.categoryEndpoint || '').trim();
+    if (!endpoint) {
+      throw new Error('Kategorier kunde inte laddas.');
+    }
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ name: pendingName }),
+    });
+    const data = await response.json().catch(() => ({ ok: false }));
+    if (!(response.status < 400 && data && data.ok && data.category)) {
+      if (response.status === 409) {
+        await loadDishCategories();
+        const duplicate = state.categoryOptions.find((category) => (
+          normalizedCategoryName(category && category.label) === normalizedName
+        ));
+        if (duplicate && String(duplicate.key || '').trim()) {
+          state.pendingCategoryName = '';
+          state.categoryInput.value = String(duplicate.key).trim();
+          closeCategoryEditor();
+          return state.categoryInput.value;
+        }
+      }
+      throw new Error(String(data && (data.message || data.error) || 'Kategorin kunde inte skapas.'));
+    }
+
+    const category = data.category;
+    const categoryKey = String(category.key || '').trim();
+    if (!categoryKey) {
+      throw new Error('Kategorin saknar en giltig identifierare.');
+    }
+    state.categoryOptions = [
+      ...state.categoryOptions,
+      { key: categoryKey, label: String(category.label || pendingName).trim() },
+    ];
+    state.pendingCategoryName = '';
+    state.categoryInput.value = categoryKey;
+    closeCategoryEditor();
+    return categoryKey;
   }
 
   function nextRowId() {
@@ -647,6 +694,8 @@
       state.categoryInput.value = 'ovrigt';
     }
     closeCategoryEditor();
+    state.categoryOptions = [];
+    state.pendingCategoryName = '';
     state.reviewedComponents = [];
     state.editingRowId = null;
     state.editingMode = null;
@@ -684,7 +733,6 @@
     }
 
     const name = String(state.nameInput ? state.nameInput.value : '').trim();
-    const libraryGroup = String(state.categoryInput ? state.categoryInput.value : 'ovrigt').trim() || 'ovrigt';
     if (!name) {
       setOutput('Rättnamn måste anges.', true);
       if (state.nameInput) {
@@ -707,6 +755,7 @@
     setOutput('Skapar...');
 
     try {
+      const libraryGroup = await resolveLibraryGroup();
       const requestBody = reviewEnabled()
         ? {
           menu_detail_id: String(state.config.menuDetailId),
@@ -769,6 +818,13 @@
 
   function close(reason = 'cancel') {
     hideModal();
+    if (reason === 'cancel') {
+      state.pendingCategoryName = '';
+      closeCategoryEditor();
+      if (state.categoryInput) {
+        state.categoryInput.value = 'ovrigt';
+      }
+    }
     if (reason === 'cancel' && state.config && typeof state.config.onCancel === 'function') {
       state.config.onCancel();
     }
@@ -797,6 +853,7 @@
           if (state.categoryInput.value === '__new_dish_category__') {
             openCategoryEditor();
           } else {
+            state.pendingCategoryName = '';
             closeCategoryEditor();
           }
         });

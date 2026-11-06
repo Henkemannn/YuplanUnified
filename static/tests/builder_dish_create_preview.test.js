@@ -112,7 +112,7 @@ describe('BuilderDishCreateModal component preview', () => {
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     document.getElementById('btnCreateDish').click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(onSuccess).toHaveBeenCalledWith({ composition_id: 'dish-1' }, expect.any(Object));
     expect(document.getElementById('createDishPreview').textContent).toContain('kunde inte laddas');
@@ -206,7 +206,7 @@ describe('BuilderDishCreateModal component preview', () => {
     ambiguousSelect.dispatchEvent(new Event('change'));
 
     document.getElementById('btnCreateDish').click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(savedBody.menu_detail_id).toBe('detail-1');
     expect(savedBody.idempotency_key).toEqual(expect.any(String));
@@ -520,8 +520,9 @@ describe('BuilderDishCreateModal component preview', () => {
     expect(details.open).toBe(false);
   });
 
-  it('creates a custom dish category inline and selects it', async () => {
+  it('creates a custom dish category during dish submission', async () => {
     renderModal();
+    let dishRequestBody = null;
     window.fetch = vi.fn(async (url, options = {}) => {
       if (String(url).includes('/dish-categories')) {
         if (options.method === 'POST') {
@@ -544,10 +545,21 @@ describe('BuilderDishCreateModal component preview', () => {
           }),
         };
       }
+      if (String(url).includes('/compositions/site')) {
+        dishRequestBody = JSON.parse(options.body);
+        return {
+          status: 201,
+          json: async () => ({
+            ok: true,
+            composition: { composition_id: 'dish-1' },
+          }),
+        };
+      }
       return previewResponse([]);
     });
 
     window.BuilderDishCreateModal.open({
+      createEndpoint: '/api/builder/compositions/site',
       categoryEndpoint: '/api/builder/dish-categories',
       previewEndpoint: '/api/builder/components/preview',
       initialName: 'Dish name',
@@ -558,12 +570,25 @@ describe('BuilderDishCreateModal component preview', () => {
     category.value = '__new_dish_category__';
     category.dispatchEvent(new Event('change'));
     const editor = document.querySelector('.create-dish-category-inline-editor');
-    editor.querySelector('input').value = 'Temavecka';
-    editor.querySelector('button').click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    const editorInput = editor.querySelector('input');
+    editorInput.value = 'Temavecka';
+    editorInput.dispatchEvent(new Event('input', { bubbles: true }));
 
-    expect(category.value).toBe('dishcat_theme');
-    expect(category.options[category.selectedIndex].textContent).toBe('Temavecka');
+    expect(editor.querySelector('button')).toBeNull();
+    expect(window.fetch).not.toHaveBeenCalledWith(
+      '/api/builder/dish-categories',
+      expect.objectContaining({ method: 'POST' }),
+    );
+
+    document.getElementById('btnCreateDish').click();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(category.value).toBe('ovrigt');
+    expect(dishRequestBody).toEqual({
+      composition_name: 'Dish name',
+      library_group: 'dishcat_theme',
+      seed_components: false,
+    });
   });
 
   it('does not fall back to an empty atomic dish when preview fails', async () => {
