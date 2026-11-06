@@ -1,15 +1,23 @@
 from __future__ import annotations
 
 import os
-import time
 from collections.abc import Callable
 from functools import wraps
 
 from flask import Blueprint, current_app, jsonify, make_response, request, session, render_template
 from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from .db import get_session
+from .auth_rate_limit import (
+    AuthLoginRateLimitStore,
+    AuthRateLimitConfigurationError,
+    AuthRateLimitDecision,
+    AuthRateLimitPolicy,
+    AuthRateLimitStoreError,
+    configured_hmac_secret,
+)
+from .db import get_new_session, get_session
 from .config import auth_bypass_allowed
 from .jwt_utils import (
     DEFAULT_ACCESS_TTL,
@@ -24,9 +32,6 @@ from .models import Tenant, User
 # Legacy error envelopes are used for auth endpoints to preserve compatibility with tests/clients.
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
-
-# In-memory rate limit store: key -> {failures:int, first:ts, lock_until:ts?}
-_RATE_LIMIT_STORE: dict[str, dict[str, float | int]] = {}
 
 # --- Helpers ---
 
@@ -133,7 +138,10 @@ def require_roles(*roles: str):
                 request.headers.get("X-User-Role")
             )
             if not synthetic_test_identity:
-                db = get_session()
+                try:
+                    db = get_session()
+                except (RuntimeError, SQLAlchemyError):
+                    return _login_rate_limit_error_response(csrf_token)
                 try:
                     active_user = _load_active_user_by_id(db, session.get("user_id"))
                 finally:
@@ -226,6 +234,34 @@ def _user_is_auth_eligible(user: User | None) -> bool:
     return bool(user is not None and user.is_active and user.deleted_at is None)
 
 
+def _login_rate_limit_store() -> AuthLoginRateLimitStore:
+    config = current_app.config.get("AUTH_RATE_LIMIT") or {}
+    return AuthLoginRateLimitStore(
+        get_new_session,
+        hmac_secret=configured_hmac_secret(current_app.config),
+        account_policy=AuthRateLimitPolicy(
+            window_seconds=int(config.get("window_sec", 300)),
+            max_failures=int(config.get("max_failures", 5)),
+            lock_seconds=int(config.get("lock_sec", 600)),
+        ),
+        ip_policy=AuthRateLimitPolicy(
+            window_seconds=int(config.get("ip_window_sec", 300)),
+            max_failures=int(config.get("ip_max_failures", 50)),
+            lock_seconds=int(config.get("ip_lock_sec", 60)),
+        ),
+    )
+
+
+def _login_rate_limit_error_response(csrf_token: str):
+    resp = make_response(
+        jsonify({"error": "service unavailable", "message": "service unavailable"}),
+        503,
+    )
+    resp.headers["Retry-After"] = "1"
+    set_csrf_cookie(resp, csrf_token)
+    return resp
+
+
 def _load_active_user_by_id(db, user_id) -> User | None:
     try:
         user_id_int = int(user_id)
@@ -307,50 +343,56 @@ def login():
         resp = make_response(jsonify({"error": "missing credentials", "message": "missing credentials"}), 400)
         set_csrf_cookie(resp, csrf_token)
         return resp
-    # Rate limiting (simple in-memory). Key by email + remote addr.
-    rl_cfg = current_app.config.get(
-        "AUTH_RATE_LIMIT", {"window_sec": 300, "max_failures": 5, "lock_sec": 600}
-    )
-    window_sec = rl_cfg.get("window_sec", 300)
-    max_failures = rl_cfg.get("max_failures", 5)
-    lock_sec = rl_cfg.get("lock_sec", 600)
-    now = time.time()
     ip = request.remote_addr or "na"
-    key = f"{email}:{ip}"
-    store = _RATE_LIMIT_STORE
-    rec = store.get(key)
-    if rec:
-        # rec = {failures: int, first: ts, lock_until: ts?}
-        lock_until = rec.get("lock_until")
-        if lock_until and lock_until > now:
-            resp = make_response(jsonify({"error": "rate_limited", "message": "rate_limited"}), 429)
-            resp.headers["Retry-After"] = str(int(lock_until - now))
-            return resp
-        # slide window
-        if now - rec["first"] > window_sec:
-            rec["first"] = now
-            rec["failures"] = 0
-    else:
-        rec = {"failures": 0, "first": now}
-        store[key] = rec
+    try:
+        rate_limit_store = _login_rate_limit_store()
+        rate_limit_decision, rate_limit_lease = rate_limit_store.begin_attempt(email, ip)
+    except (AuthRateLimitConfigurationError, AuthRateLimitStoreError, TypeError, ValueError):
+        return _login_rate_limit_error_response(csrf_token)
+    if not rate_limit_decision.allowed:
+        resp = make_response(jsonify({"error": "rate_limited", "message": "rate_limited"}), 429)
+        resp.headers["Retry-After"] = str(max(1, rate_limit_decision.retry_after))
+        set_csrf_cookie(resp, csrf_token)
+        return resp
+
     db = get_session()
     try:
         # Login user lookup: case-insensitive on stored email, but fail closed when duplicates exist.
-        user = _lookup_user_by_email(db, email)
-        user_found = bool(user)
-        password_ok = bool(user and check_password_hash(user.password_hash, password))
+        try:
+            user = _lookup_user_by_email(db, email)
+            user_found = bool(user)
+            password_ok = bool(user and check_password_hash(user.password_hash, password))
+        except (SQLAlchemyError, TypeError, ValueError):
+            return _login_rate_limit_error_response(csrf_token)
         if (not user_found) or (not password_ok) or (not _user_is_auth_eligible(user)):
-            rec["failures"] += 1
-            if rec["failures"] >= max_failures:
-                rec["lock_until"] = now + lock_sec
+            try:
+                failure_decision = rate_limit_store.complete_attempt(
+                    rate_limit_lease,
+                    success=False,
+                )
+            except (AuthRateLimitStoreError, TypeError, ValueError):
+                return _login_rate_limit_error_response(csrf_token)
+            if not failure_decision.allowed:
                 resp = make_response(
                     jsonify({"error": "rate_limited", "message": "rate_limited"}), 429
                 )
-                resp.headers["Retry-After"] = str(lock_sec)
+                resp.headers["Retry-After"] = str(max(1, failure_decision.retry_after))
                 set_csrf_cookie(resp, csrf_token)
                 return resp
-            
+
             resp = make_response(jsonify({"error": "invalid credentials", "message": "invalid credentials"}), 401)
+            set_csrf_cookie(resp, csrf_token)
+            return resp
+        try:
+            success_decision = rate_limit_store.complete_attempt(
+                rate_limit_lease,
+                success=True,
+            )
+        except (AuthRateLimitStoreError, TypeError, ValueError):
+            return _login_rate_limit_error_response(csrf_token)
+        if not success_decision.allowed:
+            resp = make_response(jsonify({"error": "rate_limited", "message": "rate_limited"}), 429)
+            resp.headers["Retry-After"] = str(max(1, success_decision.retry_after))
             set_csrf_cookie(resp, csrf_token)
             return resp
         secrets_list = current_app.config.get("JWT_SECRETS") or []
@@ -371,8 +413,6 @@ def login():
         )
         user.refresh_token_jti = refresh_jti
         db.commit()
-        if key in store:
-            del store[key]
         # Persist session for tests that rely on cookie-based auth instead of bearer header
         session["user_id"] = user.id
         session["role"] = _normalize_role(user.role)

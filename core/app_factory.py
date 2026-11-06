@@ -41,7 +41,7 @@ from .auth import (
     ensure_dev_superuser_henrik,
     ensure_dev_sync_superuser_from_env,
 )
-from .config import Config
+from .config import LOCAL_AUTH_BYPASS_ENVS, Config
 from .config import auth_bypass_allowed
 from .db import get_session, init_engine, sqlite_file_path_from_url, _is_protected_pilot_db_path
 from .diet_api import bp as diet_api_bp
@@ -165,6 +165,17 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
 
     if testing_flag and not (app.config.get("JWT_SECRET") or "").strip():
         app.config["JWT_SECRET"] = "test-jwt-secret-0123456789abcdef0123456789abcdef"
+    configured_envs = {
+        os.getenv(name, "").strip().lower()
+        for name in ("DEPLOY_ENV", "APP_ENV", "FLASK_ENV")
+    }
+    if (
+        testing_flag
+        and not (app.config.get("AUTH_RATE_LIMIT_HMAC_SECRET") or "").strip()
+        and configured_envs & LOCAL_AUTH_BYPASS_ENVS
+        and auth_bypass_allowed(testing=True)
+    ):
+        app.config["AUTH_RATE_LIMIT_HMAC_SECRET"] = "test-only-rate-limit-secret"
 
     if testing_flag and sqlite_file and _is_protected_pilot_db_path(sqlite_file):
         raise RuntimeError("Refusing to start TESTING app against protected pilot database")

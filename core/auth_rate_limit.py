@@ -172,14 +172,19 @@ class AuthLoginRateLimitStore:
 
         return self._run(operation)
 
-    def complete_attempt(self, lease: AuthRateLimitLease, *, success: bool) -> None:
+    def complete_attempt(
+        self,
+        lease: AuthRateLimitLease,
+        *,
+        success: bool,
+    ) -> AuthRateLimitDecision:
         if not lease.allowed:
             raise ValueError("cannot complete a denied rate-limit lease")
         if not lease.reservation_token:
             raise AuthRateLimitReservationError("rate-limit lease has no reservation token")
         now = self._clock()
 
-        def operation(session: Session) -> bool:
+        def operation(session: Session) -> AuthRateLimitDecision | None:
             with session.begin():
                 locked = self._lock_rows(session, lease.account_hash, lease.ip_hash, now)
                 self._reclaim_expired_reservations(session, locked)
@@ -198,12 +203,14 @@ class AuthLoginRateLimitStore:
                 if reservation.expires_at <= now:
                     self._remove_reservation(session, reservation, locked.all_rows)
                     return False
-                self._complete(locked.current, now, success=success)
+                decision = self._complete(locked.current, now, success=success)
                 session.delete(reservation)
-                return True
+                return decision
 
-        if not self._run(operation):
+        decision = self._run(operation)
+        if decision is None:
             raise AuthRateLimitReservationError("rate-limit reservation expired")
+        return decision
 
     def _reservation_hash(self, token: str) -> str:
         return hmac.new(
@@ -225,6 +232,10 @@ class AuthLoginRateLimitStore:
                     raise AuthRateLimitStoreError("persistent auth rate-limit store unavailable") from exc
                 sleep(self._retry_delay_seconds * (attempt + 1))
             except (DBAPIError, SQLAlchemyError) as exc:
+                raise AuthRateLimitStoreError("persistent auth rate-limit store unavailable") from exc
+            except RuntimeError as exc:
+                if isinstance(exc, AuthRateLimitStoreError):
+                    raise
                 raise AuthRateLimitStoreError("persistent auth rate-limit store unavailable") from exc
             finally:
                 if session is not None:
@@ -380,7 +391,8 @@ class AuthLoginRateLimitStore:
         now: int,
         *,
         success: bool,
-    ) -> None:
+    ) -> AuthRateLimitDecision:
+        lock_decision: AuthRateLimitDecision | None = None
         for scope, row in rows.items():
             policy = self._policies[scope]
             if row.in_flight_count <= 0:
@@ -397,6 +409,13 @@ class AuthLoginRateLimitStore:
             if row.failure_count >= policy.max_failures:
                 row.locked_until = max(row.locked_until or 0, now + policy.lock_seconds)
             row.updated_at = _utc_now()
+            if lock_decision is None and row.locked_until is not None and row.locked_until > now:
+                lock_decision = AuthRateLimitDecision(
+                    allowed=False,
+                    retry_after=max(1, row.locked_until - now),
+                    scope=scope,
+                )
+        return lock_decision or AuthRateLimitDecision(allowed=True)
 
     @staticmethod
     def _roll_window_forward(
@@ -404,6 +423,9 @@ class AuthLoginRateLimitStore:
         now: int,
         policy: AuthRateLimitPolicy,
     ) -> None:
+        if row.locked_until is not None and row.locked_until <= now:
+            row.locked_until = None
+            row.failure_count = 0
         if row.window_started_at <= 0:
             row.window_started_at = now
             return
@@ -412,5 +434,3 @@ class AuthLoginRateLimitStore:
             row.failure_count = 0
             # A future lock and valid in-flight reservations are independent
             # of the failure window and must survive the rollover.
-            if row.locked_until is not None and row.locked_until <= now:
-                row.locked_until = None

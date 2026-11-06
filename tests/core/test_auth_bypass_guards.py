@@ -65,6 +65,7 @@ def test_auth_bypass_policy_stays_closed_on_fly(monkeypatch):
 @pytest.mark.parametrize(
     "environment",
     (
+        {"DEPLOY_ENV": "staging", "APP_ENV": "dev"},
         {"FLY_APP_NAME": "yuplan-unified-staging", "APP_ENV": "dev"},
         {"DEPLOY_ENV": "pilot", "APP_ENV": "dev"},
         {"DEPLOY_ENV": "production", "APP_ENV": "dev"},
@@ -75,6 +76,7 @@ def test_deployed_environment_overrides_testing_and_blocks_bypass(
 ):
     for name in _BYPASS_ENV_VARS + ("FLY_APP_NAME",):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("AUTH_RATE_LIMIT_HMAC_SECRET", raising=False)
     for name, value in environment.items():
         monkeypatch.setenv(name, value)
     monkeypatch.setenv("DEMO_UI", "1")
@@ -84,6 +86,7 @@ def test_deployed_environment_overrides_testing_and_blocks_bypass(
     assert auth_bypass_allowed(testing=True) is False
     app = _isolated_app(tmp_path, monkeypatch, testing=True, DEMO_AUTH_ENABLED=True)
     assert app.config["SESSION_COOKIE_SECURE"] is True
+    assert app.config.get("AUTH_RATE_LIMIT_HMAC_SECRET") != "test-only-rate-limit-secret"
 
     client = app.test_client()
     assert client.post("/auth/login", json={"role": "admin"}).status_code != 200
@@ -136,7 +139,12 @@ def test_dev_login_is_not_available_in_staging(tmp_path, monkeypatch):
 
 def test_normal_login_sets_secure_session_cookie_in_deployed_environment(tmp_path, monkeypatch):
     monkeypatch.setenv("DEPLOY_ENV", "pilot")
-    app = _isolated_app(tmp_path, monkeypatch, testing=False)
+    app = _isolated_app(
+        tmp_path,
+        monkeypatch,
+        testing=False,
+        AUTH_RATE_LIMIT_HMAC_SECRET="isolated-pilot-test-secret",
+    )
     with app.app_context():
         db = get_session()
         tenant = Tenant(name="Cookie Test Tenant")
