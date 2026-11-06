@@ -1320,6 +1320,26 @@ def _create_review_row(client, *, menu_id: str = "review_menu") -> str:
     )
 
 
+def _create_empty_review_row(client, *, menu_id: str = "empty_review_menu") -> str:
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": menu_id, "site_id": "site_1", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+    created = client.post(
+        f"/api/builder/menus/{menu_id}/rows",
+        json={
+            "day": "monday",
+            "display_label": "Manuell rätt",
+            "composition_ref_type": "empty",
+        },
+        headers=HEADERS,
+    )
+    return str(
+        (created.get_json() or {}).get("menu_detail", {}).get("menu_detail_id")
+    )
+
+
 def test_reviewed_composition_atomically_persists_components_and_row() -> None:
     client = _client()
     detail_id = _create_review_row(client)
@@ -1386,6 +1406,111 @@ def test_reviewed_composition_reuses_exact_and_alias_matches() -> None:
     components = (rv.get_json() or {}).get("composition", {}).get("components") or []
     assert len(components) == 1
     assert components[0]["component_id"] == existing_id
+
+
+def test_reviewed_composition_atomically_persists_empty_row_components_and_category() -> None:
+    client = _client()
+    detail_id = _create_empty_review_row(client)
+    existing = client.post(
+        "/api/builder/components/site",
+        json={"component_name": "Shared soup"},
+        headers=HEADERS,
+    )
+    existing_id = (existing.get_json() or {}).get("component", {}).get("component_id")
+    category = client.post(
+        "/api/builder/dish-categories",
+        json={"name": "Förrätt"},
+        headers=HEADERS,
+    )
+    category_id = ((category.get_json() or {}).get("category") or {}).get("key")
+
+    payload = {
+        "menu_detail_id": detail_id,
+        "composition_name": "Svampsoppa med dillchips",
+        "library_group": category_id,
+        "idempotency_key": "empty-review-1",
+        "components": [
+            {
+                "name": "Shared soup",
+                "selection": "reuse",
+                "component_id": existing_id,
+            },
+            {"name": "Dillchips variant", "selection": "new"},
+        ],
+    }
+    first = client.post(
+        "/api/builder/menus/empty_review_menu/create-reviewed-composition",
+        json=payload,
+        headers=HEADERS,
+    )
+    retry = client.post(
+        "/api/builder/menus/empty_review_menu/create-reviewed-composition",
+        json=payload,
+        headers=HEADERS,
+    )
+
+    assert first.status_code == 201
+    assert retry.status_code == 201
+    first_body = first.get_json() or {}
+    retry_body = retry.get_json() or {}
+    composition = first_body["composition"]
+    assert composition["library_group"] == category_id
+    assert [item["component_id"] for item in composition["components"]][0] == existing_id
+    assert composition["components"][1]["component_name"] == "Dillchips variant"
+    assert retry_body["composition"]["composition_id"] == composition["composition_id"]
+    assert first_body["menu_detail"]["menu_detail_id"] == detail_id
+    assert first_body["menu_detail"]["composition_ref_type"] == "composition"
+
+    library = client.get("/api/builder/components", headers=HEADERS)
+    names = {
+        item["component_id"]: item["component_name"]
+        for item in ((library.get_json() or {}).get("components") or [])
+    }
+    assert names[existing_id] == "Shared soup"
+
+
+def test_reviewed_composition_rejects_empty_row_on_published_menu() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/menus",
+        json={
+            "menu_id": "published_empty_menu",
+            "site_id": "site_1",
+            "week_key": "2026-W16",
+        },
+        headers=HEADERS,
+    )
+    created = client.post(
+        "/api/builder/menus/published_empty_menu/rows",
+        json={
+            "day": "monday",
+            "display_label": "Published empty row",
+            "composition_ref_type": "empty",
+        },
+        headers=HEADERS,
+    )
+    detail_id = (created.get_json() or {}).get("menu_detail", {}).get("menu_detail_id")
+    from core.builder_menu_context_api import _get_menu_context_flow
+
+    with client.application.app_context():
+        _get_menu_context_flow()._menu_service.update_menu(
+            "published_empty_menu",
+            status="published",
+        )
+
+    response = client.post(
+        "/api/builder/menus/published_empty_menu/create-reviewed-composition",
+        json={
+            "menu_detail_id": detail_id,
+            "composition_name": "Published dish",
+            "idempotency_key": "published-empty-review",
+            "components": [{"name": "Soup", "selection": "new"}],
+        },
+        headers=HEADERS,
+    )
+
+    assert response.status_code == 400
+    assert "published" in str((response.get_json() or {}).get("message"))
 
 
 def test_reviewed_composition_preserves_mixed_selection_modes_per_component() -> None:

@@ -506,9 +506,13 @@
         return;
       }
       const targetContext = state.activePickerContext;
+      if (!targetContext || !targetContext.menuDetailId) {
+        setStatus('Menyraden måste sparas innan en rätt kan skapas.', true);
+        return;
+      }
       const atomicEndpoint = targetContext
         && targetContext.menuDetailId
-        && targetContext.unresolvedText
+        && (targetContext.unresolvedText || targetContext.isEmpty)
         ? '/api/builder/menus/' + encodeURIComponent(builderMenuId) + '/create-reviewed-composition'
         : '';
       globalThis.BuilderDishCreateModal.open({

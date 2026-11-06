@@ -166,4 +166,69 @@ describe('admin menu import week actions', () => {
     expect(window.fetch).toHaveBeenCalledWith('/api/builder/compositions', expect.any(Object));
     expect(reloadCount).toBe(1);
   });
+
+  it('uses the reviewed endpoint for a persisted empty row', async () => {
+    document.body.innerHTML = `
+      <section class="menu-week__grid" data-builder-menu-id="menu-123">
+        <article data-week-slot-row data-menu-detail-id="detail-empty" data-day-key="monday" data-day-label="Måndag" data-meal-label="Lunch" data-slot-key="lunch" data-meal-slot="lunch" data-is-empty="1">
+          <button type="button" data-admin-week-builder-review-open>Skapa rätt</button>
+        </article>
+      </section>
+      <section data-admin-week-builder-host>
+        <div data-admin-week-builder-host-frame></div>
+        <div data-admin-week-builder-inline-picker hidden data-admin-week-builder-inline-context></div>
+        <input data-admin-week-builder-inline-search>
+        <p data-admin-week-builder-inline-status></p>
+        <div data-admin-week-builder-inline-results></div>
+      </section>
+    `;
+    window.YuplanModalHost = {
+      create: vi.fn(() => ({ open: vi.fn(), close: vi.fn() })),
+    };
+    window.BuilderDishCreateModal = { open: vi.fn() };
+
+    loadScript('../../static/ui/admin_menu_import_week_actions.js');
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+    document.querySelector('[data-admin-week-builder-review-open]').click();
+
+    expect(window.BuilderDishCreateModal.open).toHaveBeenCalledWith(
+      expect.objectContaining({
+        createEndpoint: '/api/builder/menus/menu-123/create-reviewed-composition',
+        reviewEndpoint: '/api/builder/menus/menu-123/create-reviewed-composition',
+        menuDetailId: 'detail-empty',
+        previewEndpoint: '/api/builder/components/preview',
+        categoryEndpoint: '/api/builder/dish-categories',
+        includeSeedComponents: false,
+      }),
+    );
+  });
+
+  it('refuses creation when the menu row has not been persisted', async () => {
+    document.body.innerHTML = `
+      <section class="menu-week__grid" data-builder-menu-id="menu-123">
+        <article data-week-slot-row data-menu-detail-id="" data-day-key="monday" data-day-label="Måndag" data-meal-label="Lunch">
+          <button type="button" data-admin-week-builder-review-open>Skapa rätt</button>
+        </article>
+      </section>
+      <section data-admin-week-builder-host>
+        <div data-admin-week-builder-host-frame></div>
+        <div data-admin-week-builder-inline-picker hidden data-admin-week-builder-inline-context></div>
+        <input data-admin-week-builder-inline-search>
+        <p data-admin-week-builder-inline-status></p>
+        <div data-admin-week-builder-inline-results></div>
+      </section>
+    `;
+    window.YuplanModalHost = {
+      create: vi.fn(() => ({ open: vi.fn(), close: vi.fn() })),
+    };
+    window.BuilderDishCreateModal = { open: vi.fn() };
+
+    loadScript('../../static/ui/admin_menu_import_week_actions.js');
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+    document.querySelector('[data-admin-week-builder-review-open]').click();
+
+    expect(window.BuilderDishCreateModal.open).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-admin-week-builder-inline-status]').textContent)
+      .toContain('sparas');
+  });
 });

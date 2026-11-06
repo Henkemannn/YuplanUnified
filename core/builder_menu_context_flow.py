@@ -658,8 +658,10 @@ class BuilderMenuContextFlow:
                     )
                 return composition, detail
 
-            if detail.composition_ref_type != "unresolved":
-                raise ReviewedCompositionConflict("menu row is no longer unresolved")
+            if detail.composition_ref_type not in {"unresolved", "empty"}:
+                raise ReviewedCompositionConflict(
+                    "menu row is no longer unresolved or empty"
+                )
 
             resolved_components: list[tuple[str, str, str, str | None]] = []
             for index, selection in enumerate(normalized_selections):
