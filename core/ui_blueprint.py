@@ -7,6 +7,7 @@ from sqlalchemy import text
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .auth import require_roles
+from .config import auth_bypass_allowed
 from .db import get_session
 from .models import Note, Task, User
 from .weekview.service import WeekviewService
@@ -2880,7 +2881,7 @@ def admin_system_diet_create():
     return redirect(url_for("ui.admin_system_page"))
 @ui_bp.get("/ui/demo")
 def demo_landing():
-    if _is_pilot_or_prod():
+    if not auth_bypass_allowed(testing=bool(current_app.config.get("TESTING"))):
         abort(404)
     # Simple landing with one-click links using demo IDs
     today = _date.today()
@@ -2906,7 +2907,7 @@ def test_login():
     Development-only test login page.
     Allows choosing a role and destination without real authentication.
     """
-    if _is_pilot_or_prod():
+    if not auth_bypass_allowed(testing=bool(current_app.config.get("TESTING"))):
         abort(404)
     if request.method == "GET":
         return render_template("test_login.html")

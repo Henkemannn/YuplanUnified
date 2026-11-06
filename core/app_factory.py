@@ -42,6 +42,7 @@ from .auth import (
     ensure_dev_sync_superuser_from_env,
 )
 from .config import Config
+from .config import auth_bypass_allowed
 from .db import get_session, init_engine, sqlite_file_path_from_url, _is_protected_pilot_db_path
 from .diet_api import bp as diet_api_bp
 from .errors import APIError, register_error_handlers as register_domain_handlers
@@ -134,6 +135,9 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     except Exception:
         pass
     app.config.update(cfg.to_flask_dict())
+    app.config["SESSION_COOKIE_SECURE"] = not auth_bypass_allowed(
+        testing=bool(app.config.get("TESTING"))
+    )
     builder_db_env = str(os.getenv("BUILDER_DB_PATH") or "").strip()
     builder_db_cfg = str(app.config.get("BUILDER_DB_PATH") or "").strip()
     builder_db_path = builder_db_env or builder_db_cfg
@@ -678,14 +682,20 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         pass
     # Auto-enable admin module when running under TESTING or simple staging auth flag.
     try:
-        if app.config.get("TESTING") or os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes"):
+        if app.config.get("TESTING") or (
+            auth_bypass_allowed(testing=bool(app.config.get("TESTING")))
+            and os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes")
+        ):
             feature_registry.set("ff.admin.enabled", True)
     except Exception:
         pass
 
     # Enable admin module by default in staging/demo environments when simple auth flag is on.
     try:
-        if os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes"):
+        if (
+            auth_bypass_allowed(testing=bool(app.config.get("TESTING")))
+            and os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes")
+        ):
             # Add and enable ff.admin.enabled if not present
             if not feature_registry.has("ff.admin.enabled"):
                 feature_registry.add("ff.admin.enabled")
@@ -946,7 +956,10 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         # Dev flags for template footer
         dev_mode = False
         try:
-            dev_mode = os.getenv("APP_ENV", "").lower() == "dev" or os.getenv("YUPLAN_DEV_HELPERS", "0").lower() in ("1", "true", "yes")
+            dev_mode = auth_bypass_allowed(testing=bool(current_app.config.get("TESTING"))) and (
+                os.getenv("APP_ENV", "").lower() == "dev"
+                or os.getenv("YUPLAN_DEV_HELPERS", "0").lower() in ("1", "true", "yes")
+            )
         except Exception:
             dev_mode = False
 
@@ -959,7 +972,9 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             "csrf_token_input": csrf_token_input,
             "current_site_name": current_site_name,
             # Staging demo banner: enabled only when env flag is truthy
-            "staging_demo": os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes"),
+            "staging_demo": auth_bypass_allowed(testing=bool(current_app.config.get("TESTING"))) and (
+                os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes")
+            ),
             # Runtime info for DEV footer
             "dev_mode": dev_mode,
             "runtime_branch": current_app.config.get("RUNTIME_GIT_BRANCH"),
@@ -1246,7 +1261,11 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     except Exception:
         pass
     # Optional root redirect to /demo for staging demo environments (avoid affecting tests)
-    if os.getenv("DEMO_UI", "0").lower() in ("1", "true", "yes") and not app.config.get("TESTING"):
+    if (
+        os.getenv("DEMO_UI", "0").lower() in ("1", "true", "yes")
+        and auth_bypass_allowed(testing=bool(app.config.get("TESTING")))
+        and not app.config.get("TESTING")
+    ):
         @app.before_request
         def _demo_root_redirect():  # type: ignore
             try:
@@ -1259,7 +1278,10 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             return None
     # Minimal demo UI exposing ETag/CSRF flows for admin endpoints (env-guarded)
     try:
-        if os.getenv("DEMO_UI", "0").lower() in ("1", "true", "yes"):
+        if (
+            os.getenv("DEMO_UI", "0").lower() in ("1", "true", "yes")
+            and auth_bypass_allowed(testing=bool(app.config.get("TESTING")))
+        ):
             from .admin_demo_ui import bp as admin_demo_ui_bp
 
             app.register_blueprint(admin_demo_ui_bp)
@@ -1269,7 +1291,10 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         app.logger.warning("Admin demo UI blueprint not loaded", exc_info=True)
 
     # Simple route enumerator when demo UI enabled (helps staging verification without exposing full internals)
-    if os.getenv("DEMO_UI", "0").lower() in ("1", "true", "yes"):
+    if (
+        os.getenv("DEMO_UI", "0").lower() in ("1", "true", "yes")
+        and auth_bypass_allowed(testing=bool(app.config.get("TESTING")))
+    ):
         @app.get("/_routes")
         def _routes() -> dict[str, list[str]] | tuple[dict[str, str], int]:  # pragma: no cover - diagnostics
             # Restrict access when enabled: allow if simple-auth cookie is present OR explicit header token

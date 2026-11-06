@@ -10,6 +10,7 @@ from sqlalchemy import func
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .db import get_session
+from .config import auth_bypass_allowed
 from .jwt_utils import (
     DEFAULT_ACCESS_TTL,
     DEFAULT_REFRESH_TTL,
@@ -273,6 +274,7 @@ def login():
     if (
         os.getenv("STAGING_SIMPLE_AUTH", "0") in ("1", "true", "yes")
         and current_app.config.get("DEMO_AUTH_ENABLED") is True
+        and auth_bypass_allowed(testing=bool(current_app.config.get("TESTING")))
         and not current_app.config.get("TESTING")
     ):
         data = request.get_json(silent=True) or {}
@@ -625,6 +627,7 @@ def refresh():
     if (
         os.getenv("STAGING_SIMPLE_AUTH", "0") in ("1", "true", "yes")
         and current_app.config.get("DEMO_AUTH_ENABLED") is True
+        and auth_bypass_allowed(testing=bool(current_app.config.get("TESTING")))
         and not current_app.config.get("TESTING")
     ):
         return _json_error("refresh not supported in demo", 400)

@@ -4,6 +4,24 @@ import os
 from dataclasses import dataclass, field
 
 
+LOCAL_AUTH_BYPASS_ENVS = frozenset({"dev", "development", "local", "test", "testing"})
+
+
+def auth_bypass_allowed(*, testing: bool = False) -> bool:
+    """Allow unauthenticated development helpers only in explicit local/test environments."""
+    if testing:
+        return True
+    if os.getenv("FLY_APP_NAME"):
+        return False
+    runtime_env = (
+        os.getenv("DEPLOY_ENV")
+        or os.getenv("APP_ENV")
+        or os.getenv("FLASK_ENV")
+        or ""
+    ).strip().lower()
+    return runtime_env in LOCAL_AUTH_BYPASS_ENVS
+
+
 @dataclass
 class Config:
     secret_key: str = ""

@@ -3,6 +3,8 @@ from __future__ import annotations
 from flask import Blueprint, render_template, redirect, session, g, current_app
 from flask import request, url_for
 
+from .config import auth_bypass_allowed
+
 bp = Blueprint("home", __name__, template_folder="templates", static_folder="static")
 
 
@@ -52,7 +54,10 @@ def ui_dev_login():  # pragma: no cover
     import os
     from flask import make_response
     # Only enable when explicitly opted-in
-    if os.getenv("YUPLAN_DEV_HELPERS", "0").lower() not in ("1", "true", "yes"):
+    if (
+        os.getenv("YUPLAN_DEV_HELPERS", "0").lower() not in ("1", "true", "yes")
+        or not auth_bypass_allowed(testing=bool(current_app.config.get("TESTING")))
+    ):
         return redirect(url_for("home.ui_login"))
     # Prefer current bearer header; else fall back to bootstrap superuser from env
     auth_header = request.headers.get("Authorization", "")

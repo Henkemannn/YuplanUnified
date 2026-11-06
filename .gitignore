@@ -75,6 +75,7 @@ specs/openapi.diff.json
 .env.*
 secrets.*
 credentials.*
+cookie.txt
 
 # Coverage dir
 coverage/
