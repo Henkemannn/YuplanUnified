@@ -6,11 +6,11 @@
 
 The core Kommun planning and packing flows, K25–K27, and Builder Gates 19–21E are product-owner accepted and protected. Do not reopen these paths without a reproducible regression.
 
-1. Fix the white/grey outer **Admin Menu Import → Builder editor host frame**, comparing Offshore/Admin before a minimal host-only change.
-2. Fix the **Department Portal menu-choice page UX** with authenticated tablet/desktop review; retain canonical choices and authorization.
-3. Complete **login/password recovery/security rules**, preserve already accepted first-login/revocation and spinning globe.
-4. Product owner manually walks the full Kommun app; Copilot runs focused and full isolated regression, negative tenant/site tests, report consistency and critical iPad scenarios. Fix proven failures only.
-5. Complete clean-customer pilot acceptance, deployment/migration/staging checks; freeze/tag Kommun 1.1.
+1. **CLOSED (2026-11-06):** Admin Menu Import → Builder editor host outer white frame; product code checkpoint `3bfc9892`, owner-verified after reload.
+2. **CLOSED for owner-approved desktop appearance (2026-11-06):** Department Portal menu-choice light/dark layout, week scrolling, equal lunch columns, weekend note and Dessert/Kvällsmat separation; checkpoint `1ff5dbef`. iPad/mobile and end-to-end interaction remain in final live walkthrough.
+3. **NOW:** Audit and complete login/password recovery/security rules; preserve first-login/revocation and spinning globe.
+4. Product-owner full Kommun walkthrough plus focused/full isolated regression, real Portal choice/submit, tenant/site/RBAC negatives, reports/export consistency, iPad/mobile; resolve nine legacy Portal JS test failures by proving fixture drift vs actual defects without redesigning accepted UI.
+5. Clean-customer pilot acceptance, staging/migration/deployment checks, freeze/tag Kommun 1.1.
 
 **Not overall pilot GO yet.** Report/export and meal-path behavior must be verified in the final acceptance; test-only failures do not automatically reopen accepted production features.
 
