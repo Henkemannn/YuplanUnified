@@ -1533,6 +1533,10 @@ body.modal-open {
   background: transparent;
 }
 
+.yp-modal-host[data-admin-week-builder-host][data-modal-host-mode="child-owned-card"] .yp-modal-host__frame {
+  color-scheme: normal;
+}
+
 .yp-modal-host[data-modal-host-mode="shell-owned-card"] .yp-modal-host__frame {
   display: none;
 }
