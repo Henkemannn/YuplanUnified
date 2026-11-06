@@ -127,7 +127,7 @@
               <span class="portal-choice-row__label">Alternativ 1</span>
               <span class="portal-choice-row__copy">{{ menu.lunch_alt1 or 'Ingen rätt' }}</span>
             </div>
-            <div class="portal-day-row__info-row" aria-hidden="true">Endast ett lunchalternativ idag</div>
+            <div class="portal-choice-row portal-day-row__info-row portal-day-row__single-option-note">Endast ett lunchalternativ idag</div>
           {% endif %}
           {% if menu.dessert or menu.dinner %}
             <div class="portal-day-row__secondary">
