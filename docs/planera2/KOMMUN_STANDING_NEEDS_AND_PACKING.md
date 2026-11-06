@@ -695,9 +695,9 @@ Do not turn this work into:
 The central principles are:
 
 > Specialkost describes recipient production requirements.
-
+>
 > Serveringsanpassning describes destination-level serving and packing rules.
-
+>
 > They remain separate operational tracks.
-
+>
 > A total pack list may combine their outputs only as an explicit downstream projection.

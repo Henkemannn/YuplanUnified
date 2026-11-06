@@ -1,4 +1,7 @@
-# Project Context (Living Document)
+# Project Context (Historical technical reference)
+
+> **DOCUMENT STATUS — 2026-11-06:** Historical technical context and selectors only. This is **not** the current MVP/release plan. Read [docs/KOMMUN_1_1_LIVE_ACCEPTANCE.md](docs/KOMMUN_1_1_LIVE_ACCEPTANCE.md) for current accepted gates; [docs/README.md](docs/README.md) for document authority. Old task or implementation notes here must not override newer code and accepted product-owner decisions.
+
 
 Short, durable facts that survive chat resets. Keep updated as we learn.
 

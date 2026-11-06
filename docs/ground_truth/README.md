@@ -1,5 +1,5 @@
 Status: LOCKED
-Last reviewed: 2026-09-23
+Last reviewed: 2026-11-06 (documentation governance)
 
 # Ground Truth
 
@@ -19,6 +19,15 @@ When a locked decision changes:
 Ground Truth describes architecture and product intent, not implementation details that can be read from code.
 
 Keep the files concise enough that a new project-lead conversation can read the whole directory quickly.
+
+## Authority boundaries (2026-11-06)
+
+- **Architecture/product contract:** the LOCKED files in this directory. A locked decision changes only by an explicit product decision and a DECISION_LOG entry.
+- **Current implementation status / next Copilot gate / release acceptance:** [Kommun 1.1 Live Acceptance](../KOMMUN_1_1_LIVE_ACCEPTANCE.md), not an old "current" paragraph embedded in a September lock.
+- **Phase ordering:** [Roadmap](../roadmap.md), not another MVP checklist.
+- **Document map / historical documentation branches:** [Documentation index](../README.md).
+
+September implementation checklists and HEADs within Ground Truth are evidence of their dates, not active development commands. K25–K27, current Planera and Builder Gates 19–21E must remain closed absent reproduced regression. The codebase and real acceptance evidence decide actual implementation state; Ground Truth decides intended behavior. Do not create competing status master files on handoff/documentation branches.
 
 ## Files
 

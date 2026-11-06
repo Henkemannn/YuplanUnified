@@ -1,5 +1,8 @@
 # Copilot Instructions / Context Bootstrap
 
+> **CURRENT PROJECT STATUS (2026-11-06):** This document contains historical scaffold/task-order sections. **Before deciding work, read** [docs/KOMMUN_1_1_LIVE_ACCEPTANCE.md](docs/KOMMUN_1_1_LIVE_ACCEPTANCE.md) for the latest approved Kommun gate, [docs/roadmap.md](docs/roadmap.md) for phase ordering and [docs/ground_truth/README.md](docs/ground_truth/README.md) for locked architecture. Do not run the historical "Immediate Next Implementation Tasks" below as a current order. Working sequence: Admin menu-import Builder modal outer frame → Department Portal menu-choice UI → login/reset/security flow → owner manual walkthrough and regression → Kommun freeze → Offshore 1.0. Builder Gates 19–21E, Planera and K25–K27 packing are accepted. **One order → one report → review → next order; no Copilot commit/push without approval; verify branch, HEAD, dirty state, `git diff --check` and protect unrelated local edits.**
+
+
 This file gives the AI assistant (Copilot) the full context needed to continue implementing the unified Yuplan platform without re-reading legacy repos.
 
 ---
@@ -77,7 +80,7 @@ export.docx, import.docx
 ```
 Later: persistent per-tenant toggles.
 
-## 5. Immediate Next Implementation Tasks (Recommended Order)
+## 5. Historical Implementation Tasks (superseded; see current status ledger)
 1. Generate Alembic initial migration: reflect `core/models.Base.metadata` → versions/0001_init.py
 2. Add `core/auth.py`:
    - password hashing (Werkzeug / argon2 later)

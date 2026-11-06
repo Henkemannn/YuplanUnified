@@ -1,10 +1,13 @@
 Status: LOCKED
-Last reviewed: 2026-09-28
+Last reviewed: 2026-11-06 (delivery-status pointers only; original architecture unchanged)
 
 # Yuplan 1.0 Finishline
 
+> **CURRENT DELIVERY STATUS — 2026-11-06:** This file remains the locked **Yuplan 1.0 scope and architecture** reference, NOT the active Kommun task list. The September 28 "Current Phase", "Current Checkpoint", "Current Active Gate" and "Freeze Point" below are **historical**, including the Page3 completion task described as active. Current accepted operational plan and evidence: [Kommun 1.1 Live Acceptance](../KOMMUN_1_1_LIVE_ACCEPTANCE.md). Phase sequence: [Roadmap](../roadmap.md). On code checkpoint `a75f754c`, K25–K27 serving/packing, Planera Page1–3 and Builder Gates 19–21E have reached user-accepted functional states; outstanding immediate gates are Admin Builder-host frame → Department Portal menu-choice UX → login/password recovery → full manual/automated pilot acceptance → Kommun 1.1 freeze → Offshore 1.0. Do not reopen September gates or create another masterchecklist on their basis. **No full pilot GO is claimed.**
 
-## Current Phase
+
+
+## Historical Current Phase (snapshot 2026-09-28)
 
 The shared Builder/Menu/Offshore seam remains accepted and frozen.
 
@@ -20,7 +23,7 @@ The Page3 information architecture and Specialkost hierarchy are no longer the m
 Broad Builder/Menu and Offshore MVP expansion remains closed. Only pilot-blocking regressions or shared-platform issues may reopen those seams before Kommun is pilot-ready.
 
 
-## Current Checkpoint
+## Historical Checkpoint (2026-09-28)
 
 Active development branch:
 
@@ -76,7 +79,7 @@ Do not checkpoint that uncommitted gate until the clean manual Page3 -> Kitchen 
 - Existing Serveringstillägg remains valid operational input and must be preserved in a separate Servering / Packning track.
 
 
-## Current Active Gate
+## Historical Page3 Completion Gate (later accepted; do not reopen without defect)
 
 ### Close the Page3 -> Weekview completion E2E
 
@@ -149,7 +152,7 @@ The E2E database must not be confused with `dev.db`. Reused E2E state may contai
 A small developer-experience helper for deterministic E2E startup may be added later, but it is not allowed to become a launch-blocking side project.
 
 
-## Next Major Milestone
+## Historical Milestone Plan (September 2026)
 
 **Kommun 1.1 — Ready for Pilot.**
 
@@ -228,7 +231,7 @@ A difference must be classified as:
 Do not force Planera 2.0 to reproduce a known legacy limitation merely to achieve numerical equality.
 
 
-## Freeze Point
+## Historical Freeze Sequence (September 2026)
 
 Builder/Menu/Offshore broad MVP work remains frozen.
 
