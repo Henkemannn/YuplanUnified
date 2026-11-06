@@ -26,7 +26,7 @@ def test_systemadmin_customer_create_atomic():
         data={
             "site_name": site_name,
             "admin_email": admin_email,
-            "admin_password": "Passw0rd!",
+            "admin_password": "Admin customer password 2026!",
         },
         headers={"X-User-Role": "superuser", "X-Tenant-Id": "1"},
         follow_redirects=True,

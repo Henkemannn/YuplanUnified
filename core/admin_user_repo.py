@@ -7,6 +7,7 @@ from typing import Optional
 
 from sqlalchemy import text
 from werkzeug.security import generate_password_hash
+from .password_policy import validate_new_password
 
 from .db import get_session
 from .models import User
@@ -193,6 +194,7 @@ class AdminUserRepo:
         Create a new user.
         Returns the new user ID.
         """
+        validate_new_password(password)
         password_hash = generate_password_hash(password)
         normalized_email = _normalize_email(email)
         
@@ -298,7 +300,7 @@ class AdminUserRepo:
         Returns the plaintext password (for display to admin).
         """
         # Generate 12-character password
-        temp_password = secrets.token_urlsafe(9)  # ~12 chars base64
+        temp_password = secrets.token_urlsafe(12)  # ~16 chars base64
         password_hash = generate_password_hash(temp_password)
         
         db = get_session()

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from werkzeug.security import generate_password_hash
+from .password_policy import validate_new_password
 
 from .db import get_session
 from .models import Tenant, TenantFeatureFlag, User
@@ -74,6 +75,7 @@ class FeatureService:
                 for f in feats:
                     db.add(TenantFeatureFlag(tenant_id=tenant.id, name=f, enabled=True))
             # Create admin user
+            validate_new_password(admin_password)
             pw_hash = generate_password_hash(admin_password)
             user = User(
                 tenant_id=tenant.id,

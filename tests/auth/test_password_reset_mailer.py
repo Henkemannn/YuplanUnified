@@ -4,7 +4,11 @@ from email.message import EmailMessage
 
 import pytest
 
-from core.password_reset import PasswordResetDeliveryError, PasswordResetService
+from core.password_reset import (
+    PasswordResetDeliveryError,
+    PasswordResetService,
+    reset_url_allows_insecure,
+)
 from core.password_reset_mailer import SMTPPasswordResetMailer, smtp_mailer_from_config
 
 
@@ -136,4 +140,24 @@ def test_reset_base_url_requires_https_outside_local_development():
             allow_insecure=True,
         )
         == "http://localhost:5000/auth/reset?token=abc"
+    )
+
+
+def test_explicit_local_environment_allows_insecure_reset_url(monkeypatch):
+    monkeypatch.delenv("FLY_APP_NAME", raising=False)
+    assert reset_url_allows_insecure({"APP_ENV": "dev", "TESTING": True})
+
+
+@pytest.mark.parametrize("deploy_env", ["staging", "pilot", "production"])
+def test_deployed_environments_never_allow_insecure_reset_urls(deploy_env, monkeypatch):
+    monkeypatch.delenv("FLY_APP_NAME", raising=False)
+    assert not reset_url_allows_insecure(
+        {"APP_ENV": "dev", "DEPLOY_ENV": deploy_env, "TESTING": True}
+    )
+
+
+def test_fly_never_allows_insecure_reset_urls_even_with_dev_testing(monkeypatch):
+    monkeypatch.setenv("FLY_APP_NAME", "yuplan-pilot")
+    assert not reset_url_allows_insecure(
+        {"APP_ENV": "dev", "TESTING": True}
     )

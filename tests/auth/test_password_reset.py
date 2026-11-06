@@ -80,7 +80,7 @@ def test_reset_is_single_use_and_invalidates_old_auth_state(tmp_path):
     token = sent[0].split("token=", 1)[1]
     response = client.post(
         "/auth/reset",
-        json={"token": token, "new_password": "new-password", "confirm_password": "new-password"},
+        json={"token": token, "new_password": "new-password-2026", "confirm_password": "new-password-2026"},
     )
     assert response.status_code == 200
 
@@ -91,14 +91,14 @@ def test_reset_is_single_use_and_invalidates_old_auth_state(tmp_path):
         assert user.auth_version == old_version + 1
         assert user.refresh_token_jti is None
         assert user.must_change_password is False
-        assert check_password_hash(user.password_hash, "new-password")
+        assert check_password_hash(user.password_hash, "new-password-2026")
         reset = db.execute(select(PasswordResetToken)).scalar_one()
         assert reset.used_at is not None
         db.close()
 
     replay = client.post(
         "/auth/reset",
-        json={"token": token, "new_password": "third-password", "confirm_password": "third-password"},
+        json={"token": token, "new_password": "third-password-2026", "confirm_password": "third-password-2026"},
     )
     assert replay.status_code == 400
 
@@ -127,7 +127,7 @@ def test_reset_invalidates_existing_login_tokens_and_accepts_only_new_password(t
     token = parse_qs(urlsplit(sent[0]).query)["token"][0]
     reset = reset_client.post(
         "/auth/reset",
-        json={"token": token, "new_password": "new-password", "confirm_password": "new-password"},
+        json={"token": token, "new_password": "new-password-2026", "confirm_password": "new-password-2026"},
     )
     assert reset.status_code == 200
 
@@ -139,7 +139,7 @@ def test_reset_invalidates_existing_login_tokens_and_accepts_only_new_password(t
     )
     old_refresh = old_client.post("/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
     old_login = old_client.post("/auth/login", json={"email": email, "password": "old-password"})
-    new_login = reset_client.post("/auth/login", json={"email": email, "password": "new-password"})
+    new_login = reset_client.post("/auth/login", json={"email": email, "password": "new-password-2026"})
     new_access = reset_client.get(
         "/auth/me",
         headers={"Authorization": f"Bearer {new_login.get_json()['access_token']}"},
@@ -255,7 +255,7 @@ def test_reset_posts_require_csrf_in_production_like_runtime(tmp_path, monkeypat
     missing_forgot = client.post("/auth/forgot", json={"email": "unknown@example.com"})
     missing_reset = client.post(
         "/auth/reset",
-        json={"token": "invalid", "new_password": "new-password", "confirm_password": "new-password"},
+        json={"token": "invalid", "new_password": "new-password-2026", "confirm_password": "new-password-2026"},
     )
     assert missing_forgot.status_code == 403
     assert missing_reset.status_code == 403
@@ -274,8 +274,8 @@ def test_reset_posts_require_csrf_in_production_like_runtime(tmp_path, monkeypat
         "/auth/reset",
         json={
             "token": token,
-            "new_password": "new-password",
-            "confirm_password": "new-password",
+            "new_password": "new-password-2026",
+            "confirm_password": "new-password-2026",
         },
         headers=csrf_headers,
     )

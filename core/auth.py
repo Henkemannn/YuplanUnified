@@ -34,6 +34,7 @@ from .password_reset import (
     PasswordResetStoreError,
 )
 from .password_reset_mailer import smtp_mailer_from_config
+from .password_policy import PasswordPolicyError, validate_new_password
 
 # Legacy error envelopes are used for auth endpoints to preserve compatibility with tests/clients.
 
@@ -684,8 +685,15 @@ def reset_password_post():
     token = str(body.get("token") or request.form.get("token") or "")
     new_password = str(body.get("new_password") or request.form.get("new_password") or "")
     confirm_password = str(body.get("confirm_password") or request.form.get("confirm_password") or "")
-    if new_password != confirm_password or len(new_password) < 6:
-        message = "Lösenordet måste vara minst 6 tecken och matcha bekräftelsen."
+    try:
+        validate_new_password(new_password)
+    except PasswordPolicyError:
+        message = "Lösenordet måste vara minst 15 tecken och får inte vara välkänt svagt."
+        response = make_response(render_template("auth_reset.html", token=token, error=message), 400)
+        _set_no_store_headers(response)
+        return response
+    if new_password != confirm_password:
+        message = "Lösenordet måste matcha bekräftelsen."
         response = make_response(render_template("auth_reset.html", token=token, error=message), 400)
         _set_no_store_headers(response)
         return response

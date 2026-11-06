@@ -77,7 +77,7 @@
           </div>
           <div class="admin-form-row">
             <label for="admin_password">Admin lösenord</label>
-            <input type="password" id="admin_password" name="admin_password" required>
+            <input type="password" id="admin_password" name="admin_password" minlength="15" placeholder="Minst 15 tecken" required>
           </div>
           <button type="submit" class="sa-btn sa-btn-primary">Skapa kund</button>
           <a class="sa-btn sa-btn-secondary" href="{{ url_for('admin_ui.systemadmin_customers') }}">Avbryt</a>

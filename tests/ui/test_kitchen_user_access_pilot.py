@@ -105,7 +105,7 @@ def test_admin_can_create_and_deactivate_kitchen_user(client_admin):
         data={
             "name": "Kitchen Pilot",
             "email": "kitchen.pilot@example.com",
-            "password": "pilotpass123",
+            "password": "Kitchen pilot password 2026",
             "role": "kitchen",
         },
         follow_redirects=True,

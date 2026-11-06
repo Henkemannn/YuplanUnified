@@ -48,7 +48,7 @@ def test_systemadmin_site_create_sets_tenant_id(app_session, client: FlaskClient
         data={
             "site_name": "Östergården",
             "admin_email": "admin.ost@example.com",
-            "admin_password": "Passw0rd!",
+            "admin_password": "Admin site password 2026!",
             "sf_weekview": "on",
         },
         follow_redirects=True,
@@ -142,7 +142,7 @@ def test_systemadmin_can_add_additional_admin_for_site(app_session, client: Flas
         data={
             "admin_full_name": "Admin Two",
             "admin_email": "admin.two@example.com",
-            "admin_password": "Passw0rd!",
+            "admin_password": "Admin site password 2026!",
         },
         follow_redirects=True,
     )

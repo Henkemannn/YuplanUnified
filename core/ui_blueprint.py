@@ -5,6 +5,7 @@ import os
 from flask import Blueprint, current_app, render_template, session, request, jsonify, redirect, url_for, flash, g, abort
 from sqlalchemy import text
 from werkzeug.security import check_password_hash, generate_password_hash
+from .password_policy import PasswordPolicyError, validate_new_password
 
 from .auth import require_roles
 from .config import auth_bypass_allowed
@@ -2081,16 +2082,18 @@ def account_change_password():
         flash("Sessionen saknar användare. Logga in igen.", "error")
         return redirect(url_for("home.ui_login"))
 
-    current_password = str((request.form.get("current_password") or "").strip())
-    new_password = str((request.form.get("new_password") or "").strip())
-    confirm_password = str((request.form.get("confirm_password") or "").strip())
+    current_password = str(request.form.get("current_password") or "")
+    new_password = str(request.form.get("new_password") or "")
+    confirm_password = str(request.form.get("confirm_password") or "")
 
     if not current_password or not new_password or not confirm_password:
         flash("Fyll i nuvarande lösenord och det nya lösenordet två gånger.", "error")
         return redirect(url_for("ui.account_page"))
 
-    if len(new_password) < 6:
-        flash("Nytt lösenord måste vara minst 6 tecken.", "error")
+    try:
+        validate_new_password(new_password)
+    except PasswordPolicyError:
+        flash("Nytt lösenord måste vara minst 15 tecken och får inte vara välkänt svagt.", "error")
         return redirect(url_for("ui.account_page"))
 
     if new_password != confirm_password:

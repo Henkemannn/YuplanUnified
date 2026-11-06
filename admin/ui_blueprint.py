@@ -10,6 +10,7 @@ from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 from core.models import MenuVariant, Tenant, User
 from core.impersonation import start_impersonation
+from core.password_policy import PasswordPolicyError, validate_new_password
 from datetime import date, datetime, timedelta, timezone
 import uuid
 
@@ -2210,11 +2211,16 @@ def _bind_admin_to_site(db, *, user_id: int, tenant_id: int, site_id: str) -> No
 @require_roles("superuser")
 def systemadmin_site_admin_create(tenant_id: int, site_id: str):
     admin_email = (request.form.get("admin_email") or "").strip().lower()
-    admin_password = (request.form.get("admin_password") or "").strip()
+    admin_password = str(request.form.get("admin_password") or "")
     admin_full_name = (request.form.get("admin_full_name") or "").strip()
 
     if not admin_email or not admin_password:
         flash("Ange admin e-post och lösenord.", "danger")
+        return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
+    try:
+        validate_new_password(admin_password)
+    except PasswordPolicyError:
+        flash("Lösenordet måste vara minst 15 tecken och får inte vara välkänt svagt.", "danger")
         return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
 
     db = get_session()
@@ -2300,9 +2306,14 @@ def systemadmin_site_admin_delete(tenant_id: int, site_id: str, user_id: int):
 @admin_ui_bp.post("/ui/systemadmin/customers/<int:tenant_id>/sites/<site_id>/admins/<int:user_id>/reset-password")
 @require_roles("superuser")
 def systemadmin_site_admin_reset_password(tenant_id: int, site_id: str, user_id: int):
-    new_password = (request.form.get("new_password") or "").strip()
+    new_password = str(request.form.get("new_password") or "")
     if not new_password:
         flash("Ange nytt lösenord.", "danger")
+        return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
+    try:
+        validate_new_password(new_password)
+    except PasswordPolicyError:
+        flash("Lösenordet måste vara minst 15 tecken och får inte vara välkänt svagt.", "danger")
         return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
 
     db = get_session()
@@ -2340,12 +2351,17 @@ def systemadmin_site_admin_reset_password(tenant_id: int, site_id: str, user_id:
 def systemadmin_customer_sites_create(tenant_id: int):
     name = (request.form.get("site_name") or "").strip()
     admin_email = (request.form.get("admin_email") or "").strip().lower()
-    admin_password = (request.form.get("admin_password") or "").strip()
+    admin_password = str(request.form.get("admin_password") or "")
     if not name:
         flash("Ange site-namn.", "danger")
         return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
     if not admin_email or not admin_password:
         flash("Ange admin e-post och lösenord.", "danger")
+        return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
+    try:
+        validate_new_password(admin_password)
+    except PasswordPolicyError:
+        flash("Lösenordet måste vara minst 15 tecken och får inte vara välkänt svagt.", "danger")
         return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
     site_id = name.lower().replace(" ", "-")
     db = get_session()
@@ -2479,13 +2495,18 @@ def systemadmin_customer_create():
     raw_type = (data.get("customer_type") or "").strip()
     site_name = (request.form.get("site_name") or "").strip()
     admin_email = (request.form.get("admin_email") or "").strip().lower()
-    admin_password = (request.form.get("admin_password") or "").strip()
+    admin_password = str(request.form.get("admin_password") or "")
 
     if not tenant_name:
         flash("Kundnamn saknas.", "danger")
         return redirect(url_for("admin_ui.systemadmin_customer_new_step1"))
     if not site_name or not admin_email or not admin_password:
         flash("Ange site-namn, admin e-post och lösenord.", "danger")
+        return redirect(url_for("admin_ui.systemadmin_customer_new_step4"))
+    try:
+        validate_new_password(admin_password)
+    except PasswordPolicyError:
+        flash("Lösenordet måste vara minst 15 tecken och får inte vara välkänt svagt.", "danger")
         return redirect(url_for("admin_ui.systemadmin_customer_new_step4"))
 
     db = get_session()

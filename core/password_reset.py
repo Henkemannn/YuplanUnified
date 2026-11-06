@@ -17,7 +17,9 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError, OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from .config import DEPLOYED_AUTH_BYPASS_ENVS, LOCAL_AUTH_BYPASS_ENVS, auth_bypass_allowed
 from .models import PasswordResetThrottle, PasswordResetToken, User
+from .password_policy import validate_new_password
 
 
 class PasswordResetStoreError(RuntimeError):
@@ -87,24 +89,12 @@ class PasswordResetService:
             or os.getenv("PASSWORD_RESET_HMAC_SECRET")
             or ""
         ).strip()
-        runtime_env = str(
-            config.get("APP_ENV")
-            or config.get("DEPLOY_ENV")
-            or os.getenv("APP_ENV")
-            or os.getenv("DEPLOY_ENV")
-            or ""
-        ).lower()
+        allow_insecure = reset_url_allows_insecure(config)
         return cls(
             session_factory,
             hmac_secret=secret,
             clock=clock,
-            allow_insecure_public_url=runtime_env in {
-                "local",
-                "dev",
-                "development",
-                "test",
-                "testing",
-            },
+            allow_insecure_public_url=allow_insecure,
         )
 
     def request_reset(
@@ -184,8 +174,7 @@ class PasswordResetService:
     def consume_reset(self, token: str, new_password: str) -> None:
         if not token.strip():
             raise ValueError("reset token is required")
-        if len(new_password) < 6:
-            raise ValueError("password must be at least 6 characters")
+        validate_new_password(new_password)
         now = self._clock()
         token_hash = self._token_hash(token)
 
@@ -251,10 +240,12 @@ class PasswordResetService:
         allow_insecure: bool = False,
     ) -> str:
         parts = urlsplit(public_base_url.strip())
-        allowed_schemes = {"https"}
-        if allow_insecure:
-            allowed_schemes.add("http")
-        if parts.scheme not in allowed_schemes or not parts.netloc:
+        is_loopback = parts.hostname in {"localhost", "127.0.0.1", "::1"}
+        if parts.scheme == "https":
+            pass
+        elif parts.scheme == "http" and allow_insecure and is_loopback:
+            pass
+        else:
             raise PasswordResetDeliveryError("PASSWORD_RESET_PUBLIC_BASE_URL is invalid")
         if parts.query or parts.fragment:
             raise PasswordResetDeliveryError("PASSWORD_RESET_PUBLIC_BASE_URL must not contain query or fragment")
@@ -405,3 +396,22 @@ def _generate_password_hash(password: str) -> str:
     from werkzeug.security import generate_password_hash
 
     return generate_password_hash(password)
+
+
+def reset_url_allows_insecure(config: dict[str, object] | None = None) -> bool:
+    """Allow HTTP reset URLs only for an explicitly local, non-deployed runtime."""
+    values = config or {}
+    if os.getenv("FLY_APP_NAME"):
+        return False
+    configured_envs = {
+        str(values.get(name) or os.getenv(name) or "").strip().lower()
+        for name in ("DEPLOY_ENV", "APP_ENV", "FLASK_ENV")
+    }
+    if configured_envs & DEPLOYED_AUTH_BYPASS_ENVS:
+        return False
+    runtime_env = next((value for value in configured_envs if value), "")
+    if runtime_env not in LOCAL_AUTH_BYPASS_ENVS:
+        return False
+    if not auth_bypass_allowed(testing=bool(values.get("TESTING"))):
+        return False
+    return True

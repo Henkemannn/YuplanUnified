@@ -137,7 +137,7 @@ def test_admin_reset_invalidates_all_prior_credentials():
         csrf = _csrf_from_html(client_admin.get("/ui/admin/users").data.decode("utf-8"))
         reset_resp = client_admin.post(
             f"/ui/admin/users/{user_a_id}/reset-password",
-            data={"new_password": "NewPassw0rd!", "csrf_token": csrf},
+            data={"new_password": "NewPassw0rd!2026", "csrf_token": csrf},
             follow_redirects=True,
         )
         assert reset_resp.status_code == 200
@@ -227,8 +227,8 @@ def test_self_service_change_clears_session_and_invalidates_old_credentials():
             "/ui/account/password",
             data={
                 "current_password": "OldPassw0rd!",
-                "new_password": "NewPassw0rd!",
-                "confirm_password": "NewPassw0rd!",
+                "new_password": "NewPassw0rd!2026",
+                "confirm_password": "NewPassw0rd!2026",
                 "csrf_token": csrf,
             },
             follow_redirects=True,
@@ -254,7 +254,7 @@ def test_self_service_change_clears_session_and_invalidates_old_credentials():
 
         relogin = client.post(
             "/auth/login",
-            json={"email": "user.self@example.com", "password": "NewPassw0rd!"},
+            json={"email": "user.self@example.com", "password": "NewPassw0rd!2026"},
             headers={"Accept": "application/json"},
         )
         assert relogin.status_code == 200
@@ -269,7 +269,7 @@ def test_self_service_change_clears_session_and_invalidates_old_credentials():
         ).status_code == 401
         assert client.post(
             "/auth/login",
-            json={"email": "user.self@example.com", "password": "NewPassw0rd!"},
+            json={"email": "user.self@example.com", "password": "NewPassw0rd!2026"},
             headers={"Accept": "application/json"},
         ).status_code == 200
 
@@ -466,7 +466,7 @@ def test_systemadmin_reset_forces_password_change_and_bumps_auth_version(monkeyp
         csrf = _csrf_from_html(client.get(f"/ui/systemadmin/customers/{tenant_id}/sites").data.decode("utf-8"))
         reset_resp = client.post(
             f"/ui/systemadmin/customers/{tenant_id}/sites/{site_id}/admins/{admin_id}/reset-password",
-            data={"new_password": "ResetPassw0rd!", "csrf_token": csrf},
+            data={"new_password": "Reset password 2026!", "csrf_token": csrf},
             follow_redirects=False,
         )
         assert reset_resp.status_code in (301, 302)
@@ -486,7 +486,7 @@ def test_systemadmin_reset_forces_password_change_and_bumps_auth_version(monkeyp
 
         relogin = client.post(
             "/auth/login",
-            json={"email": admin_email, "password": "ResetPassw0rd!"},
+            json={"email": admin_email, "password": "Reset password 2026!"},
             headers={"Accept": "application/json"},
         )
         assert relogin.status_code == 200
@@ -558,8 +558,8 @@ def test_unit_portal_canonical_department_portal_blocked_until_password_change(m
             "/ui/account/password",
             data={
                 "current_password": "TempPassw0rd!",
-                "new_password": "NewPassw0rd!",
-                "confirm_password": "NewPassw0rd!",
+                "new_password": "NewPassw0rd!2026",
+                "confirm_password": "NewPassw0rd!2026",
                 "csrf_token": csrf,
             },
             follow_redirects=True,
@@ -568,7 +568,7 @@ def test_unit_portal_canonical_department_portal_blocked_until_password_change(m
 
         relogin = client.post(
             "/auth/login",
-            json={"email": email, "password": "NewPassw0rd!"},
+            json={"email": email, "password": "NewPassw0rd!2026"},
             headers={"Accept": "application/json"},
         )
         assert relogin.status_code == 200

@@ -65,7 +65,7 @@ def _create_site(client: FlaskClient, tenant_id: int, name: str, admin_email: st
         data={
             "site_name": name,
             "admin_email": admin_email,
-            "admin_password": "Passw0rd!",
+            "admin_password": "Admin site password 2026!",
             "sf_weekview": "on",
         },
         follow_redirects=True,

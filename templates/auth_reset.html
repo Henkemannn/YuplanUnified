@@ -10,9 +10,9 @@
       {{ csrf_token_input()|safe }}
       <input type="hidden" name="token" value="{{ token }}">
       <label for="new_password">Nytt lösenord</label>
-      <input id="new_password" name="new_password" type="password" minlength="6" required autocomplete="new-password">
+      <input id="new_password" name="new_password" type="password" minlength="15" required autocomplete="new-password" placeholder="Minst 15 tecken">
       <label for="confirm_password">Bekräfta lösenord</label>
-      <input id="confirm_password" name="confirm_password" type="password" minlength="6" required autocomplete="new-password">
+      <input id="confirm_password" name="confirm_password" type="password" minlength="15" required autocomplete="new-password" placeholder="Minst 15 tecken">
       <button type="submit">Spara nytt lösenord</button>
     </form>
   </div>
