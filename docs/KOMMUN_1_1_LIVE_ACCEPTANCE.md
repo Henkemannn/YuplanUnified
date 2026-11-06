@@ -6,7 +6,7 @@
 > This section is the single current Kommun 1.1 pilot work ledger. The October baseline, older gate labels and old recommended sequence lower in this document are **historical**. Never use those older labels to reopen work already accepted by the product owner. Not a claim of full pilot/release GO.
 
 **Development branch:** `feat/planera-app-shell-2026-03-03`  
-**Last product-code checkpoint pushed and product-owner approved:** `1ff5dbef6336feac26943cafce09053ddc13dcd4` (2026-11-06; `fix(portal): restore department menu choice layout and theme`). Subsequent docs-only commits may advance the branch HEAD; use `git rev-parse HEAD` for every preflight.  
+**Last pushed product/security code checkpoint:** `dbfa1534c8ba0781b630cfc2279e0029b113dfd3` (2026-11-06; `security(auth): harden deployed auth and session cookies`). **Last product-owner-approved visual UI checkpoint:** `1ff5dbef6336feac26943cafce09053ddc13dcd4`. Subsequent docs-only commits may advance branch HEAD; use `git rev-parse HEAD` in every preflight. **Gate 03C is code-tested but NOT yet deployed/live verified; C.1 pending.**  
 **Worktree:** locally dirty; protected, unrelated edits must remain untouched: `core/admin_repo.py`, `scripts/seed_ostergarden_from_json.py`, `scripts/seed_product2_e2e.py`, `artifacts/`, `static/tests/builder_editor_host_styles.test.js`. Verify current local state before every Copilot order.
 
 **Status:** Kommun 1.1 pilot preparation; **NOT YET final PILOT GO**. Product-owner-accepted operational features are frozen except for reproducible regressions.
@@ -23,12 +23,16 @@
 
 ### Decided remaining order — one gate at a time
 
-1. **NOW — Login and password recovery.** Audit current login, failed-attempt rules, HTML feedback, lockout persistence across workers, password-recovery email/token (expiry, one use, anti-enumeration), password change/reset, role routing, revocation/session invalidation, tenant/site scope, audit events and browser/iPad handling. Confirm what is already implemented before changing anything. Preserve the spinning Yuplan globe. Existing `/auth/forgot` was documented as a placeholder on 2026-11-01, not assumed complete.
+1. **NOW — Login security Gate 03C.1.** Focused correction: `auth_bypass_allowed(testing=True)` currently wins over Fly-runtime guard; platform/deployed deny must precede testing allowances. Prove Fly + testing true cannot enable demo/dev auth or disable Secure session cookie. Gate 03C checkpoint `dbfa1534`: 46/46 focused tests passed, no deploy. See [Security Baseline](security/YUPLAN_SECURITY_BASELINE.md).
+2. **NEXT — Pilot environment check and session incident.** Verify running Fly deployment flags / `Set-Cookie` without exposing secrets; assess historical `cookie.txt` exposure and revoke relevant sessions before real pilot data. Removal from Git index does not erase Git history.
+3. **NEXT — Shared login throttling, then safe password recovery, then HTML login UX/CSRF decision.** Preserve the rotating globe, working auth/roles, `must_change_password`, `auth_version` and refresh invalidation.
 2. **THEN — Product-owner full manual Kommun walkthrough** combined with isolated automated and negative tenant/site/RBAC regressions, real Portal choice/submit and kitchen propagation, critical desktop/iPad/mobile screens, reporting/export consistency and lunch/kvällsmat/dessert meal paths. Fix only reproduced issues.
 3. **THEN — Pilot acceptance, release verification and freeze/tag.** Confirm clean-customer path, staging/migrations, full appropriate regression and security; no unverified blanket GO.
 4. **AFTER KOMMUN — Offshore 1.0**, then Yuplan 1.0 platform release.
 
 **Locked visual UI rule:** Product-owner accepted Kommun Builder modal and Department Portal Menyval must not be restructured or restyled by unrelated features. Any required change to an accepted screen needs explicit scoped approval, actual before/after browser evidence in both themes and relevant iPad viewport, plus focused regression tests. The existing CSS/DOM tests are useful but do not replace visual review. Historic approved screenshot baselines are not currently versioned in the repository; capture reviewed visual baselines during final pilot acceptance rather than falsely claiming pixel-snapshot coverage.
+
+**Security baseline owner:** `docs/security/YUPLAN_SECURITY_BASELINE.md` records security controls, evidence and open security risks. This is not a separate product status ledger; the present Live Acceptance document remains the single operational gate authority.
 
 ### Known follow-ups: evidence, not automatic implementation orders
 
