@@ -70,6 +70,33 @@ def test_reset_request_is_neutral_and_sends_only_for_active_known_account(tmp_pa
     assert known.headers["Referrer-Policy"] == "no-referrer"
 
 
+def test_forgot_endpoint_uses_public_base_url_from_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv(
+        "PASSWORD_RESET_PUBLIC_BASE_URL",
+        "https://yuplan-unified-staging.fly.dev",
+    )
+    sent = []
+    app = create_app(
+        {
+            "TESTING": True,
+            "database_url": f"sqlite:///{(tmp_path / 'env-public-url.db').as_posix()}",
+            "FORCE_DB_REINIT": True,
+            "PASSWORD_RESET_MAILER": lambda recipient, url: sent.append(url),
+            "PASSWORD_RESET_HMAC_SECRET": "isolated-password-reset-secret",
+        }
+    )
+    with app.app_context():
+        create_all()
+    email, _, _ = _seed_user(app)
+
+    response = app.test_client().post("/auth/forgot", json={"email": email})
+
+    assert response.status_code == 202
+    assert sent[0].startswith(
+        "https://yuplan-unified-staging.fly.dev/auth/reset?token="
+    )
+
+
 def test_reset_is_single_use_and_invalidates_old_auth_state(tmp_path):
     sent = []
     app = _make_app(tmp_path, lambda recipient, url: sent.append(url))

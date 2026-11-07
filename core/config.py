@@ -48,6 +48,7 @@ class Config:
     jwt_leeway_seconds: int = 60
     impersonation_max_age_seconds: int = 900  # 15 minutes default
     strict_csrf_env: bool = False
+    password_reset_public_base_url: str = ""
     problem_only: bool = True  # deprecated by ADR-003 (kept for backward compat, unused)
 
     @classmethod
@@ -69,6 +70,7 @@ class Config:
             jwt_leeway_seconds=int(os.getenv("JWT_LEEWAY_SECONDS", "60")),
             impersonation_max_age_seconds=int(os.getenv("IMPERSONATION_MAX_AGE_SECONDS", "900")),
             strict_csrf_env=bool(int(os.getenv("YUPLAN_STRICT_CSRF", "0"))),
+            password_reset_public_base_url=os.getenv("PASSWORD_RESET_PUBLIC_BASE_URL", "").strip(),
             problem_only=True,
         )
 
@@ -91,6 +93,7 @@ class Config:
             "JWT_LEEWAY_SECONDS": self.jwt_leeway_seconds,
             "IMPERSONATION_MAX_AGE_SECONDS": self.impersonation_max_age_seconds,
             "YUPLAN_STRICT_CSRF": self.strict_csrf_env,
+            "PASSWORD_RESET_PUBLIC_BASE_URL": self.password_reset_public_base_url,
             # ProblemDetails is always on; legacy flag removed (ADR-003)
             "STRICT_CSRF_IN_TESTS": bool(int(os.getenv("STRICT_CSRF_IN_TESTS", "0"))),
             # Harden session cookie defaults (still allow override in tests)

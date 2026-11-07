@@ -112,13 +112,15 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     runtime_env = (os.getenv("DEPLOY_ENV") or os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").lower()
     is_pilot_or_prod = runtime_env in ("pilot", "prod", "production")
     cfg = Config.from_env()
+    direct_config_overrides = {}
     if config_override:
         known = {k: v for k, v in config_override.items() if hasattr(cfg, k)}
         if known:
             cfg.override(known)
-        for k, v in config_override.items():  # also allow direct Flask config keys
-            if k.isupper():
-                app.config[k] = v
+        direct_config_overrides = {
+            k: v for k, v in config_override.items() if k.isupper()
+        }
+        app.config.update(direct_config_overrides)
     # Tests should use isolated sqlite memory DB unless explicitly overridden.
     if (config_override and config_override.get("TESTING")) and not os.getenv("DATABASE_URL"):
         cfg.database_url = "sqlite:///:memory:"
@@ -135,6 +137,8 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     except Exception:
         pass
     app.config.update(cfg.to_flask_dict())
+    # Reapply explicit Flask test/runtime overrides after environment defaults.
+    app.config.update(direct_config_overrides)
     app.config["SESSION_COOKIE_SECURE"] = not auth_bypass_allowed(
         testing=bool(app.config.get("TESTING"))
     )

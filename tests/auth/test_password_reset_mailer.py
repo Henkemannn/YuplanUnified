@@ -4,6 +4,7 @@ from email.message import EmailMessage
 
 import pytest
 
+from core.app_factory import create_app
 from core.password_reset import (
     PasswordResetDeliveryError,
     PasswordResetService,
@@ -160,4 +161,34 @@ def test_fly_never_allows_insecure_reset_urls_even_with_dev_testing(monkeypatch)
     monkeypatch.setenv("FLY_APP_NAME", "yuplan-pilot")
     assert not reset_url_allows_insecure(
         {"APP_ENV": "dev", "TESTING": True}
+    )
+
+
+def test_public_reset_base_url_reads_environment_and_preserves_explicit_override(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setenv(
+        "PASSWORD_RESET_PUBLIC_BASE_URL",
+        "https://yuplan-unified-staging.fly.dev",
+    )
+    env_app = create_app(
+        {
+            "TESTING": True,
+            "database_url": f"sqlite:///{(tmp_path / 'env-config.db').as_posix()}",
+        }
+    )
+    assert env_app.config["PASSWORD_RESET_PUBLIC_BASE_URL"] == (
+        "https://yuplan-unified-staging.fly.dev"
+    )
+
+    override_app = create_app(
+        {
+            "TESTING": True,
+            "database_url": f"sqlite:///{(tmp_path / 'override-config.db').as_posix()}",
+            "PASSWORD_RESET_PUBLIC_BASE_URL": "https://test.example.test",
+        }
+    )
+    assert override_app.config["PASSWORD_RESET_PUBLIC_BASE_URL"] == (
+        "https://test.example.test"
     )
