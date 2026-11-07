@@ -119,6 +119,45 @@ def test_smtp_mailer_rejects_header_injection_and_insecure_url(monkeypatch):
         mailer("user@example.test", "http://pilot.example.test/auth/reset?token=abc")
 
 
+def test_smtp_mailer_allows_http_loopback_only_in_local_environment(monkeypatch):
+    _FakeSMTP.instances.clear()
+    monkeypatch.delenv("FLY_APP_NAME", raising=False)
+    monkeypatch.delenv("DEPLOY_ENV", raising=False)
+    monkeypatch.setenv("APP_ENV", "dev")
+    monkeypatch.setattr("core.password_reset_mailer.smtplib.SMTP", _FakeSMTP)
+    mailer = smtp_mailer_from_config(_config())
+
+    mailer("user@example.test", "http://127.0.0.1:5000/auth/reset?token=abc")
+
+    assert _FakeSMTP.instances[0].message is not None
+    with pytest.raises(PasswordResetDeliveryError):
+        mailer("user@example.test", "http://example.test/auth/reset?token=abc")
+
+
+@pytest.mark.parametrize("deploy_env", ["staging", "pilot", "production"])
+def test_smtp_mailer_rejects_http_loopback_in_deployed_environment(
+    monkeypatch,
+    deploy_env,
+):
+    monkeypatch.delenv("FLY_APP_NAME", raising=False)
+    monkeypatch.setenv("APP_ENV", "dev")
+    monkeypatch.setenv("DEPLOY_ENV", deploy_env)
+    mailer = smtp_mailer_from_config(_config())
+
+    with pytest.raises(PasswordResetDeliveryError):
+        mailer("user@example.test", "http://localhost:5000/auth/reset?token=abc")
+
+
+def test_smtp_mailer_rejects_http_loopback_in_fly_environment(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "dev")
+    monkeypatch.delenv("DEPLOY_ENV", raising=False)
+    monkeypatch.setenv("FLY_APP_NAME", "yuplan-local-test")
+    mailer = smtp_mailer_from_config(_config())
+
+    with pytest.raises(PasswordResetDeliveryError):
+        mailer("user@example.test", "http://[::1]:5000/auth/reset?token=abc")
+
+
 def test_smtp_mailer_converts_timeout_and_delivery_errors(monkeypatch):
     class _TimeoutSMTP(_FakeSMTP):
         def send_message(self, message):

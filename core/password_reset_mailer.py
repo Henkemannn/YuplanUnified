@@ -9,8 +9,13 @@ import ssl
 from email.message import EmailMessage
 from email.utils import parseaddr
 from typing import Mapping
+from urllib.parse import urlsplit
 
-from .password_reset import PasswordResetDeliveryError, PasswordResetMailer
+from .password_reset import (
+    PasswordResetDeliveryError,
+    PasswordResetMailer,
+    reset_url_allows_insecure,
+)
 
 
 _SECURITY_MODES = {"starttls", "implicit_tls"}
@@ -48,6 +53,7 @@ class SMTPPasswordResetMailer:
         sender: str,
         security: str,
         timeout: float,
+        allow_insecure_public_url: bool = False,
     ) -> None:
         self._host = _validate_header_value(host.strip(), "host")
         self._port = port
@@ -56,11 +62,22 @@ class SMTPPasswordResetMailer:
         self._sender = _validate_address(sender, "sender", allow_display_name=True)
         self._security = security
         self._timeout = timeout
+        self._allow_insecure_public_url = allow_insecure_public_url
 
     def __call__(self, recipient: str, reset_url: str) -> None:
         recipient = _validate_address(recipient, "recipient")
         reset_url = _validate_header_value(reset_url.strip(), "reset URL")
-        if not reset_url.startswith("https://"):
+        parsed_url = urlsplit(reset_url)
+        is_loopback = parsed_url.hostname in {"localhost", "127.0.0.1", "::1"}
+        if parsed_url.scheme == "https":
+            pass
+        elif (
+            parsed_url.scheme == "http"
+            and self._allow_insecure_public_url
+            and is_loopback
+        ):
+            pass
+        else:
             raise PasswordResetDeliveryError("password reset URL must use HTTPS")
 
         message = EmailMessage()
@@ -140,4 +157,5 @@ def smtp_mailer_from_config(config: Mapping[str, object]) -> PasswordResetMailer
         sender=sender,
         security=security,
         timeout=timeout,
+        allow_insecure_public_url=reset_url_allows_insecure(config),
     )
