@@ -114,7 +114,8 @@ def test_fifth_failure_finishes_account_and_ip_and_preserves_other_account(
     )
     assert response.status_code == 200
 
-def test_missing_hmac_secret_returns_503_without_session(tmp_path) -> None:
+def test_missing_hmac_secret_returns_503_without_session(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("AUTH_RATE_LIMIT_HMAC_SECRET", "")
     app = _make_app(tmp_path)
     app.config["AUTH_RATE_LIMIT_HMAC_SECRET"] = ""
     client = app.test_client()

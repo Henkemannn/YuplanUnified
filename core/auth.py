@@ -4,7 +4,7 @@ import os
 from collections.abc import Callable
 from functools import wraps
 
-from flask import Blueprint, current_app, jsonify, make_response, request, session, render_template
+from flask import Blueprint, current_app, flash, jsonify, make_response, redirect, request, session, render_template, url_for
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -713,7 +713,12 @@ def forgot_password_request():
     if request.is_json or request.accept_mimetypes.best == "application/json":
         response = make_response(jsonify({"ok": True, "message": message}), 202)
     else:
-        response = make_response(render_template("auth_forgot.html", message=message), 202)
+        flash(
+            "Om kontot finns har vi skickat en återställningslänk till e-postadressen. "
+            "Kontrollera din inkorg.",
+            "success",
+        )
+        response = redirect(url_for("auth.login_get"), code=303)
     _set_no_store_headers(response)
     return response
 

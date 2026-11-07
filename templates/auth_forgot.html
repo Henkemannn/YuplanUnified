@@ -12,5 +12,6 @@
       <input id="email" name="email" type="email" required autocomplete="email">
       <button type="submit">Skicka återställningslänk</button>
     </form>
+    <a href="{{ url_for('auth.login_get') }}">← Tillbaka till inloggning</a>
   </div>
 {% endblock %}

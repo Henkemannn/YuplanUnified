@@ -63,12 +63,52 @@ def test_reset_request_is_neutral_and_sends_only_for_active_known_account(tmp_pa
     unknown = client.post("/auth/forgot", json={"email": "unknown@example.com"})
 
     assert known.status_code == unknown.status_code == 202
+    assert known.get_json() == {
+        "ok": True,
+        "message": "Om kontot finns skickas en återställningslänk till e-postadressen.",
+    }
+    assert unknown.get_json() == known.get_json()
     assert known.get_json()["message"] == unknown.get_json()["message"]
     assert len(sent) == 1
     assert email in sent[0][0]
     assert "token=" in sent[0][1]
     assert known.headers["Cache-Control"].startswith("no-store")
     assert known.headers["Referrer-Policy"] == "no-referrer"
+
+
+def test_html_forgot_redirects_to_login_with_neutral_flash_and_back_link(tmp_path):
+    sent = []
+    app = _make_app(tmp_path, lambda recipient, url: sent.append((recipient, url)))
+    email, _, _ = _seed_user(app)
+    client = app.test_client()
+
+    forgot_page = client.get("/auth/forgot")
+    assert forgot_page.status_code == 200
+    assert "← Tillbaka till inloggning" in forgot_page.get_data(as_text=True)
+
+    responses = []
+    for submitted_email in (email, "unknown@example.com"):
+        response = client.post(
+            "/auth/forgot",
+            data={"email": submitted_email},
+            headers={"Accept": "text/html"},
+            follow_redirects=False,
+        )
+        responses.append(response)
+        assert response.status_code == 303
+        assert response.headers["Location"].endswith("/auth/login")
+        assert b"auth_forgot" not in response.data
+
+        login_page = client.get(response.headers["Location"])
+        assert login_page.status_code == 200
+        assert (
+            "Om kontot finns har vi skickat en återställningslänk till "
+            "e-postadressen. Kontrollera din inkorg."
+            in login_page.get_data(as_text=True)
+        )
+
+    assert responses[0].headers["Location"] == responses[1].headers["Location"]
+    assert len(sent) == 1
 
 
 def test_forgot_endpoint_uses_public_base_url_from_environment(tmp_path, monkeypatch):
