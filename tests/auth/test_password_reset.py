@@ -11,6 +11,7 @@ import pytest
 from core.app_factory import create_app
 from core.db import create_all, get_session
 from core.models import PasswordResetToken, Tenant, User
+from core.password_reset import PasswordResetService
 from sqlalchemy import create_engine, inspect, select
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -128,6 +129,31 @@ def test_reset_is_single_use_and_invalidates_old_auth_state(tmp_path):
         json={"token": token, "new_password": "third-password-2026", "confirm_password": "third-password-2026"},
     )
     assert replay.status_code == 400
+
+
+def test_reset_token_expires_after_thirty_minutes(tmp_path):
+    sent = []
+    app = _make_app(tmp_path, lambda recipient, url: sent.append(url))
+    email, _, _ = _seed_user(app)
+    now = [1_000]
+    service = PasswordResetService(
+        get_session,
+        hmac_secret="isolated-password-reset-secret",
+        clock=lambda: now[0],
+    )
+
+    with app.app_context():
+        service.request_reset(
+            email,
+            "127.0.0.1",
+            mailer=lambda recipient, url: sent.append(url),
+            public_base_url="https://pilot.example.test",
+        )
+    token = parse_qs(urlsplit(sent[0]).query)["token"][0]
+    now[0] += PasswordResetService.TOKEN_TTL_SECONDS
+
+    with app.app_context(), pytest.raises(ValueError, match="invalid or expired"):
+        service.consume_reset(token, "expired-reset-password-2026")
 
 
 def test_reset_invalidates_existing_login_tokens_and_accepts_only_new_password(tmp_path):
