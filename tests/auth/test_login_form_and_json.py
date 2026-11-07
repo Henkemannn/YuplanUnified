@@ -96,9 +96,16 @@ def test_login_rejects_inactive_or_deleted_user(monkeypatch, request_kind, accou
             )
 
         assert r.status_code == 401
-        body = r.get_json() or {}
-        assert body.get("error") == "invalid credentials"
-        assert body.get("message") == "invalid credentials"
+        if request_kind == "json":
+            body = r.get_json() or {}
+            assert body == {
+                "error": "invalid credentials",
+                "message": "invalid credentials",
+            }
+        else:
+            assert r.content_type.startswith("text/html")
+            assert "E-postadressen eller lösenordet är fel." in r.get_data(as_text=True)
+            assert '"error":"invalid credentials"' not in r.get_data(as_text=True)
         with c.session_transaction() as sess:
             assert sess.get("user_id") is None
             assert sess.get("role") is None
@@ -204,3 +211,69 @@ def test_auth_login_forces_must_change_password_users_to_account_page(monkeypatc
 def test_auth_login_role_constants_remain_unchanged() -> None:
     assert KITCHEN_UI_ROLES == ("kitchen", "cook", "admin", "superuser")
     assert ADMIN_ROLES == ("admin", "superuser")
+
+
+def test_html_login_bad_credentials_renders_login_page(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "dev")
+    app = _make_isolated_app()
+    with app.app_context():
+        db = get_session()
+        email = f"html-error.{uuid.uuid4().hex[:8]}@example.com"
+        _seed_user(db, email, "Passw0rd!", role="superuser")
+        response = app.test_client().post(
+            "/auth/login",
+            data={"email": email, "password": "wrong-password"},
+            headers={"Accept": "text/html"},
+        )
+
+    assert response.status_code == 401
+    body = response.get_data(as_text=True)
+    assert response.content_type.startswith("text/html")
+    assert "E-postadressen eller lösenordet är fel." in body
+    assert '"error":"invalid credentials"' not in body
+    assert "Passw0rd!" not in body
+
+
+def test_html_login_rate_limit_renders_login_page_with_retry_after(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "dev")
+    db_fd, db_path = tempfile.mkstemp(prefix="login_html_limit_", suffix=".db")
+    os.close(db_fd)
+    app = create_app(
+        {
+            "TESTING": True,
+            "database_url": f"sqlite:///{db_path}",
+            "FORCE_DB_REINIT": True,
+            "AUTH_RATE_LIMIT": {
+                "window_sec": 60,
+                "max_failures": 2,
+                "lock_sec": 60,
+                "ip_max_failures": 100,
+            },
+        }
+    )
+    with app.app_context():
+        from core.db import create_all
+
+        create_all()
+        db = get_session()
+        email = f"html-limit.{uuid.uuid4().hex[:8]}@example.com"
+        _seed_user(db, email, "Passw0rd!", role="superuser")
+        client = app.test_client()
+        first = client.post(
+            "/auth/login",
+            data={"email": email, "password": "wrong-password"},
+            headers={"Accept": "text/html"},
+        )
+        blocked = client.post(
+            "/auth/login",
+            data={"email": email, "password": "wrong-password"},
+            headers={"Accept": "text/html"},
+        )
+
+    assert first.status_code == 401
+    assert blocked.status_code == 429
+    assert int(blocked.headers["Retry-After"]) >= 1
+    body = blocked.get_data(as_text=True)
+    assert blocked.content_type.startswith("text/html")
+    assert "För många inloggningsförsök. Försök igen senare." in body
+    assert '"error":"rate_limited"' not in body

@@ -316,6 +316,33 @@ def _clear_authenticated_session() -> None:
         pass
 
 
+def _login_wants_html() -> bool:
+    content_type = (request.content_type or "").lower()
+    accept = (request.headers.get("Accept") or "").lower()
+    return (
+        "application/json" not in content_type
+        and bool(request.form)
+        and ("text/html" in accept or not accept or "application/json" not in accept)
+    )
+
+
+def _login_html_error_response(
+    message: str,
+    status_code: int,
+    csrf_token: str,
+    *,
+    retry_after: int | None = None,
+):
+    response = make_response(
+        render_template("login.html", vm={"error": message}, error_message=None),
+        status_code,
+    )
+    if retry_after is not None:
+        response.headers["Retry-After"] = str(max(1, retry_after))
+    set_csrf_cookie(response, csrf_token)
+    return response
+
+
 # --- Routes ---
 @bp.post("/login")
 def login():
@@ -364,6 +391,13 @@ def login():
     except (AuthRateLimitConfigurationError, AuthRateLimitStoreError, TypeError, ValueError):
         return _login_rate_limit_error_response(csrf_token)
     if not rate_limit_decision.allowed:
+        if _login_wants_html():
+            return _login_html_error_response(
+                "För många inloggningsförsök. Försök igen senare.",
+                429,
+                csrf_token,
+                retry_after=rate_limit_decision.retry_after,
+            )
         resp = make_response(jsonify({"error": "rate_limited", "message": "rate_limited"}), 429)
         resp.headers["Retry-After"] = str(max(1, rate_limit_decision.retry_after))
         set_csrf_cookie(resp, csrf_token)
@@ -387,6 +421,13 @@ def login():
             except (AuthRateLimitStoreError, TypeError, ValueError):
                 return _login_rate_limit_error_response(csrf_token)
             if not failure_decision.allowed:
+                if _login_wants_html():
+                    return _login_html_error_response(
+                        "För många inloggningsförsök. Försök igen senare.",
+                        429,
+                        csrf_token,
+                        retry_after=failure_decision.retry_after,
+                    )
                 resp = make_response(
                     jsonify({"error": "rate_limited", "message": "rate_limited"}), 429
                 )
@@ -394,6 +435,12 @@ def login():
                 set_csrf_cookie(resp, csrf_token)
                 return resp
 
+            if _login_wants_html():
+                return _login_html_error_response(
+                    "E-postadressen eller lösenordet är fel.",
+                    401,
+                    csrf_token,
+                )
             resp = make_response(jsonify({"error": "invalid credentials", "message": "invalid credentials"}), 401)
             set_csrf_cookie(resp, csrf_token)
             return resp
@@ -405,6 +452,13 @@ def login():
         except (AuthRateLimitStoreError, TypeError, ValueError):
             return _login_rate_limit_error_response(csrf_token)
         if not success_decision.allowed:
+            if _login_wants_html():
+                return _login_html_error_response(
+                    "För många inloggningsförsök. Försök igen senare.",
+                    429,
+                    csrf_token,
+                    retry_after=success_decision.retry_after,
+                )
             resp = make_response(jsonify({"error": "rate_limited", "message": "rate_limited"}), 429)
             resp.headers["Retry-After"] = str(max(1, success_decision.retry_after))
             set_csrf_cookie(resp, csrf_token)
@@ -544,14 +598,7 @@ def login():
             pass
 
         # Decide response based on request type: HTML form vs JSON client
-        wants_html = False
-        try:
-            ctype = (request.content_type or "").lower()
-            accept = (request.headers.get("Accept") or "").lower()
-            if ("application/json" not in ctype) and (request.form) and ("text/html" in accept or not accept or "application/json" not in accept):
-                wants_html = True
-        except Exception:
-            wants_html = False
+        wants_html = _login_wants_html()
         if wants_html:
             # HTML form flow: for non-superusers without active site, deny access instead of selector
             from flask import redirect, url_for
