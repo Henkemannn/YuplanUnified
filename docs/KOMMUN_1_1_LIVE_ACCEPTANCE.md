@@ -1,15 +1,16 @@
 # Kommun 1.1 — Live Acceptance & UX Race
 
 
-## CURRENT — 2026-11-06 — authoritative operational status
+## CURRENT — 2026-11-07 — authoritative operational status
 
-> This section is the single current Kommun 1.1 pilot work ledger. The October baseline, older gate labels and old recommended sequence lower in this document are **historical**. Never use those older labels to reopen work already accepted by the product owner. Not a claim of full pilot/release GO.
+> This section is the **only current Kommun 1.1 delivery ledger**. The October baseline, older gate labels, and the September finishline paragraphs below/in other documents are historical evidence, not current orders. **No final Kommun 1.1 PILOT GO or Yuplan 1.0 release GO is claimed.**
 
-**Development branch:** `feat/planera-app-shell-2026-03-03`  
-**Last pushed product/security code checkpoint:** `dbfa1534c8ba0781b630cfc2279e0029b113dfd3` (2026-11-06; `security(auth): harden deployed auth and session cookies`). **Last product-owner-approved visual UI checkpoint:** `1ff5dbef6336feac26943cafce09053ddc13dcd4`. Subsequent docs-only commits may advance branch HEAD; use `git rev-parse HEAD` in every preflight. **Gate 03C is code-tested but NOT yet deployed/live verified; C.1 pending.**  
-**Worktree:** locally dirty; protected, unrelated edits must remain untouched: `core/admin_repo.py`, `scripts/seed_ostergarden_from_json.py`, `scripts/seed_product2_e2e.py`, `artifacts/`, `static/tests/builder_editor_host_styles.test.js`. Verify current local state before every Copilot order.
+**Active development branch:** `feat/planera-app-shell-2026-03-03`  
+**Last confirmed pushed product/security checkpoint (before this documentation-only update):** `7286fb64355eca26c2016bbaabadf756989fc41f` — `fix(auth): load password reset public URL from environment` (2026-11-07).  
+**Last product-owner-approved visual UI checkpoint:** `1ff5dbef6336feac26943cafce09053ddc13dcd4`.  
+**Worktree at last confirmed code checkpoint:** dirty with five unrelated protected paths: `core/admin_repo.py`, `scripts/seed_ostergarden_from_json.py`, `scripts/seed_product2_e2e.py`, `artifacts/`, `static/tests/builder_editor_host_styles.test.js`. Do not stage, overwrite or clean these. Documentation-only GitHub commits can advance the remote branch; reconcile with local HEAD **before future code commits**. Always check branch, HEAD, staged files and dirty paths; never assume remote HEAD equals the user's local HEAD.
 
-**Status:** Kommun 1.1 pilot preparation; **NOT YET final PILOT GO**. Product-owner-accepted operational features are frozen except for reproducible regressions.
+**Status:** Kommun 1.1 remains under local development and final pilot acceptance. The user explicitly decided **finish Kommun 1.1 first, then prepare fresh staging/deploy**. Do **not** redeploy or migrate the old Fly installation as a shortcut. Keep completed UI/Builder/Planera/K25–K27 work frozen absent a reproduced regression.
 
 ### Product-owner-accepted / CLOSED scope
 
@@ -21,14 +22,34 @@
 - **Kommun UI Gates 02B–02F.2 — Department Portal menu-choice visual recovery (2026-11-06): CLOSED for product-owner-approved desktop design in dark and light themes.** Repaired nested hidden week scrolling, theme token use, consistent 50/50 weekday lunch columns, separate full-width Dessert/Kvällsmat row, subtle day-card separation, and weekend Alt 1 + noninteractive single-option note in the Alt 2 position. Owner inspected the live authenticated page and approved the final visual result. Product checkpoint `1ff5dbef6336feac26943cafce09053ddc13dcd4`; 7/7 CSS layout/scroll/theme tests and 30/30 focused Portal Python tests passed. **iPad/mobile live visual walkthrough and actual choice/submit interaction remain release-acceptance checks**, not claimed closed here.
 - **Account/site and role isolation foundations** previously implemented. Existing forced first-login change and `auth_version` revocation are not to be discarded when hardening login.
 
-### Decided remaining order — one gate at a time
+### Security and Postmark checkpoints (verified through 2026-11-07)
 
-1. **NOW — Login security Gate 03C.1.** Focused correction: `auth_bypass_allowed(testing=True)` currently wins over Fly-runtime guard; platform/deployed deny must precede testing allowances. Prove Fly + testing true cannot enable demo/dev auth or disable Secure session cookie. Gate 03C checkpoint `dbfa1534`: 46/46 focused tests passed, no deploy. See [Security Baseline](security/YUPLAN_SECURITY_BASELINE.md).
-2. **NEXT — Pilot environment check and session incident.** Verify running Fly deployment flags / `Set-Cookie` without exposing secrets; assess historical `cookie.txt` exposure and revoke relevant sessions before real pilot data. Removal from Git index does not erase Git history.
-3. **NEXT — Shared login throttling, then safe password recovery, then HTML login UX/CSRF decision.** Preserve the rotating globe, working auth/roles, `must_change_password`, `auth_version` and refresh invalidation.
-4. **THEN — Product-owner full manual Kommun walkthrough** combined with isolated automated and negative tenant/site/RBAC regressions, real Portal choice/submit and kitchen propagation, critical desktop/iPad/mobile screens, reporting/export consistency and lunch/kvällsmat/dessert meal paths. Fix only reproduced issues.
-5. **THEN — Pilot acceptance, release verification and freeze/tag.** Confirm clean-customer path, staging/migrations, full appropriate regression and security; no unverified blanket GO.
-6. **AFTER KOMMUN — Offshore 1.0**, then Yuplan 1.0 platform release.
+- **Login/deployed-mode guard:** the earlier Gate 03C.1 bypass precedence issue was corrected in code (`auth_bypass_allowed()` checks `FLY_APP_NAME` and deployed environments before the testing allowance). This is **code/test accepted, not a claim of deployed verification**.
+- **Persistent login throttling:** implemented with database-backed account/IP throttles and reservation semantics (migrations 0048–0049). Preserve login/API behavior and `auth_version` revocation; actual hosted behavior not yet verified.
+- **Self-service password reset:** implemented in code with hashed expiring single-use reset tokens, request-throttle storage (migration `0050_add_password_reset_storage`), anti-enumeration response and failure handling, and SMTP mailer adapter. Existing mailer uses authenticated TLS and requires an HTTPS reset URL. No real Postmark delivery or live reset is yet accepted.
+- **Password policy:** central validation `core/password_policy.py`, 15–1024 characters, Unicode/spaces supported, small explicit denylist with optional configured extension; legacy password logins must remain valid. Security code checkpoint `6caa9d1a51a24f7b5b8da6ad249ae227660f1903`.
+- **Gate 03G.1 — CLOSED (2026-11-07):** `PASSWORD_RESET_PUBLIC_BASE_URL` now flows from environment through `Config.from_env()` into Flask config while explicit test overrides are preserved. Four changed files (`core/config.py`, `core/app_factory.py`, `tests/auth/test_password_reset.py`, `tests/auth/test_password_reset_mailer.py`); **79/79 auth tests green**, focused Ruff and `git diff --check` green; GitHub push confirmed at `7286fb64`.
+- **Postmark account and DNS:** user verified Postmark approval and `yuplan.se` domain. Postmark DKIM and Return-Path verified; one.com SPF enabled and custom DMARC TXT `v=DMARC1; p=none` created. User generated and saved a **separate** Postmark SMTP Access Key / Secret Key outside Git/ChatGPT. Do **not** log, paste into Copilot, check in, or request their values. Proposed sender `no-reply@yuplan.se`; intended controlled recipient `info@yuplan.se`. Real delivery **NOT yet tested**.
+- **Gate 03G.2 — ORDER SENT, REPORT PENDING (as of this checkpoint):** inspect adapter and prepare a secure *manual* Postmark SMTP smoke procedure with interactive credentials and explicit send confirmation; verify reset E2E with isolated DB/mock mailer. **No claim of tests, message delivery, changed files, commit or push from this gate** until the Copilot report is reviewed. Never automatically send mail.
+
+### Fly inventory — historical environment, explicitly NOT the pilot-deploy target
+
+The user confirms the existing Fly deployments were not used for active development for approximately **9–10 months**. Read-only inventory on 2026-11-07 found:
+- Fly app `yuplan-unified-staging`, hostname `https://yuplan-unified-staging.fly.dev`, machine `68320edf664468`, release v141, health 1/1.
+- Attached `yuplan_data` volume (~3 GB), runtime `DATABASE_URL` scheme SQLite, DB path `/data/yuplan_pilot.db`, `YUPLAN_ENABLE_STARTUP_MUTATIONS=0`.
+- On-server Alembic **database current = `0020_add_diet_family_to_dietary_types`**; **deployed source head = `0023_scope_service_addons_by_site`**. Database approximately 1.2 MB with 48 tables; volume about 2.8 GB free. This is **not** the local migration HEAD `0050_add_password_reset_storage`.
+- No backup, data migration, Fly secret setting, deployment or restart was performed during this inventory. No readiness/restore proof exists for the old DB.
+- An older `yuplan-unified-staging-icy-wave-9332` environment and paused PostgreSQL apps also appear in Fly. Do not confuse old Postgres runbooks with the inspected SQLite app.
+- **Decision:** leave all old Fly apps/data untouched. Do not advance the 0020 database to 0050 on the old machine. Once Kommun 1.1 reaches product-owner pilot acceptance, design a fresh, current-schema staging/release with proper backup, isolated migrations, runtime security and Postmark secrets verification.
+
+### Next sequence — one Copilot order, one report, one review
+
+1. **NOW: finish Gate 03G.2 locally.** Review the pending Copilot report; approve changes only if minimal and safe. Perform **one owner-authorized real SMTP smoke message** only after checking that the procedure does not leak secrets, tokens or write to persistent pilot DB. Validate full password-reset flow on isolated DB and record results. If it passes, label **Postmark Development CLOSED / Hosted Acceptance PENDING**. Do not deploy.
+2. **Then resume remaining Kommun 1.1 release work** using product-owner-approved flows and actual defect evidence, not stale historical gate lists: clean-customer full walkthrough, admin/department/kitchen/portal/menu/Planera completion and persistence, report/export parity, negative tenant/site/RBAC, mobile/iPad acceptance, obsolete Portal JS fixture audit vs real bugs, HTML login feedback/CSRF and actual login UX with spinning globe preserved. A remaining item is closed **only** with reviewed evidence; do not reopen accepted work without reproduction.
+3. **When Kommun 1.1 is actually accepted:** freeze/tag candidate; determine fresh staging/DB deployment strategy, safely rehearse and verify current migrations with backup/restore; stage Postmark secrets (separate SMTP Access Key = username, Secret Key = password; HMAC secrets separately), use actual app HTTPS reset URL, and perform hosted real reset/session invalidation/negative tests. New staging is a release-acceptance activity, **not** today's work.
+4. **After Kommun 1.1 Pilot GO:** resume Offshore 1.0 then the cross-product Yuplan 1.0 release gate. See [Roadmap](roadmap.md).
+
+**Important:** `docs/security/YUPLAN_SECURITY_BASELINE.md` tracks security controls, evidence and remaining risks; this file remains the sole operational next-gate authority. Neither doc-only updates nor passing auth tests imply a real deploy or pilot GO.
 
 **Locked visual UI rule:** Product-owner accepted Kommun Builder modal and Department Portal Menyval must not be restructured or restyled by unrelated features. Any required change to an accepted screen needs explicit scoped approval, actual before/after browser evidence in both themes and relevant iPad viewport, plus focused regression tests. The existing CSS/DOM tests are useful but do not replace visual review. Historic approved screenshot baselines are not currently versioned in the repository; capture reviewed visual baselines during final pilot acceptance rather than falsely claiming pixel-snapshot coverage.
 
