@@ -116,3 +116,13 @@ def test_auth_login_renders_polished_template(client_admin):
     html = r.get_data(as_text=True)
     # Look for Yuplan brand marker or spinner/logo classes
     assert "Yuplan" in html or re.search(r"login-logo-spin|yp-logo|logo-proposal", html)
+
+
+def test_auth_login_contains_accessible_password_toggle(client_admin):
+    r = client_admin.get("/auth/login")
+    assert r.status_code == 200
+    html = r.get_data(as_text=True)
+    assert 'data-password-toggle' in html
+    assert 'aria-controls="password"' in html
+    assert 'aria-label="Visa lösenord"' in html
+    assert 'static/js/login.js' in html

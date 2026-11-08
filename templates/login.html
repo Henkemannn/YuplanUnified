@@ -4,20 +4,27 @@
 
 {% block head_extra %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
+  <script src="{{ url_for('static', filename='js/login.js') }}" defer></script>
 {% endblock %}
 
 {% block content %}
   <div class="login-content">
-    <div class="login-logo-wrapper login-logo-wrapper--globe-exp">
-      <img src="{{ url_for('static', filename='img/logo-proposal-globe-exp-v3.svg') }}" alt="Yuplan" class="login-logo-spin login-logo-spin--globe-exp">
+    <div class="login-brand">
+      <div class="login-logo-wrapper login-logo-wrapper--globe-exp">
+        <img src="{{ url_for('static', filename='img/logo-proposal-globe-exp-v3.svg') }}" alt="" class="login-logo-spin login-logo-spin--globe-exp">
+      </div>
+      <div class="login-brand-copy">
+        <div class="login-brand-name">Yuplan</div>
+        <p class="login-tagline">Planering för professionella kök.</p>
+      </div>
     </div>
     <h1 class="login-title">Logga in</h1>
     {% if vm.error or error_message %}
-      <p class="login-error">{{ vm.error or error_message }}</p>
+      <p class="login-error" role="alert">{{ vm.error or error_message }}</p>
     {% endif %}
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
-        <div class="ua-flashes" style="margin-bottom: 1rem;">
+        <div class="login-flashes" role="status">
           {% for category, message in messages %}
             <div class="ua-flash ua-flash-{{ category }}">{{ message }}</div>
           {% endfor %}
@@ -32,7 +39,10 @@
       </div>
       <div class="login-form-row">
         <label for="password">Lösenord</label>
-        <input type="password" id="password" name="password" required autocomplete="current-password">
+        <div class="login-password-control">
+          <input type="password" id="password" name="password" required autocomplete="current-password">
+          <button type="button" class="login-password-toggle" data-password-toggle aria-controls="password" aria-label="Visa lösenord" aria-pressed="false">Visa</button>
+        </div>
       </div>
       <div class="login-actions">
         <button type="submit" class="login-submit">Logga in</button>
