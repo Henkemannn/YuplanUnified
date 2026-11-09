@@ -5,6 +5,7 @@ import pytest
 from sqlalchemy import text
 
 from core.builder import BuilderFlow
+from core.builder.library_scope import ObjectScope
 from core.builder_menu_context_flow import BuilderMenuContextFlow
 from core.components import (
     ComponentService,
@@ -21,6 +22,20 @@ from core.menu import MenuService, InMemoryCompositionAliasRepository
 
 
 ADMIN_HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
+
+
+class _PublicationScopeRepository:
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+        if object_type != "composition":
+            return None
+        return ObjectScope(
+            tenant_id=1,
+            owner_scope="organisation",
+            owner_site_id=None,
+            owner_user_id=None,
+            visibility="organisation",
+            source_object_id=None,
+        )
 
 
 @pytest.fixture
@@ -45,6 +60,7 @@ def _seed_canonical_builder_menu(app_session, *, site_id: str, year: int, week: 
             composition_repository=composition_repository,
             alias_repository=alias_repository,
             component_alias_repository=InMemoryComponentAliasRepository(),
+            object_scope_repository=_PublicationScopeRepository(),
         )
         menu_context_flow = BuilderMenuContextFlow(
             menu_service=MenuService(composition_repository=composition_repository),

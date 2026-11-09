@@ -6,13 +6,16 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from flask import current_app, has_app_context
+from sqlalchemy import text
 
 from .commun_builder_linkage import CommunBuilderMenuLinkService
+from .builder.library_scope import ActorContext, ObjectScope, can_read_object
 from .builder_sqlite import (
     SQLiteMenuDetailRepository,
     SQLiteMenuRepository,
     initialize_builder_sqlite,
 )
+from .db import get_session
 
 
 _SUPPORTED_BUILDER_MEALS = {
@@ -86,6 +89,74 @@ class CommunBuilderProjectionOutcome:
     linked_version: int | None = None
     current_version: int | None = None
     error: str | None = None
+
+
+def _site_belongs_to_tenant(*, tenant_id: int, site_id: str) -> bool:
+    if not has_app_context():
+        return False
+    db = get_session()
+    try:
+        row = db.execute(
+            text(
+                "SELECT 1 FROM sites "
+                "WHERE id = :site_id AND tenant_id = :tenant_id "
+                "LIMIT 1"
+            ),
+            {"site_id": str(site_id), "tenant_id": int(tenant_id)},
+        ).first()
+        return row is not None
+    finally:
+        db.close()
+
+
+def _scope_is_valid_for_publication(
+    scope: ObjectScope,
+    *,
+    tenant_id: int,
+    site_id: str,
+) -> bool:
+    if int(scope.tenant_id) != int(tenant_id):
+        return False
+    if scope.visibility == "organisation":
+        return (
+            scope.owner_scope == "organisation"
+            and scope.owner_site_id is None
+            and scope.owner_user_id is None
+        )
+    if scope.visibility == "site":
+        return (
+            scope.owner_scope == "site"
+            and str(scope.owner_site_id or "").strip() == str(site_id).strip()
+            and scope.owner_user_id is None
+        )
+    return False
+
+
+def _validate_composition_for_publication(
+    flow: Any,
+    *,
+    composition_id: str,
+    tenant_id: int,
+    site_id: str,
+) -> str | None:
+    library_flow = getattr(flow, "_library_flow", None)
+    scope_repository = getattr(library_flow, "_object_scope_repository", None)
+    if scope_repository is None:
+        return "composition_scope_unavailable"
+    scope = scope_repository.get_scope("composition", str(composition_id))
+    if scope is None:
+        return "composition_scope_missing"
+    if not _scope_is_valid_for_publication(scope, tenant_id=tenant_id, site_id=site_id):
+        return "composition_scope_forbidden"
+    actor = ActorContext(
+        tenant_id=int(tenant_id),
+        user_id=0,
+        site_id=str(site_id),
+        role="admin",
+    )
+    if not can_read_object(actor, scope):
+        return "composition_scope_forbidden"
+    return None
 
 
 def _snapshot_from_projection(projection: CommunMenuWeekProjection) -> dict[str, Any]:
@@ -478,6 +549,13 @@ class CommunBuilderMenuProjectionReader:
                 linked_version=int(builder_menu_version),
                 error="builder_menu_context_flow_unavailable",
             )
+        if not _site_belongs_to_tenant(tenant_id=tenant_id, site_id=site_id):
+            return CommunBuilderProjectionOutcome(
+                status="projection_error",
+                builder_menu_id=builder_menu_id,
+                linked_version=int(builder_menu_version),
+                error="menu_site_ownership_invalid",
+            )
 
         menus = flow.list_menus()
         menu = next((item for item in menus if str(getattr(item, "menu_id", "")).strip() == builder_menu_id), None)
@@ -487,6 +565,13 @@ class CommunBuilderMenuProjectionReader:
                 builder_menu_id=builder_menu_id,
                 linked_version=int(builder_menu_version),
                 error="builder_menu_not_found",
+            )
+        if str(getattr(menu, "site_id", "") or "").strip() != str(site_id).strip():
+            return CommunBuilderProjectionOutcome(
+                status="projection_error",
+                builder_menu_id=builder_menu_id,
+                linked_version=int(builder_menu_version),
+                error="menu_site_mismatch",
             )
 
         current_version = int(getattr(menu, "version", 0) or 0)
@@ -533,6 +618,18 @@ class CommunBuilderMenuProjectionReader:
                         composition_effective_name = str(
                             getattr(composition, "effective_menu_name", composition_name) or ""
                         ).strip() or None
+                        scope_error = _validate_composition_for_publication(
+                            flow,
+                            composition_id=composition_id,
+                            tenant_id=tenant_id,
+                            site_id=site_id,
+                        )
+                        if scope_error is not None:
+                            resolved = False
+                            error = scope_error
+                            composition_id = None
+                            composition_name = None
+                            composition_effective_name = None
                 if not resolved and unresolved_text is None and error is None:
                     error = "unresolved_text_missing"
 
@@ -665,6 +762,17 @@ class CommunBuilderMenuProjectionReader:
             )
         outcome = _projection_from_snapshot(snapshot if isinstance(snapshot, dict) else {})
         if outcome.projection is not None:
+            if (
+                int(outcome.projection.tenant_id) != int(tenant_id)
+                or str(outcome.projection.site_id) != str(site_id)
+            ):
+                return CommunBuilderProjectionOutcome(
+                    status="projection_error",
+                    builder_menu_id=str(publication.builder_menu_id),
+                    linked_version=int(publication.builder_menu_version),
+                    current_version=int(publication.builder_menu_version),
+                    error="publication_snapshot_scope_mismatch",
+                )
             outcome = CommunBuilderProjectionOutcome(
                 status=outcome.status,
                 projection=outcome.projection,

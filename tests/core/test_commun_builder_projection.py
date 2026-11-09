@@ -7,6 +7,7 @@ from sqlalchemy import text
 from core.admin_repo import SitesRepo
 from core.builder import BuilderFlow
 from core.builder_menu_context_flow import BuilderMenuContextFlow
+from core.builder.library_scope import ObjectScope
 from core.commun_builder_linkage import CommunBuilderMenuLinkService
 from core.commun_builder_projection import (
     CommunBuilderMenuProjectionReader,
@@ -42,6 +43,7 @@ def _build_builder_menu_context_flow() -> tuple[BuilderMenuContextFlow, Composit
         composition_repository=composition_repository,
         alias_repository=alias_repository,
         component_alias_repository=InMemoryComponentAliasRepository(),
+        object_scope_repository=_ProjectionScopeRepository(),
     )
 
     builder_flow = BuilderMenuContextFlow(
@@ -58,6 +60,35 @@ def _build_builder_menu_context_flow() -> tuple[BuilderMenuContextFlow, Composit
 _SITE_SEQUENCE = 0
 
 
+class _ProjectionScopeRepository:
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+        if object_type != "composition":
+            return None
+        return ObjectScope(
+            tenant_id=1,
+            owner_scope="organisation",
+            owner_site_id=None,
+            owner_user_id=None,
+            visibility="organisation",
+            source_object_id=None,
+        )
+
+
+class _ForeignProjectionScopeRepository(_ProjectionScopeRepository):
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+        scope = super().get_scope(object_type, object_id)
+        if scope is None:
+            return None
+        return ObjectScope(
+            tenant_id=999,
+            owner_scope=scope.owner_scope,
+            owner_site_id=scope.owner_site_id,
+            owner_user_id=scope.owner_user_id,
+            visibility=scope.visibility,
+            source_object_id=scope.source_object_id,
+        )
+
+
 def _seed_tenant_and_site(app_session):
     global _SITE_SEQUENCE
     with app_session.app_context():
@@ -72,9 +103,9 @@ def _seed_tenant_and_site(app_session):
             tenant_id = int(tenant.id)
         finally:
             db.close()
-            _SITE_SEQUENCE += 1
-            site, _ = SitesRepo().create_site(f"Projection Site {_SITE_SEQUENCE}", tenant_id=tenant_id)
-            return tenant_id, site["id"]
+        _SITE_SEQUENCE += 1
+        site, _ = SitesRepo().create_site(f"Projection Site {_SITE_SEQUENCE}", tenant_id=tenant_id)
+        return tenant_id, site["id"]
 
 
 def _create_legacy_menu_rows(tenant_id: int, site_id: str, year: int, week: int, rows: list[tuple[str, str, str, str]]) -> int:
@@ -726,6 +757,64 @@ def test_projection_reader_marks_missing_composition_as_projection_error(app_ses
     assert result.projection is not None
     assert result.projection.rows[0].resolved is False
     assert result.projection.rows[0].composition_id is None
+
+
+def test_projection_reader_rejects_foreign_composition_scope(app_session):
+    tenant_id, site_id = _seed_tenant_and_site(app_session)
+    builder_flow, composition_service, _ = _build_builder_menu_context_flow()
+
+    with app_session.app_context():
+        current_app.extensions["builder_menu_context_flow"] = builder_flow
+        builder_flow._library_flow._object_scope_repository = _ForeignProjectionScopeRepository()
+        builder_flow.create_menu(menu_id="builder-menu-foreign", site_id=site_id, week_key="2026-W16", version=1)
+        composition_service.create_composition(composition_id="comp_foreign", composition_name="Foreign Plate")
+        builder_flow.add_composition_menu_row(
+            menu_id="builder-menu-foreign",
+            day="monday",
+            meal_slot="lunch_alt1",
+            composition_id="comp_foreign",
+        )
+        result = CommunBuilderMenuProjectionReader().get_projection_for_builder_menu(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-foreign",
+            builder_menu_version=1,
+        )
+
+    assert result.status == "projection_error"
+    assert result.error == "composition_scope_forbidden"
+    assert result.projection is not None
+    assert result.projection.rows[0].resolved is False
+
+
+def test_projection_reader_rejects_menu_site_mismatch(app_session):
+    tenant_id, site_id = _seed_tenant_and_site(app_session)
+    _, other_site_id = _seed_tenant_and_site(app_session)
+    builder_flow, composition_service, _ = _build_builder_menu_context_flow()
+
+    with app_session.app_context():
+        current_app.extensions["builder_menu_context_flow"] = builder_flow
+        builder_flow.create_menu(menu_id="builder-menu-site", site_id=site_id, week_key="2026-W16", version=1)
+        composition_service.create_composition(composition_id="comp_site", composition_name="Site Plate")
+        builder_flow.add_composition_menu_row(
+            menu_id="builder-menu-site",
+            day="monday",
+            meal_slot="lunch_alt1",
+            composition_id="comp_site",
+        )
+        result = CommunBuilderMenuProjectionReader().get_projection_for_builder_menu(
+            tenant_id=tenant_id,
+            site_id=other_site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-site",
+            builder_menu_version=1,
+        )
+
+    assert result.status == "projection_error"
+    assert result.error == "menu_site_mismatch"
 
 
 def test_projection_reader_rejects_unknown_explicit_variant_suffix(app_session):

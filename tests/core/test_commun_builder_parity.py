@@ -5,6 +5,7 @@ from flask import current_app
 from sqlalchemy import text
 
 from core.db import get_session
+from core.builder.library_scope import ObjectScope
 from core.commun_builder_import import import_menu_result_to_builder_canonical
 from core.commun_builder_parity import (
     ALLOWED_NON_BLOCKING_WARNINGS,
@@ -17,6 +18,20 @@ from core.importers.base import ImportedMenuItem, MenuImportResult, WeekImport
 from core.menu_service import MenuServiceDB
 from core.models import Dish
 from tests.core.test_commun_builder_import import _build_flow
+
+
+class _ParityScopeRepository:
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+        if object_type != "composition":
+            return None
+        return ObjectScope(
+            tenant_id=1,
+            owner_scope="organisation",
+            owner_site_id=None,
+            owner_user_id=None,
+            visibility="organisation",
+            source_object_id=None,
+        )
 
 
 def _seed_site_and_department(site_id: str, department_id: str, tenant_id: int = 1) -> None:
@@ -140,6 +155,7 @@ def _seed_builder_import(
                 )
             except ValueError:
                 pass
+        flow._library_flow._object_scope_repository = _ParityScopeRepository()
         outcome = import_menu_result_to_builder_canonical(
             MenuImportResult(weeks=[WeekImport(year=year, week=week, items=items)]),
             tenant_id=1,
@@ -533,6 +549,7 @@ def test_parity_realistic_transition_flow(parity_app):
                 alias_text="Soup Deluxe",
                 composition_repository=flow._composition_repository,
             )
+            flow._library_flow._object_scope_repository = _ParityScopeRepository()
 
             legacy_menu = MenuServiceDB().create_or_get_menu(tenant_id=tenant_id, site_id=site_id, week=week, year=year)
             from core.db import get_new_session

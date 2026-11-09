@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from flask import current_app
+from sqlalchemy import text
 
 from core.builder import BuilderFlow
 from core.builder.library_scope import ActorContext, ObjectScope
@@ -102,7 +103,6 @@ def test_canonical_import_created_unchanged_and_updated(app_session, monkeypatch
 
     with app_session.app_context():
         current_app.extensions["builder_menu_context_flow"] = flow
-
         flow._library_flow.create_composition(composition_id="plate_1", composition_name="Fish Plate")
         flow._library_flow.create_composition(composition_id="plate_2", composition_name="Soup")
         create_composition_alias(
@@ -345,6 +345,17 @@ def test_canonical_import_end_to_end_projection_roundtrip(app_session, monkeypat
 
     with app_session.app_context():
         current_app.extensions["builder_menu_context_flow"] = flow
+        from core.db import get_session
+
+        db = get_session()
+        try:
+            db.execute(
+                text("INSERT OR REPLACE INTO sites(id, name, tenant_id, version) VALUES(:id, :name, :tid, 0)"),
+                {"id": "site-a", "name": "Import site", "tid": 1},
+            )
+            db.commit()
+        finally:
+            db.close()
 
         flow._library_flow.create_composition(composition_id="plate_1", composition_name="Fish Plate")
         flow._library_flow.create_composition(composition_id="plate_2", composition_name="Soup")
@@ -362,6 +373,18 @@ def test_canonical_import_end_to_end_projection_roundtrip(app_session, monkeypat
             alias_text="Soup",
             composition_repository=flow._composition_repository,
         )
+        scope_repository = _ObjectScopeRepository()
+        publication_scope = ObjectScope(
+            tenant_id=1,
+            owner_scope="organisation",
+            owner_site_id=None,
+            owner_user_id=None,
+            visibility="organisation",
+            source_object_id=None,
+        )
+        scope_repository.set_scope("composition", "plate_1", publication_scope)
+        scope_repository.set_scope("composition", "plate_2", publication_scope)
+        flow._library_flow._object_scope_repository = scope_repository
 
         result = MenuImportResult(
             weeks=[

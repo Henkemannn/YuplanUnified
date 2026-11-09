@@ -8,6 +8,7 @@ from flask import current_app
 import pytest
 from core.builder import BuilderFlow
 from core.builder_menu_context_flow import BuilderMenuContextFlow
+from core.builder.library_scope import ObjectScope
 from core.components import (
     ComponentService,
     CompositionService,
@@ -26,6 +27,35 @@ from core.menu_service import MenuServiceDB
 from core.ui_blueprint import _apply_builder_reader_weekview_overview
 from core.commun_builder_publication import CommunBuilderPublicationService
 from core.commun_builder_projection import get_shadow_projection_reader
+
+
+class _PublicationScopeRepository:
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+        if object_type != "composition":
+            return None
+        return ObjectScope(
+            tenant_id=1,
+            owner_scope="organisation",
+            owner_site_id=None,
+            owner_user_id=None,
+            visibility="organisation",
+            source_object_id=None,
+        )
+
+
+class _ForeignPublicationScopeRepository(_PublicationScopeRepository):
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+        scope = super().get_scope(object_type, object_id)
+        if scope is None:
+            return None
+        return ObjectScope(
+            tenant_id=999,
+            owner_scope=scope.owner_scope,
+            owner_site_id=scope.owner_site_id,
+            owner_user_id=scope.owner_user_id,
+            visibility=scope.visibility,
+            source_object_id=scope.source_object_id,
+        )
 
 
 def _clear_publication_state(app_session):
@@ -120,6 +150,7 @@ def _build_builder_menu_context_flow() -> tuple[BuilderMenuContextFlow, Composit
         composition_repository=composition_repository,
         alias_repository=alias_repository,
         component_alias_repository=InMemoryComponentAliasRepository(),
+        object_scope_repository=_PublicationScopeRepository(),
     )
     menu_context_flow = BuilderMenuContextFlow(
         menu_service=MenuService(composition_repository=composition_repository),
@@ -294,6 +325,58 @@ def test_publish_mirrors_builder_publication_pin(app_session, monkeypatch):
         assert int(pin[1]) == 1
         assert int(pin[2]) == int(menu_id)
         assert '"selection_group_id":"group-publish"' in pin[3]
+    finally:
+        db.close()
+
+
+def test_publish_rejects_foreign_composition_without_creating_revision_or_pin(app_session):
+    site_id = "site-publication-foreign"
+    year = 2025
+    week = 50
+    _seed_site(app_session, site_id=site_id)
+    menu_id = _seed_menu_and_link(site_id, year, week, "builder-menu-foreign", 1)
+
+    with app_session.app_context():
+        builder_flow, _ = _seed_publication_builder_context(
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-foreign",
+            builder_menu_version=1,
+            composition_id="comp_publication_foreign",
+            composition_name="Foreign Soup",
+        )
+        builder_flow._library_flow._object_scope_repository = _ForeignPublicationScopeRepository()
+        svc = CommunBuilderPublicationService()
+        with pytest.raises(RuntimeError, match="projection_verification_failed:composition_scope_forbidden"):
+            svc.publish_week(
+                tenant_id=1,
+                site_id=site_id,
+                year=year,
+                week=week,
+                legacy_menu_id=menu_id,
+            )
+
+    from core.db import get_new_session
+
+    db = get_new_session()
+    try:
+        revision_count = db.execute(
+            text(
+                "SELECT COUNT(*) FROM commun_builder_publication_revisions "
+                "WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week"
+            ),
+            {"tid": 1, "sid": site_id, "year": year, "week": week},
+        ).scalar_one()
+        pin_count = db.execute(
+            text(
+                "SELECT COUNT(*) FROM commun_builder_publication_pins "
+                "WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week"
+            ),
+            {"tid": 1, "sid": site_id, "year": year, "week": week},
+        ).scalar_one()
+        assert revision_count == 0
+        assert pin_count == 0
     finally:
         db.close()
 
