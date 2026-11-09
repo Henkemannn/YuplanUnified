@@ -136,6 +136,42 @@
       subtitleNode.textContent = 'Välj en aktiv serveringsanpassning för den här siten.';
     }
 
+    function normalizeAddonName(value) {
+      return text(value).toLowerCase().replace(/\s+/g, ' ').replace(/[.,!?;:]+$/g, '');
+    }
+
+    function findSimilarAddon(value) {
+      var normalized = normalizeAddonName(value);
+      if (normalized.length < 3 || !addSelect) return null;
+      var candidate = null;
+      $all('option', addSelect).some(function (option) {
+        var optionName = normalizeAddonName(option.textContent);
+        if (!option.value || !optionName) return false;
+        if (optionName === normalized || optionName.indexOf(normalized) !== -1 || normalized.indexOf(optionName) !== -1) {
+          candidate = option;
+          return true;
+        }
+        return false;
+      });
+      return candidate;
+    }
+
+    function updateDuplicateWarning() {
+      var candidate = findSimilarAddon(createName ? createName.value : '');
+      if (!duplicateStatus || !useExisting) return;
+      if (!candidate) {
+        duplicateStatus.hidden = true;
+        useExisting.hidden = true;
+        useExisting.removeAttribute('data-service-addon-existing-id');
+        return;
+      }
+      duplicateStatus.textContent = 'En likadan eller liknande beskrivning finns redan: ' + text(candidate.textContent) + '.';
+      duplicateStatus.hidden = false;
+      useExisting.hidden = false;
+      useExisting.textContent = 'Välj befintlig: ' + text(candidate.textContent);
+      useExisting.setAttribute('data-service-addon-existing-id', candidate.value);
+    }
+
     function filterAddSelect(query, family) {
       if (!addSelect) return;
       var normalized = text(query).toLowerCase();
@@ -144,42 +180,6 @@
         if (!option.value) {
           option.hidden = false;
           return;
-        }
-
-        function normalizeAddonName(value) {
-          return text(value).toLowerCase().replace(/\s+/g, ' ').replace(/[.,!?;:]+$/g, '');
-        }
-
-        function findSimilarAddon(value) {
-          var normalized = normalizeAddonName(value);
-          if (normalized.length < 3 || !addSelect) return null;
-          var candidate = null;
-          $all('option', addSelect).some(function (option) {
-            var optionName = normalizeAddonName(option.textContent);
-            if (!option.value || !optionName) return false;
-            if (optionName === normalized || optionName.indexOf(normalized) !== -1 || normalized.indexOf(optionName) !== -1) {
-              candidate = option;
-              return true;
-            }
-            return false;
-          });
-          return candidate;
-        }
-
-        function updateDuplicateWarning() {
-          var candidate = findSimilarAddon(createName ? createName.value : '');
-          if (!duplicateStatus || !useExisting) return;
-          if (!candidate) {
-            duplicateStatus.hidden = true;
-            useExisting.hidden = true;
-            useExisting.removeAttribute('data-service-addon-existing-id');
-            return;
-          }
-          duplicateStatus.textContent = 'En likadan eller liknande beskrivning finns redan: ' + text(candidate.textContent) + '.';
-          duplicateStatus.hidden = false;
-          useExisting.hidden = false;
-          useExisting.textContent = 'Välj befintlig: ' + text(candidate.textContent);
-          useExisting.setAttribute('data-service-addon-existing-id', candidate.value);
         }
         var optionFamily = text(option.getAttribute('data-service-addon-family')).toLowerCase();
         var match = !!selectedFamily &&
