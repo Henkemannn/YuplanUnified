@@ -1533,6 +1533,29 @@ body.modal-open {
   background: transparent;
 }
 
+.yp-modal-host[data-admin-week-builder-host][data-modal-host-mode="child-owned-card"] {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+}
+
+.yp-modal-host[data-admin-week-builder-host][data-modal-host-mode="child-owned-card"] .yp-modal-host__panel {
+  position: absolute;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  max-height: none;
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.yp-modal-host[data-admin-week-builder-host][data-modal-host-mode="child-owned-card"] .yp-modal-host__frame {
+  position: absolute;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+}
+
 .yp-modal-host[data-admin-week-builder-host][data-modal-host-mode="child-owned-card"] .yp-modal-host__frame {
   color-scheme: normal;
 }
