@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Callable
 import re
 from typing import Any
 
@@ -125,7 +126,15 @@ def _import_week(
     )
     week_key = f"{int(week_import.year):04d}-W{int(week_import.week):02d}"
 
-    desired_rows, row_warnings, resolved_count, unresolved_count = _build_desired_rows(week_import, flow)
+    desired_rows, row_warnings, resolved_count, unresolved_count = _build_desired_rows(
+        week_import,
+        flow,
+        composition_is_allowed=_composition_allowed_for_import(
+            flow,
+            tenant_id=tenant_id,
+            site_id=site_id,
+        ),
+    )
     existing_menu = flow._menu_service.get_menu(menu_id)
     existing_rows = list(flow.list_menu_rows(menu_id)) if existing_menu is not None else []
 
@@ -196,6 +205,31 @@ def _import_week(
         builder_menu_version=int(getattr(builder_menu, "version", 0) or 0),
         warnings=list(import_warnings) + row_warnings,
     )
+
+
+def _composition_allowed_for_import(
+    flow: BuilderMenuContextFlow,
+    *,
+    tenant_id: int,
+    site_id: str,
+) -> Callable[[str], bool] | None:
+    scope_repository = getattr(flow._library_flow, "_object_scope_repository", None)
+    if scope_repository is None:
+        return None
+
+    normalized_site_id = str(site_id or "").strip()
+
+    def is_allowed(composition_id: str) -> bool:
+        scope = scope_repository.get_scope("composition", str(composition_id).strip())
+        if scope is None:
+            return False
+        if int(scope.tenant_id) != int(tenant_id):
+            return False
+        if scope.owner_scope == "site":
+            return str(scope.owner_site_id or "").strip() == normalized_site_id
+        return True
+
+    return is_allowed
 
 
 def _snapshot_week_state(
@@ -303,6 +337,8 @@ def _canonical_meal_slot(item: ImportedMenuItem) -> str:
 def _build_desired_rows(
     week_import: WeekImport,
     flow: BuilderMenuContextFlow,
+    *,
+    composition_is_allowed: Callable[[str], bool] | None = None,
 ) -> tuple[list[dict[str, Any]], list[str], int, int]:
     desired_rows: list[dict[str, Any]] = []
     warnings: list[str] = []
@@ -315,6 +351,7 @@ def _build_desired_rows(
             import_text=str(item.dish_name or ""),
             composition_repository=flow._composition_repository,
             alias_repository=flow._alias_repository,
+            composition_is_allowed=composition_is_allowed,
         )
         if resolution.kind != "composition" or resolution.composition_id is None:
             desired_rows.append(

@@ -4,6 +4,7 @@ import pytest
 from flask import current_app
 
 from core.builder import BuilderFlow
+from core.builder.library_scope import ActorContext, ObjectScope
 from core.builder_menu_context_flow import BuilderMenuContextFlow
 from core.commun_builder_import import (
     CommunBuilderCanonicalImportError,
@@ -25,7 +26,18 @@ from core.importers.base import ImportedMenuItem, MenuImportResult, WeekImport
 from core.menu import InMemoryCompositionAliasRepository, MenuService, create_composition_alias
 
 
-def _build_flow() -> BuilderMenuContextFlow:
+class _ObjectScopeRepository:
+    def __init__(self) -> None:
+        self.scopes: dict[tuple[str, str], ObjectScope] = {}
+
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+        return self.scopes.get((object_type, object_id))
+
+    def set_scope(self, object_type: str, object_id: str, scope: ObjectScope) -> None:
+        self.scopes[(object_type, object_id)] = scope
+
+
+def _build_flow(scope_repository: _ObjectScopeRepository | None = None) -> BuilderMenuContextFlow:
     component_repository = InMemoryComponentRepository()
     composition_repository = InMemoryCompositionRepository()
     alias_repository = InMemoryCompositionAliasRepository()
@@ -41,6 +53,7 @@ def _build_flow() -> BuilderMenuContextFlow:
         composition_service=composition_service,
         composition_repository=composition_repository,
         alias_repository=alias_repository,
+        object_scope_repository=scope_repository,
     )
     return BuilderMenuContextFlow(
         menu_service=menu_service,
@@ -157,6 +170,103 @@ def test_canonical_import_created_unchanged_and_updated(app_session, monkeypatch
         assert [row["day"] for row in flow.list_menu_rows(menu_id)] == ["monday", "tuesday"]
         assert flow.list_menu_rows(menu_id)[0]["composition_id"] == "plate_2"
         assert flow.list_menu_rows(menu_id)[1]["composition_id"] == "plate_1"
+
+
+def test_canonical_import_never_resolves_foreign_tenant_compositions(app_session, monkeypatch):
+    scope_repository = _ObjectScopeRepository()
+    flow = _build_flow(scope_repository)
+    monkeypatch.setattr(CommunBuilderMenuLinkService, "_validate_site_tenant_access", lambda self, tenant_id, site_id: None)
+
+    with app_session.app_context():
+        current_app.extensions["builder_menu_context_flow"] = flow
+        actor = ActorContext(tenant_id=2, user_id=22, site_id="tenant-b-site", role="admin")
+
+        flow._library_flow.create_composition(
+            composition_id="foreign_canonical",
+            composition_name="Shared Dish",
+            actor=actor,
+        )
+        flow._library_flow.create_composition(
+            composition_id="foreign_alias",
+            composition_name="Foreign Alias Canonical",
+            actor=actor,
+        )
+        flow._library_flow.create_composition(
+            composition_id="local_canonical",
+            composition_name="Local Dish",
+            actor=actor,
+        )
+        flow._library_flow.create_composition(
+            composition_id="unscoped_canonical",
+            composition_name="Unscoped Dish",
+            actor=actor,
+        )
+        scope_repository.scopes.update(
+            {
+                ("composition", "foreign_canonical"): ObjectScope(
+                    tenant_id=1,
+                    owner_scope="site",
+                    owner_site_id="tenant-a-site",
+                    owner_user_id=None,
+                    visibility="site",
+                ),
+                ("composition", "foreign_alias"): ObjectScope(
+                    tenant_id=1,
+                    owner_scope="organisation",
+                    owner_site_id=None,
+                    owner_user_id=None,
+                    visibility="organisation",
+                ),
+                ("composition", "local_canonical"): ObjectScope(
+                    tenant_id=2,
+                    owner_scope="site",
+                    owner_site_id="tenant-b-site",
+                    owner_user_id=None,
+                    visibility="site",
+                ),
+            }
+        )
+        scope_repository.scopes.pop(("composition", "unscoped_canonical"))
+        create_composition_alias(
+            alias_repository=flow._library_flow._alias_repository,
+            alias_id="foreign_alias_1",
+            composition_id="foreign_alias",
+            alias_text="Foreign Alias",
+            composition_repository=flow._composition_repository,
+        )
+
+        result = import_menu_result_to_builder_canonical(
+            MenuImportResult(
+                weeks=[
+                    WeekImport(
+                        year=2026,
+                        week=20,
+                        items=[
+                            ImportedMenuItem(day="monday", meal="lunch", variant_type="alt1", dish_name="Shared Dish"),
+                            ImportedMenuItem(day="tuesday", meal="lunch", variant_type="alt1", dish_name="Foreign Alias"),
+                            ImportedMenuItem(day="wednesday", meal="lunch", variant_type="alt1", dish_name="Local Dish"),
+                            ImportedMenuItem(day="thursday", meal="lunch", variant_type="alt1", dish_name="Missing Dish"),
+                            ImportedMenuItem(day="friday", meal="lunch", variant_type="alt1", dish_name="Unscoped Dish"),
+                        ],
+                    )
+                ]
+            ),
+            tenant_id=2,
+            site_id="tenant-b-site",
+        )[0]
+
+        rows = flow.list_menu_rows(result.menu_id)
+        assert result.resolved_count == 1
+        assert result.unresolved_count == 4
+        assert rows[0]["composition_ref_type"] == "unresolved"
+        assert rows[0]["composition_id"] is None
+        assert rows[1]["composition_ref_type"] == "unresolved"
+        assert rows[1]["composition_id"] is None
+        assert rows[2]["composition_id"] == "local_canonical"
+        assert rows[3]["composition_ref_type"] == "unresolved"
+        assert rows[3]["composition_id"] is None
+        assert rows[4]["composition_ref_type"] == "unresolved"
+        assert rows[4]["composition_id"] is None
 
 
 def test_canonical_import_rolls_back_builder_failure(app_session, monkeypatch):

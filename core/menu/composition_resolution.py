@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from decimal import Decimal
 import re
+from collections.abc import Callable
 
 from ..components.composition_repository import InMemoryCompositionRepository
 from .alias_domain import CompositionAlias
@@ -37,6 +38,7 @@ def resolve_composition_reference(
     import_text: str,
     composition_repository: InMemoryCompositionRepository,
     alias_repository: InMemoryCompositionAliasRepository,
+    composition_is_allowed: Callable[[str], bool] | None = None,
 ) -> CompositionResolutionResult:
     normalized_text = normalize_menu_import_text(import_text)
     raw_text = str(import_text or "").strip()
@@ -52,7 +54,14 @@ def resolve_composition_reference(
             warnings=["empty or non-meaningful menu text; unresolved"],
         )
 
-    alias_matches = alias_repository.find_by_alias_norm(normalized_text)
+    def is_allowed(composition_id: str) -> bool:
+        return composition_is_allowed is None or composition_is_allowed(str(composition_id))
+
+    alias_matches = [
+        match
+        for match in alias_repository.find_by_alias_norm(normalized_text)
+        if is_allowed(match.composition_id)
+    ]
     if len(alias_matches) == 1:
         match = alias_matches[0]
         return CompositionResolutionResult(
@@ -79,6 +88,7 @@ def resolve_composition_reference(
         composition
         for composition in composition_repository.list_all()
         if normalize_menu_import_text(composition.composition_name) == normalized_text
+        and is_allowed(composition.composition_id)
     ]
 
     if len(canonical_matches) == 1:
