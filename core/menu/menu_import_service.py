@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from collections.abc import Callable
 
 from ..components.composition_repository import InMemoryCompositionRepository
 from .alias_repository import InMemoryCompositionAliasRepository
@@ -45,6 +46,7 @@ def import_menu_rows(
     menu_service: MenuService,
     composition_repository: InMemoryCompositionRepository,
     alias_repository: InMemoryCompositionAliasRepository,
+    composition_is_allowed: Callable[[str], bool] | None = None,
 ) -> MenuImportSummary:
     existing_count = len(menu_service.list_menu_details(menu_id))
 
@@ -59,6 +61,7 @@ def import_menu_rows(
             import_text=row.raw_text,
             composition_repository=composition_repository,
             alias_repository=alias_repository,
+            composition_is_allowed=composition_is_allowed,
         )
 
         warnings = list(resolution.warnings)

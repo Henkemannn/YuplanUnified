@@ -7,9 +7,10 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
+from sqlalchemy import text
 
 from core.app_factory import create_app
-from core.db import create_all
+from core.db import create_all, get_session
 
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 _TEMP_DB_DIRS: list[str] = []
@@ -39,6 +40,38 @@ def _client():
             os.environ["BUILDER_DB_PATH"] = previous_builder_db_path
     with app.app_context():
         create_all()
+        db = get_session()
+        try:
+            db.execute(
+                text(
+                    "INSERT INTO tenants (id, name, active) "
+                    "VALUES (1, 'Tenant 1', 1)"
+                )
+            )
+            db.execute(
+                text(
+                    "INSERT INTO sites (id, name, tenant_id, version) "
+                    "VALUES ('site_1', 'Site 1', 1, 0)"
+                )
+            )
+            db.execute(
+                text("INSERT INTO tenants (id, name, active) VALUES (2, 'Tenant 2', 1)")
+            )
+            db.execute(
+                text(
+                    "INSERT INTO sites (id, name, tenant_id, version) "
+                    "VALUES ('site_2', 'Site 2', 1, 0)"
+                )
+            )
+            db.execute(
+                text(
+                    "INSERT INTO sites (id, name, tenant_id, version) "
+                    "VALUES ('site_2_foreign', 'Foreign Site 2', 2, 0)"
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
     client = app.test_client()
     with client.session_transaction() as session:
         session["user_id"] = 1
@@ -97,6 +130,76 @@ def test_create_menu_endpoint_supports_title_and_generated_menu_id() -> None:
     assert menu.get("title") == "Week 16"
 
 
+def test_menu_context_rejects_foreign_menu_and_site_access() -> None:
+    client = _client()
+    own_menu = client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_own", "site_id": "site_1", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+    assert own_menu.status_code == 201
+
+    foreign_site_create = client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_bad", "site_id": "site_2", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+    assert foreign_site_create.status_code == 400
+
+    with client.session_transaction() as session:
+        session["tenant_id"] = 2
+        session["site_id"] = "site_2_foreign"
+    foreign_menu = client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_foreign", "site_id": "site_2_foreign", "week_key": "2026-W16"},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "2"},
+    )
+    assert foreign_menu.status_code == 201
+    foreign_row = client.post(
+        "/api/builder/menus/menu_foreign/rows",
+        json={
+            "day": "monday",
+            "display_label": "Foreign empty",
+            "composition_ref_type": "empty",
+        },
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "2"},
+    )
+    assert foreign_row.status_code == 201
+    foreign_detail_id = (foreign_row.get_json() or {}).get("menu_detail", {}).get(
+        "menu_detail_id"
+    )
+
+    with client.session_transaction() as session:
+        session["tenant_id"] = 1
+        session["site_id"] = "site_1"
+        session["site_id"] = "site_1"
+
+    listed = client.get("/api/builder/menus", headers=HEADERS)
+    assert listed.status_code == 200
+    assert [item["menu_id"] for item in (listed.get_json() or {}).get("menus", [])] == [
+        "menu_own"
+    ]
+    assert client.get("/api/builder/menus/menu_foreign/rows", headers=HEADERS).status_code == 400
+    assert client.post(
+        "/api/builder/menus/menu_foreign/rows",
+        json={
+            "day": "tuesday",
+            "display_label": "Denied",
+            "composition_ref_type": "empty",
+        },
+        headers=HEADERS,
+    ).status_code == 400
+    assert client.patch(
+        f"/api/builder/menus/menu_foreign/rows/{foreign_detail_id}",
+        json={"composition_ref_type": "empty"},
+        headers=HEADERS,
+    ).status_code == 400
+    assert client.delete(
+        f"/api/builder/menus/menu_foreign/rows/{foreign_detail_id}",
+        headers=HEADERS,
+    ).status_code == 400
+
+
 def test_add_and_list_composition_menu_rows_endpoint() -> None:
     client = _client()
     client.post(
@@ -118,7 +221,7 @@ def test_add_and_list_composition_menu_rows_endpoint() -> None:
             "composition_id": "plate_1",
             "note": "main",
         },
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "2"},
+        headers=HEADERS,
     )
     assert created.status_code == 201
     created_body = created.get_json() or {}
@@ -1787,7 +1890,7 @@ def test_reviewed_composition_denies_foreign_site_and_published_menu() -> None:
 
     with client.session_transaction() as session:
         session["site_id"] = "site_2"
-        session["tenant_id"] = 2
+        session["tenant_id"] = 1
     foreign = client.post(
         "/api/builder/menus/review_menu/create-reviewed-composition",
         json={
@@ -1813,10 +1916,11 @@ def test_reviewed_composition_denies_foreign_site_and_published_menu() -> None:
         },
         headers={"X-User-Role": "admin", "X-Tenant-Id": "2"},
     )
-    assert foreign_tenant.status_code == 400
+    assert foreign_tenant.status_code == 401
 
     with client.session_transaction() as session:
         session["tenant_id"] = 1
+        session["site_id"] = "site_1"
     from core.builder_menu_context_api import _get_menu_context_flow
 
     with client.application.app_context():

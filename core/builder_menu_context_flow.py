@@ -5,6 +5,10 @@ import hashlib
 import json
 import logging
 
+from flask import has_app_context
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+
 from .builder import BuilderFlow
 from .builder.library_scope import ActorContext, ObjectScope
 from .builder.declaration_readiness import (
@@ -14,6 +18,7 @@ from .builder.declaration_readiness import (
 )
 from .builder.diet_conflict_preview import DietConflictPreview, merge_diet_conflict_previews
 from .builder_sqlite import builder_transaction
+from .db import get_session
 from .components import (
     Composition,
     InMemoryCompositionRepository,
@@ -28,7 +33,7 @@ from .menu import (
     MenuImportSummary,
     MenuService,
     calculate_menu_detail_cost,
-    import_menu_rows,
+    import_menu_rows as import_menu_rows_service,
 )
 from .planera_v2.adapters import build_menu_composition_payload
 from .planera_v2.adapters import build_menu_composition_grouped_payload
@@ -70,16 +75,87 @@ class BuilderMenuContextFlow:
         self._ingredient_repository = ingredient_repository
         self._library_flow = library_flow
 
+    def _site_belongs_to_tenant(self, actor: ActorContext, site_id: str) -> bool:
+        site_value = str(site_id or "").strip()
+        if not site_value:
+            return False
+        if not has_app_context():
+            return True
+        db = get_session()
+        try:
+            row = db.execute(
+                text(
+                    "SELECT 1 FROM sites "
+                    "WHERE id = :site_id AND tenant_id = :tenant_id "
+                    "LIMIT 1"
+                ),
+                {"site_id": site_value, "tenant_id": int(actor.tenant_id)},
+            ).first()
+            return row is not None
+        except SQLAlchemyError as exc:
+            raise ValueError("menu ownership could not be verified") from exc
+        finally:
+            db.close()
+
+    def _require_menu_access(
+        self,
+        menu_id: str,
+        actor: ActorContext | None,
+    ):
+        menu = self._menu_service.get_menu(str(menu_id))
+        if menu is None:
+            raise ValueError(f"menu not found: {menu_id}")
+        if actor is None:
+            return menu
+        if not str(actor.site_id or "").strip():
+            raise ValueError("authenticated site is required")
+        if str(menu.site_id or "").strip() != str(actor.site_id).strip():
+            raise ValueError("menu is outside the authenticated site")
+        if not self._site_belongs_to_tenant(actor, str(menu.site_id)):
+            raise ValueError("menu is outside the authenticated tenant")
+        return menu
+
+    def _require_composition_access(
+        self,
+        composition_id: str,
+        actor: ActorContext | None,
+    ) -> Composition:
+        if actor is None:
+            composition = self._composition_repository.get(str(composition_id))
+            if composition is None:
+                raise ValueError(f"composition not found: {composition_id}")
+            return composition
+        scope_repository = getattr(self._library_flow, "_object_scope_repository", None)
+        if scope_repository is not None and scope_repository.get_scope(
+            "composition", str(composition_id)
+        ) is None:
+            raise ValueError("composition scope could not be verified")
+        composition = self._library_flow.get_library_composition(
+            str(composition_id),
+            actor=actor,
+        )
+        if composition is None:
+            raise ValueError("composition is outside the authenticated site")
+        return composition
+
     def create_menu(
         self,
         menu_id: str,
         site_id: str,
         week_key: str,
         *,
+        actor: ActorContext | None = None,
         title: str | None = None,
         version: int = 1,
         status: str = "draft",
     ):
+        if actor is not None and (
+            not str(actor.site_id or "").strip()
+            or str(actor.site_id).strip() != str(site_id or "").strip()
+        ):
+            raise ValueError("site is outside the authenticated site")
+        if actor is not None and not self._site_belongs_to_tenant(actor, site_id):
+            raise ValueError("site is outside the authenticated tenant")
         return self._menu_service.create_menu(
             menu_id=menu_id,
             title=title,
@@ -89,18 +165,24 @@ class BuilderMenuContextFlow:
             status=status,
         )
 
-    def list_menus(self):
-        return self._menu_service.list_menus()
+    def list_menus(self, *, actor: ActorContext | None = None):
+        if actor is None:
+            return self._menu_service.list_menus()
+        return [
+            menu
+            for menu in self._menu_service.list_menus()
+            if str(menu.site_id or "").strip() == str(actor.site_id).strip()
+            and self._site_belongs_to_tenant(actor, str(menu.site_id))
+        ]
 
     def get_menu_composition_adapter_payload(
         self,
         menu_id: str,
         *,
         menu_detail_id: str | None = None,
+        actor: ActorContext | None = None,
     ) -> dict[str, object]:
-        menu = self._menu_service.get_menu(str(menu_id))
-        if menu is None:
-            raise ValueError(f"menu not found: {menu_id}")
+        menu = self._require_menu_access(menu_id, actor)
 
         details = self._menu_service.list_menu_details(str(menu_id))
         if menu_detail_id:
@@ -121,10 +203,10 @@ class BuilderMenuContextFlow:
     def get_menu_composition_grouped_adapter_payload(
         self,
         menu_id: str,
+        *,
+        actor: ActorContext | None = None,
     ) -> dict[str, object]:
-        menu = self._menu_service.get_menu(str(menu_id))
-        if menu is None:
-            raise ValueError(f"menu not found: {menu_id}")
+        menu = self._require_menu_access(menu_id, actor)
 
         details = self._menu_service.list_menu_details(str(menu_id))
         payload = build_menu_composition_grouped_payload(
@@ -137,10 +219,10 @@ class BuilderMenuContextFlow:
     def get_menu_composition_production_shape_adapter_payload(
         self,
         menu_id: str,
+        *,
+        actor: ActorContext | None = None,
     ) -> dict[str, object]:
-        menu = self._menu_service.get_menu(str(menu_id))
-        if menu is None:
-            raise ValueError(f"menu not found: {menu_id}")
+        menu = self._require_menu_access(menu_id, actor)
 
         details = self._menu_service.list_menu_details(str(menu_id))
         payload = build_menu_composition_production_shape_payload(
@@ -162,7 +244,10 @@ class BuilderMenuContextFlow:
         menu_detail_id: str | None = None,
         display_label: str | None = None,
         selection_group_id: str | None = None,
+        actor: ActorContext | None = None,
     ) -> MenuDetail:
+        self._require_menu_access(menu_id, actor)
+        self._require_composition_access(composition_id, actor)
         detail_id = str(menu_detail_id or "").strip()
         if not detail_id:
             existing = self._menu_service.list_menu_details(menu_id)
@@ -192,7 +277,9 @@ class BuilderMenuContextFlow:
         sort_order: int | None = None,
         menu_detail_id: str | None = None,
         selection_group_id: str | None = None,
+        actor: ActorContext | None = None,
     ) -> MenuDetail:
+        self._require_menu_access(menu_id, actor)
         detail_id = str(menu_detail_id or "").strip()
         existing = self._menu_service.list_menu_details(menu_id)
         if not detail_id:
@@ -221,7 +308,10 @@ class BuilderMenuContextFlow:
         note: str | None = None,
         sort_order: int | None = None,
         selection_group_id: object = _MISSING,
+        actor: ActorContext | None = None,
     ) -> MenuDetail:
+        self._require_menu_access(menu_id, actor)
+        self._require_composition_access(composition_id, actor)
         details = self._menu_service.list_menu_details(menu_id)
         match = next((detail for detail in details if detail.menu_detail_id == menu_detail_id), None)
         if match is None:
@@ -246,7 +336,9 @@ class BuilderMenuContextFlow:
         *,
         menu_id: str,
         menu_detail_id: str,
+        actor: ActorContext | None = None,
     ) -> MenuDetail:
+        self._require_menu_access(menu_id, actor)
         details = self._menu_service.list_menu_details(menu_id)
         match = next((detail for detail in details if detail.menu_detail_id == menu_detail_id), None)
         if match is None:
@@ -254,14 +346,27 @@ class BuilderMenuContextFlow:
 
         return self._menu_service.clear_menu_detail(menu_detail_id=menu_detail_id)
 
-    def delete_menu_row(self, *, menu_id: str, menu_detail_id: str) -> None:
+    def delete_menu_row(
+        self,
+        *,
+        menu_id: str,
+        menu_detail_id: str,
+        actor: ActorContext | None = None,
+    ) -> None:
+        self._require_menu_access(menu_id, actor)
         details = self._menu_service.list_menu_details(menu_id)
         match = next((detail for detail in details if detail.menu_detail_id == menu_detail_id), None)
         if match is None:
             raise ValueError("menu_detail_id not found for menu")
         self._menu_service.remove_menu_detail(menu_detail_id)
 
-    def list_menu_rows(self, menu_id: str) -> list[dict[str, str | int | None]]:
+    def list_menu_rows(
+        self,
+        menu_id: str,
+        *,
+        actor: ActorContext | None = None,
+    ) -> list[dict[str, str | int | None]]:
+        self._require_menu_access(menu_id, actor)
         rows: list[dict[str, str | int | None]] = []
         for insertion_index, detail in enumerate(self._menu_service.list_menu_details(menu_id)):
             composition_name: str | None = None
@@ -308,8 +413,10 @@ class BuilderMenuContextFlow:
     def list_menu_rows_grouped(
         self,
         menu_id: str,
+        *,
+        actor: ActorContext | None = None,
     ) -> list[dict[str, str | int | list[dict[str, str | int | None]]]]:
-        rows = self.list_menu_rows(menu_id)
+        rows = self.list_menu_rows(menu_id, actor=actor)
         grouped: dict[tuple[str, str], dict[str, object]] = {}
         group_order: list[tuple[str, str]] = []
 
@@ -364,12 +471,12 @@ class BuilderMenuContextFlow:
     def get_menu_declaration_readiness(
         self,
         menu_id: str,
+        *,
+        actor: ActorContext | None = None,
     ) -> MenuDeclarationReadiness:
-        menu = self._menu_service.get_menu(str(menu_id))
-        if menu is None:
-            raise ValueError(f"menu not found: {menu_id}")
+        menu = self._require_menu_access(menu_id, actor)
 
-        rows = self.list_menu_rows(str(menu_id))
+        rows = self.list_menu_rows(str(menu_id), actor=actor)
         row_models: list[MenuRowDeclarationReadiness] = []
         warnings: list[str] = []
 
@@ -392,6 +499,7 @@ class BuilderMenuContextFlow:
                 try:
                     composition_readiness = self._library_flow.preview_composition_declaration_readiness(
                         composition_id=composition_id,
+                        actor=actor,
                     )
                     row_signals = tuple(composition_readiness.trait_signals_present)
                     row_conflict_preview = composition_readiness.conflict_preview
@@ -431,16 +539,39 @@ class BuilderMenuContextFlow:
             warnings=warnings,
         )
 
-    def import_menu_rows(self, menu_id: str, rows: list[ImportedMenuRow]) -> MenuImportSummary:
-        return import_menu_rows(
+    def import_menu_rows(
+        self,
+        menu_id: str,
+        rows: list[ImportedMenuRow],
+        *,
+        actor: ActorContext | None = None,
+    ) -> MenuImportSummary:
+        self._require_menu_access(menu_id, actor)
+        allowed = None
+        if actor is not None:
+            def allowed(composition_id: str) -> bool:
+                try:
+                    self._require_composition_access(composition_id, actor)
+                except ValueError:
+                    return False
+                return True
+
+        return import_menu_rows_service(
             menu_id=menu_id,
             rows=rows,
             menu_service=self._menu_service,
             composition_repository=self._composition_repository,
             alias_repository=self._alias_repository,
+            composition_is_allowed=allowed,
         )
 
-    def list_unresolved_menu_details(self, menu_id: str) -> list[MenuDetail]:
+    def list_unresolved_menu_details(
+        self,
+        menu_id: str,
+        *,
+        actor: ActorContext | None = None,
+    ) -> list[MenuDetail]:
+        self._require_menu_access(menu_id, actor)
         details = self._menu_service.list_menu_details(menu_id)
         return [detail for detail in details if detail.composition_ref_type == "unresolved"]
 
@@ -453,24 +584,15 @@ class BuilderMenuContextFlow:
         actor: ActorContext | None = None,
         require_site_scope: bool = False,
     ) -> MenuDetail:
-        menu = self._menu_service.get_menu(str(menu_id))
-        if menu is None:
-            raise ValueError("menu not found")
+        menu = self._require_menu_access(menu_id, actor)
         details = self._menu_service.list_menu_details(menu_id)
         match = next((detail for detail in details if detail.menu_detail_id == menu_detail_id), None)
         if match is None:
             raise ValueError("menu_detail_id not found for menu")
         if require_site_scope:
-            if actor is None or not actor.site_id or str(menu.site_id or "") != str(actor.site_id):
-                raise ValueError("menu row is outside the authenticated site")
             if str(menu.status or "").lower() == "published":
                 raise ValueError("published menu rows cannot be resolved")
-            composition = self._library_flow.get_library_composition(
-                str(composition_id),
-                actor=actor,
-            )
-            if composition is None:
-                raise ValueError("composition is outside the authenticated site")
+        self._require_composition_access(composition_id, actor)
 
         return self._menu_service.update_menu_detail(
             menu_detail_id=menu_detail_id,
@@ -487,6 +609,7 @@ class BuilderMenuContextFlow:
         *,
         actor: ActorContext | None = None,
     ) -> tuple[Composition, MenuDetail, list[str]]:
+        self._require_menu_access(menu_id, actor)
         details = self._menu_service.list_menu_details(menu_id)
         match = next((detail for detail in details if detail.menu_detail_id == menu_detail_id), None)
         if match is None:
@@ -536,6 +659,7 @@ class BuilderMenuContextFlow:
     ) -> tuple[Composition, MenuDetail]:
         if not str(actor.site_id or "").strip():
             raise ValueError("authenticated site is required")
+        self._require_menu_access(menu_id, actor)
         name_value = str(composition_name or "").strip()
         if not name_value:
             raise ValueError("composition_name is required")
@@ -773,9 +897,11 @@ class BuilderMenuContextFlow:
         self,
         menu_id: str,
         *,
+        actor: ActorContext | None = None,
         default_target_portions: int = 1,
         target_portions_by_detail: dict[str, int] | None = None,
     ) -> MenuCostOverview:
+        self._require_menu_access(menu_id, actor)
         details = self._menu_service.list_menu_details(menu_id)
         detail_costs: list[MenuDetailCostBreakdown] = []
         warnings: list[str] = []

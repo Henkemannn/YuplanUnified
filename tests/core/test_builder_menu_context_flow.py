@@ -420,7 +420,7 @@ def test_menu_context_flow_is_orchestration_not_logic_duplication() -> None:
 
 def test_create_composition_from_unresolved_row_creates_and_resolves() -> None:
     _, flow, scope_repo = _build_scoped_flows()
-    actor = ActorContext(tenant_id=7, user_id=101, site_id=None, role="admin")
+    actor = ActorContext(tenant_id=7, user_id=101, site_id="site_1", role="admin")
     flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
     summary = flow.import_menu_rows(
         menu_id="menu_1",
@@ -454,7 +454,7 @@ def test_create_composition_from_unresolved_row_creates_and_resolves() -> None:
 
 def test_create_composition_from_unresolved_row_adds_suggested_components() -> None:
     _, flow, scope_repo = _build_scoped_flows()
-    actor = ActorContext(tenant_id=7, user_id=101, site_id=None, role="admin")
+    actor = ActorContext(tenant_id=7, user_id=101, site_id="site_1", role="admin")
     flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
     summary = flow.import_menu_rows(
         menu_id="menu_1",

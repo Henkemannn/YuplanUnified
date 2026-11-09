@@ -57,6 +57,15 @@ def _optional_str(payload: dict[str, Any], field: str) -> str | None:
     return value or None
 
 
+def _get_menu_actor() -> ActorContext:
+    from .builder_api import _get_builder_actor
+
+    actor = _get_builder_actor()
+    if actor is None or not str(actor.site_id or "").strip():
+        raise ValueError("authenticated site is required")
+    return actor
+
+
 def _patch_optional_str(payload: dict[str, Any], field: str) -> object:
     if field not in payload:
         return _MISSING
@@ -324,12 +333,15 @@ def create_menu():
 
     try:
         flow = _get_menu_context_flow()
+        actor = _get_menu_actor()
+        site_id = _require_str(payload, "site_id")
         generated_menu_id = f"menu_{uuid.uuid4().hex[:8]}"
         menu = flow.create_menu(
             menu_id=_optional_str(payload, "menu_id") or generated_menu_id,
             title=_optional_str(payload, "title") or _optional_str(payload, "name"),
-            site_id=_require_str(payload, "site_id"),
+            site_id=site_id,
             week_key=_require_str(payload, "week_key"),
+            actor=actor,
             version=_maybe_int(payload.get("version"), field="version") or 1,
             status=_optional_str(payload, "status") or "draft",
         )
@@ -342,8 +354,11 @@ def create_menu():
 @bp.get("")
 @require_roles("editor", "admin", "superuser")
 def list_menus():
-    flow = _get_menu_context_flow()
-    menus = flow.list_menus()
+    try:
+        flow = _get_menu_context_flow()
+        menus = flow.list_menus(actor=_get_menu_actor())
+    except ValueError as exc:
+        return _bad_request(str(exc))
     return jsonify(
         {
             "ok": True,
@@ -362,6 +377,7 @@ def add_composition_menu_row(menu_id: str):
 
     try:
         flow = _get_menu_context_flow()
+        actor = _get_menu_actor()
         composition_ref_type = str(payload.get("composition_ref_type") or "").strip().lower()
         if composition_ref_type == "empty":
             display_label = _require_str(payload, "display_label")
@@ -373,6 +389,7 @@ def add_composition_menu_row(menu_id: str):
                 note=_optional_str(payload, "note"),
                 sort_order=_maybe_int(payload.get("sort_order"), field="sort_order"),
                 selection_group_id=_optional_str(payload, "selection_group_id"),
+                actor=actor,
             )
         else:
             detail = flow.add_composition_menu_row(
@@ -385,6 +402,7 @@ def add_composition_menu_row(menu_id: str):
                 sort_order=_maybe_int(payload.get("sort_order"), field="sort_order") or 0,
                 display_label=_optional_str(payload, "display_label"),
                 selection_group_id=_optional_str(payload, "selection_group_id"),
+                actor=actor,
             )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -397,8 +415,9 @@ def add_composition_menu_row(menu_id: str):
 def list_menu_rows(menu_id: str):
     try:
         flow = _get_menu_context_flow()
-        rows = flow.list_menu_rows(str(menu_id))
-        grouped = flow.list_menu_rows_grouped(str(menu_id))
+        actor = _get_menu_actor()
+        rows = flow.list_menu_rows(str(menu_id), actor=actor)
+        grouped = flow.list_menu_rows_grouped(str(menu_id), actor=actor)
     except ValueError as exc:
         return _bad_request(str(exc))
 
@@ -427,9 +446,11 @@ def get_menu_composition_adapter_payload(menu_id: str):
     menu_detail_id = str(request.args.get("menu_detail_id") or "").strip() or None
     try:
         flow = _get_menu_context_flow()
+        actor = _get_menu_actor()
         payload = flow.get_menu_composition_adapter_payload(
             str(menu_id),
             menu_detail_id=menu_detail_id,
+            actor=actor,
         )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -442,7 +463,10 @@ def get_menu_composition_adapter_payload(menu_id: str):
 def get_menu_composition_grouped_adapter_payload(menu_id: str):
     try:
         flow = _get_menu_context_flow()
-        payload = flow.get_menu_composition_grouped_adapter_payload(str(menu_id))
+        payload = flow.get_menu_composition_grouped_adapter_payload(
+            str(menu_id),
+            actor=_get_menu_actor(),
+        )
     except ValueError as exc:
         return _bad_request(str(exc))
 
@@ -454,7 +478,10 @@ def get_menu_composition_grouped_adapter_payload(menu_id: str):
 def get_menu_composition_production_shape_adapter_payload(menu_id: str):
     try:
         flow = _get_menu_context_flow()
-        payload = flow.get_menu_composition_production_shape_adapter_payload(str(menu_id))
+        payload = flow.get_menu_composition_production_shape_adapter_payload(
+            str(menu_id),
+            actor=_get_menu_actor(),
+        )
     except ValueError as exc:
         return _bad_request(str(exc))
 
@@ -470,11 +497,13 @@ def update_composition_menu_row(menu_id: str, menu_detail_id: str):
 
     try:
         flow = _get_menu_context_flow()
+        actor = _get_menu_actor()
         composition_ref_type = str(payload.get("composition_ref_type") or "").strip().lower()
         if composition_ref_type == "empty":
             detail = flow.clear_menu_row_composition(
                 menu_id=str(menu_id),
                 menu_detail_id=str(menu_detail_id),
+                actor=actor,
             )
         else:
             selection_group_id = _patch_optional_str(payload, "selection_group_id")
@@ -486,6 +515,7 @@ def update_composition_menu_row(menu_id: str, menu_detail_id: str):
                 "composition_id": _require_str(payload, "composition_id"),
                 "note": _optional_str(payload, "note"),
                 "sort_order": _maybe_int(payload.get("sort_order"), field="sort_order"),
+                "actor": actor,
             }
             if selection_group_id is not _MISSING:
                 update_kwargs["selection_group_id"] = selection_group_id
@@ -501,7 +531,11 @@ def update_composition_menu_row(menu_id: str, menu_detail_id: str):
 def delete_menu_row(menu_id: str, menu_detail_id: str):
     try:
         flow = _get_menu_context_flow()
-        flow.delete_menu_row(menu_id=str(menu_id), menu_detail_id=str(menu_detail_id))
+        flow.delete_menu_row(
+            menu_id=str(menu_id),
+            menu_detail_id=str(menu_detail_id),
+            actor=_get_menu_actor(),
+        )
     except ValueError as exc:
         return _bad_request(str(exc))
 
@@ -536,7 +570,11 @@ def import_menu(menu_id: str):
             )
 
         flow = _get_menu_context_flow()
-        summary = flow.import_menu_rows(menu_id=str(menu_id), rows=rows)
+        summary = flow.import_menu_rows(
+            menu_id=str(menu_id),
+            rows=rows,
+            actor=_get_menu_actor(),
+        )
     except ValueError as exc:
         return _bad_request(str(exc))
 
@@ -548,7 +586,10 @@ def import_menu(menu_id: str):
 def list_unresolved(menu_id: str):
     try:
         flow = _get_menu_context_flow()
-        unresolved = flow.list_unresolved_menu_details(str(menu_id))
+        unresolved = flow.list_unresolved_menu_details(
+            str(menu_id),
+            actor=_get_menu_actor(),
+        )
     except ValueError as exc:
         return _bad_request(str(exc))
 
@@ -577,6 +618,7 @@ def menu_cost_overview(menu_id: str):
         flow = _get_menu_context_flow()
         overview = flow.get_menu_cost_overview(
             str(menu_id),
+            actor=_get_menu_actor(),
             default_target_portions=target_portions,
         )
     except ValueError as exc:
@@ -597,7 +639,10 @@ def menu_declaration_readiness(menu_id: str):
             return jsonify({"ok": True, "declaration_enabled": False, "readiness": None})
 
         flow = _get_menu_context_flow()
-        readiness = flow.get_menu_declaration_readiness(str(menu_id))
+        readiness = flow.get_menu_declaration_readiness(
+            str(menu_id),
+            actor=_get_menu_actor(),
+        )
     except ValueError as exc:
         return _bad_request(str(exc))
 
@@ -623,11 +668,7 @@ def resolve_menu_detail(menu_id: str):
         handoff_resolution = bool(payload.get("admin_builder_handoff"))
 
         flow = _get_menu_context_flow()
-        actor: ActorContext | None = None
-        if handoff_resolution:
-            from .builder_api import _get_builder_actor, _require_dish_library_group
-
-            actor = _get_builder_actor()
+        actor = _get_menu_actor()
         updated = flow.resolve_menu_detail(
             menu_id=str(menu_id),
             menu_detail_id=menu_detail_id,
@@ -653,13 +694,7 @@ def create_composition_from_row(menu_id: str):
         composition_name = _require_str(payload, "composition_name")
 
         flow = _get_menu_context_flow()
-        actor: ActorContext | None = None
-        try:
-            from .builder_api import _get_builder_actor, _require_dish_library_group
-
-            actor = _get_builder_actor()
-        except Exception:
-            actor = None
+        actor = _get_menu_actor()
         composition, updated_menu_detail, warnings = flow.create_composition_from_unresolved_row(
             menu_id=str(menu_id),
             menu_detail_id=menu_detail_id,
