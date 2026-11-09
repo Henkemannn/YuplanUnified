@@ -134,12 +134,14 @@ class BuilderFlow:
         *,
         actor: ActorContext | None,
     ) -> bool:
-        if actor is None or self._object_scope_repository is None:
+        if self._object_scope_repository is None:
             return True
+        if actor is None:
+            return False
 
         scope = self._object_scope_repository.get_scope(object_type, object_id)
         if scope is None:
-            return True
+            return False
         return can_read_object(actor, scope)
 
     def _can_write_library_object(
@@ -149,12 +151,14 @@ class BuilderFlow:
         *,
         actor: ActorContext | None,
     ) -> bool:
-        if actor is None or self._object_scope_repository is None:
+        if self._object_scope_repository is None:
             return True
+        if actor is None:
+            return False
 
         scope = self._object_scope_repository.get_scope(object_type, object_id)
         if scope is None:
-            return actor.role in PRIVILEGED_WRITE_ROLES
+            return False
         return can_write_object(actor, scope)
 
     def _set_object_scope(self, object_type: str, object_id: str, scope: ObjectScope) -> None:
@@ -838,7 +842,15 @@ class BuilderFlow:
 
     def list_component_aliases(self, *, component_id: str | None = None, actor: ActorContext | None = None):
         if component_id is None:
-            return self._component_alias_repository.list_all()
+            if self._object_scope_repository is None:
+                return self._component_alias_repository.list_all()
+            if actor is None:
+                return []
+            return [
+                alias
+                for alias in self._component_alias_repository.list_all()
+                if self._can_read_library_object("component", alias.component_id, actor=actor)
+            ]
         if self.get_library_component(component_id, actor=actor) is None:
             raise ValueError(f"component not found: {component_id}")
         return self._component_alias_repository.list_for_component(component_id)
@@ -1685,7 +1697,9 @@ class BuilderFlow:
 
     def list_library_components(self, *, actor: ActorContext | None = None) -> list[Component]:
         items = self._component_service.list_components(active_only=False)
-        if actor is not None and self._object_scope_repository is not None:
+        if self._object_scope_repository is not None:
+            if actor is None:
+                return []
             items = [
                 item
                 for item in items
@@ -1772,7 +1786,9 @@ class BuilderFlow:
 
     def list_library_compositions(self, *, actor: ActorContext | None = None) -> list[Composition]:
         items = self._composition_service.list_compositions()
-        if actor is not None and self._object_scope_repository is not None:
+        if self._object_scope_repository is not None:
+            if actor is None:
+                return []
             items = [
                 item
                 for item in items
@@ -1820,11 +1836,21 @@ class BuilderFlow:
         created_count = 0
         reused_count = 0
 
+        composition_is_allowed = None
+        if self._object_scope_repository is not None:
+            def composition_is_allowed(composition_id: str) -> bool:
+                return self._can_read_library_object(
+                    "composition",
+                    composition_id,
+                    actor=actor,
+                )
+
         for line in normalized_lines:
             resolution = resolve_composition_reference(
                 import_text=line,
                 composition_repository=self._composition_repository,
                 alias_repository=self._alias_repository,
+                composition_is_allowed=composition_is_allowed,
             )
 
             warnings = list(resolution.warnings)

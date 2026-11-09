@@ -395,7 +395,7 @@ def test_private_object_is_only_visible_to_owner(object_type: str) -> None:
 
 
 @pytest.mark.parametrize("object_type", ["component", "composition"])
-def test_legacy_unscoped_objects_remain_visible(object_type: str) -> None:
+def test_legacy_unscoped_objects_are_hidden(object_type: str) -> None:
     scope_repo = _MemoryScopeRepository()
     flow = _build_flow(scope_repo)
     actor = _actor(tenant_id=31, user_id=1)
@@ -405,14 +405,16 @@ def test_legacy_unscoped_objects_remain_visible(object_type: str) -> None:
         component = flow._component_service.create_component("legacy_visible", "Legacy visible")
         object_id = component.component_id
         assert scope_repo.get_scope("component", object_id) is None
-        assert object_id in {item.component_id for item in flow.list_library_components(actor=actor)}
-        assert object_id in {item.component_id for item in flow.list_library_components(actor=other_actor)}
+        assert object_id not in {item.component_id for item in flow.list_library_components(actor=actor)}
+        assert object_id not in {item.component_id for item in flow.list_library_components(actor=other_actor)}
+        assert flow.get_library_component(object_id, actor=actor) is None
     else:
         composition = flow._composition_service.create_composition("legacy-plate", "Legacy plate")
         object_id = composition.composition_id
         assert scope_repo.get_scope("composition", object_id) is None
-        assert object_id in {item.composition_id for item in flow.list_library_compositions(actor=actor)}
-        assert object_id in {item.composition_id for item in flow.list_library_compositions(actor=other_actor)}
+        assert object_id not in {item.composition_id for item in flow.list_library_compositions(actor=actor)}
+        assert object_id not in {item.composition_id for item in flow.list_library_compositions(actor=other_actor)}
+        assert flow.get_library_composition(object_id, actor=actor) is None
 
 
 def test_builder_flow_without_scope_repo_preserves_legacy_behavior() -> None:
@@ -439,6 +441,7 @@ def test_scoped_component_recipe_list_and_detail_are_blocked_for_foreign_tenant(
         component_id=component.component_id,
         recipe_name="Primary recipe",
         yield_portions=4,
+        actor=owner,
     )
 
     with pytest.raises(ValueError, match="component not found"):

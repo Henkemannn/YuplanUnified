@@ -1392,6 +1392,17 @@ def test_delete_composition_endpoint_removes_unreferenced_dish() -> None:
 
 def test_delete_composition_endpoint_blocks_when_dish_is_used_by_menu() -> None:
     client = _client()
+    with client.application.app_context():
+        db = get_session()
+        db.execute(
+            text(
+                "INSERT OR IGNORE INTO sites (id, name, tenant_id, version) "
+                "VALUES (:id, :name, :tenant_id, 0)"
+            ),
+            {"id": "site-1", "name": "Test site", "tenant_id": 1},
+        )
+        db.commit()
+        db.close()
     client.post(
         "/api/builder/compositions",
         json={"composition_id": "dish_in_menu", "composition_name": "Dish in menu"},
@@ -1399,7 +1410,7 @@ def test_delete_composition_endpoint_blocks_when_dish_is_used_by_menu() -> None:
     )
     client.post(
         "/api/builder/menus",
-        json={"menu_id": "menu_1", "site_id": "site_1", "week_key": "2026-W16"},
+        json={"menu_id": "menu_1", "site_id": "site-1", "week_key": "2026-W16"},
         headers=HEADERS,
     )
     client.post(

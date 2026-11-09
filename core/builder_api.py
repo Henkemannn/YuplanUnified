@@ -1793,7 +1793,7 @@ def _is_dev_reset_allowed() -> bool:
     )
 
 
-def _reset_builder_state() -> dict[str, Any]:
+def _reset_builder_state(*, actor: ActorContext | None = None) -> dict[str, Any]:
     builder_db_path = str(current_app.config.get("BUILDER_DB_PATH") or "").strip()
     mode = "sqlite" if builder_db_path else "in_memory"
     before_counts: dict[str, int] = {}
@@ -1812,14 +1812,21 @@ def _reset_builder_state() -> dict[str, Any]:
         if not isinstance(menu_flow, BuilderMenuContextFlow):
             menu_flow = _get_menu_context_flow()
 
-        compositions = flow.list_library_compositions()
+        compositions = flow.list_library_compositions(actor=actor)
         menus = menu_flow.list_menus()
         before_counts = {
-            "builder_components": len(flow.list_library_components()),
-            "builder_component_aliases": len(flow._component_alias_repository.list_all()),
+            "builder_components": len(flow.list_library_components(actor=actor)),
+            "builder_component_aliases": len(flow.list_component_aliases(actor=actor)),
             "component_details": len(_component_details_store()),
             "builder_compositions": len(compositions),
-            "builder_composition_aliases": len(flow._alias_repository.list_all()),
+            "builder_composition_aliases": sum(
+                1
+                for alias in flow._alias_repository.list_all()
+                if any(
+                    alias.composition_id == composition.composition_id
+                    for composition in compositions
+                )
+            ),
             "builder_composition_components": sum(len(item.components) for item in compositions),
             "builder_menus": len(menus),
             "builder_menu_rows": sum(len(menu_flow.list_menu_rows(menu.menu_id)) for menu in menus),
@@ -2692,7 +2699,7 @@ def list_component_aliases(component_id: str):
         component = flow.get_library_component(component_id_value, actor=actor)
         if component is None:
             return _bad_request(f"component not found: {component_id_value}")
-        aliases = flow.list_component_aliases(component_id=component_id_value)
+        aliases = flow.list_component_aliases(component_id=component_id_value, actor=actor)
     except ValueError as exc:
         return _bad_request(str(exc))
 
@@ -3120,7 +3127,7 @@ def reset_builder_dev_data():
     if not _is_dev_reset_allowed():
         return jsonify({"ok": False, "error": "forbidden", "message": "builder reset is dev-only"}), 403
 
-    details = _reset_builder_state()
+    details = _reset_builder_state(actor=_get_builder_actor())
     return jsonify({"ok": True, **details})
 
 
