@@ -1720,6 +1720,19 @@
             });
         }
 
+        function closeResidenceDialog() {
+            try {
+                if (typeof dialog.close === 'function') {
+                    dialog.close();
+                } else {
+                    dialog.removeAttribute('open');
+                }
+            } catch (closeError) {
+                dialog.removeAttribute('open');
+            }
+            dialog.classList.remove('ua-modal-open');
+        }
+
         async function submitInline(event) {
             if (!window.fetch || !window.FormData) {
                 return;
@@ -1748,11 +1761,7 @@
                 }
                 ensureResidenceOption(payload.residence || {});
                 setStatus('', 'neutral');
-                try {
-                    dialog.close();
-                } catch (closeError) {
-                    dialog.removeAttribute('open');
-                }
+                closeResidenceDialog();
                 if (input) input.value = '';
             } catch (error) {
                 setStatus('Kunde inte skapa boende.', 'error');
