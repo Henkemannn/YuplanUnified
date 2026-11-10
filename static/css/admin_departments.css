@@ -1454,6 +1454,41 @@
   gap: 10px;
 }
 
+.admin-service-addon-modal__picker {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-service-addon-modal__picker[hidden],
+.admin-service-addon-modal__selected[hidden] {
+  display: none !important;
+}
+
+.admin-service-addon-modal__selected {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.admin-service-addon-modal__selected-heading {
+  color: var(--muted);
+  font-size: .86rem;
+  font-weight: 650;
+}
+
+.admin-service-addon-modal__selected-name {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.admin-service-addon-modal__selected-family {
+  color: var(--muted);
+  font-size: .88rem;
+}
+
 .admin-service-addon-modal__picker-head {
   display: grid;
   gap: 8px;
@@ -1466,6 +1501,61 @@
 
 .admin-service-addon-modal__select {
   width: 100%;
+}
+
+.admin-service-addon-modal__select[data-service-addon-select] {
+  display: none;
+}
+
+.admin-service-addon-modal__option-list {
+  display: grid;
+  gap: 5px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.admin-service-addon-modal__option-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-service-addon-modal__option-row:hover,
+.admin-service-addon-modal__option-row:focus-visible,
+.admin-service-addon-modal__option-row[aria-selected="true"] {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.admin-service-addon-modal__option-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-service-addon-modal__option-family {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: .82rem;
+}
+
+.admin-service-addon-modal__option-empty {
+  margin: 0;
+  padding: 12px;
+  color: var(--muted);
+  font-size: .9rem;
 }
 
 .admin-service-addon-modal__secondary-action {

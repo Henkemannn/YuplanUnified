@@ -207,8 +207,9 @@
                 <div class="ua-modal-body admin-service-addon-modal__body">
                     <label class="admin-service-addon-modal__field admin-service-addon-modal__field--wide">
                         <span class="admin-service-addon-modal__label">Serveringsanpassning</span>
-                        <select class="yp-input admin-service-addon-modal__select" data-service-addon-family-filter aria-label="Välj familj">
-                            <option value="" selected disabled>Välj familj</option>
+                        <div class="admin-service-addon-modal__picker" data-service-addon-picker>
+                            <select class="yp-input admin-service-addon-modal__select" data-service-addon-family-filter aria-label="Välj kategori">
+                            <option value="" selected>Alla kategorier</option>
                             {% set addon_families = namespace(values=[]) %}
                             {% for opt in vm.service_addons_master or [] %}
                                 {% set addon_family = (opt.addon_family or 'ovrigt')|lower %}
@@ -219,6 +220,14 @@
                             {% endfor %}
                         </select>
                         <input type="search" class="yp-input admin-service-addon-modal__search" placeholder="Sök aktiv serveringsanpassning..." aria-label="Sök serveringsanpassning" data-service-addon-search>
+                        <div class="admin-service-addon-modal__option-list" data-service-addon-option-list role="listbox" aria-label="Aktiva serveringsanpassningar"></div>
+                        </div>
+                        <div class="admin-service-addon-modal__selected" data-service-addon-selected hidden>
+                        <div class="admin-service-addon-modal__selected-heading">Vald serveringsanpassning</div>
+                        <div class="admin-service-addon-modal__selected-name" data-service-addon-selected-name></div>
+                        <div class="admin-service-addon-modal__selected-family">Kategori: <span data-service-addon-selected-family></span></div>
+                        <button type="button" class="yp-button yp-button-secondary" data-service-addon-change-selection>Ändra</button>
+                        </div>
                         <select name="service_addon_id" class="yp-input admin-service-addon-modal__select" size="6" data-service-addon-select>
                             <option value="" selected disabled>Välj serveringsanpassning</option>
                             {% for opt in vm.service_addons_master or [] %}
@@ -307,13 +316,13 @@
                                 {% for fam in ns.custom_families %}
                                 <option value="{{ fam }}">{{ fam }}</option>
                                 {% endfor %}
-                                <option value="__custom__">+ Skapa ny familj…</option>
+                                <option value="__custom__">+ Skapa ny kategori…</option>
                             </select>
                         </label>
                         <div class="admin-service-addon-modal__family-custom" data-service-addon-family-custom hidden>
                             <label class="admin-service-addon-modal__field admin-service-addon-modal__field--wide">
-                                <span class="admin-service-addon-modal__label">Ny familj</span>
-                                <input type="text" class="yp-input" name="service_addon_family_custom" placeholder="Ange ny familj">
+                                <span class="admin-service-addon-modal__label">Ny kategori</span>
+                                <input type="text" class="yp-input" name="service_addon_family_custom" placeholder="Ange ny kategori">
                             </label>
                         </div>
                     </div>
