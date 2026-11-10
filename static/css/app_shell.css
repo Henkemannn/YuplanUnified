@@ -2035,6 +2035,8 @@ body.modal-open {
 
   .app-shell__sidebar {
     position: static;
+    align-self: start;
+    min-height: 0;
   }
 
   .app-shell__sidebar-panel {
@@ -2042,6 +2044,47 @@ body.modal-open {
     border: none;
     box-shadow: none;
     padding: 0;
+    min-height: 0;
+    flex: 0 0 auto;
+    justify-content: flex-start;
+  }
+
+  .app-shell__nav {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .app-shell__nav-item {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .app-shell__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1100px) and (orientation: portrait) {
+  .app-shell__body {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell__sidebar {
+    position: static;
+    align-self: start;
+    min-height: 0;
+  }
+
+  .app-shell__sidebar-panel {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    min-height: 0;
+    flex: 0 0 auto;
+    justify-content: flex-start;
   }
 
   .app-shell__nav {
