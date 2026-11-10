@@ -200,7 +200,7 @@
 
 .production-lists-addons-table {
   width: 100%;
-  min-width: 620px;
+  min-width: 680px;
   border-collapse: collapse;
 }
 
@@ -238,9 +238,14 @@
 }
 
 .production-lists-addons-print-button--family {
-  width: 44px;
-  height: 44px;
-  color: var(--yp-shell-text-muted);
+  width: 30px;
+  height: 30px;
+  border: 0;
+  color: var(--yp-product-accent-2, #198754);
+}
+
+.production-lists-addons-print-button--family[aria-pressed="false"] {
+  color: var(--yp-product-warning, #b7791f);
 }
 
 .production-lists-addons-print-button svg {
@@ -251,6 +256,12 @@
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.8;
+}
+
+.production-lists-addons-print-feedback {
+  margin: .5rem 0 0;
+  color: var(--yp-product-warning, #b7791f);
+  font-size: .85rem;
 }
 
 .production-lists-addons-print-button:hover,
@@ -289,26 +300,42 @@
 }
 
 .production-lists-addons-table th:nth-child(1) {
-  width: 24%;
+  width: 40%;
 }
 
 .production-lists-addons-table th:nth-child(2),
 .production-lists-addons-table td:nth-child(2) {
-  width: 15%;
+  width: 14%;
+  text-align: center;
+}
+
+.production-lists-addons-table th:nth-child(3),
+.production-lists-addons-table td:nth-child(3) {
+  width: 19%;
+}
+
+.production-lists-addons-table th:nth-child(4),
+.production-lists-addons-table td:nth-child(4) {
+  width: 27%;
 }
 
 .production-lists-addons-quantity {
-  text-align: right !important;
+  text-align: center !important;
   white-space: nowrap;
 }
 
 .production-lists-addons-quantity small {
   display: block;
-  max-width: 12rem;
+  max-width: 10rem;
+  margin-inline: auto;
   color: var(--yp-shell-text-muted);
   font-size: 0.76rem;
   font-weight: 400;
   white-space: normal;
+}
+
+.production-lists-addons-table td:first-child {
+  overflow-wrap: anywhere;
 }
 
 .production-lists-addons-note {
@@ -335,7 +362,8 @@
   .app-shell__sidebar,
   .app-shell__page-actions,
   .production-lists-addons-explanation,
-  .production-lists-addons-print-button {
+  .production-lists-addons-print-button,
+  .production-lists-addons-print-feedback {
     display: none !important;
   }
 

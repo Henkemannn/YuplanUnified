@@ -1628,9 +1628,23 @@ def api_create_production_list_snapshot():
     return jsonify({"ok": True, "item": created}), 201
 
 
-def _build_production_list_service_addons(site_id: str, service_date: _date) -> list[dict]:
+def _build_production_list_service_addons(
+    site_id: str,
+    service_date: _date,
+    *,
+    meal: str = "lunch",
+) -> list[dict]:
     from core.admin_repo import DepartmentServiceAddonsRepo, ServiceAddonsRepo
     from .service_addon_contract import resolve_service_addon_quantity
+
+    meal_key = str(meal or "").strip().lower()
+    if meal_key not in {"lunch", "dinner"}:
+        raise ValueError("service_addon_meal_invalid")
+    scope_labels = {
+        "all_services": "Alla serveringar",
+        "lunch": "Lunch",
+        "dinner": "Kvällsmat",
+    }
 
     active_addons = {
         str(addon["id"]): addon
@@ -1662,7 +1676,9 @@ def _build_production_list_service_addons(site_id: str, service_date: _date) -> 
             addon_id = str(assignment.get("addon_id") or "")
             addon = active_addons.get(addon_id)
             service_scope = str(assignment.get("service_scope") or "").strip().lower()
-            if not addon or service_scope not in {"lunch", "all_services"}:
+            if not addon or service_scope not in {"lunch", "dinner", "all_services"}:
+                continue
+            if service_scope != "all_services" and service_scope != meal_key:
                 continue
             quantity_label = ""
             quantity_issue = ""
@@ -1674,7 +1690,7 @@ def _build_production_list_service_addons(site_id: str, service_date: _date) -> 
                     raise ValueError("missing_lunch_count")
                 quantity = resolve_service_addon_quantity(
                     assignment_for_resolution,
-                    meal="lunch",
+                    meal=meal_key,
                     year=iso.year,
                     week=iso.week,
                     weekday=iso.weekday,
@@ -1701,6 +1717,8 @@ def _build_production_list_service_addons(site_id: str, service_date: _date) -> 
                     "department_name": department_name,
                     "quantity_label": quantity_label,
                     "quantity_issue": quantity_issue,
+                    "service_scope_label": scope_labels.get(service_scope, service_scope),
+                    "quantity_mode": quantity_mode,
                     "note": str(assignment.get("note") or "").strip(),
                 }
             )
@@ -1894,7 +1912,8 @@ def ui_production_lists_addons():
     if not site_id or active_site_id != site_id:
         return abort(404)
     date_iso = (request.args.get("date") or "").strip()
-    if (request.args.get("meal") or "lunch").strip().lower() != "lunch":
+    meal = (request.args.get("meal") or "lunch").strip().lower()
+    if meal not in {"lunch", "dinner"}:
         return abort(404)
     try:
         service_date = _date.fromisoformat(date_iso)
@@ -1924,7 +1943,13 @@ def ui_production_lists_addons():
         "site_name": str(row_s[0] or "").strip(),
         "service_date": service_date,
         "service_date_label": f"{service_date.day} {('januari', 'februari', 'mars', 'april', 'maj', 'juni', 'juli', 'augusti', 'september', 'oktober', 'november', 'december')[service_date.month - 1]} {service_date.year}",
-        "service_addons": _build_production_list_service_addons(site_id, service_date),
+        "meal": meal,
+        "meal_label": "Lunch" if meal == "lunch" else "Kvällsmat",
+        "service_addons": _build_production_list_service_addons(
+            site_id,
+            service_date,
+            meal=meal,
+        ),
         "back_url": url_for(
             "ui.ui_production_lists_index",
             site_id=site_id,

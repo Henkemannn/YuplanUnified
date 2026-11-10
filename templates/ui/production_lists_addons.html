@@ -11,7 +11,7 @@
   <section class="app-shell__page-header">
     <div>
       <h1 class="app-shell__title">Serveringstillägg</h1>
-      <p class="app-shell__subtitle">{{ vm.service_date_label }} · Lunch{% if vm.site_name %} · {{ vm.site_name }}{% endif %}</p>
+      <p class="app-shell__subtitle">{{ vm.service_date_label }} · {{ vm.meal_label }}{% if vm.site_name %} · {{ vm.site_name }}{% endif %}</p>
     </div>
     <div class="app-shell__page-actions">
       <a class="yp-button yp-button-secondary" href="{{ vm.back_url }}">Tillbaka till Produktionslistor</a>
@@ -27,6 +27,7 @@
         </svg>
       </button>
     </div>
+    <p class="production-lists-addons-print-feedback" data-production-lists-print-feedback role="status" aria-live="polite" hidden></p>
   </section>
 
   <article class="app-shell__card production-lists-addons-card">
@@ -37,15 +38,18 @@
       {% if vm.service_addons %}
         <div class="production-lists-addons-groups">
           {% for family in vm.service_addons %}
-            <section class="production-lists-addons-family" data-family-key="{{ family.family_name|lower }}">
+            <section class="production-lists-addons-family" data-family-key="family-{{ loop.index0 }}">
               <header class="production-lists-addons-family-header">
                 <h2>{{ family.family_name }}</h2>
                 <button
                   class="production-lists-addons-print-button production-lists-addons-print-button--family"
                   type="button"
-                  data-production-lists-print-family="{{ family.family_name|lower }}"
+                  data-production-lists-family-toggle="family-{{ loop.index0 }}"
+                  data-production-lists-print-family="family-{{ loop.index0 }}"
+                  data-family-name="{{ family.family_name }}"
+                  aria-pressed="true"
                   aria-label="Skriv ut {{ family.family_name }}"
-                  title="Skriv ut {{ family.family_name }}"
+                  title="Välj {{ family.family_name }} för utskrift"
                 >
                   <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
                     <path d="M7 8V3h10v5M6 17H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5h-2M6 14h12v7H6zM18 11h.01" />
@@ -56,23 +60,28 @@
                 <table class="production-lists-addons-table">
                   <thead>
                     <tr>
-                      <th scope="col">Avdelning</th>
+                      <th scope="col">Anpassning / kommentar</th>
                       <th scope="col">Antal</th>
-                      <th scope="col">Beskrivning / kommentar</th>
+                      <th scope="col">Servering</th>
+                      <th scope="col">Avdelning</th>
                     </tr>
                   </thead>
                   <tbody>
                     {% for row in family.rows %}
                       <tr>
-                        <th scope="row">{{ row.department_name }}</th>
-                        <td class="production-lists-addons-quantity">
-                          {{ row.quantity_label }}
-                          {% if row.quantity_issue %}<small>{{ row.quantity_issue }}</small>{% endif %}
-                        </td>
                         <td>
                           <div>{{ row.addon_name }}</div>
                           {% if row.note %}<div class="production-lists-addons-note">{{ row.note }}</div>{% endif %}
                         </td>
+                        <td class="production-lists-addons-quantity">
+                          {{ row.quantity_label }}
+                          {% if row.quantity_mode == "whole_department" %}
+                            <small>Hela avdelningen</small>
+                          {% endif %}
+                          {% if row.quantity_issue %}<small>{{ row.quantity_issue }}</small>{% endif %}
+                        </td>
+                        <td>{{ row.service_scope_label }}</td>
+                        <th scope="row">{{ row.department_name }}</th>
                       </tr>
                     {% endfor %}
                   </tbody>

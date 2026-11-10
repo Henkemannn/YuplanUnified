@@ -160,6 +160,7 @@ def _page3_vm() -> Product2Page3VM:
             "overview": "/ui/kitchen/planering/day/production?ui=product2&site_id=site-1&date=2026-09-08&meal=lunch&view=overview",
             "normal": "/ui/kitchen/planering/day/production?ui=product2&site_id=site-1&date=2026-09-08&meal=lunch&view=normal",
             "special": "/ui/kitchen/planering/day/production?ui=product2&site_id=site-1&date=2026-09-08&meal=lunch&view=special&special_view=production",
+            "addons": "/ui/kitchen/planering/day/production?ui=product2&site_id=site-1&date=2026-09-08&meal=lunch&view=addons",
         },
         special_navigation_urls={
             "production": "/ui/kitchen/planering/day/production?ui=product2&site_id=site-1&date=2026-09-08&meal=lunch&view=special&special_view=production",
@@ -397,6 +398,7 @@ def _page3_vm_hierarchy(*, view: str = "overview", special_view: str = "producti
             "overview": "/ui/kitchen/planering/day/production?ui=product2&site_id=site-1&date=2026-09-08&meal=lunch&view=overview",
             "normal": "/ui/kitchen/planering/day/production?ui=product2&site_id=site-1&date=2026-09-08&meal=lunch&view=normal",
             "special": "/ui/kitchen/planering/day/production?ui=product2&site_id=site-1&date=2026-09-08&meal=lunch&view=special&special_view=production",
+            "addons": "/ui/kitchen/planering/day/production?ui=product2&site_id=site-1&date=2026-09-08&meal=lunch&view=addons",
         },
         special_navigation_urls={
             "production": "/ui/kitchen/planering/day/production?ui=product2&site_id=site-1&date=2026-09-08&meal=lunch&view=special&special_view=production",
@@ -623,6 +625,10 @@ def test_page3_route_supports_canonical_view_params(app_session, monkeypatch):
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=special&special_view=department",
         headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
+    addons = client.get(
+        f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=addons",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
 
     assert normal.status_code == 200
     assert "Normalkost" in normal.get_data(as_text=True)
@@ -635,6 +641,10 @@ def test_page3_route_supports_canonical_view_params(app_session, monkeypatch):
     assert "Avdelning A" in special.get_data(as_text=True)
     assert "Produktionslista" in special.get_data(as_text=True)
     assert "Packlista" in special.get_data(as_text=True)
+
+    assert addons.status_code == 200
+    assert "Serveringsanpassningar" in addons.get_data(as_text=True)
+    assert 'data-page3-panel="addons"' in addons.get_data(as_text=True)
 
 
 def test_page3_route_preserves_explicit_option_id(app_session, monkeypatch):

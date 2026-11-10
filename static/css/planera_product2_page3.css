@@ -403,6 +403,109 @@
   white-space: nowrap;
 }
 
+.yp-planera-page3-addons-list {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.yp-planera-page3-addons-group__title {
+  margin: 0;
+  font-size: .85rem;
+  letter-spacing: .08em;
+}
+
+.yp-planera-page3-addons-group__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 2rem;
+  margin-bottom: .5rem;
+}
+
+.yp-planera-page3-addons-family-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--yp-product-accent-2, #198754);
+  cursor: pointer;
+}
+
+.yp-planera-page3-addons-family-toggle[aria-pressed="false"] {
+  color: var(--yp-product-warning, #b7791f);
+}
+
+.yp-planera-page3-addons-family-toggle:focus-visible {
+  outline: 2px solid var(--page2-accent-strong);
+  outline-offset: 2px;
+}
+
+.yp-planera-page3-addons-family-toggle svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.yp-planera-page3-print-selection-feedback {
+  margin: .5rem 0 0;
+  color: var(--yp-product-warning, #b7791f);
+  font-size: .85rem;
+}
+
+.yp-planera-page3-addons-table {
+  display: grid;
+  overflow-x: auto;
+  border: 1px solid var(--page2-line);
+  border-radius: .5rem;
+}
+
+.yp-planera-page3-addons-table__header,
+.yp-planera-page3-addons-table__row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 2fr) minmax(5rem, .7fr) minmax(7rem, 1fr) minmax(8rem, 1fr);
+  gap: 1rem;
+  align-items: center;
+  min-width: 38rem;
+  padding: .7rem 1rem;
+}
+
+.yp-planera-page3-addons-table__header {
+  color: var(--page2-muted);
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.yp-planera-page3-addons-table__row {
+  border-top: 1px solid var(--page2-line);
+}
+
+.yp-planera-page3-addons-table__description,
+.yp-planera-page3-addons-table__quantity {
+  display: grid;
+  gap: .15rem;
+}
+
+.yp-planera-page3-addons-table__description small,
+.yp-planera-page3-addons-table__quantity small {
+  color: var(--page2-muted);
+  font-size: .8em;
+}
+
+.yp-planera-page3-addons-table__quantity,
+.yp-planera-page3-addons-table__header > :nth-child(2) {
+  text-align: center;
+}
+
 .yp-planera-page3-service-addon-row__note {
   color: var(--page2-muted);
   font-size: 0.82rem;
@@ -999,6 +1102,8 @@
 
   .yp-product-topbar,
   .yp-planera-page3-tabs-row,
+  .yp-planera-page3-addons-family-toggle,
+  .yp-planera-page3-print-selection-feedback,
   .yp-planera-page3-backlink,
   .yp-planera-page3-action-row,
   .yp-planera-page3-alert,
@@ -1098,6 +1203,10 @@
   [data-page3-panel].is-print-active,
   [data-page3-special-view-panel].is-print-active {
     display: block !important;
+  }
+
+  .yp-planera-page3-addons-group.is-print-inactive {
+    display: none !important;
   }
 
   .yp-planera-page3-special-group {

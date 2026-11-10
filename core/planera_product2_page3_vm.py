@@ -111,6 +111,15 @@ class Product2Page3ServiceAddonVM:
     description: str
     quantity_label: str
     note: str = ""
+    department_name: str = ""
+    service_scope_label: str = ""
+    quantity_mode: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class Product2Page3ServiceAddonGroupVM:
+    family: str
+    rows: tuple[Product2Page3ServiceAddonVM, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,6 +186,7 @@ class Product2Page3VM:
     normal_matrix: Product2Page3NormalMatrixVM | None = None
     special_production_groups: tuple[Product2Page3SpecialProductionGroupVM, ...] = ()
     special_destination_groups: tuple[Product2Page3SpecialDestinationGroupVM, ...] = ()
+    service_addon_groups: tuple[Product2Page3ServiceAddonGroupVM, ...] = ()
     navigation_urls: dict[str, str] = field(default_factory=dict)
     special_navigation_urls: dict[str, str] = field(default_factory=dict)
     service_date_compact_label: str = ""
@@ -868,6 +878,13 @@ def _build_service_addons_by_destination(
                     description=str(addon.get("name") or ""),
                     quantity_label=quantity_label,
                     note=str(assignment.get("note") or "").strip(),
+                    department_name=department_name,
+                    service_scope_label={
+                        "all_services": "Alla serveringar",
+                        "lunch": "Lunch",
+                        "dinner": "Kvällsmat",
+                    }.get(scope, scope),
+                    quantity_mode=quantity_mode,
                 )
             )
     return {
@@ -1035,7 +1052,7 @@ def build_product2_page3_vm(
     normalized_service_date = _normalize_service_date(service_date)
     normalized_meal = _normalize_meal(meal)
     normalized_view = str(view or "overview").strip().lower()
-    if normalized_view not in {"overview", "normal", "special"}:
+    if normalized_view not in {"overview", "normal", "special", "addons"}:
         normalized_view = "overview"
     normalized_special_view = str(special_view or "production").strip().lower()
     if normalized_special_view not in {"production", "department"}:
@@ -1127,13 +1144,15 @@ def build_product2_page3_vm(
         requirement_name_map=requirement_name_map,
         requirement_group_display_lookup=requirement_group_display_lookup,
     )
-    if normalized_view == "special" and normalized_special_view == "department":
+    if normalized_view in {"special", "addons"} and (
+        normalized_view == "addons" or normalized_special_view == "department"
+    ):
         service_addons_by_destination, service_addon_department_names = _build_service_addons_by_destination(
             site_id=normalized_site_id,
             service_date=normalized_service_date,
             meal=normalized_meal,
             destination_map=destination_map,
-            dessert=target_variant_type == "dessert",
+            dessert=target_variant_type == "dessert" and normalized_view != "addons",
         )
     else:
         service_addons_by_destination, service_addon_department_names = {}, {}
@@ -1164,6 +1183,30 @@ def build_product2_page3_vm(
         for destination_id in destination_ids
         if destination_id in special_groups_by_destination or destination_id in service_addons_by_destination
     )
+    service_addons_by_family: dict[str, list[Product2Page3ServiceAddonVM]] = {}
+    for destination_id in sorted(service_addons_by_destination):
+        for addon in service_addons_by_destination[destination_id]:
+            service_addons_by_family.setdefault(addon.family.casefold(), []).append(addon)
+    service_addon_groups = tuple(
+        Product2Page3ServiceAddonGroupVM(
+            family=rows[0].family,
+            rows=tuple(
+                sorted(
+                    rows,
+                    key=lambda row: (
+                        row.description.casefold(),
+                        row.department_name.casefold(),
+                        row.addon_id,
+                    ),
+                )
+            ),
+        )
+        for rows in sorted(
+            service_addons_by_family.values(),
+            key=lambda family_rows: family_rows[0].family.casefold(),
+        )
+        if rows
+    )
 
     page1_url = _build_product2_page1_url(site_id=normalized_site_id, service_date=normalized_service_date)
     base_url = (
@@ -1183,6 +1226,7 @@ def build_product2_page3_vm(
         "overview": f"{base_url}&view=overview",
         "normal": f"{base_url}&view=normal",
         "special": f"{base_url}&view=special&special_view={normalized_special_view}",
+        "addons": f"{base_url}&view=addons",
     }
     special_navigation_urls = {
         "production": f"{base_url}&view=special&special_view=production",
@@ -1243,6 +1287,7 @@ def build_product2_page3_vm(
         normal_matrix=normal_matrix,
         special_production_groups=special_production_groups,
         special_destination_groups=special_destination_groups,
+        service_addon_groups=service_addon_groups,
         page1_url=page1_url,
         page2_url=page2_url,
         navigation_urls=navigation_urls,

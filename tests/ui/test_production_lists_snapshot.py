@@ -9,6 +9,7 @@ from sqlalchemy import text
 
 from core.admin_repo import (
     DepartmentServiceAddonsRepo,
+    DepartmentsRepo,
     ServiceAddonsRepo,
     SitesRepo,
 )
@@ -142,6 +143,79 @@ def test_production_lists_index_renders_and_keeps_site_id(app_session, client_ad
     html = rv.get_data(as_text=True)
     assert "Produktionslistor" in html
     assert f"/ui/production-lists?site_id={site['id']}" in html
+
+
+def test_service_addons_production_list_filters_meal_and_renders_scope_and_quantity(
+    app_session,
+    client_admin,
+):
+    site, _ = SitesRepo().create_site(f"Addon production site {uuid.uuid4()}")
+    department, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Mos",
+        resident_count_mode="fixed",
+        resident_count_fixed=12,
+    )
+    addon_repo = ServiceAddonsRepo()
+    mos_id = addon_repo.create_if_missing("Mos", site_id=site["id"], addon_family="mos")
+    pasta_id = addon_repo.create_if_missing("Pasta", site_id=site["id"], addon_family="ovrigt")
+    DepartmentServiceAddonsRepo().replace_for_department(
+        department["id"],
+        [
+            {
+                "addon_id": mos_id,
+                "service_scope": "all_services",
+                "quantity_mode": "whole_department",
+                "note": "Mos till potatis",
+            },
+            {
+                "addon_id": pasta_id,
+                "service_scope": "lunch",
+                "quantity_mode": "custom",
+                "lunch_count": 2,
+                "note": "Aldrig spaghetti",
+            },
+        ],
+        site_id=site["id"],
+    )
+    _set_active_site(client_admin, site["id"])
+
+    lunch = client_admin.get(
+        f"/ui/production-lists/addons?site_id={site['id']}&date=2026-02-10&meal=lunch&year=2026&week=7",
+        headers=_h(),
+    )
+    assert lunch.status_code == 200
+    lunch_html = lunch.get_data(as_text=True)
+    assert "Lunch" in lunch_html
+    assert "Avdelning" in lunch_html
+    assert "Servering" in lunch_html
+    assert "Antal" in lunch_html
+    assert "Anpassning / kommentar" in lunch_html
+    header_order = [
+        lunch_html.index("Anpassning / kommentar"),
+        lunch_html.index(">Antal<"),
+        lunch_html.index(">Servering<"),
+        lunch_html.index(">Avdelning<"),
+    ]
+    assert header_order == sorted(header_order)
+    assert "Alla serveringar" in lunch_html
+    assert "Hela avdelningen" in lunch_html
+    assert "Mos" in lunch_html
+    assert "12" in lunch_html
+    assert "Aldrig spaghetti" in lunch_html
+    assert "2" in lunch_html
+
+    dinner = client_admin.get(
+        f"/ui/production-lists/addons?site_id={site['id']}&date=2026-02-10&meal=dinner&year=2026&week=7",
+        headers=_h(),
+    )
+    assert dinner.status_code == 200
+    dinner_html = dinner.get_data(as_text=True)
+    assert "Kvällsmat" in dinner_html
+    assert "Alla serveringar" in dinner_html
+    assert "Mos" in dinner_html
+    assert "Hela avdelningen" in dinner_html
+    assert "Aldrig spaghetti" not in dinner_html
 
 
 def test_production_lists_index_renders_selected_iso_week_and_lunch_links(app_session, client_admin, monkeypatch):

@@ -57,6 +57,7 @@
                   <a class="yp-planera-page3-tab {% if vm.view == 'overview' %}is-active{% endif %}" data-page3-view-link data-page3-view="overview" href="{{ vm.navigation_urls['overview'] }}">Översikt</a>
                   <a class="yp-planera-page3-tab {% if vm.view == 'normal' %}is-active{% endif %}" data-page3-view-link data-page3-view="normal" href="{{ vm.navigation_urls['normal'] }}">Normalkost</a>
                   <a class="yp-planera-page3-tab {% if vm.view == 'special' %}is-active{% endif %}" data-page3-view-link data-page3-view="special" data-page3-special-view="{{ vm.special_view }}" href="{{ vm.navigation_urls['special'] }}">Specialkost</a>
+                  <a class="yp-planera-page3-tab {% if vm.view == 'addons' %}is-active{% endif %}" data-page3-view-link data-page3-view="addons" href="{{ vm.navigation_urls['addons'] }}">Serveringsanpassningar</a>
               </nav>
               <button
                 class="yp-planera-page3-print-button"
@@ -70,6 +71,7 @@
                 </svg>
               </button>
             </div>
+            <p class="yp-planera-page3-print-selection-feedback" data-page3-print-selection-feedback role="status" aria-live="polite" hidden></p>
 
             {% if not vm.ready and vm.blocker_messages %}
             <section class="yp-planera-page3-alert" aria-label="Blockeringar">
@@ -315,6 +317,60 @@
                   </button>
                   <p class="yp-planera-page3-completion-feedback" data-page3-completion-feedback aria-live="polite" hidden></p>
                 </div>
+                {% endif %}
+              </section>
+
+              <section class="yp-planera-page3-section yp-planera-page3-section--addons" aria-labelledby="yp-planera-page3-addons-title" data-page3-panel="addons" {% if vm.view != 'addons' %}hidden{% endif %}>
+                <div class="yp-planera-page3-section__head">
+                  <h2 class="yp-planera-page3-section__title" id="yp-planera-page3-addons-title">Serveringsanpassningar</h2>
+                </div>
+                {% if vm.service_addon_groups %}
+                  <div class="yp-planera-page3-addons-list">
+                  {% for group in vm.service_addon_groups %}
+                    <section class="yp-planera-page3-addons-group" data-page3-addon-family="family-{{ loop.index0 }}">
+                      <header class="yp-planera-page3-addons-group__header">
+                        <h3 class="yp-planera-page3-addons-group__title">{{ group.family|upper }}</h3>
+                        <button
+                          class="yp-planera-page3-addons-family-toggle"
+                          type="button"
+                          data-page3-addon-family-toggle="family-{{ loop.index0 }}"
+                          data-page3-addon-family-name="{{ group.family|upper }}"
+                          aria-pressed="true"
+                          aria-label="Välj {{ group.family|upper }} för utskrift"
+                          title="Välj {{ group.family|upper }} för utskrift"
+                        >
+                          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+                            <path d="M7 8V3h10v5M6 17H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5h-2M6 14h12v7H6zM18 11h.01" />
+                          </svg>
+                        </button>
+                      </header>
+                      <div class="yp-planera-page3-addons-table" role="table" aria-label="{{ group.family|upper }}">
+                        <div class="yp-planera-page3-addons-table__header" role="row">
+                          <span role="columnheader">Anpassning / kommentar</span>
+                          <span role="columnheader">Antal</span>
+                          <span role="columnheader">Servering</span>
+                          <span role="columnheader">Avdelning</span>
+                        </div>
+                        {% for addon in group.rows %}
+                        <div class="yp-planera-page3-addons-table__row" role="row">
+                          <span role="cell" class="yp-planera-page3-addons-table__description">
+                            <span>{{ addon.description }}</span>
+                            {% if addon.note %}<small>{{ addon.note }}</small>{% endif %}
+                          </span>
+                          <span role="cell" class="yp-planera-page3-addons-table__quantity">
+                            <span>{{ addon.quantity_label }}</span>
+                            {% if addon.quantity_mode == 'whole_department' %}<small>Hela avdelningen</small>{% endif %}
+                          </span>
+                          <span role="cell">{{ addon.service_scope_label }}</span>
+                          <span role="cell">{{ addon.department_name }}</span>
+                        </div>
+                        {% endfor %}
+                      </div>
+                    </section>
+                  {% endfor %}
+                  </div>
+                {% else %}
+                  <p class="empty-text">Inga registrerade serveringsanpassningar för denna måltid.</p>
                 {% endif %}
               </section>
             </div>

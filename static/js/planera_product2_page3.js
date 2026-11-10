@@ -3,6 +3,10 @@ document.addEventListener("DOMContentLoaded", () => {
   if (!root) {
     return;
   }
+  if (root.dataset.page3PrintSelectionInitialized === "true") {
+    return;
+  }
+  root.dataset.page3PrintSelectionInitialized = "true";
 
   const topTabs = Array.from(root.querySelectorAll("[data-page3-view-link]"));
   const specialTabs = Array.from(root.querySelectorAll("[data-page3-special-view-link]"));
@@ -14,10 +18,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const normalColumnHeaders = Array.from(root.querySelectorAll("[data-page3-normal-table] thead th[data-page3-normal-option]"));
   const normalSingleHeadings = Array.from(root.querySelectorAll("[data-page3-normal-single-heading]"));
   const normalQuantityHeading = root.querySelector("[data-page3-normal-quantity-heading]");
+  const addonFamilies = Array.from(root.querySelectorAll("[data-page3-addon-family]"));
+  const addonFamilyToggles = Array.from(root.querySelectorAll("[data-page3-addon-family-toggle]"));
+  const printSelectionFeedback = root.querySelector("[data-page3-print-selection-feedback]");
 
   const readStateFromUrl = () => {
     const params = new URLSearchParams(window.location.search);
-    const view = ["overview", "normal", "special"].includes(params.get("view") || "") ? params.get("view") : "overview";
+    const view = ["overview", "normal", "special", "addons"].includes(params.get("view") || "") ? params.get("view") : "overview";
     const specialView = ["production", "department"].includes(params.get("special_view") || "") ? params.get("special_view") : "production";
     return { view, specialView };
   };
@@ -93,6 +100,48 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
+  const selectedAddonFamilies = () => addonFamilies.filter((family) => !family.classList.contains("is-print-unselected"));
+  const setPrintSelectionFeedback = (message) => {
+    if (!printSelectionFeedback) {
+      return;
+    }
+    printSelectionFeedback.textContent = message;
+    printSelectionFeedback.hidden = !message;
+  };
+  const syncAddonToggle = (toggle, selected) => {
+    const familyName = toggle.getAttribute("data-page3-addon-family-name") || "familjen";
+    toggle.setAttribute("aria-pressed", String(selected));
+    toggle.setAttribute("title", `${selected ? "Avmarkera" : "Välj"} ${familyName} för utskrift`);
+  };
+  const resetAddonPrintScope = () => {
+    addonFamilies.forEach((family) => family.classList.remove("is-print-inactive"));
+  };
+  const applyAddonPrintScope = () => {
+    const selected = selectedAddonFamilies();
+    addonFamilies.forEach((family) => family.classList.toggle("is-print-inactive", !selected.includes(family)));
+    return selected.length > 0;
+  };
+  const toggleAddonFamily = (toggle) => {
+    const familyKey = toggle.getAttribute("data-page3-addon-family-toggle") || "";
+    const family = addonFamilies.find((item) => item.getAttribute("data-page3-addon-family") === familyKey);
+    if (!family) {
+      return;
+    }
+    const selected = family.classList.toggle("is-print-unselected") === false;
+    syncAddonToggle(toggle, selected);
+    setPrintSelectionFeedback("");
+  };
+
+  addonFamilyToggles.forEach((toggle) => {
+    const familyKey = toggle.getAttribute("data-page3-addon-family-toggle") || "";
+    const family = addonFamilies.find((item) => item.getAttribute("data-page3-addon-family") === familyKey);
+    if (family) {
+      family.classList.remove("is-print-unselected");
+      syncAddonToggle(toggle, true);
+    }
+    toggle.addEventListener("click", () => toggleAddonFamily(toggle));
+  });
+
   const showState = ({ view, specialView }, options = {}) => {
     const { updateHistory = false, replaceHistory = false } = options;
     const resolvedSpecialView = view === "special" ? specialView : lastSpecialView;
@@ -119,6 +168,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (view === "special") {
       lastSpecialView = resolvedSpecialView;
     }
+    if (view !== "addons") {
+      resetAddonPrintScope();
+      setPrintSelectionFeedback("");
+    }
     root.setAttribute("data-page3-active-view", view);
     root.setAttribute("data-page3-active-special-view", resolvedSpecialView);
     if (printTitle) {
@@ -126,6 +179,8 @@ document.addEventListener("DOMContentLoaded", () => {
         ? "Översikt – Dagens produktion"
         : view === "normal"
           ? "Normalkost"
+          : view === "addons"
+            ? "Serveringsanpassningar"
           : resolvedSpecialView === "department"
             ? "Specialkost – Packlista"
             : "Specialkost – Produktionslista";
@@ -174,8 +229,13 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   window.addEventListener("beforeprint", () => {
-    showState(readStateFromUrl(), { updateHistory: false });
+    const state = readStateFromUrl();
+    showState(state, { updateHistory: false });
+    if (state.view === "addons") {
+      applyAddonPrintScope();
+    }
   });
+  window.addEventListener("afterprint", resetAddonPrintScope);
 
   const completionButton = root.querySelector("[data-page3-completion-button]");
   const completionFeedback = root.querySelector("[data-page3-completion-feedback]");
@@ -200,7 +260,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const printButton = root.querySelector("[data-page3-print]");
   if (printButton) {
-    printButton.addEventListener("click", () => window.print());
+    printButton.addEventListener("click", () => {
+      if (root.getAttribute("data-page3-active-view") === "addons" && !applyAddonPrintScope()) {
+        setPrintSelectionFeedback("Välj minst en familj innan utskrift.");
+        return;
+      }
+      setPrintSelectionFeedback("");
+      window.print();
+    });
   }
 
   if (!completionButton || !completionDepartmentIds.length || !siteId || !serviceDate || !meal || !Number.isInteger(isoYear) || !Number.isInteger(isoWeek)) {
