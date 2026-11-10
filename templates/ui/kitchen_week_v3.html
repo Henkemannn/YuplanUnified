@@ -28,6 +28,7 @@
       </div>
     </section>
     <div class="app-shell__card-meta no-print">År {{ vm.year }} • Vecka {{ vm.week }}</div>
+    <div class="weekview-status" data-weekview-status role="status" aria-live="polite" aria-atomic="true"></div>
     <div class="print-header">
       <h1>Kök – Veckovy</h1>
       <p>År {{ vm.year }} • Vecka {{ vm.week }}</p>
@@ -58,7 +59,7 @@
             </div>
           {% endif %}
         </div>
-        {% set interactive = vm.weekview_enabled %}
+        {% set interactive = true %}
         {% include "ui/_partials/week_grid.html" %}
         {% if dep.no_diets %}
           <div class="dept-empty" aria-live="polite">Inga specialkoster kopplade</div>

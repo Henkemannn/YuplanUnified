@@ -199,6 +199,7 @@ def test_kitchen_week_v3_renders_and_flags(app_session):
     assert "Laktosfri" in html
     # Buttons contain dataset attributes
     assert "class=\"kostcell-btn" in html and "data-department-id" in html and "data-diet-type-id" in html
+    assert "Färdigmarkering är inte aktiverad för denna arbetsplats." not in html
     # Buttons should not render disabled in the markup
     assert not re.search(r"kostcell-btn[^>]*\sdisabled", html)
     # Alt2 flag appears at least once (Monday lunch for dep1)
@@ -455,7 +456,7 @@ def test_kitchen_week_v3_default_select_false_not_premarked_cells(app_session):
     )
 
 
-def test_kitchen_week_v3_weekview_disabled_renders_read_only(app_session, client_admin):
+def test_kitchen_week_v3_completion_ignores_absent_feature_flag(app_session, client_admin):
     app = app_session
     suffix = uuid.uuid4().hex[:8]
     with app.app_context():
@@ -472,6 +473,18 @@ def test_kitchen_week_v3_weekview_disabled_renders_read_only(app_session, client
 
     try:
         _set_weekview_flag(client_admin, False)
+        with app_session.app_context():
+            db = get_session()
+            try:
+                db.execute(
+                    text(
+                        "DELETE FROM tenant_feature_flags "
+                        "WHERE tenant_id = 1 AND name = 'ff.weekview.enabled'"
+                    )
+                )
+                db.commit()
+            finally:
+                db.close()
         headers = {"X-User-Role": "cook", "X-Tenant-Id": "1"}
         with client_admin.session_transaction() as sess:
             sess["tenant_id"] = 1
@@ -480,10 +493,9 @@ def test_kitchen_week_v3_weekview_disabled_renders_read_only(app_session, client
         rv = client_admin.get("/ui/kitchen/week?year=2026&week=6", headers=headers)
         assert rv.status_code == 200
         html = rv.data.decode("utf-8")
-        assert 'data-readonly="1"' in html
+        assert "Färdigmarkering är inte aktiverad för denna arbetsplats." not in html
         buttons = re.findall(r'<button[^>]*class="[^"]*kostcell-btn[^"]*"[^>]*>', html)
         assert buttons
-        assert all('disabled' in button and 'aria-disabled="true"' in button for button in buttons)
-        _assert_boende_row_is_read_only(html)
+        assert any("disabled" not in button for button in buttons)
     finally:
         _set_weekview_flag(client_admin, True)

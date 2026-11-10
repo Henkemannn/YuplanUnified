@@ -100,7 +100,6 @@ def _unique_id(prefix: str) -> str:
 
 def test_requirement_group_mark_success_clear_projection_and_no_dual_write(app_session):
     app = app_session
-    _enable_weekview_feature(app)
     client = app.test_client()
     site_id = _unique_id("site-cohort-mark-success")
     department_id = _unique_id("dept-cohort-mark-success")
@@ -110,6 +109,17 @@ def test_requirement_group_mark_success_clear_projection_and_no_dual_write(app_s
     with app.app_context():
         group_id = _seed_site_department_group(site_id=site_id, department_id=department_id)
         _seed_version(1, department_id, year, week, 0)
+        db = get_session()
+        try:
+            db.execute(
+                text(
+                    "DELETE FROM tenant_feature_flags "
+                    "WHERE tenant_id = 1 AND name = 'ff.weekview.enabled'"
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
 
     _login(client, site_id=site_id, role="cook")
     etag_before = _current_etag(client, department_id, year, week, site_id)

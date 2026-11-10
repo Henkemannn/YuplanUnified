@@ -1,4 +1,13 @@
 (function(){
+  class WeekviewRequestError extends Error {
+    constructor(status, phase, network = false){
+      super(network ? 'network_error' : `${phase}_${status}`);
+      this.status = status;
+      this.phase = phase;
+      this.network = network;
+    }
+  }
+
   function getCookie(name){
     try {
       const cookie = document.cookie
@@ -30,6 +39,7 @@
       default: return "Mån";
     }
   }
+
   function resolveSiteId(){
     const qs = new URLSearchParams(window.location.search);
     const querySiteId = qs.get('site_id');
@@ -41,17 +51,97 @@
     if(shell && shell.getAttribute('data-page-site-id')){ return shell.getAttribute('data-page-site-id'); }
     return null;
   }
+
+  function setStatus(message, state){
+    const status = document.querySelector('[data-weekview-status]');
+    if(!status){ return; }
+    status.textContent = message;
+    if(state){ status.dataset.state = state; }
+    else { delete status.dataset.state; }
+  }
+
+  function errorMessage(error){
+    if(error && error.network){
+      return 'Markeringen kunde inte sparas. Kontrollera nätverksanslutningen och försök igen.';
+    }
+    const status = error && error.status;
+    if(status === 401 || status === 403){
+      return 'Markeringen kunde inte sparas. Kontrollera att sessionen fortfarande är aktiv och försök igen.';
+    }
+    if(status === 400 || status === 404){
+      return 'Markeringen kunde inte sparas eftersom veckovyn eller raden inte längre är giltig.';
+    }
+    if(status === 409){
+      return 'Markeringen kunde inte sparas eftersom uppgifterna ändrades. Läs in veckovyn igen.';
+    }
+    if(status === 412){
+      return 'Markeringen kunde inte sparas eftersom veckovyn ändrades av någon annan. Försök igen.';
+    }
+    return 'Markeringen kunde inte sparas på grund av ett serverfel. Försök igen.';
+  }
+
+  async function fetchOrThrow(url, options, phase){
+    let resp;
+    try {
+      resp = await fetch(url, options);
+    } catch(e){
+      throw new WeekviewRequestError(0, phase, true);
+    }
+    return resp;
+  }
+
   async function getEtag(departmentId, year, week){
     const siteId = resolveSiteId();
     const base = `/api/weekview/etag?department_id=${encodeURIComponent(departmentId)}&year=${year}&week=${week}`;
     const url = siteId ? `${base}&site_id=${encodeURIComponent(siteId)}` : base;
     console.debug("[K3] GET ETag URL:", url);
-    const resp = await fetch(url, { headers: {"X-User-Role":"cook"} });
-    if(!resp.ok){ return null; }
-    const j = await resp.json();
-    console.debug("[K3] Fetched ETag:", j.etag || null);
-    return j.etag || null;
+    const resp = await fetchOrThrow(url, { headers: {"X-User-Role":"cook"} }, 'etag');
+    if(!resp.ok){ throw new WeekviewRequestError(resp.status, 'etag'); }
+    let json;
+    try {
+      json = await resp.json();
+    } catch(e){
+      throw new WeekviewRequestError(500, 'etag');
+    }
+    if(!json || !json.etag){ throw new WeekviewRequestError(500, 'etag'); }
+    console.debug("[K3] Fetched ETag:", json.etag);
+    return json.etag;
   }
+
+  function requestOptions(etag, csrf, payload){
+    return {
+      method:'POST',
+      credentials:'same-origin',
+      headers:{
+        'Content-Type':'application/json',
+        'If-Match': etag,
+        'X-User-Role':'cook',
+        ...(csrf ? { 'X-CSRF-Token': csrf } : {})
+      },
+      body: JSON.stringify(payload)
+    };
+  }
+
+  async function postWithRetry(url, payload, departmentId, year, week, csrf, label){
+    let etag = await getEtag(departmentId, year, week);
+    let resp = await fetchOrThrow(url, requestOptions(etag, csrf, payload), label);
+    if(resp.status === 412){
+      etag = await getEtag(departmentId, year, week);
+      resp = await fetchOrThrow(url, requestOptions(etag, csrf, payload), label);
+      if(resp.status === 412){
+        throw new WeekviewRequestError(412, 'post');
+      }
+    }
+    if(resp.status !== 200){
+      throw new WeekviewRequestError(resp.status, 'post');
+    }
+  }
+
+  function setMarkedState(btn, marked){
+    if(marked){ btn.classList.add('is-done'); }
+    else { btn.classList.remove('is-done'); }
+  }
+
   async function toggleMark(btn){
     const depId = btn.dataset.departmentId;
     const dtId = btn.dataset.dietTypeId;
@@ -61,8 +151,6 @@
     const meal = btn.dataset.meal || "lunch";
     const marked = !btn.classList.contains('is-done');
     const siteId = resolveSiteId();
-    const etag = await getEtag(depId, year, week);
-    if(!etag){ return; }
     const payload = {
       year: year,
       week: week,
@@ -73,54 +161,19 @@
       marked: marked,
       site_id: siteId
     };
-    const csrf = getCsrfToken();
-    console.debug("[K3] If-Match on first POST:", etag);
-    const resp = await fetch('/api/weekview/specialdiets/mark',{
-      method:'POST',
-      credentials:'same-origin',
-      headers:{
-        'Content-Type':'application/json',
-        'If-Match': etag,
-        'X-User-Role':'cook',
-        ...(csrf ? { 'X-CSRF-Token': csrf } : {})
-      },
-      body: JSON.stringify(payload)
-    });
-    if(resp.status === 200){
-      // Success: toggle UI locally without full reload
-      if(marked){ btn.classList.add('is-done'); } else { btn.classList.remove('is-done'); }
-      return;
-    } else if(resp.status === 412){
-      try {
-        const txt = await resp.text();
-        console.warn("[K3] 412 from mark POST. Response snippet:", txt?.slice(0,200));
-      } catch(e) { /* ignore */ }
-      // ETag mismatch: re-fetch and retry once
-      const etag2 = await getEtag(depId, year, week);
-      if(!etag2) return;
-      console.debug("[K3] If-Match on retry POST:", etag2);
-      const resp2 = await fetch('/api/weekview/specialdiets/mark',{
-        method:'POST',
-        credentials:'same-origin',
-        headers:{
-          'Content-Type':'application/json',
-          'If-Match': etag2,
-          'X-User-Role':'cook',
-          ...(csrf ? { 'X-CSRF-Token': csrf } : {})
-        },
-        body: JSON.stringify(payload)
-      });
-      if(resp2.status === 200){
-        // Retry succeeded: toggle UI locally; no full reload
-        if(marked){ btn.classList.add('is-done'); } else { btn.classList.remove('is-done'); }
-        return;
-      } else {
-        // Conflict unresolved: notify and reload to sync fresh data
-        try { alert('Uppdaterades av någon annan – laddar om data'); } catch(_) {}
-        window.location.reload();
-      }
-    }
+    await postWithRetry(
+      '/api/weekview/specialdiets/mark',
+      payload,
+      depId,
+      year,
+      week,
+      getCsrfToken(),
+      'specialdiet'
+    );
+    setMarkedState(btn, marked);
+    setStatus(marked ? 'Markering sparad.' : 'Markering borttagen.', 'success');
   }
+
   async function toggleCohortMark(btn){
     const depId = btn.dataset.departmentId;
     const groupId = btn.dataset.groupId;
@@ -130,67 +183,59 @@
     const meal = (btn.dataset.meal || 'lunch').toLowerCase();
     const marked = !btn.classList.contains('is-done');
     const siteId = resolveSiteId();
-    const csrf = getCsrfToken();
-
-    async function postOnce(etag){
-      return fetch('/api/weekview/requirement-groups/mark', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'Content-Type': 'application/json',
-          'If-Match': etag,
-          'X-User-Role': 'cook',
-          ...(csrf ? { 'X-CSRF-Token': csrf } : {})
-        },
-        body: JSON.stringify({
-          site_id: siteId,
-          department_id: depId,
-          year: year,
-          week: week,
-          group_id: groupId,
-          service_date: serviceDate,
-          meal: meal,
-          marked: marked
-        })
-      });
-    }
-
-    const etag = await getEtag(depId, year, week);
-    if(!etag){ return; }
-    const resp = await postOnce(etag);
-    if(resp.status === 200){
-      if(marked){ btn.classList.add('is-done'); } else { btn.classList.remove('is-done'); }
-      return;
-    }
-    if(resp.status === 412){
-      try {
-        const txt = await resp.text();
-        console.warn('[K3] 412 from cohort mark POST. Response snippet:', txt?.slice(0,200));
-      } catch(e) { /* ignore */ }
-      const etag2 = await getEtag(depId, year, week);
-      if(!etag2){ return; }
-      const resp2 = await postOnce(etag2);
-      if(resp2.status === 200){
-        if(marked){ btn.classList.add('is-done'); } else { btn.classList.remove('is-done'); }
-        return;
-      }
-    }
-    try { alert('Uppdaterades av någon annan – laddar om data'); } catch(_) {}
-    window.location.reload();
+    const payload = {
+      site_id: siteId,
+      department_id: depId,
+      year: year,
+      week: week,
+      group_id: groupId,
+      service_date: serviceDate,
+      meal: meal,
+      marked: marked
+    };
+    await postWithRetry(
+      '/api/weekview/requirement-groups/mark',
+      payload,
+      depId,
+      year,
+      week,
+      getCsrfToken(),
+      'cohort'
+    );
+    setMarkedState(btn, marked);
+    setStatus(marked ? 'Markering sparad.' : 'Markering borttagen.', 'success');
   }
+
+  function beginPending(btn){
+    if(btn.disabled || btn.dataset.weekviewPending === '1'){ return null; }
+    const wasDisabled = btn.disabled;
+    btn.dataset.weekviewPending = '1';
+    btn.disabled = true;
+    return wasDisabled;
+  }
+
+  function endPending(btn, wasDisabled){
+    if(wasDisabled === null){ return; }
+    btn.disabled = wasDisabled;
+    delete btn.dataset.weekviewPending;
+  }
+
   document.addEventListener('DOMContentLoaded', function(){
     document.addEventListener('click', async function(ev){
       const btn = ev.target && ev.target.closest ? ev.target.closest('.kostcell-btn') : null;
       if(!btn){ return; }
       ev.preventDefault();
+      const wasDisabled = beginPending(btn);
+      if(wasDisabled === null){ return; }
+      const isCohort = btn.dataset.rowKind === 'cohort';
+      setStatus('Sparar markering…');
       try {
-        if(btn.dataset.rowKind === 'cohort'){
-          await toggleCohortMark(btn);
-        } else {
-          await toggleMark(btn);
-        }
+        if(isCohort){ await toggleCohortMark(btn); }
+        else { await toggleMark(btn); }
+      } catch(error){
+        setStatus(errorMessage(error), 'error');
       } finally {
-        // Remove focus to avoid any residual browser focus outline
+        endPending(btn, wasDisabled);
         try { btn.blur(); } catch(e) { /* ignore */ }
       }
     });

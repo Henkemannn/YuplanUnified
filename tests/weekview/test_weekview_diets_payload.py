@@ -11,8 +11,7 @@ def _h(role):
     return {"X-User-Role": role, "X-Tenant-Id": "1"}
 
 
-@pytest.fixture
-def enable_weekview(client_admin):
+def _enable_weekview(client_admin):
     resp = client_admin.post(
         "/features/set",
         json={"name": "ff.weekview.enabled", "enabled": True},
@@ -21,7 +20,6 @@ def enable_weekview(client_admin):
     assert resp.status_code == 200
 
 
-@pytest.mark.usefixtures("enable_weekview")
 def test_weekview_diets_in_days_payload(client_admin):
     app = client_admin.application
     site_id = str(uuid.uuid4())
@@ -36,12 +34,13 @@ def test_weekview_diets_in_days_payload(client_admin):
         db = get_session()
         try:
             # Seed site + department
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), {"i": site_id, "n": "Varberg"})
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"), {"i": site_id, "n": "Varberg"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',0,0) ON CONFLICT(id) DO NOTHING"), {"i": dep_id, "s": site_id, "n": "Avd D"})
             db.commit()
         finally:
             db.close()
 
+    _enable_weekview(client_admin)
     diets_repo = DietTypesRepo()
     gluten_id = str(diets_repo.create(site_id=site_id, name="Glutenfri", default_select=False))
     laktos_id = str(diets_repo.create(site_id=site_id, name="Laktosfri", default_select=False))
@@ -110,9 +109,9 @@ def _seed_marked_precedence_case(default_select: bool) -> tuple[str, str, str]:
     return site["id"], dept["id"], diet_id
 
 
-@pytest.mark.usefixtures("enable_weekview")
 def test_weekview_diets_payload_default_select_true_without_explicit_row_is_marked(client_admin: FlaskClient):
     site_id, dep_id, diet_id = _seed_marked_precedence_case(default_select=True)
+    _enable_weekview(client_admin)
     year, week = 2025, 48
 
     with client_admin.session_transaction() as sess:
@@ -125,7 +124,6 @@ def test_weekview_diets_payload_default_select_true_without_explicit_row_is_mark
     assert row["marked"] is True
 
 
-@pytest.mark.usefixtures("enable_weekview")
 def test_weekview_diets_payload_default_select_true_explicit_false_still_marked(client_admin: FlaskClient):
     site_id, dep_id, diet_id = _seed_marked_precedence_case(default_select=True)
     year, week = 2025, 48
@@ -142,6 +140,7 @@ def test_weekview_diets_payload_default_select_true_explicit_false_still_marked(
     finally:
         db.close()
 
+    _enable_weekview(client_admin)
     with client_admin.session_transaction() as sess:
         sess["site_id"] = site_id
 
@@ -152,7 +151,6 @@ def test_weekview_diets_payload_default_select_true_explicit_false_still_marked(
     assert row["marked"] is True
 
 
-@pytest.mark.usefixtures("enable_weekview")
 def test_weekview_diets_payload_explicit_true_is_marked(client_admin: FlaskClient):
     site_id, dep_id, diet_id = _seed_marked_precedence_case(default_select=False)
     year, week = 2025, 48
@@ -169,6 +167,7 @@ def test_weekview_diets_payload_explicit_true_is_marked(client_admin: FlaskClien
     finally:
         db.close()
 
+    _enable_weekview(client_admin)
     with client_admin.session_transaction() as sess:
         sess["site_id"] = site_id
 
@@ -179,9 +178,9 @@ def test_weekview_diets_payload_explicit_true_is_marked(client_admin: FlaskClien
     assert row["marked"] is True
 
 
-@pytest.mark.usefixtures("enable_weekview")
 def test_weekview_diets_payload_default_select_false_without_explicit_row_is_unmarked(client_admin: FlaskClient):
     site_id, dep_id, diet_id = _seed_marked_precedence_case(default_select=False)
+    _enable_weekview(client_admin)
     year, week = 2025, 48
 
     with client_admin.session_transaction() as sess:

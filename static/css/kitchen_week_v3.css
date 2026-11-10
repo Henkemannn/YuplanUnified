@@ -32,6 +32,21 @@
   text-decoration: none;
 }
 
+.kitchen-week .weekview-status {
+  min-height: 1.4rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.kitchen-week .weekview-status[data-state="error"] {
+  color: var(--danger, #b42318);
+}
+
+.kitchen-week .weekview-status[data-state="success"] {
+  color: var(--success, #16794c);
+}
+
 .kitchen-week .dept-header {
   display: flex;
   flex-direction: column;

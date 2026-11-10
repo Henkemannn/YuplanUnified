@@ -3537,8 +3537,6 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         name = (data.get("name") or "").strip()
         if not name:
             return jsonify({"ok": False, "error": "name required"}), 400
-        if name not in feature_registry.list():
-            feature_registry.add(name)
         enabled = bool(data.get("enabled"))
         tid = getattr(g, "tenant_id", None)
         if not tid:

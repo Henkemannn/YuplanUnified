@@ -4,6 +4,7 @@ import os
 
 from flask import Blueprint, current_app, render_template, session, request, jsonify, redirect, url_for, flash, g, abort
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.security import check_password_hash, generate_password_hash
 from .password_policy import PasswordPolicyError, validate_new_password
 
@@ -485,25 +486,54 @@ def api_weekview_specialdiets_mark():
         "diet_type": diet_type_id,
         "marked": desired_state,
     }
-    # Enforce site isolation with sane defaults:
-    # - If session site is present and locked/hard-bound, require it matches department's site
-    # - If session site is missing, infer site from department and proceed
+    tid_raw = getattr(g, "tenant_id", None) or session.get("tenant_id")
+    if tid_raw is None:
+        return jsonify({"type": "about:blank", "title": "missing_tenant"}), 400
+    try:
+        tid = int(tid_raw)
+    except (TypeError, ValueError):
+        return jsonify({"type": "about:blank", "title": "invalid_tenant"}), 400
+
+    active_site = str(
+        session.get("site_id") or getattr(g, "site_id", "") or ""
+    ).strip()
+    if not active_site:
+        return jsonify({"type": "about:blank", "title": "missing_site_context"}), 403
+    if site_id_payload and site_id_payload != active_site:
+        return jsonify({"type": "about:blank", "title": "site_mismatch"}), 403
+    site_ctx = site_id_payload or active_site
+
+    db = None
     try:
         db = get_session()
-        row = db.execute(text("SELECT site_id FROM departments WHERE id=:d"), {"d": department_id}).fetchone()
+        row = db.execute(
+            text(
+                """
+                SELECT d.site_id, s.tenant_id
+                FROM departments AS d
+                JOIN sites AS s ON s.id = d.site_id
+                WHERE d.id = :department_id
+                  AND d.site_id = :site_id
+                  AND s.tenant_id = :tenant_id
+                """
+            ),
+            {
+                "department_id": department_id,
+                "site_id": site_ctx,
+                "tenant_id": tid,
+            },
+        ).fetchone()
         if row is None:
-            return jsonify({"type": "about:blank", "title": "invalid_department_id"}), 400
-        dept_site = str(row[0])
-        active_site = (session.get("site_id") or "").strip()
-        if active_site and dept_site != active_site:
-            return jsonify({"type": "about:blank", "title": "site_mismatch"}), 403
-    except Exception:
-        pass
+            return jsonify({"type": "about:blank", "title": "forbidden_site"}), 403
+    except SQLAlchemyError:
+        current_app.logger.exception("Weekview specialdiet scope validation failed")
+        return jsonify({"type": "about:blank", "title": "server_error"}), 500
+    finally:
+        if db is not None:
+            db.close()
+
     svc = WeekviewService()
     # Align tenant resolution with the ETag endpoint to avoid scope mismatches
-    tid = getattr(g, "tenant_id", None) or session.get("tenant_id") or 0
-    # Prefer explicit site_id from payload; else fall back to session context
-    site_ctx = site_id_payload or (session.get("site_id") if "site_id" in session else None)
     # Compute the canonical-aware effective version in a single place.
     version = svc.get_effective_version(tid, year, week, department_id, site_ctx)
     current_dept_etag = svc.build_etag(tid, department_id, year, week, version)
@@ -1443,8 +1473,6 @@ def api_weekview_get_etag():
 @ui_bp.route("/api/weekview/requirement-groups/mark", methods=["POST"])
 @require_roles("cook", "admin", "superuser", "kitchen")
 def api_weekview_requirement_groups_mark():
-    from .weekview_api import _require_weekview_enabled
-
     def _norm_et(et: str) -> str:
         et = (et or "").strip()
         et = et.split(",")[0].strip()
@@ -1453,10 +1481,6 @@ def api_weekview_requirement_groups_mark():
         if len(et) >= 2 and et[0] == '"' and et[-1] == '"':
             et = et[1:-1]
         return et
-
-    maybe = _require_weekview_enabled()
-    if maybe is not None:
-        return maybe
 
     data = request.get_json(silent=True) or {}
     try:
@@ -1494,20 +1518,33 @@ def api_weekview_requirement_groups_mark():
         return jsonify({"type": "about:blank", "title": "missing_tenant"}), 400
 
     ctx_site = str((session.get("site_id") or getattr(g, "site_id", "") or "")).strip()
-    if ctx_site and ctx_site != site_id:
+    if not ctx_site:
+        return jsonify({"type": "about:blank", "title": "missing_site_context"}), 403
+    if ctx_site != site_id:
         return jsonify({"type": "about:blank", "title": "forbidden_site"}), 403
 
-    db = get_session()
+    db = None
     try:
+        db = get_session()
         dept_row = db.execute(
-            text("SELECT id, site_id FROM departments WHERE id = :dept_id"),
-            {"dept_id": department_id},
+            text(
+                """
+                SELECT d.id, d.site_id
+                FROM departments AS d
+                JOIN sites AS s ON s.id = d.site_id
+                WHERE d.id = :dept_id
+                  AND d.site_id = :site_id
+                  AND s.tenant_id = :tenant_id
+                """
+            ),
+            {"dept_id": department_id, "site_id": site_id, "tenant_id": tid},
         ).fetchone()
+    except SQLAlchemyError:
+        current_app.logger.exception("Weekview cohort scope validation failed")
+        return jsonify({"type": "about:blank", "title": "server_error"}), 500
     finally:
-        try:
+        if db is not None:
             db.close()
-        except Exception:
-            pass
     if not dept_row:
         return jsonify({"type": "about:blank", "title": "department_not_found"}), 404
     dept_site_id = str(dept_row[1] or "").strip()
@@ -5104,7 +5141,6 @@ def kitchen_veckovy_week():
             "departments": deps_out,
             "allow_site_switch": False,
             "nav_context": "kitchen",
-            "weekview_enabled": _feature_enabled("ff.weekview.enabled"),
         }
         return render_template("ui/kitchen_week_v3.html", vm=vm, meal_labels=get_meal_labels_for_site(site_id))
     # Legacy path rendering remains unchanged below
