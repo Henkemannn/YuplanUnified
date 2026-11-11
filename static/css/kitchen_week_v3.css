@@ -3,17 +3,21 @@
   --kw-alt2-fg: var(--yp-alt2-fg);
   --kw-border: var(--border-subtle);
   --kw-day-sep: rgba(255, 255, 255, 0.06);
-  --kw-label-col-min: 124px;
-  --kw-label-col-pref: 12.5vw;
-  --kw-label-col-max: 150px;
+  --kw-label-col-min: 170px;
+  --kw-label-col-pref: 170px;
+  --kw-label-col-max: 175px;
   --kw-label-col-width: clamp(var(--kw-label-col-min), var(--kw-label-col-pref), var(--kw-label-col-max));
-  --kw-label-col-min-portrait: 120px;
-  --kw-label-col-pref-portrait: 21vw;
-  --kw-label-col-max-portrait: 142px;
+  --kw-label-col-min-portrait: 170px;
+  --kw-label-col-pref-portrait: 170px;
+  --kw-label-col-max-portrait: 175px;
   --kw-label-col-width-portrait: clamp(var(--kw-label-col-min-portrait), var(--kw-label-col-pref-portrait), var(--kw-label-col-max-portrait));
+  --kw-meal-col-min: 60px;
+  --kw-day-min: calc(var(--kw-meal-col-min) * 2);
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .kitchen-week .toolbar {
@@ -125,7 +129,31 @@
   border-collapse: collapse;
   table-layout: fixed;
   background: var(--surface);
-  overflow-x: hidden;
+}
+
+.kitchen-week .kw-grid {
+  width: max(100%, calc(var(--kw-label-col-width) + (var(--kw-meal-col-min) * 14)));
+}
+
+.kitchen-week .kw-grid .kw-label-col {
+  width: var(--kw-label-col-width);
+}
+
+.kitchen-week .kw-grid .kw-meal-col {
+  width: var(--kw-meal-col-min);
+}
+
+.kitchen-week .kw-grid-scroll {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.kitchen-week .kw-grid-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .kitchen-week .grid-table th,
@@ -174,10 +202,7 @@
 }
 
 .kitchen-week .diet-name {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 6px;
+  display: table-cell;
   text-align: left;
   font-weight: 650;
   color: color-mix(in srgb, var(--text) 92%, #ffffff 8%);
@@ -188,6 +213,15 @@
   overflow-wrap: break-word;
   word-break: break-word;
   line-height: 1.2;
+  vertical-align: middle;
+}
+
+.kitchen-week .diet-name__content {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
 }
 
 .kitchen-week .boende-row .diet-name {
@@ -294,6 +328,7 @@
   justify-content: center;
   width: 100%;
   height: 100%;
+  min-height: 44px;
 }
 
 .kitchen-week .kostcell-btn:hover,
@@ -333,10 +368,17 @@
 }
 
 .kitchen-week .menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: 0;
   cursor: pointer;
   font-size: 0.86rem;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
   opacity: 0.92;
   transition: opacity 120ms ease;
 }
@@ -396,9 +438,29 @@
   }
 }
 
+@media (max-width: 1100px) {
+  .kitchen-week .kw-grid {
+    min-width: calc(var(--kw-label-col-width) + (var(--kw-meal-col-min) * 14));
+  }
+
+  .kitchen-week .grid-table th,
+  .kitchen-week .grid-table td {
+    box-sizing: border-box;
+  }
+}
+
 
 
 @media print {
+  .kitchen-week .kw-grid-scroll {
+    overflow: visible !important;
+  }
+
+  .kitchen-week .kw-grid {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
   .kitchen-week .toolbar button,
   .kitchen-week .toolbar a {
     display: none !important;

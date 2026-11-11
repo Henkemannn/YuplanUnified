@@ -9,90 +9,96 @@
     {{ weekday }}
   {% endif %}
 {%- endmacro %}
-<table class="grid-table kw-grid" aria-label="Specialkostöversikt" data-testid="weekview-grid"{% if not interactive %} data-readonly="1"{% endif %}>
-  <thead>
-    <tr>
-      <th>Kostbehov</th>
-      {% for dow in range(1,8) %}
-        {% set d = dep.days[dow-1] %}
-        <th colspan="2" class="day-group-header{% if dow > 1 %} day-sep{% endif %}{% if dow >= 6 %} is-weekend{% endif %}">
-          <span class="day-group-title">{{ day_title(d) }}</span>
-          <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="{{ dow-1 }}" data-testid="day-menu-icon">📖</button>
-        </th>
-      {% endfor %}
-    </tr>
-    <tr class="grid-subhead">
-      <th></th>
-      {% for dow in range(1,8) %}
-        <th class="meal-label-cell{% if dow > 1 %} day-sep{% endif %}">Lunch</th>
-        <th class="meal-label-cell meal-sep{% if dow >= 6 %} is-weekend{% endif %}">Kväll</th>
-      {% endfor %}
-    </tr>
-  </thead>
-  <tbody>
-    <tr class="boende-row">
-      <td class="diet-name boende-label"><span class="boende-icon" aria-hidden="true">👥</span><span>Boende totalt</span></td>
-      {% for dow in range(1,8) %}
-        {% set d = dep.days[dow-1] %}
-        <td class="kw-cell day-start{% if dow > 1 %} day-sep{% endif %}{% if d.alt2_lunch %} is-alt2{% endif %}">{% if d.alt2_lunch %}<span class="is-alt2" aria-hidden="true"></span>{% endif %}{{ d.residents.lunch if d and d.residents else 0 }}</td>
-        <td class="kw-cell">{{ d.residents.dinner if d and d.residents else 0 }}</td>
-      {% endfor %}
-    </tr>
-    {% for row in dep.diet_rows %}
-      {% set row_kind = row.row_kind or 'legacy' %}
-      {% set row_label = row.row_label or row.diet_type_name or row.kosttyp_name or '' %}
-      <tr class="diet-row" data-row-kind="{{ row_kind }}"{% if row_kind == 'cohort' and row.group_id %} data-group-id="{{ row.group_id }}"{% endif %}>
-        <td class="diet-name">{{ row_label }}</td>
+<div class="kw-grid-scroll" role="region" aria-label="Veckotabell, svep i sidled för fler dagar" tabindex="0">
+  <table class="grid-table kw-grid" aria-label="Specialkostöversikt" data-testid="weekview-grid"{% if not interactive %} data-readonly="1"{% endif %}>
+    <colgroup>
+      <col class="kw-label-col" />
+      {% for _ in range(14) %}<col class="kw-meal-col" />{% endfor %}
+    </colgroup>
+    <thead>
+      <tr>
+        <th>Kostbehov</th>
         {% for dow in range(1,8) %}
-          {% set lunch = row.cells[(dow-1)*2] %}
-          {% set dinner = row.cells[(dow-1)*2+1] %}
-          <td class="{% if lunch.is_alt2 %}is-alt2 {% endif %}diet-cell{% if lunch.is_done %} marked{% endif %}{% if lunch.is_override %} override-count{% endif %} kw-cell day-start{% if dow > 1 %} day-sep{% endif %}">
-            {% if lunch.is_alt2 %}<span class="is-alt2" aria-hidden="true"></span>{% endif %}
-            {% set cell_readonly = (not interactive) or (row_kind == 'cohort' and (lunch.count | int) <= 0) %}
-            <button class="kostcell-btn {{ 'is-done' if lunch.is_done else '' }} {{ 'override-count' if lunch.is_override else '' }}{% if row_kind == 'cohort' %} kostcell-btn--cohort{% endif %}"
-              {% if row_kind == 'cohort' %}
-              data-row-kind="cohort"
-              data-site-id="{{ vm.site_id }}"
-              data-department-id="{{ dep.id }}"
-              data-group-id="{{ row.group_id }}"
-              data-service-date="{{ lunch.service_date }}"
-              {% else %}
-              data-department-id="{{ dep.id }}"
-              data-diet-type-id="{{ row.diet_type_id }}"
-              {% endif %}
-              data-year="{{ vm.year }}"
-              data-week="{{ vm.week }}"
-              data-day-index="{{ lunch.day_index }}"
-              data-meal="lunch"
-              aria-label="Lunch {{ row_label }} dag {{ lunch.day_index }}"
-              {% if cell_readonly %}disabled aria-disabled="true" tabindex="-1" data-readonly="1"{% endif %}>
-              {{ lunch.count }}
-            </button>
-          </td>
-          <td class="diet-cell{% if dinner.is_done %} marked{% endif %}{% if dinner.is_override %} override-count{% endif %} kw-cell">
-            <button class="kostcell-btn {{ 'is-done' if dinner.is_done else '' }} {{ 'override-count' if dinner.is_override else '' }}{% if row_kind == 'cohort' %} kostcell-btn--cohort{% endif %}"
-              {% if row_kind == 'cohort' %}
-              data-row-kind="cohort"
-              data-site-id="{{ vm.site_id }}"
-              data-department-id="{{ dep.id }}"
-              data-group-id="{{ row.group_id }}"
-              data-service-date="{{ dinner.service_date }}"
-              {% else %}
-              data-department-id="{{ dep.id }}"
-              data-diet-type-id="{{ row.diet_type_id }}"
-              {% endif %}
-              {% set cell_readonly = (not interactive) or (row_kind == 'cohort' and (dinner.count | int) <= 0) %}
-              data-year="{{ vm.year }}"
-              data-week="{{ vm.week }}"
-              data-day-index="{{ dinner.day_index }}"
-              data-meal="dinner"
-              aria-label="{{ meal_labels.dinner }} {{ row_label }} dag {{ dinner.day_index }}"
-              {% if cell_readonly %}disabled aria-disabled="true" tabindex="-1" data-readonly="1"{% endif %}>
-              {{ dinner.count }}
-            </button>
-          </td>
+          {% set d = dep.days[dow-1] %}
+          <th colspan="2" class="day-group-header{% if dow > 1 %} day-sep{% endif %}{% if dow >= 6 %} is-weekend{% endif %}">
+            <span class="day-group-title">{{ day_title(d) }}</span>
+            <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="{{ dow-1 }}" data-testid="day-menu-icon">📖</button>
+          </th>
         {% endfor %}
       </tr>
-    {% endfor %}
-  </tbody>
-</table>
+      <tr class="grid-subhead">
+        <th></th>
+        {% for dow in range(1,8) %}
+          <th class="meal-label-cell{% if dow > 1 %} day-sep{% endif %}">Lunch</th>
+          <th class="meal-label-cell meal-sep{% if dow >= 6 %} is-weekend{% endif %}">Kväll</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="boende-row">
+        <td class="diet-name boende-label"><span class="diet-name__content"><span class="boende-icon" aria-hidden="true">👥</span><span>Boende totalt</span></span></td>
+        {% for dow in range(1,8) %}
+          {% set d = dep.days[dow-1] %}
+          <td class="kw-cell day-start{% if dow > 1 %} day-sep{% endif %}{% if d.alt2_lunch %} is-alt2{% endif %}">{% if d.alt2_lunch %}<span class="is-alt2" aria-hidden="true"></span>{% endif %}{{ d.residents.lunch if d and d.residents else 0 }}</td>
+          <td class="kw-cell">{{ d.residents.dinner if d and d.residents else 0 }}</td>
+        {% endfor %}
+      </tr>
+      {% for row in dep.diet_rows %}
+        {% set row_kind = row.row_kind or 'legacy' %}
+        {% set row_label = row.row_label or row.diet_type_name or row.kosttyp_name or '' %}
+        <tr class="diet-row" data-row-kind="{{ row_kind }}"{% if row_kind == 'cohort' and row.group_id %} data-group-id="{{ row.group_id }}"{% endif %}>
+          <td class="diet-name"><span class="diet-name__content">{{ row_label }}</span></td>
+          {% for dow in range(1,8) %}
+            {% set lunch = row.cells[(dow-1)*2] %}
+            {% set dinner = row.cells[(dow-1)*2+1] %}
+            <td class="{% if lunch.is_alt2 %}is-alt2 {% endif %}diet-cell{% if lunch.is_done %} marked{% endif %}{% if lunch.is_override %} override-count{% endif %} kw-cell day-start{% if dow > 1 %} day-sep{% endif %}">
+              {% if lunch.is_alt2 %}<span class="is-alt2" aria-hidden="true"></span>{% endif %}
+              {% set cell_readonly = (not interactive) or (row_kind == 'cohort' and (lunch.count | int) <= 0) %}
+              <button class="kostcell-btn {{ 'is-done' if lunch.is_done else '' }} {{ 'override-count' if lunch.is_override else '' }}{% if row_kind == 'cohort' %} kostcell-btn--cohort{% endif %}"
+                {% if row_kind == 'cohort' %}
+                data-row-kind="cohort"
+                data-site-id="{{ vm.site_id }}"
+                data-department-id="{{ dep.id }}"
+                data-group-id="{{ row.group_id }}"
+                data-service-date="{{ lunch.service_date }}"
+                {% else %}
+                data-department-id="{{ dep.id }}"
+                data-diet-type-id="{{ row.diet_type_id }}"
+                {% endif %}
+                data-year="{{ vm.year }}"
+                data-week="{{ vm.week }}"
+                data-day-index="{{ lunch.day_index }}"
+                data-meal="lunch"
+                aria-label="Lunch {{ row_label }} dag {{ lunch.day_index }}"
+                {% if cell_readonly %}disabled aria-disabled="true" tabindex="-1" data-readonly="1"{% endif %}>
+                {{ lunch.count }}
+              </button>
+            </td>
+            <td class="diet-cell{% if dinner.is_done %} marked{% endif %}{% if dinner.is_override %} override-count{% endif %} kw-cell">
+              <button class="kostcell-btn {{ 'is-done' if dinner.is_done else '' }} {{ 'override-count' if dinner.is_override else '' }}{% if row_kind == 'cohort' %} kostcell-btn--cohort{% endif %}"
+                {% if row_kind == 'cohort' %}
+                data-row-kind="cohort"
+                data-site-id="{{ vm.site_id }}"
+                data-department-id="{{ dep.id }}"
+                data-group-id="{{ row.group_id }}"
+                data-service-date="{{ dinner.service_date }}"
+                {% else %}
+                data-department-id="{{ dep.id }}"
+                data-diet-type-id="{{ row.diet_type_id }}"
+                {% endif %}
+                {% set cell_readonly = (not interactive) or (row_kind == 'cohort' and (dinner.count | int) <= 0) %}
+                data-year="{{ vm.year }}"
+                data-week="{{ vm.week }}"
+                data-day-index="{{ dinner.day_index }}"
+                data-meal="dinner"
+                aria-label="{{ meal_labels.dinner }} {{ row_label }} dag {{ dinner.day_index }}"
+                {% if cell_readonly %}disabled aria-disabled="true" tabindex="-1" data-readonly="1"{% endif %}>
+                {{ dinner.count }}
+              </button>
+            </td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
