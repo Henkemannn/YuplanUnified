@@ -815,51 +815,52 @@ def _build_product2_page1_menu_vm(*, tenant_id: int, site_id: str, year: int, we
 
 def _build_product2_week_selector_vm(*, tenant_id: int, site_id: str, year: int, week: int) -> dict[str, object]:
     try:
-        selected_monday = _date.fromisocalendar(int(year), int(week), 1)
+        selected_year = int(year)
+        selected_week = int(week)
+        _date.fromisocalendar(selected_year, selected_week, 1)
     except Exception as exc:
         raise RuntimeError("product2_week_selector_contract_error") from exc
 
-    week_options: list[dict[str, object]] = []
+    db = get_session()
     try:
-        from .commun_builder_projection import get_shadow_projection_reader
-        projection_reader = get_shadow_projection_reader()
-    except Exception as exc:
-        raise RuntimeError("product2_week_selector_projection_unavailable") from exc
+        published_weeks = db.execute(
+            text(
+                "SELECT DISTINCT year, week FROM menus "
+                "WHERE tenant_id = :tenant_id AND site_id = :site_id "
+                "AND lower(status) = 'published' "
+                "ORDER BY year ASC, week ASC"
+            ),
+            {"tenant_id": int(tenant_id), "site_id": str(site_id)},
+        ).all()
+    finally:
+        db.close()
 
-    for offset in (-2, -1, 0, 1):
-        candidate_date = selected_monday + timedelta(weeks=offset)
-        candidate_iso = candidate_date.isocalendar()
-        candidate_year = int(candidate_iso[0])
-        candidate_week = int(candidate_iso[1])
-        available = False
-        try:
-            outcome = projection_reader.get_projection(
-                tenant_id=int(tenant_id),
-                site_id=str(site_id),
-                year=candidate_year,
-                week=candidate_week,
-            )
-            if outcome.status == "ok" and outcome.projection is not None:
-                available = any(
-                    bool(row.resolved)
-                    and str(row.variant_type or "").strip().lower() != "unresolved_variant"
-                    for row in outcome.projection.rows
-                )
-        except Exception:
-            available = False
-        week_options.append(
+    week_options: list[dict[str, object]] = [
+        {
+            "year": int(row.year),
+            "week": int(row.week),
+            "label": f"Vecka {int(row.week)} ({int(row.year)})",
+            "available": True,
+            "selected": int(row.year) == selected_year and int(row.week) == selected_week,
+            "url": (
+                f"/ui/kitchen/planering?ui=product2&site_id={site_id}"
+                f"&year={int(row.year)}&week={int(row.week)}"
+            ),
+        }
+        for row in published_weeks
+    ]
+
+    if not any(option["selected"] for option in week_options):
+        week_options.insert(
+            0,
             {
-                "year": candidate_year,
-                "week": candidate_week,
-                "label": f"Vecka {candidate_week}",
-                "available": available,
-                "selected": candidate_year == int(year) and candidate_week == int(week),
-                "url": (
-                    f"/ui/kitchen/planering?ui=product2&site_id={site_id}&year={candidate_year}&week={candidate_week}"
-                    if available
-                    else None
-                ),
-            }
+                "year": selected_year,
+                "week": selected_week,
+                "label": "Välj publicerad vecka",
+                "available": False,
+                "selected": True,
+                "url": None,
+            },
         )
 
     return {"options": tuple(week_options)}

@@ -23,7 +23,11 @@ from core.commun_builder_linkage import CommunBuilderMenuLinkService
 from core.db import create_all, get_session
 from core.menu import InMemoryCompositionAliasRepository, MenuService
 from core.menu_service import MenuServiceDB
-from core.ui_blueprint import _apply_builder_reader_weekview_overview, _build_product2_page1_menu_vm
+from core.ui_blueprint import (
+    _apply_builder_reader_weekview_overview,
+    _build_product2_page1_menu_vm,
+    _build_product2_week_selector_vm,
+)
 from sqlalchemy import text
 
 
@@ -291,6 +295,21 @@ def _seed_product2_legacy_only_menu(
         legacy_menu_service = MenuServiceDB()
         legacy_menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="tuesday", meal="lunch", variant_type="alt1", dish_id=99001)
         legacy_menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="tuesday", meal="lunch", variant_type="alt2", dish_id=99002)
+        return menu.id
+
+
+def _seed_published_text_menu(app, *, site_id: str, year: int, week: int, tenant_id: int = 1) -> int:
+    with app.app_context():
+        menu = MenuServiceDB().create_or_get_menu(tenant_id=tenant_id, site_id=site_id, week=week, year=year)
+        db = get_session()
+        try:
+            db.execute(
+                text("UPDATE menus SET status='published' WHERE id=:menu_id AND tenant_id=:tenant_id AND site_id=:site_id"),
+                {"menu_id": menu.id, "tenant_id": tenant_id, "site_id": site_id},
+            )
+            db.commit()
+        finally:
+            db.close()
         return menu.id
 
 
@@ -717,21 +736,17 @@ def test_kitchen_planering_product2_weekbar_hrefs_preserve_product2_context(clie
 def test_kitchen_planering_product2_week_selector_compact_availability(client_admin, monkeypatch):
     monkeypatch.setattr("core.ui_blueprint._date", _FixedTodayWednesday)
     site_id = _seed_site(client_admin.application, site_name="Week Selector Site")
-    _seed_product2_publication(
+    _seed_published_text_menu(
         client_admin.application,
         site_id=site_id,
         year=2026,
         week=40,
-        builder_menu_id="builder-menu-week-40",
-        builder_menu_version=1,
     )
-    _seed_product2_publication(
+    _seed_published_text_menu(
         client_admin.application,
         site_id=site_id,
         year=2026,
         week=42,
-        builder_menu_id="builder-menu-week-42",
-        builder_menu_version=1,
     )
 
     html = _product2_html(client_admin, site_id, query="&year=2026&week=42")
@@ -742,24 +757,44 @@ def test_kitchen_planering_product2_week_selector_compact_availability(client_ad
     assert re.search(r'<select[^>]*class="[^"]*planera-page1__weekpicker-select[^"]*"', html)
     assert 'aria-label="Vecka"' in html
 
-    week40 = _weekpicker_entry(html, "Vecka 40")
-    week41 = _weekpicker_entry(html, "Vecka 41")
-    week42 = _weekpicker_entry(html, "Vecka 42")
-    week43 = _weekpicker_entry(html, "Vecka 43")
+    week40 = _weekpicker_entry(html, "Vecka 40 (2026)")
+    week42 = _weekpicker_entry(html, "Vecka 42 (2026)")
 
     assert week40["tag"] == "option"
     assert week40["href"] is not None and "ui=product2" in week40["href"]
     assert "year=2026" in week40["href"] and "week=40" in week40["href"]
 
-    assert week41["tag"] == "option"
-    assert week41["disabled"] is True
-
     assert week42["tag"] == "option"
     assert week42["current"] is True
     assert "week=42" in (week42["href"] or "")
+    assert "Vecka 41" not in html
+    assert "Vecka 43" not in html
 
-    assert week43["tag"] == "option"
-    assert week43["disabled"] is True
+
+def test_kitchen_planering_product2_week_selector_uses_all_published_text_weeks(client_admin):
+    site_id = _seed_site(client_admin.application, site_name="Published Text Weeks Site")
+    for week in (45, 46, 47):
+        _seed_published_text_menu(client_admin.application, site_id=site_id, year=2026, week=week)
+
+    html_46 = _product2_html(client_admin, site_id, query="&year=2026&week=46")
+    html_45 = _product2_html(client_admin, site_id, query="&year=2026&week=45")
+
+    for html in (html_46, html_45):
+        assert _weekpicker_entry(html, "Vecka 45 (2026)")["href"]
+        assert _weekpicker_entry(html, "Vecka 46 (2026)")["href"]
+        assert _weekpicker_entry(html, "Vecka 47 (2026)")["href"]
+
+
+def test_kitchen_planering_product2_week_selector_isolates_tenant_and_uses_neutral_selection(client_admin):
+    site_a = _seed_site(client_admin.application, site_name="Selector Tenant A", tenant_id=1)
+    site_b = _seed_site(client_admin.application, site_name="Selector Tenant B", tenant_id=2)
+    _seed_published_text_menu(client_admin.application, site_id=site_a, year=2026, week=45)
+    _seed_published_text_menu(client_admin.application, site_id=site_b, year=2026, week=47, tenant_id=2)
+
+    vm = _build_product2_week_selector_vm(tenant_id=1, site_id=site_a, year=2026, week=46)
+    assert vm["options"][0]["label"] == "Välj publicerad vecka"
+    assert vm["options"][0]["selected"] is True
+    assert all(option["week"] != 47 for option in vm["options"][1:])
 
 
 def test_kitchen_planering_product2_week_selector_has_native_change_wiring():
@@ -791,28 +826,23 @@ def test_app_shell_initializes_theme_before_app_shell_stylesheet():
 def test_kitchen_planering_product2_week_selector_handles_iso_year_boundary(client_admin, monkeypatch):
     monkeypatch.setattr("core.ui_blueprint._date", _FixedTodayIsoBoundary)
     site_id = _seed_site(client_admin.application, site_name="Boundary Selector Site")
-    _seed_product2_publication(
+    _seed_published_text_menu(
         client_admin.application,
         site_id=site_id,
         year=2026,
         week=52,
-        builder_menu_id="builder-menu-boundary-52",
-        builder_menu_version=1,
     )
-    _seed_product2_publication(
+    _seed_published_text_menu(
         client_admin.application,
         site_id=site_id,
         year=2027,
         week=1,
-        builder_menu_id="builder-menu-boundary-1",
-        builder_menu_version=1,
     )
 
     html = _product2_html(client_admin, site_id, query="&year=2027&week=1")
 
-    week52 = _weekpicker_entry(html, "Vecka 52")
-    week1 = _weekpicker_entry(html, "Vecka 1")
-    week2 = _weekpicker_entry(html, "Vecka 2")
+    week52 = _weekpicker_entry(html, "Vecka 52 (2026)")
+    week1 = _weekpicker_entry(html, "Vecka 1 (2027)")
 
     assert week52["tag"] == "option"
     assert "year=2026" in (week52["href"] or "")
@@ -821,8 +851,7 @@ def test_kitchen_planering_product2_week_selector_handles_iso_year_boundary(clie
     assert week1["current"] is True
     assert "year=2027" in (week1["href"] or "")
     assert "week=1" in (week1["href"] or "")
-    assert week2["tag"] == "option"
-    assert week2["disabled"] is True
+    assert "Vecka 2" not in html
 
 
 def test_kitchen_planering_product2_missing_tenant_fails_closed(client_admin):
