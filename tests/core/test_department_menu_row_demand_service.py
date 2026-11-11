@@ -6,6 +6,7 @@ from sqlalchemy import text
 
 from core.builder import BuilderFlow
 from core.builder_menu_context_flow import BuilderMenuContextFlow
+from core.builder.library_scope import ObjectScope
 from core.commun_builder_linkage import CommunBuilderMenuLinkService
 from core.commun_builder_publication import CommunBuilderPublicationService
 from core.commun_builder_projection import get_shadow_projection_reader
@@ -24,6 +25,26 @@ from core.department_menu_row_demand_service import DepartmentMenuRowDemandError
 from core.menu import InMemoryCompositionAliasRepository, MenuService
 from core.menu_service import MenuServiceDB
 from core.models import Department, Site, Tenant
+
+
+class _TestCompositionScopeRepository:
+    def __init__(self) -> None:
+        self._composition_ids: set[str] = set()
+
+    def register(self, composition_id: str) -> None:
+        self._composition_ids.add(str(composition_id))
+
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+        if object_type != "composition" or str(object_id) not in self._composition_ids:
+            return None
+        return ObjectScope(
+            tenant_id=1,
+            owner_scope="organisation",
+            owner_site_id=None,
+            owner_user_id=None,
+            visibility="organisation",
+            source_object_id=None,
+        )
 
 
 def _seed_site(app_session, *, site_id: str, tenant_id: int = 1) -> None:
@@ -74,6 +95,7 @@ def _build_builder_menu_context_flow() -> tuple[BuilderMenuContextFlow, Composit
     alias_repository = InMemoryCompositionAliasRepository()
     recipe_repository = InMemoryRecipeRepository()
     ingredient_repository = InMemoryRecipeIngredientLineRepository()
+    scope_repository = _TestCompositionScopeRepository()
 
     builder_flow = BuilderFlow(
         component_service=ComponentService(repository=component_repository),
@@ -81,6 +103,7 @@ def _build_builder_menu_context_flow() -> tuple[BuilderMenuContextFlow, Composit
         composition_repository=composition_repository,
         alias_repository=alias_repository,
         component_alias_repository=InMemoryComponentAliasRepository(),
+        object_scope_repository=scope_repository,
     )
     menu_context_flow = BuilderMenuContextFlow(
         menu_service=MenuService(composition_repository=composition_repository),
@@ -95,6 +118,23 @@ def _build_builder_menu_context_flow() -> tuple[BuilderMenuContextFlow, Composit
 
 def _seed_publication_versions(app_session, *, site_id: str, year: int, week: int) -> dict[str, object]:
     _seed_site(app_session, site_id=site_id)
+    db = get_session()
+    try:
+        for table in (
+            "commun_builder_publication_pins",
+            "commun_builder_publication_revisions",
+            "commun_builder_menu_links",
+        ):
+            db.execute(
+                text(
+                    f"DELETE FROM {table} "
+                    "WHERE tenant_id=1 AND site_id=:site_id AND year=:year AND week=:week"
+                ),
+                {"site_id": site_id, "year": year, "week": week},
+            )
+        db.commit()
+    finally:
+        db.close()
     department_id = f"dept-demand-{site_id}"
     tenant_id, site_id, department_id = _seed_department(app_session, site_id=site_id, department_id=department_id)
 
@@ -111,13 +151,16 @@ def _seed_publication_versions(app_session, *, site_id: str, year: int, week: in
             status="published",
         )
         composition_service.create_composition(composition_id="comp-a", composition_name="Soup A")
+        builder_flow._library_flow._object_scope_repository.register("comp-a")
         composition_service.create_composition(composition_id="comp-b", composition_name="Soup B")
+        builder_flow._library_flow._object_scope_repository.register("comp-b")
         composition_service.create_composition(
             composition_id="comp-fixed",
             composition_name="Fixed Soup",
             use_custom_menu_name=True,
             menu_name="Fixed Soup",
         )
+        builder_flow._library_flow._object_scope_repository.register("comp-fixed")
         builder_flow.add_composition_menu_row(
             menu_id="builder-menu-demand",
             menu_detail_id="builder-menu-demand-row-a",

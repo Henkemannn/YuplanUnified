@@ -1,0 +1,46 @@
+.kitchen-menu__dish-link {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.kitchen-menu__dish-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.kitchen-menu__dish-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.kitchen-menu__dish-icon {
+  display: inline-block;
+  margin-left: 10px;
+  font-size: 0.85em;
+  line-height: 1;
+}
+
+@media print {
+  .kitchen-menu__dish-link {
+    margin: 0;
+    padding: 0;
+    cursor: default;
+    text-decoration: none;
+  }
+
+  .kitchen-menu__dish-icon {
+    display: none;
+  }
+}

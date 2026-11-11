@@ -4106,17 +4106,27 @@ def kitchen_menu_overview():
             week = _date.today().isocalendar()[1]
     db = get_session()
     try:
-        row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
-        site_name = str(row_s[0]) if row_s else ""
+        row_s = db.execute(text("SELECT tenant_id, name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
     finally:
         db.close()
-    tenant_id = int(session.get("tenant_id") or 1)
+    active_tenant_id = ctx.get("tenant_id") if ctx.get("tenant_id") is not None else session.get("tenant_id")
+    if active_tenant_id is None:
+        return abort(404)
+    tenant_id = int(active_tenant_id)
+    if not row_s or row_s[0] is None or int(row_s[0]) != tenant_id:
+        return abort(404)
+    site_name = str(row_s[1] or "")
     from .menu_service import MenuServiceDB
     menu_service = MenuServiceDB()
     try:
         week_view = menu_service.get_week_view(tenant_id, site_id, week, year)
     except Exception:
         week_view = {"days": {}}
+    if str((week_view or {}).get("menu_status") or "").strip().lower() != "published":
+        week_view = {
+            **(week_view or {}),
+            "days": {},
+        }
     days_raw = (week_view or {}).get("days") or {}
     day_map: dict[str, dict] = {}
     for k, v in (days_raw or {}).items():
@@ -4141,12 +4151,62 @@ def kitchen_menu_overview():
         "sun": ["sun", "sunday", "sön", "söndag"],
     }
 
+    projection_composition_ids: dict[tuple[str, str, str], str] = {}
+    try:
+        from .commun_builder_projection import get_shadow_projection_reader
+
+        projection_outcome = get_shadow_projection_reader().get_projection(
+            tenant_id=int(tenant_id),
+            site_id=str(site_id),
+            year=int(year),
+            week=int(week),
+        )
+        projection = projection_outcome.projection
+        if projection_outcome.status == "ok" and projection is not None and not any(
+            bool(row.error) for row in projection.rows
+        ):
+            for row in projection.rows:
+                composition_id = str(row.composition_id or "").strip()
+                if composition_id and row.resolved:
+                    projection_composition_ids[
+                        (str(row.day).strip().lower(), str(row.meal).strip().lower(), str(row.variant_type).strip().lower())
+                    ] = composition_id
+    except Exception:
+        projection_composition_ids = {}
+
+    projection_day_keys = {
+        "mon": "monday",
+        "tue": "tuesday",
+        "wed": "wednesday",
+        "thu": "thursday",
+        "fri": "friday",
+        "sat": "saturday",
+        "sun": "sunday",
+    }
+
+    def _projection_composition_id(day_key: str, meal: str, variant: str) -> str | None:
+        return projection_composition_ids.get(
+            (
+                projection_day_keys.get(day_key, day_key),
+                meal,
+                variant,
+            )
+        )
+
     def _pick_name(val) -> str:
         if not val:
             return ""
         if isinstance(val, dict):
             return str(val.get("dish_name") or val.get("name") or "")
         return str(val)
+
+    def _pick_entry(val) -> dict[str, str | None]:
+        if isinstance(val, dict):
+            return {
+                "name": _pick_name(val),
+                "composition_id": str(val.get("composition_id") or "").strip() or None,
+            }
+        return {"name": _pick_name(val), "composition_id": None}
 
     def _meal_obj(day: dict, meal_key: str) -> dict:
         if not day:
@@ -4156,12 +4216,12 @@ def kitchen_menu_overview():
             return meal
         return {"main": meal}
 
-    def _variant_text(meal: dict, keys: list[str]) -> str:
+    def _variant_entry(meal: dict, keys: list[str]) -> dict[str, str | None]:
         for key in keys:
-            name = _pick_name(meal.get(key) or meal.get(key.capitalize()))
-            if name:
-                return name
-        return ""
+            entry = _pick_entry(meal.get(key) or meal.get(key.capitalize()))
+            if entry["name"]:
+                return entry
+        return {"name": "", "composition_id": None}
 
     menu_days = []
     has_menu = False
@@ -4173,18 +4233,32 @@ def kitchen_menu_overview():
                 break
         lunch_meal = _meal_obj(day_val, "lunch")
         dinner_meal = _meal_obj(day_val, "dinner")
-        lunch_alt1 = _variant_text(lunch_meal, ["main", "alt1"])
-        lunch_alt2 = _variant_text(lunch_meal, ["alt2"])
-        dessert_text = _variant_text(lunch_meal, ["dessert"])
-        dinner_text = _variant_text(dinner_meal, ["main", "dinner", "alt1", "alt2"])
+        lunch_alt1_entry = _variant_entry(lunch_meal, ["main", "alt1"])
+        lunch_alt2_entry = _variant_entry(lunch_meal, ["alt2"])
+        dessert_entry = _variant_entry(lunch_meal, ["dessert"])
+        dinner_entry = _variant_entry(dinner_meal, ["main", "dinner", "alt1", "alt2"])
+        lunch_alt1_entry["composition_id"] = _projection_composition_id(key, "lunch", "main") or _projection_composition_id(
+            key, "lunch", "alt1"
+        )
+        lunch_alt2_entry["composition_id"] = _projection_composition_id(key, "lunch", "alt2")
+        dessert_entry["composition_id"] = _projection_composition_id(key, "lunch", "dessert")
+        dinner_entry["composition_id"] = _projection_composition_id(key, "dinner", "main")
+        lunch_alt1 = str(lunch_alt1_entry["name"] or "")
+        lunch_alt2 = str(lunch_alt2_entry["name"] or "")
+        dessert_text = str(dessert_entry["name"] or "")
+        dinner_text = str(dinner_entry["name"] or "")
         if lunch_alt1 or lunch_alt2 or dessert_text or dinner_text:
             has_menu = True
         menu_days.append({
             "label": label,
             "lunch_alt1": lunch_alt1,
+            "lunch_alt1_composition_id": lunch_alt1_entry["composition_id"],
             "lunch_alt2": lunch_alt2,
+            "lunch_alt2_composition_id": lunch_alt2_entry["composition_id"],
             "dessert": dessert_text,
+            "dessert_composition_id": dessert_entry["composition_id"],
             "dinner": dinner_text,
+            "dinner_composition_id": dinner_entry["composition_id"],
         })
 
     week_options = []

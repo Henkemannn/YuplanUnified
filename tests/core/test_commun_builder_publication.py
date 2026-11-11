@@ -527,20 +527,6 @@ def test_publish_captures_immutable_snapshot_and_republish_refreshes_it(app_sess
             composition_name="Ny intern gryta",
             menu_name="Ny publik gryta",
         )
-        builder_flow._menu_service.update_menu(
-            "builder-menu-immutable",
-            version=2,
-            status="published",
-        )
-        CommunBuilderMenuLinkService(builder_menu_context_flow=builder_flow).create_or_replace_link(
-            tenant_id=1,
-            site_id=site_id,
-            year=year,
-            week=week,
-            builder_menu_id="builder-menu-immutable",
-            source="manual",
-        )
-
         pinned_after_edit = get_shadow_projection_reader().get_projection_for_pinned_menu(
             tenant_id=1,
             site_id=site_id,
@@ -587,6 +573,116 @@ def test_publish_captures_immutable_snapshot_and_republish_refreshes_it(app_sess
         assert historical_v1 is not None
         assert historical_v1.projection_snapshot_json is not None
         assert "Husets gryta" in historical_v1.projection_snapshot_json
+
+
+def test_republish_retry_reuses_builder_version_after_post_bump_failure(app_session, monkeypatch):
+    site_id = "site-publication-retry"
+    year = 2025
+    week = 48
+    _seed_site(app_session, site_id=site_id)
+
+    with app_session.app_context():
+        builder_flow, composition_service = _seed_publication_builder_context(
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-retry",
+            builder_menu_version=1,
+            composition_id="comp_retry",
+            composition_name="Retry Soup",
+        )
+        legacy_menu_id = MenuServiceDB().create_or_get_menu(
+            tenant_id=1,
+            site_id=site_id,
+            week=week,
+            year=year,
+        ).id
+        CommunBuilderMenuLinkService(builder_menu_context_flow=builder_flow).create_or_replace_link(
+            tenant_id=1,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-retry",
+            source="manual",
+        )
+
+    monkeypatch.setattr(CommunBuilderPublicationService, "_verify_projection", lambda self, **kwargs: None)
+    with app_session.app_context():
+        MenuServiceDB().publish_menu(tenant_id=1, menu_id=legacy_menu_id)
+        publication_service = CommunBuilderPublicationService()
+        before = publication_service.get_publication_for_week(
+            tenant_id=1,
+            site_id=site_id,
+            year=year,
+            week=week,
+        )
+        assert before is not None
+        before_snapshot = before.projection_snapshot_json
+
+        composition_service.update_composition_metadata(
+            "comp_retry",
+            composition_name="Retry Soup v2",
+        )
+        original_capture = CommunBuilderPublicationService._capture_projection_snapshot
+        capture_calls = 0
+
+        def fail_after_builder_bump(self, **kwargs):
+            nonlocal capture_calls
+            capture_calls += 1
+            if capture_calls == 2:
+                raise RuntimeError("capture_failed_after_builder_bump")
+            return original_capture(self, **kwargs)
+
+        monkeypatch.setattr(
+            CommunBuilderPublicationService,
+            "_capture_projection_snapshot",
+            fail_after_builder_bump,
+        )
+        with pytest.raises(RuntimeError, match="capture_failed_after_builder_bump"):
+            MenuServiceDB().publish_menu(tenant_id=1, menu_id=legacy_menu_id)
+
+        failed = publication_service.get_publication_for_week(
+            tenant_id=1,
+            site_id=site_id,
+            year=year,
+            week=week,
+        )
+        assert failed is not None
+        assert failed.builder_menu_version == 1
+        assert failed.projection_snapshot_json == before_snapshot
+        assert builder_flow._menu_service.get_menu("builder-menu-retry").version == 2
+
+        monkeypatch.setattr(
+            CommunBuilderPublicationService,
+            "_capture_projection_snapshot",
+            original_capture,
+        )
+        MenuServiceDB().publish_menu(tenant_id=1, menu_id=legacy_menu_id)
+
+        retried = publication_service.get_publication_for_week(
+            tenant_id=1,
+            site_id=site_id,
+            year=year,
+            week=week,
+        )
+        assert retried is not None
+        assert retried.builder_menu_version == 2
+        assert retried.projection_snapshot_json is not None
+        assert "Retry Soup v2" in retried.projection_snapshot_json
+
+        db = __import__("core.db", fromlist=["get_session"]).get_session()
+        try:
+            versions = db.execute(
+                text(
+                    "SELECT builder_menu_version FROM commun_builder_publication_revisions "
+                    "WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week "
+                    "ORDER BY builder_menu_version"
+                ),
+                {"tid": 1, "sid": site_id, "year": year, "week": week},
+            ).fetchall()
+            assert [int(row[0]) for row in versions] == [1, 2]
+        finally:
+            db.close()
 
 
 def test_broken_publication_snapshot_fails_controlledly(app_session, monkeypatch):

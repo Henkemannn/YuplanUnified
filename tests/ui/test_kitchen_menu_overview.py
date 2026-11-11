@@ -1,9 +1,11 @@
 from flask.testing import FlaskClient
 from sqlalchemy import text
 import re
+from types import SimpleNamespace
 
 from core.builder import BuilderFlow
 from core.builder_menu_context_flow import BuilderMenuContextFlow
+from core.builder.library_scope import ObjectScope
 from core.components import (
     ComponentService,
     CompositionService,
@@ -19,6 +21,26 @@ from core.db import create_all, get_session, get_new_session
 from core.menu import InMemoryCompositionAliasRepository, MenuService
 from core.menu_service import MenuServiceDB
 from core.models import Dish
+
+
+class _KitchenCompositionScopeRepository:
+    def __init__(self) -> None:
+        self._composition_ids: set[str] = set()
+
+    def register(self, composition_id: str) -> None:
+        self._composition_ids.add(str(composition_id))
+
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+        if object_type != "composition" or str(object_id) not in self._composition_ids:
+            return None
+        return ObjectScope(
+            tenant_id=1,
+            owner_scope="organisation",
+            owner_site_id=None,
+            owner_user_id=None,
+            visibility="organisation",
+            source_object_id=None,
+        )
 
 
 def _make_isolated_app(tmp_path, monkeypatch):
@@ -41,7 +63,10 @@ def _make_isolated_app(tmp_path, monkeypatch):
 
 def _seed_site(db, site_id: str):
     if not db.execute(text("SELECT 1 FROM sites WHERE id=:i"), {"i": site_id}).fetchone():
-        db.execute(text("INSERT INTO sites(id,name) VALUES(:i,:n)"), {"i": site_id, "n": f"K3 {site_id}"})
+        db.execute(
+            text("INSERT INTO sites(id,name,tenant_id) VALUES(:i,:n,1)"),
+            {"i": site_id, "n": f"K3 {site_id}"},
+        )
         db.commit()
 
 
@@ -76,6 +101,12 @@ def test_kitchen_menu_overview_renders(tmp_path, monkeypatch):
         svc.set_variant(1, menu.id, "mon", "lunch", "alt2", d2.id)
         svc.set_variant(1, menu.id, "mon", "lunch", "dessert", d3.id)
         svc.set_variant(1, menu.id, "mon", "dinner", "kvall", d4.id)
+        db3 = get_new_session()
+        try:
+            db3.execute(text("UPDATE menus SET status='published' WHERE id=:id"), {"id": menu.id})
+            db3.commit()
+        finally:
+            db3.close()
     client: FlaskClient = app.test_client()
     headers = {"X-User-Role": "cook", "X-Tenant-Id": "1"}
     with client.session_transaction() as sess:
@@ -92,8 +123,130 @@ def test_kitchen_menu_overview_renders(tmp_path, monkeypatch):
     assert "Alt 2" in html
     assert "yp-pill--alt2" in html
     assert "data-action=\"print\"" in html
+    assert "data-admin-week-builder-host" in html
+    assert "admin_menu_import_week_builder_host.js" in html
+    assert "data-admin-week-builder-open" not in html
     assert re.search(r"app-shell__nav-item[^>]*>\s*Menyöversikt\s*<", html)
     assert 'app-shell__nav-item">Admin<' not in html
+
+
+def test_kitchen_menu_overview_uses_published_projection_ids(tmp_path, monkeypatch):
+    app = _make_isolated_app(tmp_path, monkeypatch)
+    site_id = "site-menu-projection"
+    year = 2026
+    week = 42
+    with app.app_context():
+        db = get_session()
+        try:
+            _seed_site(db, site_id)
+        finally:
+            db.close()
+
+    week_view = {
+        "menu_status": "published",
+        "days": {
+            "mon": {
+                "lunch": {
+                    "main": {"dish_name": "Text Alt 1"},
+                    "alt2": {"dish_name": "Text Alt 2"},
+                    "dessert": {"dish_name": "Text Dessert"},
+                },
+                "dinner": {"main": {"dish_name": "Text Dinner"}},
+            }
+        }
+    }
+    projection_rows = [
+        SimpleNamespace(day="monday", meal="lunch", variant_type="main", composition_id="comp-mon-1", resolved=True, error=None),
+        SimpleNamespace(day="monday", meal="lunch", variant_type="alt2", composition_id="comp-mon-2", resolved=True, error=None),
+        SimpleNamespace(day="monday", meal="lunch", variant_type="dessert", composition_id="comp-mon-dessert", resolved=True, error=None),
+        SimpleNamespace(day="monday", meal="dinner", variant_type="main", composition_id="comp-mon-dinner", resolved=True, error=None),
+    ]
+    projection_call = {}
+
+    def get_projection(**kwargs):
+        projection_call.update(kwargs)
+        return SimpleNamespace(
+            status="ok",
+            projection=SimpleNamespace(rows=projection_rows),
+        )
+
+    reader = SimpleNamespace(get_projection=get_projection)
+    import core.commun_builder_projection as projection_module
+
+    monkeypatch.setattr(MenuServiceDB, "get_week_view", lambda self, *args: week_view)
+    monkeypatch.setattr(projection_module, "get_shadow_projection_reader", lambda: reader)
+
+    client: FlaskClient = app.test_client()
+    headers = {"X-User-Role": "cook", "X-Tenant-Id": "1"}
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+        sess["site_id"] = site_id
+    rv = client.get(f"/ui/kitchen/menu?site_id={site_id}&year={year}&week={week}", headers=headers)
+
+    assert rv.status_code == 200
+    html = rv.data.decode("utf-8")
+    assert "Text Alt 1" in html
+    assert 'data-builder-composition-id="comp-mon-1"' in html
+    assert 'data-builder-composition-id="comp-mon-2"' in html
+    assert 'data-builder-composition-id="comp-mon-dessert"' in html
+    assert 'data-builder-composition-id="comp-mon-dinner"' in html
+    assert projection_call == {
+        "tenant_id": 1,
+        "site_id": site_id,
+        "year": year,
+        "week": week,
+    }
+
+
+def test_kitchen_menu_overview_hides_draft_menu(tmp_path, monkeypatch):
+    app = _make_isolated_app(tmp_path, monkeypatch)
+    site_id = "site-menu-draft"
+    year = 2026
+    week = 5
+    with app.app_context():
+        db = get_session()
+        try:
+            _seed_site(db, site_id)
+        finally:
+            db.close()
+        svc = MenuServiceDB()
+        menu = svc.create_or_get_menu(1, site_id, week, year)
+        svc.set_variant(1, menu.id, "mon", "lunch", "main", 1)
+
+    client: FlaskClient = app.test_client()
+    headers = {"X-User-Role": "cook", "X-Tenant-Id": "1"}
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+        sess["site_id"] = site_id
+    rv = client.get(f"/ui/kitchen/menu?site_id={site_id}&year={year}&week={week}", headers=headers)
+
+    assert rv.status_code == 200
+    html = rv.data.decode("utf-8")
+    assert "Ingen meny ännu" in html
+
+
+def test_kitchen_menu_overview_rejects_site_from_another_tenant(tmp_path, monkeypatch):
+    app = _make_isolated_app(tmp_path, monkeypatch)
+    site_id = "site-menu-other-tenant"
+    with app.app_context():
+        db = get_session()
+        try:
+            db.execute(
+                text("INSERT INTO sites(id,name,tenant_id) VALUES(:i,:n,2)"),
+                {"i": site_id, "n": "Other tenant"},
+            )
+            db.commit()
+        finally:
+            db.close()
+
+    client: FlaskClient = app.test_client()
+    headers = {"X-User-Role": "cook", "X-Tenant-Id": "1"}
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+        sess["site_id"] = site_id
+    rv = client.get(f"/ui/kitchen/menu?site_id={site_id}&year=2026&week=5", headers=headers)
+
+    assert rv.status_code == 404
 
 
 def test_kitchen_menu_overview_prefers_published_builder_projection(tmp_path, monkeypatch):
@@ -108,12 +261,14 @@ def test_kitchen_menu_overview_prefers_published_builder_projection(tmp_path, mo
         alias_repository = InMemoryCompositionAliasRepository()
         recipe_repository = InMemoryRecipeRepository()
         ingredient_repository = InMemoryRecipeIngredientLineRepository()
+        scope_repository = _KitchenCompositionScopeRepository()
         builder_flow = BuilderFlow(
             component_service=ComponentService(repository=component_repository),
             composition_service=CompositionService(repository=composition_repository),
             composition_repository=composition_repository,
             alias_repository=alias_repository,
             component_alias_repository=InMemoryComponentAliasRepository(),
+            object_scope_repository=scope_repository,
         )
         menu_context_flow = BuilderMenuContextFlow(
             menu_service=MenuService(composition_repository=composition_repository),
@@ -153,6 +308,7 @@ def test_kitchen_menu_overview_prefers_published_builder_projection(tmp_path, mo
         }.items():
             for index, (sort_order, composition_id, composition_name) in enumerate(specs, start=1):
                 composition_service.create_composition(composition_id=composition_id, composition_name=composition_name)
+                builder_flow._library_flow._object_scope_repository.register(composition_id)
                 created = builder_flow.create_empty_menu_row(
                     menu_id="builder-menu-overview",
                     day=day,
@@ -195,3 +351,11 @@ def test_kitchen_menu_overview_prefers_published_builder_projection(tmp_path, mo
     assert "Sun Dessert" in html
     assert "Sun Dinner" in html
     assert "Sun Alt2" not in html
+    assert 'data-admin-week-builder-open' in html
+    assert 'data-builder-composition-id="comp_mon_1"' in html
+    assert 'data-builder-composition-id="comp_mon_2"' in html
+    assert 'data-builder-composition-id="comp_mon_3"' in html
+    assert 'data-builder-composition-id="comp_mon_4"' in html
+    assert 'data-builder-composition-id="comp_sun_1"' in html
+    assert 'data-builder-composition-id="comp_sun_3"' in html
+    assert 'data-builder-composition-id="comp_sun_4"' in html

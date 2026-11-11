@@ -5,6 +5,7 @@ from sqlalchemy import text
 
 from core.builder import BuilderFlow
 from core.builder_menu_context_flow import BuilderMenuContextFlow
+from core.builder.library_scope import ObjectScope
 from core.components import (
     ComponentService,
     CompositionService,
@@ -18,6 +19,26 @@ from core.db import get_session
 from core.commun_builder_linkage import CommunBuilderMenuLinkService
 from core.menu import InMemoryCompositionAliasRepository, MenuService
 from core.menu_service import MenuServiceDB
+
+
+class _PortalCompositionScopeRepository:
+    def __init__(self) -> None:
+        self._composition_ids: set[str] = set()
+
+    def register(self, composition_id: str) -> None:
+        self._composition_ids.add(str(composition_id))
+
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+        if object_type != "composition" or str(object_id) not in self._composition_ids:
+            return None
+        return ObjectScope(
+            tenant_id=1,
+            owner_scope="organisation",
+            owner_site_id=None,
+            owner_user_id=None,
+            visibility="organisation",
+            source_object_id=None,
+        )
 
 
 @pytest.fixture
@@ -165,11 +186,30 @@ def seed_canonical_builder_publication(app_session):
         dinner_name: str = "Kvällsgröt",
     ) -> CompositionService:
         with app_session.app_context():
+            if builder_menu_id == "builder-menu-1":
+                db = get_session()
+                try:
+                    for table in (
+                        "commun_builder_publication_pins",
+                        "commun_builder_publication_revisions",
+                        "commun_builder_menu_links",
+                    ):
+                        db.execute(
+                            text(
+                                f"DELETE FROM {table} "
+                                "WHERE tenant_id=1 AND site_id=:site_id AND year=:year AND week=:week"
+                            ),
+                            {"site_id": site_id, "year": year, "week": week},
+                        )
+                    db.commit()
+                finally:
+                    db.close()
             component_repository = InMemoryComponentRepository()
             composition_repository = InMemoryCompositionRepository()
             alias_repository = InMemoryCompositionAliasRepository()
             recipe_repository = InMemoryRecipeRepository()
             ingredient_repository = InMemoryRecipeIngredientLineRepository()
+            scope_repository = _PortalCompositionScopeRepository()
 
             builder_flow = BuilderFlow(
                 component_service=ComponentService(repository=component_repository),
@@ -177,6 +217,7 @@ def seed_canonical_builder_publication(app_session):
                 composition_repository=composition_repository,
                 alias_repository=alias_repository,
                 component_alias_repository=InMemoryComponentAliasRepository(),
+                object_scope_repository=scope_repository,
             )
             menu_context_flow = BuilderMenuContextFlow(
                 menu_service=MenuService(composition_repository=composition_repository),
@@ -212,6 +253,8 @@ def seed_canonical_builder_publication(app_session):
             _upsert_composition("builder-alt2", alt2_name)
             _upsert_composition("builder-dessert", dessert_name)
             _upsert_composition("builder-dinner", dinner_name)
+            for composition_id in ("builder-alt1", "builder-alt2", "builder-dessert", "builder-dinner"):
+                scope_repository.register(composition_id)
 
             if not any(str(menu.menu_id) == builder_menu_id for menu in menu_context_flow.list_menus()):
                 menu_context_flow.create_menu(

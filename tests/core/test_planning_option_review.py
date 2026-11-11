@@ -23,6 +23,7 @@ from core.components import (
 )
 from core.builder import BuilderFlow
 from core.builder_menu_context_flow import BuilderMenuContextFlow
+from core.builder.library_scope import ObjectScope
 from core.department_menu_choice_repo import MenuChoiceRepo
 from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
 from core.department_requirement_group_service_overrides_repo import (
@@ -65,11 +66,32 @@ class ReviewScenario:
     option_ids: dict[str, str]
 
 
+class _TestCompositionScopeRepository:
+    def __init__(self) -> None:
+        self._composition_ids: set[str] = set()
+
+    def register(self, composition_id: str) -> None:
+        self._composition_ids.add(str(composition_id))
+
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+        if object_type != "composition" or str(object_id) not in self._composition_ids:
+            return None
+        return ObjectScope(
+            tenant_id=1,
+            owner_scope="organisation",
+            owner_site_id=None,
+            owner_user_id=None,
+            visibility="organisation",
+            source_object_id=None,
+        )
+
+
 def _build_builder_menu_context_flow() -> tuple[object, CompositionService]:
     component_repository = InMemoryComponentRepository()
     composition_repository = InMemoryCompositionRepository()
     recipe_repository = InMemoryRecipeRepository()
     ingredient_repository = InMemoryRecipeIngredientLineRepository()
+    scope_repository = _TestCompositionScopeRepository()
 
     concrete_builder_flow = BuilderFlow(
         component_service=ComponentService(repository=component_repository),
@@ -77,6 +99,7 @@ def _build_builder_menu_context_flow() -> tuple[object, CompositionService]:
         composition_repository=composition_repository,
         alias_repository=InMemoryCompositionAliasRepository(),
         component_alias_repository=InMemoryComponentAliasRepository(),
+        object_scope_repository=scope_repository,
     )
     menu_context_flow = BuilderMenuContextFlow(
         menu_service=MenuService(composition_repository=composition_repository),
@@ -173,6 +196,9 @@ def _build_publication_snapshot(
     )
     composition_service.create_composition(composition_id="comp-alt1", composition_name="Fläskkarré")
     composition_service.create_composition(composition_id="comp-alt2", composition_name="Kokt torsk")
+    scope_repository = menu_context_flow._library_flow._object_scope_repository
+    scope_repository.register("comp-alt1")
+    scope_repository.register("comp-alt2")
     menu_context_flow.add_composition_menu_row(
         menu_id=builder_menu_id,
         day=day,
@@ -190,6 +216,7 @@ def _build_publication_snapshot(
     for index, (extra_day, meal_slot, composition_name, sort_order) in enumerate(extra_rows or [], start=3):
         composition_id = f"comp-{builder_menu_id}-{index}"
         composition_service.create_composition(composition_id=composition_id, composition_name=composition_name)
+        scope_repository.register(composition_id)
         menu_context_flow.add_composition_menu_row(
             menu_id=builder_menu_id,
             day=extra_day,
