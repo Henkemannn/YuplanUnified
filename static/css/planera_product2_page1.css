@@ -60,6 +60,7 @@
 
 .planera-page1__weekbar-label {
   min-height: 44px;
+  min-width: 10.5rem;
   padding: 0 14px;
   border-radius: 14px;
   border: 1px solid var(--border);
@@ -75,11 +76,13 @@
   position: relative;
   display: inline-flex;
   align-items: stretch;
+  flex: 0 0 auto;
 }
 
 .planera-page1__weekpicker-select {
   cursor: pointer;
   font: inherit;
+  flex: 0 0 auto;
 }
 
 .planera-page1__weekday {
