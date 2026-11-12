@@ -209,6 +209,30 @@ def test_week_view_does_not_show_unpublish_button_for_draft(seeded_draft_week, c
     assert "Återgå till utkast" not in html
 
 
+def test_draft_edit_view_has_no_published_menu_notice(seeded_draft_week, client_admin):
+    response = client_admin.get(
+        "/ui/admin/menu-import/week/2025/47?edit=1",
+        headers=ADMIN_HEADERS,
+    )
+
+    assert response.status_code == 200
+    assert "Du redigerar en publicerad meny" not in response.data.decode("utf-8")
+
+
+def test_published_edit_view_explains_republication(seeded_draft_week, client_admin):
+    _publish_week_for_unpublish_test(client_admin)
+
+    response = client_admin.get(
+        "/ui/admin/menu-import/week/2025/47?edit=1",
+        headers=ADMIN_HEADERS,
+    )
+
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+    assert "Du redigerar en publicerad meny" in html
+    assert "återgå till utkast och publicera menyn på nytt" in html
+
+
 def test_publish_changes_status_to_published(seeded_draft_week, client_admin):
     """Test POST /publish changes menu status from draft to published."""
     from core.db import get_session
@@ -381,7 +405,7 @@ def test_unpublish_changes_status_to_draft(seeded_draft_week, client_admin):
     response = client_admin.post(
         "/ui/admin/menu-import/week/2025/47/unpublish",
         headers=ADMIN_HEADERS,
-        data={"_etag": etag_value},
+        data={"_etag": etag_value, "_confirm_unpublish": "1"},
         follow_redirects=False
     )
     
@@ -395,8 +419,16 @@ def test_unpublish_changes_status_to_draft(seeded_draft_week, client_admin):
             {"mid": 101}
         ).fetchone()
         assert result[0] == "draft"
+        revision_count = db.execute(
+            text(
+                "SELECT COUNT(*) FROM commun_builder_publication_revisions "
+                "WHERE tenant_id = 1 AND site_id = 'site-publish-10' "
+                "AND year = 2025 AND week = 47"
+            )
+        ).scalar_one()
     finally:
         db.close()
+    assert revision_count >= 1
 
 
 def test_unpublish_shows_success_message(seeded_draft_week, client_admin):
@@ -419,7 +451,7 @@ def test_unpublish_shows_success_message(seeded_draft_week, client_admin):
     response = client_admin.post(
         "/ui/admin/menu-import/week/2025/47/unpublish",
         headers=ADMIN_HEADERS,
-        data={"_etag": etag_value},
+        data={"_etag": etag_value, "_confirm_unpublish": "1"},
         follow_redirects=True
     )
     
@@ -428,3 +460,83 @@ def test_unpublish_shows_success_message(seeded_draft_week, client_admin):
     
     # Check for success message
     assert "satt till utkast" in html.lower() or "utkast" in html.lower()
+
+
+def _publish_week_for_unpublish_test(client_admin):
+    response = client_admin.get(
+        "/ui/admin/menu-import/week/2025/47",
+        headers=ADMIN_HEADERS,
+    )
+    etag_value = response.headers.get("ETag")
+    client_admin.post(
+        "/ui/admin/menu-import/week/2025/47/publish",
+        headers=ADMIN_HEADERS,
+        data={"_etag": etag_value},
+    )
+
+
+def test_unpublish_without_confirmation_preserves_published_state(seeded_draft_week, client_admin):
+    """Direct POST must not remove the active publication without confirmation."""
+    from core.db import get_session
+
+    _publish_week_for_unpublish_test(client_admin)
+    response = client_admin.get(
+        "/ui/admin/menu-import/week/2025/47",
+        headers=ADMIN_HEADERS,
+    )
+    etag_value = response.headers.get("ETag")
+
+    client_admin.post(
+        "/ui/admin/menu-import/week/2025/47/unpublish",
+        headers=ADMIN_HEADERS,
+        data={"_etag": etag_value},
+    )
+
+    db = get_session()
+    try:
+        status = db.execute(text("SELECT status FROM menus WHERE id = 101")).scalar_one()
+        pin_count = db.execute(
+            text(
+                "SELECT COUNT(*) FROM commun_builder_publication_pins "
+                "WHERE tenant_id = 1 AND site_id = 'site-publish-10' "
+                "AND year = 2025 AND week = 47"
+            )
+        ).scalar_one()
+    finally:
+        db.close()
+
+    assert status == "published"
+    assert pin_count == 1
+
+
+def test_unpublish_rejects_stale_etag_even_when_confirmed(seeded_draft_week, client_admin):
+    """Confirmation must not bypass optimistic concurrency protection."""
+    from core.db import get_session
+
+    _publish_week_for_unpublish_test(client_admin)
+    response = client_admin.get(
+        "/ui/admin/menu-import/week/2025/47",
+        headers=ADMIN_HEADERS,
+    )
+    etag_value = response.headers.get("ETag")
+
+    db = get_session()
+    try:
+        db.execute(text("UPDATE menus SET updated_at = CURRENT_TIMESTAMP WHERE id = 101"))
+        db.commit()
+    finally:
+        db.close()
+
+    client_admin.post(
+        "/ui/admin/menu-import/week/2025/47/unpublish",
+        headers=ADMIN_HEADERS,
+        data={"_etag": etag_value, "_confirm_unpublish": "1"},
+    )
+
+    db = get_session()
+    try:
+        status = db.execute(text("SELECT status FROM menus WHERE id = 101")).scalar_one()
+    finally:
+        db.close()
+
+    assert status == "published"

@@ -1,5 +1,19 @@
 {% extends "ui/unified_admin_base.html" %}
-{% block admin_title %}Meny - vecka {{ vm.week }}/{{ vm.year }}{% endblock %}
+{% block admin_title %}Meny - vecka {{ vm.week }}/{{ vm.year }}    {% if vm.menu_status == 'published' %}
+    <dialog class="menu-editor-confirmation" data-unpublish-confirmation-dialog aria-labelledby="unpublish-confirmation-title">
+        <form method="dialog" class="menu-editor-confirmation__card">
+            <h2 id="unpublish-confirmation-title">Ändra publicerad meny?</h2>
+            <p>Menyn är redan publicerad. Avdelningarna kan ha gjort menyval och köket kan ha planerat produktionen.</p>
+            <p>Om du återgår till utkast blir menyn tillfälligt opublicerad tills du publicerar den igen.</p>
+            <p>Befintliga menyval och produktionsunderlag tas inte bort automatiskt.</p>
+            <div class="menu-editor-confirmation__actions">
+                <button type="submit" value="cancel" class="yp-btn yp-btn-secondary" data-unpublish-confirmation-cancel>Avbryt</button>
+                <button type="button" class="yp-btn yp-btn-primary" data-unpublish-confirmation-confirm>Återgå till utkast</button>
+            </div>
+        </form>
+    </dialog>
+{% endif %}
+{% endblock %}
 {% block admin_subtitle %}
     <span class="menu-week__site-chip">{{ vm.site_name or current_site_name or '-' }}</span>
     {% if vm.menu_name %}
@@ -63,6 +77,7 @@
     <script src="{{ url_for('static', filename='js/builder_composition_search.js') }}" defer></script>
     <script src="{{ url_for('static', filename='js/builder_dish_create.js') }}" defer></script>
     <script src="{{ url_for('static', filename='ui/admin_menu_import_week_actions.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='ui/admin_menu_import_week_unpublish_confirm.js') }}" defer></script>
     <script src="{{ url_for('static', filename='ui/admin_menu_week_picker.js') }}" defer></script>
 {% endblock %}
 {% block admin_main %}
@@ -88,7 +103,14 @@
                     {% endif %}
                 </div>
                 {% if is_edit_mode %}
-                    <p class="menu-week__help-text">Redigeringsläge aktivt. Använd same-page menyn och klicka Klar när du är färdig.</p>
+                    <p class="menu-week__help-text">Redigeringsläge aktivt. Klicka Klar när du är färdig.</p>
+                    {% if vm.menu_status == 'published' %}
+                        <aside class="menu-editor-published-notice" role="note">
+                            <h3>Du redigerar en publicerad meny</h3>
+                            <p>Menyn kan redan användas av avdelningar och kök. Dina ändringar börjar inte gälla automatiskt.</p>
+                            <p>För att ändringarna ska bli tillgängliga behöver du återgå till utkast och publicera menyn på nytt.</p>
+                        </aside>
+                    {% endif %}
                     <div class="menu-editor-actions menu-editor-actions--edit admin-actions-group">
                         <a href="{{ url_for('admin_ui.admin_menu_import_week', year=vm.year, week=vm.week) }}" class="yp-btn yp-btn-primary">Klar</a>
                     </div>
@@ -106,6 +128,7 @@
                             <form action="{{ url_for('admin_ui.admin_menu_import_week_unpublish', year=vm.year, week=vm.week) }}" method="POST" class="admin-form-protect menu-editor-inline-form">
                                 {{ csrf_token_input() | safe }}
                                 <input type="hidden" name="_etag" value="{{ vm.etag }}">
+                                <input type="hidden" name="_confirm_unpublish" value="0" data-unpublish-confirmation>
                                 <button type="submit" class="yp-btn yp-btn-primary">Återgå till utkast</button>
                             </form>
                         {% endif %}

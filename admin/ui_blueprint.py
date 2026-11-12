@@ -1833,7 +1833,7 @@ def admin_menu_import_week_publish(year: int, week: int) -> str:  # type: ignore
         else:
             flash(f"Konflikt: {error_msg} Ladda om sidan för att se senaste versionen.", "warning")
             return redirect(url_for("admin_ui.admin_menu_import_week", year=year, week=week))
-    
+
     try:
         menu_service.publish_menu(int(site_tenant_id), menu_id)
         flash(f"Vecka {week} publicerad.", "success")
@@ -1891,6 +1891,12 @@ def admin_menu_import_week_unpublish(year: int, week: int) -> str:  # type: igno
             }), 412
         else:
             flash(f"Konflikt: {error_msg} Ladda om sidan för att se senaste versionen.", "warning")
+            return redirect(url_for("admin_ui.admin_menu_import_week", year=year, week=week))
+
+    if str(week_view.get("menu_status") or "").strip().lower() == "published":
+        confirmation = str(request.form.get("_confirm_unpublish") or "").strip().lower()
+        if confirmation != "1":
+            flash("Bekräfta att den publicerade menyn ska återgå till utkast.", "warning")
             return redirect(url_for("admin_ui.admin_menu_import_week", year=year, week=week))
     
     try:
