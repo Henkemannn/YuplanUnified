@@ -191,6 +191,121 @@
   margin-top: 2px;
 }
 
+.menu-week__status .menu-editor-actions .yp-btn {
+  min-height: 40px;
+  padding: 9px 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.25;
+  text-decoration: none;
+  transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease, color 150ms ease;
+}
+
+.menu-week__status .menu-editor-actions .yp-btn-primary {
+  background: var(--yp-color-primary, #2563eb);
+  border-color: var(--yp-color-primary, #2563eb);
+  color: #fff;
+  box-shadow: 0 2px 6px rgb(15 23 42 / 16%);
+}
+
+.menu-week__status .menu-editor-actions .yp-btn-primary:hover {
+  background: var(--yp-color-primary-hover, #1d4ed8);
+  border-color: var(--yp-color-primary-hover, #1d4ed8);
+  color: #fff;
+  box-shadow: 0 4px 10px rgb(15 23 42 / 22%);
+}
+
+.menu-week__status .menu-editor-actions .yp-btn-secondary {
+  background: var(--yp-card-bg, var(--surface-elevated));
+  border-color: var(--yp-border-color, var(--border));
+  color: var(--yp-color-text, var(--text));
+}
+
+.menu-week__status .menu-editor-actions .yp-btn-secondary:hover {
+  background: var(--yp-color-secondary-light, var(--surface));
+  border-color: var(--yp-color-secondary, var(--border));
+  color: var(--yp-color-text, var(--text));
+}
+
+.menu-week__status .menu-editor-actions .menu-editor-unpublish-button {
+  background: color-mix(in srgb, var(--yp-color-warning, #ea580c) 16%, var(--yp-card-bg, var(--surface-elevated)) 84%);
+  border-color: color-mix(in srgb, var(--yp-color-warning, #ea580c) 52%, var(--yp-border-color, var(--border)) 48%);
+  color: var(--yp-color-warning-dark, var(--yp-color-warning, #c2410c));
+}
+
+.menu-week__status .menu-editor-actions .menu-editor-unpublish-button:hover {
+  background: color-mix(in srgb, var(--yp-color-warning, #ea580c) 24%, var(--yp-card-bg, var(--surface-elevated)) 76%);
+  border-color: var(--yp-color-warning, #ea580c);
+  color: var(--yp-color-warning-dark, var(--yp-color-warning, #c2410c));
+}
+
+.menu-week__status .menu-editor-actions .yp-btn:focus-visible {
+  outline: 2px solid var(--yp-color-primary, #2563eb);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--yp-color-primary, #2563eb) 24%, transparent);
+}
+
+.menu-week__status .menu-editor-actions .yp-btn:active {
+  box-shadow: inset 0 1px 3px rgb(15 23 42 / 22%);
+}
+
+.menu-week__status .menu-editor-actions .yp-btn:disabled,
+.menu-week__status .menu-editor-actions .yp-btn[aria-disabled="true"] {
+  opacity: 0.55;
+  color: var(--yp-color-text-muted, var(--muted));
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Keep status actions legible against the dark App Shell card. */
+.app-shell--dark .menu-week__status .menu-editor-actions .yp-btn-secondary,
+html.yp-theme-dark .app-shell .menu-week__status .menu-editor-actions .yp-btn-secondary {
+  background: #102945;
+  border-color: #6f96a8;
+  color: #eaf7f8;
+}
+
+.app-shell--dark .menu-week__status .menu-editor-actions .yp-btn-secondary:hover,
+html.yp-theme-dark .app-shell .menu-week__status .menu-editor-actions .yp-btn-secondary:hover {
+  background: #173854;
+  border-color: #9bb7c6;
+  color: #fff;
+}
+
+.app-shell--dark .menu-week__status .menu-editor-actions .menu-editor-unpublish-button,
+html.yp-theme-dark .app-shell .menu-week__status .menu-editor-actions .menu-editor-unpublish-button {
+  background: #5a351f;
+  border-color: #d97706;
+  color: #ffedd5;
+}
+
+.app-shell--dark .menu-week__status .menu-editor-actions .menu-editor-unpublish-button:hover,
+html.yp-theme-dark .app-shell .menu-week__status .menu-editor-actions .menu-editor-unpublish-button:hover {
+  background: #704326;
+  border-color: #f59e0b;
+  color: #fff7ed;
+}
+
+.app-shell--dark .menu-week__status .menu-editor-actions .yp-btn:focus-visible,
+html.yp-theme-dark .app-shell .menu-week__status .menu-editor-actions .yp-btn:focus-visible {
+  outline-color: #67e8f9;
+  box-shadow: 0 0 0 3px rgb(103 232 249 / 28%);
+}
+
+.app-shell--dark .menu-week__status .menu-editor-actions .yp-btn:active,
+html.yp-theme-dark .app-shell .menu-week__status .menu-editor-actions .yp-btn:active {
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 35%);
+}
+
+.app-shell--dark .menu-week__status .menu-editor-actions .yp-btn:disabled,
+.app-shell--dark .menu-week__status .menu-editor-actions .yp-btn[aria-disabled="true"],
+html.yp-theme-dark .app-shell .menu-week__status .menu-editor-actions .yp-btn:disabled,
+html.yp-theme-dark .app-shell .menu-week__status .menu-editor-actions .yp-btn[aria-disabled="true"] {
+  color: #9bb7c6;
+}
+
 .menu-editor-inline-form {
   display: inline-flex;
 }
