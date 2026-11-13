@@ -15,6 +15,11 @@ from core.admin_repo import (
 )
 from core.db import get_session
 from core.production_lists_repo import ProductionListsRepo
+from core.planera_product2_page3_vm import (
+    Product2Page3DestinationVM,
+    _build_service_addons_by_destination,
+)
+from core.ui_blueprint import _build_production_list_service_addons
 
 
 def _h(role: str = "admin") -> dict[str, str]:
@@ -216,6 +221,99 @@ def test_service_addons_production_list_filters_meal_and_renders_scope_and_quant
     assert "Mos" in dinner_html
     assert "Hela avdelningen" in dinner_html
     assert "Aldrig spaghetti" not in dinner_html
+
+
+def test_service_addons_projections_match_with_department_without_menu_choice(
+    app_session,
+):
+    site, _ = SitesRepo().create_site(f"Addon projection site {uuid.uuid4()}")
+    gammelapan, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Gammelapan",
+        resident_count_mode="fixed",
+        resident_count_fixed=12,
+    )
+    asnegrisen, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Åsnegrisen",
+        resident_count_mode="fixed",
+        resident_count_fixed=10,
+    )
+    addon_repo = ServiceAddonsRepo()
+    mos_id = addon_repo.create_if_missing(
+        "Mos istället för potatis",
+        site_id=site["id"],
+        addon_family="mos",
+    )
+    pasta_id = addon_repo.create_if_missing(
+        "Aldrig spaghetti",
+        site_id=site["id"],
+        addon_family="ovrigt",
+    )
+    assignments = DepartmentServiceAddonsRepo()
+    assignments.replace_for_department(
+        gammelapan["id"],
+        [
+            {"addon_id": mos_id, "service_scope": "lunch", "quantity_mode": "custom", "lunch_count": 12},
+            {"addon_id": pasta_id, "service_scope": "lunch", "quantity_mode": "custom", "lunch_count": 2},
+        ],
+        site_id=site["id"],
+    )
+    assignments.replace_for_department(
+        asnegrisen["id"],
+        [
+            {"addon_id": mos_id, "service_scope": "lunch", "quantity_mode": "custom", "lunch_count": 5},
+            {"addon_id": pasta_id, "service_scope": "lunch", "quantity_mode": "custom", "lunch_count": 10},
+        ],
+        site_id=site["id"],
+    )
+
+    service_date = date(2026, 11, 9)
+    with app_session.app_context():
+        production_families = _build_production_list_service_addons(
+            site["id"],
+            service_date,
+            meal="lunch",
+        )
+        page3_rows, page3_names = _build_service_addons_by_destination(
+            site_id=site["id"],
+            service_date=service_date,
+            meal="lunch",
+            destination_map={
+                gammelapan["id"]: Product2Page3DestinationVM(
+                    gammelapan["id"],
+                    "Gammelapan",
+                    12,
+                ),
+                asnegrisen["id"]: Product2Page3DestinationVM(
+                    asnegrisen["id"],
+                    "Åsnegrisen",
+                    5,
+                ),
+            },
+            dessert=False,
+        )
+
+    production_rows = [
+        row
+        for family in production_families
+        for row in family["rows"]
+    ]
+    page3_rows_flat = [
+        row
+        for rows in page3_rows.values()
+        for row in rows
+    ]
+
+    assert len(production_rows) == 4
+    assert len(page3_rows_flat) == 4
+    assert page3_names[gammelapan["id"]] == "Gammelapan"
+    assert page3_names[asnegrisen["id"]] == "Åsnegrisen"
+    assert sorted((row["department_name"], row["addon_name"]) for row in production_rows) == sorted(
+        (row.department_name, row.description) for row in page3_rows_flat
+    )
+    assert sorted(row["quantity_label"] for row in production_rows) == ["10", "12", "2", "5"]
+    assert sorted(row.quantity_label for row in page3_rows_flat) == ["10", "12", "2", "5"]
 
 
 def test_production_lists_index_renders_selected_iso_week_and_lunch_links(app_session, client_admin, monkeypatch):

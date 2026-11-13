@@ -196,30 +196,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const initial = readStateFromUrl();
   showState(initial, { updateHistory: false });
 
-  topTabs.forEach((link) => {
-    link.addEventListener("click", (event) => {
-      const view = link.getAttribute("data-page3-view");
-      if (!view) {
-        return;
-      }
-      event.preventDefault();
-      const specialView = view === "special" ? lastSpecialView : lastSpecialView;
-      showState({ view, specialView }, { updateHistory: true });
-    });
-  });
-
-  specialTabs.forEach((link) => {
-    link.addEventListener("click", (event) => {
-      const specialView = link.getAttribute("data-page3-special-view");
-      if (!specialView) {
-        return;
-      }
-      event.preventDefault();
-      showState({ view: "special", specialView }, { updateHistory: true });
-    });
-
-  });
-
   if (normalSelector) {
     normalSelector.addEventListener("change", applyNormalSelection);
   }

@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from core.app_factory import create_app
+from core.admin_repo import DepartmentServiceAddonsRepo, DepartmentsRepo, ServiceAddonsRepo, SitesRepo
 from core.planera_product2_menu_vm import Product2MealOptionVM
 from core.planera_product2_page2_context import (
     Product2Page2DestinationVM,
@@ -289,6 +290,118 @@ def test_build_product2_page3_vm_uses_orchestration_numbers_and_page2_metadata(m
     assert [row.display_name for row in vm.options[0].normal_department_rows] == ["Avdelning A"]
     assert vm.options[0].special_cohorts[0].label == "Vegetariskt"
     assert vm.options[0].special_cohorts[0].department_quantities[0].quantity == 3
+
+
+def test_full_page3_vm_and_route_render_real_service_addons_without_menu_choice(
+    app_session,
+    monkeypatch,
+):
+    site, _ = SitesRepo().create_site("Page3 addon integration site", tenant_id=1)
+    gammelapan, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Gammelapan",
+        resident_count_mode="fixed",
+        resident_count_fixed=12,
+    )
+    asnegrisen, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Åsnegrisen",
+        resident_count_mode="fixed",
+        resident_count_fixed=10,
+    )
+    addon_repo = ServiceAddonsRepo()
+    mos_id = addon_repo.create_if_missing(
+        "Mos istället för potatis",
+        site_id=site["id"],
+        addon_family="mos",
+    )
+    pasta_id = addon_repo.create_if_missing(
+        "Aldrig spaghetti",
+        site_id=site["id"],
+        addon_family="ovrigt",
+    )
+    assignments = DepartmentServiceAddonsRepo()
+    assignments.replace_for_department(
+        gammelapan["id"],
+        [
+            {"addon_id": mos_id, "service_scope": "lunch", "quantity_mode": "custom", "lunch_count": 12},
+            {"addon_id": pasta_id, "service_scope": "lunch", "quantity_mode": "custom", "lunch_count": 2},
+        ],
+        site_id=site["id"],
+    )
+    assignments.replace_for_department(
+        asnegrisen["id"],
+        [
+            {"addon_id": mos_id, "service_scope": "lunch", "quantity_mode": "custom", "lunch_count": 5},
+            {"addon_id": pasta_id, "service_scope": "lunch", "quantity_mode": "custom", "lunch_count": 10},
+        ],
+        site_id=site["id"],
+    )
+
+    base_context = _context()
+    page2_context = replace(
+        base_context,
+        site_id=site["id"],
+        destinations=tuple(
+            (
+                base_context.destinations[0],
+                replace(
+                    base_context.destinations[0],
+                    destination_id=gammelapan["id"],
+                    display_name=gammelapan["name"],
+                ),
+                replace(
+                    base_context.destinations[0],
+                    destination_id=asnegrisen["id"],
+                    display_name=asnegrisen["name"],
+                    selected_option_id=None,
+                    choice_source="none",
+                ),
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "core.planera_product2_page3_vm._load_site_name",
+        lambda **_: "Fantasiköket",
+    )
+    monkeypatch.setattr(
+        "core.planera_product2_page3_vm.build_product2_page2_planning_context",
+        lambda **_: page2_context,
+    )
+    monkeypatch.setattr(
+        "core.planera_product2_page3_vm.run_kommun_meal_orchestration",
+        lambda **_: _meal_result(),
+    )
+
+    with app_session.app_context():
+        vm = build_product2_page3_vm(
+            tenant_id=1,
+            site_id=site["id"],
+            service_date="2026-11-09",
+            meal="lunch",
+            view="addons",
+        )
+
+    assert sum(len(group.rows) for group in vm.service_addon_groups) == 4
+    assert {row.description for group in vm.service_addon_groups for row in group.rows} == {
+        "Mos istället för potatis",
+        "Aldrig spaghetti",
+    }
+
+    client = app_session.test_client()
+    with client.session_transaction() as session:
+        session["tenant_id"] = 1
+    response = client.get(
+        f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}"
+        "&date=2026-11-09&meal=lunch&view=addons",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Mos istället för potatis" in html
+    assert "Aldrig spaghetti" in html
+    assert "Gammelapan" in html
+    assert "Åsnegrisen" in html
 
 
 def test_build_product2_page3_vm_preserves_explicit_option_identity(monkeypatch):
