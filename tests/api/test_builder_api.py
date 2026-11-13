@@ -897,6 +897,87 @@ def test_single_composition_read_endpoint_returns_requested_composition() -> Non
     assert composition.get("effective_menu_name") == "Scoped plate"
 
 
+def test_composition_reads_are_tenant_scoped_including_render_and_library() -> None:
+    fd, db_path = tempfile.mkstemp(prefix="builder_api_composition_tenant_scope_", suffix=".db")
+    os.close(fd)
+    app = _app_with_builder_db(db_path)
+    tenant_a_admin = app.test_client()
+    tenant_a_client = app.test_client()
+    tenant_b_client = app.test_client()
+    tenant_a_admin_headers = _headers(role="admin", tenant_id=1, user_id=11)
+    tenant_a_headers = _headers(role="cook", tenant_id=1, user_id=42)
+    tenant_b_headers = {
+        "X-User-Role": "cook",
+        "X-Tenant-Id": "2",
+        "X-User-Id": "43",
+        "X-Site-Id": "site-b",
+    }
+    _seed_session(tenant_a_admin, role="admin", tenant_id=1, user_id=11)
+    _seed_session(tenant_a_client, role="cook", tenant_id=1, user_id=42)
+    _seed_session(tenant_b_client, role="cook", tenant_id=2, user_id=43)
+    with tenant_a_admin.session_transaction() as session:
+        session["site_id"] = "site-a"
+    with tenant_a_client.session_transaction() as session:
+        session["site_id"] = "site-a"
+    with tenant_b_client.session_transaction() as session:
+        session["site_id"] = "site-b"
+
+    created = tenant_a_admin.post(
+        "/api/builder/compositions",
+        json={"composition_id": "tenant-a-private-composition", "composition_name": "Tenant A private dish"},
+        headers=tenant_a_admin_headers,
+    )
+    assert created.status_code == 201
+    composition_id = ((created.get_json() or {}).get("composition") or {}).get("composition_id")
+    assert composition_id == "tenant-a-private-composition"
+
+    component = tenant_a_admin.post(
+        f"/api/builder/compositions/{composition_id}/components",
+        json={"component_name": "Tenant A private component", "role": "main"},
+        headers=tenant_a_admin_headers,
+    )
+    assert component.status_code == 200
+
+    owner_read = tenant_a_client.get(
+        f"/api/builder/compositions/{composition_id}",
+        headers=tenant_a_headers,
+    )
+    assert owner_read.status_code == 200
+    owner_payload = owner_read.get_json() or {}
+    owner_composition = owner_payload.get("composition") or {}
+    assert owner_composition.get("composition_name") == "Tenant A private dish"
+    assert any(
+        item.get("component_name") == "Tenant A private component"
+        for item in owner_composition.get("components") or []
+    )
+
+    foreign_read = tenant_b_client.get(
+        f"/api/builder/compositions/{composition_id}",
+        headers=tenant_b_headers,
+    )
+    assert foreign_read.status_code != 200
+    foreign_read_body = foreign_read.get_data(as_text=True)
+    assert "Tenant A private dish" not in foreign_read_body
+    assert "Tenant A private component" not in foreign_read_body
+
+    foreign_render = tenant_b_client.get(
+        f"/api/builder/compositions/{composition_id}/render/text",
+        headers=tenant_b_headers,
+    )
+    assert foreign_render.status_code != 200
+    foreign_render_body = foreign_render.get_data(as_text=True)
+    assert "Tenant A private dish" not in foreign_render_body
+    assert "Tenant A private component" not in foreign_render_body
+
+    foreign_library = tenant_b_client.get("/api/builder/library", headers=tenant_b_headers)
+    assert foreign_library.status_code == 200
+    foreign_composition_ids = {
+        item.get("composition_id")
+        for item in (foreign_library.get_json() or {}).get("compositions") or []
+    }
+    assert composition_id not in foreign_composition_ids
+
+
 def test_single_component_read_endpoint_respects_private_scope_boundary() -> None:
     fd, db_path = tempfile.mkstemp(prefix="builder_api_single_component_scope_", suffix=".db")
     os.close(fd)
