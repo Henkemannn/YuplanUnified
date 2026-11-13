@@ -1118,17 +1118,25 @@
   }
 
   .yp-planera-page3-print-title {
-    margin: 0 0 0.8rem;
+    margin: 0 0 0.45rem;
     color: #071426 !important;
-    font-size: 1.35rem;
-    font-weight: 800;
+    font-size: 1.2rem;
+    font-weight: 700;
+    letter-spacing: 0;
+  }
+
+  .yp-planera-page3-section__title {
+    display: none !important;
   }
 
   .yp-planera-page3-print-warning {
-    margin: 0 0 0.8rem;
+    margin: 0 0 0.55rem;
+    padding-left: 0.55rem;
+    border-left: 2px solid #b7c1c9;
     color: #4b5a66 !important;
-    font-size: 0.85rem;
-    font-weight: 650;
+    font-size: 0.78rem;
+    font-weight: 500;
+    line-height: 1.3;
   }
 
   .yp-planera-page3-date-control {
@@ -1159,6 +1167,34 @@
     color: #071426 !important;
   }
 
+  .yp-planera-page3-context {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: baseline;
+    gap: 0.25rem 0.8rem;
+    margin: 0 0 0.7rem;
+    padding: 0;
+  }
+
+  .yp-planera-page3-context__line {
+    display: block;
+  }
+
+  .yp-planera-page3-date-control__date,
+  .yp-planera-page3-subtitle {
+    font-size: 0.82rem;
+    line-height: 1.25;
+  }
+
+  .yp-planera-page3-date-control__date {
+    font-weight: 650;
+  }
+
+  .yp-planera-page3-subtitle {
+    margin: 0;
+    font-weight: 500;
+  }
+
   .yp-planera-page3-table,
   .yp-planera-page3-table thead,
   .yp-planera-page3-table tbody,
@@ -1178,6 +1214,35 @@
   .yp-planera-page3-table--matrix .is-sticky,
   .yp-planera-page3-table--matrix tfoot th {
     color: #071426 !important;
+  }
+
+  .yp-planera-page3-table--matrix th {
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  .yp-planera-page3-table--matrix .yp-planera-page3-matrix-column-title {
+    font-size: 0.74rem;
+    font-weight: 650;
+    line-height: 1.2;
+    letter-spacing: 0;
+  }
+
+  .yp-planera-page3-table--matrix tbody th.is-sticky {
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .yp-planera-page3-table--matrix tbody td,
+  .yp-planera-page3-table--matrix tfoot th:not(.is-sticky) {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .yp-planera-page3-table--matrix tfoot th {
+    font-size: 0.82rem;
+    font-weight: 700;
   }
 
   .yp-planera-page3-matrix-column-total {
@@ -1278,6 +1343,60 @@
   .yp-planera-page3-table--overview {
     width: 100%;
     table-layout: auto;
+  }
+
+  .yp-planera-page3-table--matrix {
+    table-layout: fixed;
+  }
+
+  .yp-planera-page3-table--matrix .is-sticky {
+    width: 8rem;
+    min-width: 8rem;
+    max-width: 8rem;
+  }
+
+  .yp-planera-page3-table--matrix thead th:not(.is-sticky),
+  .yp-planera-page3-table--matrix tbody td,
+  .yp-planera-page3-table--matrix tfoot th:not(.is-sticky) {
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    overflow-wrap: anywhere;
+  }
+
+  .yp-planera-page3-matrix-column-title {
+    font-size: 0.85rem;
+  }
+
+  .yp-planera-page3-table--matrix thead {
+    display: table-header-group;
+  }
+
+  .yp-planera-page3-table--matrix tfoot {
+    display: table-row-group;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .yp-planera-page3-table--matrix tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .yp-planera-page3-table--matrix th,
+  .yp-planera-page3-table--matrix td {
+    padding: 0.28rem 0.4rem;
+    font-size: 0.82rem;
+    line-height: 1.2;
+  }
+
+  .yp-planera-page3-table--matrix thead th {
+    font-size: 0.74rem;
+  }
+
+  .yp-planera-page3-table--matrix tfoot tr {
+    break-before: avoid;
+    page-break-before: avoid;
   }
 }
 

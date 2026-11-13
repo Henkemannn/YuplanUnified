@@ -44,7 +44,7 @@
                   <span class="yp-planera-page3-status-pill {% if vm.ready %}is-ready{% else %}is-blocked{% endif %}" aria-label="{{ vm.ready_label }}" title="{{ vm.ready_label }}">{{ vm.ready_label }}</span>
                 </div>
               </div>
-              <h2 class="yp-planera-page3-print-title" data-page3-print-title aria-hidden="true">Specialkost – {{ "Produktionslista" if vm.special_view == "production" else "Packlista" }}</h2>
+              <h2 class="yp-planera-page3-print-title" data-page3-print-title aria-hidden="true">{% if vm.view == "normal" %}Normalkost{% elif vm.view == "special" %}Specialkost – {{ "Produktionslista" if vm.special_view == "production" else "Packlista" }}{% else %}Produktionsunderlag{% endif %}</h2>
               {% if not vm.ready and vm.blocker_messages %}
               <div class="yp-planera-page3-print-warning" data-page3-print-warning aria-hidden="true">
                 Preliminärt underlag: {{ vm.blocker_messages | join("; ") }}
