@@ -1056,6 +1056,7 @@ def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) ->
     )
 
     for option in options:
+        option_review_state = review_state_by_option_id.get(str(option["option_id"]))
         option_destinations = [destination for destination in destinations if str(destination.get("selected_option_id") or "") == str(option["option_id"])]
         exact_requirement_groups: list[Product2Page2RequirementGroupVM] = []
         for destination in context.destinations:
@@ -1066,8 +1067,8 @@ def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) ->
                     exact_requirement_groups.append(group)
         review_rows, has_inconsistent_state = build_review_display_groups(
             requirement_groups=exact_requirement_groups,
-            decisions=getattr(review_state_by_option_id.get(str(option["option_id"])), "decisions", ()) or (),
-            review_present=review_state is not None,
+            decisions=getattr(option_review_state, "decisions", ()) or (),
+            review_present=getattr(option_review_state, "review_id", None) is not None,
         )
         review_rows = _order_product2_page2_review_groups(review_rows)
         if has_inconsistent_state:

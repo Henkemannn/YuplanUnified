@@ -49,6 +49,7 @@ from core.planera_product2_page2_context import (
     build_product2_page2_planning_context,
     build_product2_page2_target_planning_context,
 )
+from core.ui_blueprint import _build_product2_page2_vm
 
 
 @dataclass
@@ -393,6 +394,48 @@ def test_unreviewed_state_is_derived_from_absence(app_session) -> None:
     assert state.relevant_group_count == 1
     assert state.decision_count == 0
     assert state.current_basis_hash is not None
+
+
+def test_page2_review_state_is_scoped_to_each_option(app_session, monkeypatch) -> None:
+    scenario = _seed_scenario(app_session)
+    service = _service()
+    saved = service.save_option_review(
+        tenant_id=1,
+        site_id=scenario.site_id,
+        service_date=scenario.service_date,
+        meal="lunch",
+        option_id=scenario.option_ids["alt2"],
+        decisions=[_decision(scenario.dept_b["id"], scenario.group_b["id"], NO_ADAPTATION_REQUIRED)],
+        reviewed_by_user_id=1,
+    )
+    assert saved.review_state == REVIEW_STATE_NO_DEVIATIONS
+    original_get_state = PlanningOptionReviewService.get_option_review_state
+
+    def get_state_for_page2(self, **kwargs):
+        if str(kwargs.get("option_id")) == scenario.option_ids["alt2"]:
+            return saved
+        return original_get_state(self, **kwargs)
+
+    monkeypatch.setattr(PlanningOptionReviewService, "get_option_review_state", get_state_for_page2)
+
+    with app_session.test_request_context():
+        context = build_product2_page2_planning_context(
+            tenant_id=1,
+            site_id=scenario.site_id,
+            service_date=scenario.service_date,
+            meal="lunch",
+        )
+        vm = _build_product2_page2_vm(
+            context=context,
+            site_name="Review Site",
+            service_date=scenario.service_date,
+        )
+
+    options = {str(option["option_id"]): option for option in vm["options"]}
+    unreviewed = options[scenario.option_ids["alt1"]]
+    assert unreviewed["review_state"] == REVIEW_STATE_UNREVIEWED
+    assert unreviewed["review_is_stale"] is False
+    assert unreviewed["review_banner_message"] is None
 
 
 def test_all_no_decisions_reviewed_no_deviations(app_session) -> None:
