@@ -123,42 +123,128 @@
     page-break-inside: auto !important;
   }
 
-  /* Menu overview: two columns with deterministic 4/3 day split. */
-  .kitchen-menu .kitchen-menu__grid {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
-    grid-template-rows: repeat(4, minmax(0, 1fr)) !important;
-    gap: 3mm 3.5mm !important;
-    align-items: stretch !important;
-    grid-auto-flow: row !important;
-    align-content: start !important;
-    min-height: 232mm !important;
+  /* Menu overview: isolated A4 table, independent of screen layout. */
+  .kitchen-menu .kitchen-menu__screen-grid {
+    display: none !important;
   }
 
-  /* Explicit 4-left / 3-right placement for consistent print ordering. */
-  .kitchen-menu .kitchen-menu__grid > .app-card:nth-child(1) { grid-column: 1 !important; grid-row: 1 !important; }
-  .kitchen-menu .kitchen-menu__grid > .app-card:nth-child(2) { grid-column: 1 !important; grid-row: 2 !important; }
-  .kitchen-menu .kitchen-menu__grid > .app-card:nth-child(3) { grid-column: 1 !important; grid-row: 3 !important; }
-  .kitchen-menu .kitchen-menu__grid > .app-card:nth-child(4) { grid-column: 1 !important; grid-row: 4 !important; }
-  .kitchen-menu .kitchen-menu__grid > .app-card:nth-child(5) { grid-column: 2 !important; grid-row: 1 !important; }
-  .kitchen-menu .kitchen-menu__grid > .app-card:nth-child(6) { grid-column: 2 !important; grid-row: 2 !important; }
-  .kitchen-menu .kitchen-menu__grid > .app-card:nth-child(7) { grid-column: 2 !important; grid-row: 3 !important; }
-
-  .kitchen-menu .app-shell__card {
+  .kitchen-menu .kitchen-menu__print-only {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
     margin: 0 !important;
-    padding: 10px 12px !important;
-    border: 1px solid #cfcfcf !important;
-    height: 100% !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    transform: none !important;
   }
 
-  .kitchen-menu .app-shell__card-title {
-    font-size: 14px !important;
-    line-height: 1.2 !important;
-    margin-bottom: 5px !important;
+  .kitchen-menu .kitchen-menu__print-list {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    transform: none !important;
   }
 
-  .kitchen-menu .app-shell__card-text {
-    font-size: 12.8px !important;
-    line-height: 1.35 !important;
+  .kitchen-menu .kitchen-menu__print-row {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin: 0 0 3mm !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    transform: none !important;
+    font-size: 0 !important;
+    -webkit-column-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .kitchen-menu .kitchen-menu__print-cell {
+    display: inline-block !important;
+    width: calc(50% - 1.75mm) !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    vertical-align: top !important;
+    overflow: visible !important;
+    box-sizing: border-box !important;
+    transform: none !important;
+  }
+
+  .kitchen-menu .kitchen-menu__print-cell + .kitchen-menu__print-cell {
+    margin-left: 3.5mm !important;
+  }
+
+  .kitchen-menu .kitchen-menu__print-cell--empty {
+    min-height: 0 !important;
+  }
+
+  .kitchen-menu .kitchen-menu__print-card {
+    display: block !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 3mm 3.5mm !important;
+    border: 0.3mm solid #cfcfcf !important;
+    box-sizing: border-box !important;
+    overflow: visible !important;
+    transform: none !important;
+    font-size: 9.5pt !important;
+  }
+
+  .kitchen-menu .kitchen-menu__print-card .app-shell__card-title,
+  .kitchen-menu .kitchen-menu__print-card .app-shell__card-text {
+    display: block !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin: 0 0 1.2mm !important;
+    padding: 0 !important;
+    line-height: 1.25 !important;
+    overflow: visible !important;
+    transform: none !important;
+  }
+
+  .kitchen-menu .kitchen-menu__print-card .app-shell__card-title {
+    margin-bottom: 2mm !important;
+    font-size: 10.5pt !important;
+    font-weight: 700 !important;
+  }
+
+  .kitchen-menu .kitchen-menu__print-card .app-shell__card-text {
+    font-size: 9.5pt !important;
+    font-weight: 400 !important;
+  }
+
+  .kitchen-menu .kitchen-menu__print-card .kitchen-menu__dish-link {
+    display: inline !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: inherit !important;
+    overflow: visible !important;
+    transform: none !important;
   }
 }

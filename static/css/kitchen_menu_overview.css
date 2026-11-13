@@ -48,6 +48,10 @@
   line-height: 1;
 }
 
+.kitchen-menu__print-only {
+  display: none;
+}
+
 /* Keep the Kitchen host centered while binding panel and iframe to one box. */
 .yp-modal-host.kitchen-menu__builder-modal-host[data-admin-week-builder-host][data-modal-host-mode="child-owned-card"] {
   position: fixed;

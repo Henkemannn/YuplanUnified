@@ -20,6 +20,17 @@
   {% endif %}
 {%- endmacro %}
 
+{% macro day_content(day) -%}
+  <h2 class="app-shell__card-title">{{ day.label }}</h2>
+  <p class="app-shell__card-text"><strong>Lunch:</strong></p>
+  <p class="app-shell__card-text">Alt 1: {{ dish_label(day.lunch_alt1, day.lunch_alt1_composition_id) }}</p>
+  {% if day.lunch_alt2 %}
+    <p class="app-shell__card-text"><span class="yp-pill yp-pill--alt2">Alt 2</span> {{ dish_label(day.lunch_alt2, day.lunch_alt2_composition_id) }}</p>
+  {% endif %}
+  <p class="app-shell__card-text">Dessert: {{ dish_label(day.dessert, day.dessert_composition_id) }}</p>
+  <p class="app-shell__card-text"><strong>Kvällsmat:</strong> {{ dish_label(day.dinner, day.dinner_composition_id) }}</p>
+{%- endmacro %}
+
 {% block content %}
   <div class="app-page kitchen-menu">
     <section class="app-shell__page-header">
@@ -48,19 +59,33 @@
       </section>
     {% endif %}
 
-    <section class="app-shell__grid kitchen-menu__grid">
+    <section class="app-shell__grid kitchen-menu__grid kitchen-menu__screen-grid">
       {% for day in vm.menu_days %}
         <article class="app-shell__card app-card">
-          <h2 class="app-shell__card-title">{{ day.label }}</h2>
-          <p class="app-shell__card-text"><strong>Lunch:</strong></p>
-          <p class="app-shell__card-text">Alt 1: {{ dish_label(day.lunch_alt1, day.lunch_alt1_composition_id) }}</p>
-          {% if day.lunch_alt2 %}
-            <p class="app-shell__card-text"><span class="yp-pill yp-pill--alt2">Alt 2</span> {{ dish_label(day.lunch_alt2, day.lunch_alt2_composition_id) }}</p>
-          {% endif %}
-          <p class="app-shell__card-text">Dessert: {{ dish_label(day.dessert, day.dessert_composition_id) }}</p>
-          <p class="app-shell__card-text"><strong>Kvällsmat:</strong> {{ dish_label(day.dinner, day.dinner_composition_id) }}</p>
+          {{ day_content(day) }}
         </article>
       {% endfor %}
+    </section>
+
+    <section class="kitchen-menu__print-only" aria-label="Menyöversikt för utskrift">
+      <div class="kitchen-menu__print-list">
+        {% for day in vm.menu_days %}
+          {% if loop.index0 % 2 == 0 %}
+          <div class="kitchen-menu__print-row">
+          {% endif %}
+            <div class="kitchen-menu__print-cell">
+              <article class="kitchen-menu__print-card">
+                {{ day_content(day) }}
+              </article>
+            </div>
+          {% if loop.index0 % 2 == 1 %}
+          </div>
+          {% elif loop.last %}
+            <div class="kitchen-menu__print-cell kitchen-menu__print-cell--empty" aria-hidden="true"></div>
+          </div>
+          {% endif %}
+        {% endfor %}
+      </div>
     </section>
   </div>
 
