@@ -2026,7 +2026,21 @@ body.modal-open {
 
 @media (max-width: 900px) {
   .app-shell {
-    --topbar-height: 72px;
+    --topbar-height: 116px;
+  }
+
+  .app-shell__topbar {
+    align-items: flex-start;
+  }
+
+  .app-shell__topbar-actions {
+    align-content: center;
+    row-gap: 8px;
+  }
+
+  .app-shell__env-badge {
+    white-space: normal;
+    line-height: 1.25;
   }
 
   .app-shell__body {
@@ -2063,6 +2077,39 @@ body.modal-open {
 
   .app-shell__grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1366px) {
+  .app-shell {
+    --topbar-height: 116px;
+  }
+
+  .app-shell__topbar {
+    align-items: flex-start;
+  }
+
+  .app-shell__topbar-actions {
+    align-content: center;
+    row-gap: 8px;
+  }
+
+  .app-shell__env-badge {
+    white-space: normal;
+    line-height: 1.25;
+  }
+}
+
+@media (min-width: 1367px) {
+  .app-shell__topbar-actions {
+    max-width: calc(100% - 180px);
+    flex-wrap: nowrap;
+  }
+
+  .app-shell__env-badge {
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
   }
 }
 
@@ -2106,7 +2153,15 @@ body.modal-open {
 
 @media (max-width: 640px) {
   .app-shell__topbar {
-    padding: 0 16px;
+    padding: var(--safe-area-top) 16px 0;
+  }
+
+  .app-shell {
+    --topbar-height: 148px;
+  }
+
+  .app-shell__topbar-actions {
+    max-width: calc(100% - 120px);
   }
 
   .app-shell__brand-text {
