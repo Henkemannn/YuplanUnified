@@ -93,7 +93,7 @@
 
             <div class="admin-needs-list" role="list" aria-label="Registrerade kostbehov">
                 {% for group in vm.requirement_groups or [] %}
-                {% set group_display_name = group.display_name or group.primary_name or group.label or 'Kostbehov saknas' %}
+                {% set group_display_name = group.display_label or group.display_name or group.primary_name or group.label or 'Kostbehov saknas' %}
                 <div class="admin-need-item" role="listitem">
                     <div class="admin-need-item__main">
                         <strong class="admin-need-item__name">{{ group_display_name }}</strong>
@@ -879,7 +879,7 @@
                         {% if group.is_active %}
                         <details class="admin-variation-need" {% if loop.first %}open{% endif %} data-variation-group-id="{{ group.id }}">
                             <summary class="admin-variation-need__summary">
-                                <span class="admin-variation-need__name">{{ group.primary_name or group.label or 'Registrerat behov' }}</span>
+                                <span class="admin-variation-need__name">{{ group.display_label or group.primary_name or group.label or 'Registrerat behov' }}</span>
                                 <span class="admin-variation-need__meta">{{ group.default_quantity }} normalt{% if group.has_variation %} · Varierar{% endif %}</span>
                             </summary>
                             <table class="ua-table admin-variation-table admin-variation-table--need">

@@ -73,10 +73,7 @@
               <li>
                 <div class="portal-home-list-copy">
                   <div class="portal-home-list-title-line">
-                    <span class="portal-home-list-title">{{ item.label }}</span>
-                    {% if item.secondary_label %}
-                      <span class="portal-home-list-chip">+ {{ item.secondary_label }}</span>
-                    {% endif %}
+                    <span class="portal-home-list-title">{{ item.display_label or item.label }}</span>
                   </div>
                 </div>
                 <strong>{{ item.quantity }}</strong>

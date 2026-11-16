@@ -100,15 +100,19 @@ def _presentation_requirement_group(group: dict[str, Any]) -> dict[str, Any]:
     secondary_names: list[str] = []
     seen_names: set[str] = set()
     for requirement in requirements:
+        if primary_requirement and int(requirement.get("dietary_type_id") or 0) == int(primary_requirement.get("dietary_type_id") or 0):
+            continue
         requirement_name = str(requirement.get("name") or "").strip()
-        if not requirement_name or requirement_name == primary_label or requirement_name in seen_names:
+        if not requirement_name or requirement_name in seen_names:
             continue
         seen_names.add(requirement_name)
         secondary_names.append(requirement_name)
 
+    display_label = " + ".join([primary_label, *secondary_names]) if primary_label else " + ".join(secondary_names)
     return {
         "label": primary_label,
         "secondary_label": " · ".join(secondary_names) if secondary_names else None,
+        "display_label": display_label,
     }
 
 
@@ -175,6 +179,7 @@ def build_department_home_payload(scope: DepartmentPortalScope) -> dict[str, Any
                 {
                     "label": presentation["label"],
                     "secondary_label": presentation["secondary_label"],
+                    "display_label": presentation["display_label"],
                     "quantity": quantity,
                 }
             )

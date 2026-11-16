@@ -51,7 +51,7 @@
                         {% for group in vm.requirement_groups %}
                             <div class="admin-departments__summary-item" role="listitem">
                                 <div class="admin-departments__summary-item-main">
-                                    <strong class="admin-departments__summary-item-title">{{ group.display_name }}</strong>
+                                    <strong class="admin-departments__summary-item-title">{{ group.display_label or group.display_name }}</strong>
                                     <span class="admin-departments__summary-item-meta">{{ group.display_meta }}</span>
                                 </div>
                             </div>

@@ -94,19 +94,7 @@
   font-weight: 700;
   font-size: 0.98rem;
   line-height: 1.25;
-}
-
-.portal-home-list-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent-soft) 56%, white);
-  color: color-mix(in srgb, var(--accent) 58%, var(--text));
-  font-size: 0.79rem;
-  font-weight: 800;
-  line-height: 1.2;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .portal-home-list strong {

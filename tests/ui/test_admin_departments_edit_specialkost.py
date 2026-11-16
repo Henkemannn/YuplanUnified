@@ -393,7 +393,7 @@ def test_edit_form_renders_requirement_groups_and_can_create_update(client_admin
     group_repo.create_group(
         dep["id"],
         1,
-        [grovpate_id, laktosfri_id],
+        [grovpate_id, laktosfri_id, glutenfri_id],
         label=None,
         primary_requirement_id=grovpate_id,
     )
@@ -424,12 +424,31 @@ def test_edit_form_renders_requirement_groups_and_can_create_update(client_admin
     assert "Flytande kost" in create_options
     assert "Laktosfri" in create_options
     assert "Grovpaté" in create_options
-    assert '<strong class="admin-need-item__name">Grovpaté</strong>' in html
-    assert '1 person · Laktosfri' in html
+    rendered_need_labels = re.findall(r'<strong class="admin-need-item__name">(.*?)</strong>', html)
+    assert rendered_need_labels[0].startswith("Grovpaté + ")
+    assert set(rendered_need_labels[0].split(" + ")) == {"Grovpaté", "Glutenfri", "Laktosfri"}
+    assert rendered_need_labels[1] == "Timbal"
+    assert '1 person · Laktosfri' not in html
+    assert '1 person</span>' in html
     assert '<strong class="admin-need-item__name">Timbal</strong>' in html
     assert '2 personer' in html
+    assert 'data-need-primary-id="' + str(grovpate_id) + '"' in html
+    assert 'data-need-modifier-ids="' in html
     assert 'Laktosfri + Grovpaté' not in html
-    assert html.index('<strong class="admin-need-item__name">Grovpaté</strong>') < html.index('<strong class="admin-need-item__name">Timbal</strong>')
+    assert html.index('<strong class="admin-need-item__name">' + rendered_need_labels[0] + '</strong>') < html.index('<strong class="admin-need-item__name">Timbal</strong>')
+
+    quick_overview = client_admin.get(
+        f"/ui/admin/departments/{dep['id']}/quick-overview",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert quick_overview.status_code == 200
+    quick_html = quick_overview.get_data(as_text=True)
+    assert "Grovpaté +" in quick_html
+    assert "Glutenfri" in quick_html
+    assert "Laktosfri" in quick_html
+    assert "1 person" in quick_html
+    assert "1 person ·" not in quick_html
+
     assert "Standardvärden / avancerade inställningar" not in html
     assert html.count('+ Lägg till kostbehov') >= 1
     assert 'data-need-picker-toggle' in html

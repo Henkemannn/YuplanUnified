@@ -6,6 +6,7 @@ from core.db import get_session
 from core.admin_repo import DepartmentServiceAddonsRepo, ServiceAddonsRepo
 from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
 from core.residents_weekly_repo import ResidentsWeeklyRepo
+from portal.department.home_service import _presentation_requirement_group
 from sqlalchemy import text
 
 
@@ -45,6 +46,22 @@ def _seed_duplicate_requirement_label_group(site_id: str, department_id: str) ->
         DepartmentRequirementGroupsRepo().create_group(department_id, 1, [201], label="Glutenfri", primary_requirement_id=201)
     finally:
         db.close()
+
+
+def test_presentation_requirement_group_uses_primary_order_and_one_display_label():
+    presentation = _presentation_requirement_group(
+        {
+            "primary_requirement_id": 101,
+            "requirements": [
+                {"dietary_type_id": 102, "name": "Glutenfri"},
+                {"dietary_type_id": 101, "name": "Timbal"},
+                {"dietary_type_id": 103, "name": "Laktosfri"},
+            ],
+        }
+    )
+
+    assert presentation["display_label"] == "Timbal + Glutenfri + Laktosfri"
+    assert presentation["secondary_label"] == "Glutenfri · Laktosfri"
 
 
 def _seed_service_addon(site_id: str, department_id: str) -> None:
@@ -137,6 +154,8 @@ def test_department_portal_home_renders_identity_context_and_weeks(client_admin,
     assert html.count("18 boende") == 1
     assert "Timbal" in html
     assert "Glutenfri" in html
+    assert "Timbal + Glutenfri" in html
+    assert "portal-home-list-chip" not in html
     assert "Sallad" in html
     assert "aldrig tomat" in html
     assert "Request ID:" not in html

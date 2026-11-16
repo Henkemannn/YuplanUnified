@@ -7513,11 +7513,14 @@ def _build_department_overview_sections(department_id: str, *, site_id: str | No
                 primary_name = str((type_lookup.get(primary_id) or {}).get("name") or "") or None
             member_names = [str((type_lookup.get(member_id) or {}).get("name") or member_id) for member_id in member_ids]
             display_name = primary_name or (member_names[0] if member_names else None) or str(group.get("label") or "").strip() or "Kostbehov saknas"
-            modifier_names = [name for name in member_names if name and name != display_name]
+            modifier_names = [
+                name
+                for member_id, name in zip(member_ids, member_names)
+                if name and member_id != primary_id
+            ]
+            display_label = " + ".join([display_name, *modifier_names]) if display_name else " + ".join(modifier_names)
             default_quantity = int(group.get("default_quantity") or 0)
             display_meta = f"{default_quantity} person{'er' if default_quantity != 1 else ''}"
-            if modifier_names:
-                display_meta = f"{display_meta} · {' + '.join(modifier_names)}"
             formatted_groups.append(
                 {
                     "id": str(group.get("id")),
@@ -7527,6 +7530,7 @@ def _build_department_overview_sections(department_id: str, *, site_id: str | No
                     "primary_requirement_id": primary_id,
                     "primary_name": primary_name,
                     "display_name": display_name,
+                    "display_label": display_label,
                     "display_meta": display_meta,
                     "member_ids": member_ids,
                     "modifier_ids": [member_id for member_id in member_ids if member_id != primary_id],
@@ -8050,10 +8054,13 @@ def admin_departments_edit_form(dept_id: str):
             else:
                 modifier_options = list(member_options)
             default_quantity = int(group.get("default_quantity") or 0)
-            modifier_names = [name for name in member_names if name and name != display_name]
+            modifier_names = [
+                name
+                for member_id, name in zip(member_ids, member_names)
+                if name and member_id != primary_id
+            ]
+            display_label = " + ".join([display_name, *modifier_names]) if display_name else " + ".join(modifier_names)
             display_meta = f"{default_quantity} person{'er' if default_quantity != 1 else ''}"
-            if modifier_names:
-                display_meta = f"{display_meta} · {' + '.join(modifier_names)}"
             weekday_override_rows = []
             try:
                 weekday_override_rows = DepartmentRequirementGroupWeekdayOverridesRepo().list_for_group(str(group.get("id")))
@@ -8081,6 +8088,7 @@ def admin_departments_edit_form(dept_id: str):
                     "primary_requirement_id": primary_id,
                     "primary_name": primary_name,
                     "display_name": display_name,
+                    "display_label": display_label,
                     "display_meta": display_meta,
                     "primary_options": member_options,
                     "modifier_options": modifier_options,
