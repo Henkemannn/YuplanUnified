@@ -24,22 +24,32 @@
 
       <div class="yp-form-field">
         <label for="email" class="yp-label">E-post <span class="required">*</span></label>
-        <input id="email" name="email" type="email" class="yp-input" required maxlength="200" autocomplete="email" value="{% if vm.user %}{{ vm.user.email }}{% endif %}" placeholder="namn@example.com">
+        <input id="email" name="email" type="text" inputmode="email" class="yp-input{% if vm.field_errors.get('email') %} is-invalid{% endif %}" required maxlength="200" autocomplete="email" value="{{ vm.form_data.get('email', vm.user.email if vm.user else '') }}" placeholder="namn@example.com"{% if vm.field_errors.get('email') %} aria-invalid="true" aria-describedby="email-error"{% endif %}{% if vm.focus_field == 'email' %} autofocus{% endif %}>
+        <small class="yp-form-help">Kontaktadress. Internationella domäner stöds.</small>
+        {% if vm.field_errors.get('email') %}<p id="email-error" class="yp-form-error" role="alert">{{ vm.field_errors.get('email') }}</p>{% endif %}
+      </div>
+
+      <div class="yp-form-field">
+        <label for="username" class="yp-label">Användarnamn</label>
+        <input id="username" name="username" type="text" class="yp-input{% if vm.field_errors.get('username') %} is-invalid{% endif %}" maxlength="100" autocomplete="username" value="{{ vm.form_data.get('username', vm.user.username if vm.user else '') }}" placeholder="Valfritt, till exempel barbro.f"{% if vm.field_errors.get('username') %} aria-invalid="true" aria-describedby="username-error"{% endif %}{% if vm.focus_field == 'username' %} autofocus{% endif %}>
+        <small class="yp-form-help">Valfritt. Använd bokstäver, siffror, punkt, bindestreck eller understreck. Lämnas fältet tomt vid skapande används e-postadressen.</small>
+        {% if vm.field_errors.get('username') %}<p id="username-error" class="yp-form-error" role="alert">{{ vm.field_errors.get('username') }}</p>{% endif %}
       </div>
 
       <div class="yp-form-field">
         <label for="full_name" class="yp-label">Namn</label>
-        <input id="full_name" name="full_name" type="text" class="yp-input" maxlength="200" autocomplete="name" value="{% if vm.user %}{{ vm.user.full_name or '' }}{% endif %}" placeholder="För- och efternamn">
+        <input id="full_name" name="full_name" type="text" class="yp-input" maxlength="200" autocomplete="name" value="{{ vm.form_data.get('full_name', vm.user.full_name if vm.user else '') }}" placeholder="För- och efternamn">
       </div>
 
       <div class="yp-form-field">
         <label for="role" class="yp-label">Typ <span class="required">*</span></label>
-        <select id="role" name="role" class="yp-input" required>
+        <select id="role" name="role" class="yp-input{% if vm.field_errors.get('role') %} is-invalid{% endif %}" required{% if vm.field_errors.get('role') %} aria-invalid="true" aria-describedby="role-error"{% endif %}{% if vm.focus_field == 'role' %} autofocus{% endif %}>
           {% for option in vm.available_roles or [] %}
-            <option value="{{ option.value }}" {% if (vm.user and vm.user.role == option.value) or (not vm.user and vm.selected_role == option.value) %}selected{% endif %}>{{ option.label }}</option>
+            <option value="{{ option.value }}" {% if (vm.form_data.get('role', vm.user.role if vm.user else vm.selected_role) == option.value) %}selected{% endif %}>{{ option.label }}</option>
           {% endfor %}
         </select>
         <small class="yp-form-help">Admin ger administrationsåtkomst. Kök använder vald site. Avdelning väljer en befintlig avdelning.</small>
+        {% if vm.field_errors.get('role') %}<p id="role-error" class="yp-form-error" role="alert">{{ vm.field_errors.get('role') }}</p>{% endif %}
       </div>
 
       <div class="yp-form-field" id="site-field">
@@ -53,13 +63,14 @@
       <div class="yp-form-field" id="department-field">
         <label for="department_id" class="yp-label">Avdelning <span class="required">*</span></label>
         {% if vm.department_choices %}
-          <select id="department_id" name="department_id" class="yp-input" {% if (vm.user and vm.user.role == 'unit_portal') or vm.selected_role == 'unit_portal' %}required{% endif %}>
+          <select id="department_id" name="department_id" class="yp-input{% if vm.field_errors.get('department_id') %} is-invalid{% endif %}" {% if vm.form_data.get('role', vm.user.role if vm.user else vm.selected_role) == 'unit_portal' %}required{% endif %}{% if vm.field_errors.get('department_id') %} aria-invalid="true" aria-describedby="department-error"{% endif %}{% if vm.focus_field == 'department_id' %} autofocus{% endif %}>
             <option value="">Välj avdelning</option>
             {% for dept in vm.department_choices %}
-              <option value="{{ dept.id }}" {% if vm.user and vm.user.department_id == dept.id %}selected{% endif %}>{{ dept.display_label }}</option>
+              <option value="{{ dept.id }}" {% if vm.form_data.get('department_id', vm.user.department_id if vm.user else '') == dept.id %}selected{% endif %}>{{ dept.display_label }}</option>
             {% endfor %}
           </select>
           <small class="yp-form-help">Endast avdelningar inom den aktiva siten visas.</small>
+          {% if vm.field_errors.get('department_id') %}<p id="department-error" class="yp-form-error" role="alert">{{ vm.field_errors.get('department_id') }}</p>{% endif %}
         {% else %}
           <div class="empty-state empty-state--compact">
             <p>Skapa en avdelning först</p>
@@ -71,8 +82,9 @@
       {% if vm.mode == 'new' %}
         <div class="yp-form-field">
           <label for="password" class="yp-label">Lösenord <span class="required">*</span></label>
-          <input id="password" name="password" type="password" class="yp-input" required minlength="15" autocomplete="new-password" placeholder="Minst 15 tecken">
+          <input id="password" name="password" type="password" class="yp-input{% if vm.field_errors.get('password') %} is-invalid{% endif %}" required minlength="15" autocomplete="new-password" placeholder="Minst 15 tecken"{% if vm.field_errors.get('password') %} aria-invalid="true" aria-describedby="password-error"{% endif %}{% if vm.focus_field == 'password' %} autofocus{% endif %}>
           <small class="yp-form-help">Användaren får ett tillfälligt lösenord och måste byta det vid första inloggningen.</small>
+          {% if vm.field_errors.get('password') %}<p id="password-error" class="yp-form-error" role="alert">{{ vm.field_errors.get('password') }}</p>{% endif %}
         </div>
       {% else %}
         <div class="yp-form-field">

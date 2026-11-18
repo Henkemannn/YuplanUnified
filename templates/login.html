@@ -34,8 +34,8 @@
     <form method="post" action="{{ url_for('auth.login') }}" class="login-form">
       {{ csrf_token_input()|safe }}
       <div class="login-form-row">
-        <label for="email">E-post</label>
-        <input type="email" id="email" name="email" required autocomplete="username">
+        <label for="email">E-post eller användarnamn</label>
+        <input type="text" id="email" name="email" required autocomplete="username">
       </div>
       <div class="login-form-row">
         <label for="password">Lösenord</label>

@@ -9717,9 +9717,20 @@ def _admin_user_department_choices(tenant_id: int | str | None, site_id: str | N
         db.close()
 
 
-def _admin_user_form_vm(*, mode: str, user: dict | None = None) -> dict:
+def _admin_user_form_vm(
+    *,
+    mode: str,
+    user: dict | None = None,
+    form_data: dict | None = None,
+    field_errors: dict | None = None,
+    focus_field: str | None = None,
+) -> dict:
     tenant_id, site_id, site_name = _admin_user_active_scope()
-    role_value = str((user or {}).get("role") or ("admin" if mode == "new" else ""))
+    role_value = str(
+        (form_data or {}).get("role")
+        or (user or {}).get("role")
+        or ("admin" if mode == "new" else "")
+    )
     department_choices = _admin_user_department_choices(tenant_id, site_id)
     department_choices = [
         {
@@ -9740,6 +9751,9 @@ def _admin_user_form_vm(*, mode: str, user: dict | None = None) -> dict:
         "active_site_id": site_id,
         "active_site_name": site_name,
         "department_empty_state_url": url_for("ui.admin_departments_list"),
+        "form_data": form_data or {},
+        "field_errors": field_errors or {},
+        "focus_field": focus_field,
     }
     return vm
 
@@ -9802,59 +9816,77 @@ def admin_users_create():
     Create a new user.
     """
     from flask import flash, redirect, url_for
-    from core.admin_user_repo import AdminUserRepo
+    from core.admin_user_repo import AdminUserRepo, normalize_admin_email, normalize_username
 
     tenant_id_raw = session.get("tenant_id")
     tenant_id, active_site_id, _active_site_name = _admin_user_active_scope()
+    form_data = {
+        "email": request.form.get("email", ""),
+        "username": request.form.get("username", ""),
+        "full_name": request.form.get("full_name", ""),
+        "role": request.form.get("role", "staff"),
+        "department_id": request.form.get("department_id", ""),
+    }
+
+    def render_validation_error(field: str, message: str):
+        flash(message, "error")
+        vm = _admin_user_form_vm(
+            mode="new",
+            form_data=form_data,
+            field_errors={field: message},
+            focus_field=field,
+        )
+        return render_template("ui/unified_admin_users_form.html", vm=vm)
+
     if tenant_id_raw is None or tenant_id is None:
         flash("Saknar tenant-kontext.", "error")
         return redirect(url_for("ui.admin_users_new_form"))
 
     email = request.form.get("email", "").strip()
-    normalized_email = email.strip().lower()
+    username_input = request.form.get("username", "").strip()
+    try:
+        normalized_email = normalize_admin_email(email)
+    except ValueError as exc:
+        return render_validation_error("email", str(exc))
     full_name = request.form.get("full_name", "").strip()
     password = request.form.get("password", "").strip()
     role = request.form.get("role", "staff").strip()
     department_id = (request.form.get("department_id") or "").strip() or None
-    username = normalized_email
+    try:
+        username = normalize_username(username_input, normalized_email) if username_input else None
+    except ValueError as exc:
+        return render_validation_error("username", str(exc))
 
     repo = AdminUserRepo()
 
     if not email:
-        flash("E-post m?ste anges.", "error")
-        return redirect(url_for("ui.admin_users_new_form"))
+        return render_validation_error("email", "E-post måste anges.")
 
     if not password:
-        flash("L?senord m?ste anges.", "error")
-        return redirect(url_for("ui.admin_users_new_form"))
+        return render_validation_error("password", "Lösenord måste anges.")
 
-    if repo.username_exists(username):
-        flash("Anv?ndarnamnet finns redan.", "error")
-        return redirect(url_for("ui.admin_users_new_form"))
+    username_for_check = username or normalized_email
+    if repo.username_exists(username_for_check):
+        return render_validation_error("username", "Användarnamnet finns redan.")
 
     if repo.email_exists(normalized_email):
-        flash("E-postadressen anv?nds redan.", "error")
-        return redirect(url_for("ui.admin_users_new_form"))
+        return render_validation_error("email", "E-postadressen används redan.")
 
     valid_roles = ["admin", "staff", "cook", "unit_portal"]
     if session.get("role") == "superuser":
         valid_roles.append("superuser")
     if role not in valid_roles:
-        flash("Ogiltig roll.", "error")
-        return redirect(url_for("ui.admin_users_new_form"))
+        return render_validation_error("role", "Ogiltig roll.")
 
     department_choices = _admin_user_department_choices(tenant_id, active_site_id)
     if role == "unit_portal":
         if not department_id:
-            flash("Avdelningskonton m?ste vara bundna till en avdelning.", "error")
-            return redirect(url_for("ui.admin_users_new_form"))
+            return render_validation_error("department_id", "Avdelningskonton måste vara bundna till en avdelning.")
         if not any(str(choice["id"]) == str(department_id) for choice in department_choices):
-            flash("Vald avdelning tillh?r inte din tenant.", "error")
-            return redirect(url_for("ui.admin_users_new_form"))
+            return render_validation_error("department_id", "Vald avdelning tillhör inte din tenant.")
     elif role in {"admin", "cook"}:
         if not active_site_id:
-            flash("V?lj en site innan du skapar anv?ndaren.", "error")
-            return redirect(url_for("ui.admin_users_new_form"))
+            return render_validation_error("role", "Välj en site innan du skapar användaren.")
         department_id = None
     else:
         department_id = None
@@ -9872,7 +9904,7 @@ def admin_users_create():
         )
         if role in {"admin", "cook"} and active_site_id:
             repo.set_site_binding(int(user_id), int(tenant_id), str(active_site_id))
-        flash(f"Anv?ndare '{username}' skapad.", "success")
+        flash(f"Anv?ndare '{username or normalized_email}' skapad.", "success")
     except Exception as e:
         flash(f"Kunde inte skapa anv?ndare: {str(e)}", "error")
         return redirect(url_for("ui.admin_users_new_form"))
@@ -9914,7 +9946,7 @@ def admin_users_update(user_id: int):
     Update a user.
     """
     from flask import flash, redirect, url_for
-    from core.admin_user_repo import AdminUserRepo
+    from core.admin_user_repo import AdminUserRepo, normalize_admin_email, normalize_username
 
     tid = session.get("tenant_id")
     tenant_id, active_site_id, _active_site_name = _admin_user_active_scope()
@@ -9940,7 +9972,12 @@ def admin_users_update(user_id: int):
         return redirect(url_for("ui.admin_users_list"))
 
     email = request.form.get("email", "").strip()
-    normalized_email = email.strip().lower()
+    username_input = request.form.get("username", "").strip()
+    try:
+        normalized_email = normalize_admin_email(email)
+    except ValueError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("ui.admin_users_edit_form", user_id=user_id))
     full_name = request.form.get("full_name", "").strip()
     role = request.form.get("role", "").strip()
     department_id = (request.form.get("department_id") or "").strip() or None
@@ -9948,6 +9985,23 @@ def admin_users_update(user_id: int):
     if not email:
         flash("E-post m?ste anges.", "error")
         return redirect(url_for("ui.admin_users_edit_form", user_id=user_id))
+
+    username_to_update = None
+    if username_input:
+        existing_username = str(user.get("username") or "").strip()
+        if "@" in username_input and username_input.lower() == existing_username.lower():
+            username_to_update = None
+        else:
+            try:
+                username_to_update = normalize_username(username_input, normalized_email)
+            except ValueError as exc:
+                flash(str(exc), "error")
+                return redirect(url_for("ui.admin_users_edit_form", user_id=user_id))
+            if username_to_update.lower() != existing_username.lower() and repo.username_exists(
+                username_to_update, exclude_user_id=user_id
+            ):
+                flash("Användarnamnet används redan.", "error")
+                return redirect(url_for("ui.admin_users_edit_form", user_id=user_id))
 
     if normalized_email != user["email"] and repo.email_exists(normalized_email, exclude_user_id=user_id):
         flash("E-postadressen anv?nds redan.", "error")
@@ -9981,6 +10035,7 @@ def admin_users_update(user_id: int):
         repo.update_user(
             user_id=user_id,
             email=normalized_email,
+            username=username_to_update,
             full_name=full_name or None,
             role=role,
             department_id=department_id,

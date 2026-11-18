@@ -116,6 +116,7 @@ def test_auth_login_renders_polished_template(client_admin):
     html = r.get_data(as_text=True)
     # Look for Yuplan brand marker or spinner/logo classes
     assert "Yuplan" in html or re.search(r"login-logo-spin|yp-logo|logo-proposal", html)
+    assert "E-post eller användarnamn" in html
 
 
 def test_auth_login_contains_accessible_password_toggle(client_admin):

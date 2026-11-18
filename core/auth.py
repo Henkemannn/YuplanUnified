@@ -228,13 +228,14 @@ def _emit_dev_auth_fingerprint(tag: str) -> None:
         pass
 
 
-def _lookup_user_by_email(db, email: str) -> User | None:
-    normalized_email = (email or "").strip().lower()
-    if not normalized_email:
+def _lookup_user_by_identifier(db, identifier: str) -> User | None:
+    normalized_identifier = (identifier or "").strip().lower()
+    if not normalized_identifier:
         return None
+    column = User.email if "@" in normalized_identifier else User.username
     candidates = (
         db.query(User)
-        .filter(func.lower(User.email) == normalized_email)
+        .filter(column.is_not(None), func.lower(column) == normalized_identifier)
         .order_by(User.id.asc())
         .limit(2)
         .all()
@@ -242,6 +243,10 @@ def _lookup_user_by_email(db, email: str) -> User | None:
     if len(candidates) != 1:
         return None
     return candidates[0]
+
+
+def _lookup_user_by_email(db, email: str) -> User | None:
+    return _lookup_user_by_identifier(db, email)
 
 
 def _user_is_auth_eligible(user: User | None) -> bool:
@@ -371,7 +376,7 @@ def login():
     # Fallback to form fields when JSON isn't provided (browser form posts)
     if not data:
         data = {"email": request.form.get("email"), "password": request.form.get("password")}
-    email = (data.get("email") or "").strip().lower()
+    login_identifier = str(data.get("email") or "").strip()
     password = data.get("password") or ""
     # Always issue a CSRF cookie for clients (tests assert cookie presence even on errors)
     csrf_cookie_name = current_app.config.get("CSRF_COOKIE_NAME", "csrf_token")
@@ -380,35 +385,37 @@ def login():
         import secrets
 
         csrf_token = secrets.token_hex(16)
-    if not email or not password:
+    if not login_identifier or not password:
         resp = make_response(jsonify({"error": "missing credentials", "message": "missing credentials"}), 400)
         set_csrf_cookie(resp, csrf_token)
         return resp
     ip = request.remote_addr or "na"
-    try:
-        rate_limit_store = _login_rate_limit_store()
-        rate_limit_decision, rate_limit_lease = rate_limit_store.begin_attempt(email, ip)
-    except (AuthRateLimitConfigurationError, AuthRateLimitStoreError, TypeError, ValueError):
-        return _login_rate_limit_error_response(csrf_token)
-    if not rate_limit_decision.allowed:
-        if _login_wants_html():
-            return _login_html_error_response(
-                "För många inloggningsförsök. Försök igen senare.",
-                429,
-                csrf_token,
-                retry_after=rate_limit_decision.retry_after,
-            )
-        resp = make_response(jsonify({"error": "rate_limited", "message": "rate_limited"}), 429)
-        resp.headers["Retry-After"] = str(max(1, rate_limit_decision.retry_after))
-        set_csrf_cookie(resp, csrf_token)
-        return resp
-
     db = get_session()
     try:
-        # Login user lookup: case-insensitive on stored email, but fail closed when duplicates exist.
         try:
-            user = _lookup_user_by_email(db, email)
-            user_found = bool(user)
+            user = _lookup_user_by_identifier(db, login_identifier)
+        except (SQLAlchemyError, TypeError, ValueError):
+            return _login_rate_limit_error_response(csrf_token)
+        user_found = bool(user)
+        account_key = f"user:{user.id}" if user_found else login_identifier.lower()
+        try:
+            rate_limit_store = _login_rate_limit_store()
+            rate_limit_decision, rate_limit_lease = rate_limit_store.begin_attempt(account_key, ip)
+        except (AuthRateLimitConfigurationError, AuthRateLimitStoreError, TypeError, ValueError):
+            return _login_rate_limit_error_response(csrf_token)
+        if not rate_limit_decision.allowed:
+            if _login_wants_html():
+                return _login_html_error_response(
+                    "För många inloggningsförsök. Försök igen senare.",
+                    429,
+                    csrf_token,
+                    retry_after=rate_limit_decision.retry_after,
+                )
+            resp = make_response(jsonify({"error": "rate_limited", "message": "rate_limited"}), 429)
+            resp.headers["Retry-After"] = str(max(1, rate_limit_decision.retry_after))
+            set_csrf_cookie(resp, csrf_token)
+            return resp
+        try:
             password_ok = bool(user and check_password_hash(user.password_hash, password))
         except (SQLAlchemyError, TypeError, ValueError):
             return _login_rate_limit_error_response(csrf_token)

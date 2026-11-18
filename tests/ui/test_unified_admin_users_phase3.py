@@ -329,7 +329,9 @@ def test_users_new_form_renders(client_admin):
     
     assert resp.status_code == 200
     assert "Skapa användare" in html
-    assert "Användarnamn" not in html
+    assert 'name="username"' in html
+    assert 'name="email" type="text"' in html
+    assert 'required maxlength="200"' in html
     assert "E-post" in html
     assert "Lösenord" in html
     assert "Admin" in html
@@ -520,7 +522,7 @@ def test_users_create_success(client_admin):
     resp = client_admin.post("/ui/admin/users/new", data={
         "email": "NewUser_Create@Test.com",
         "full_name": "New User Create",
-        "password": "password123",
+        "password": "Password123456789!",
         "role": "staff",
         "csrf_token": csrf_token,
     }, headers=_h("admin"), follow_redirects=True)
@@ -575,7 +577,7 @@ def test_users_create_invalid_csrf_rejected(client_admin):
         data={
             "email": "badcsrf@test.com",
             "full_name": "Bad CSRF",
-            "password": "password123",
+            "password": "Password123456789!",
             "role": "staff",
             "csrf_token": "bogus",
         },
@@ -595,7 +597,7 @@ def test_users_create_prevents_duplicate_username(client_admin):
 
     create_resp = client_admin.post("/ui/admin/users/new", data={
         "email": "existing_dup_username@test.com",
-        "password": "pass123",
+        "password": "Password123456789!",
         "role": "staff",
         "csrf_token": csrf_token,
     }, headers=_h("admin"), follow_redirects=True)
@@ -604,7 +606,7 @@ def test_users_create_prevents_duplicate_username(client_admin):
     csrf_token = _form_csrf(client_admin, "/ui/admin/users/new")
     resp = client_admin.post("/ui/admin/users/new", data={
         "email": "Existing_Dup_Username@Test.com",
-        "password": "pass123",
+        "password": "Password123456789!",
         "role": "staff",
         "csrf_token": csrf_token,
     }, headers=_h("admin"), follow_redirects=True)
@@ -628,7 +630,7 @@ def test_users_create_prevents_duplicate_email(client_admin):
     csrf_token = _form_csrf(client_admin, "/ui/admin/users/new")
     create_resp = client_admin.post("/ui/admin/users/new", data={
         "email": "existing_dup_email@test.com",
-        "password": "pass123",
+        "password": "Password123456789!",
         "role": "staff",
         "csrf_token": csrf_token,
     }, headers=_h("admin"), follow_redirects=True)
@@ -637,7 +639,7 @@ def test_users_create_prevents_duplicate_email(client_admin):
     csrf_token = _form_csrf(client_admin, "/ui/admin/users/new")
     resp = client_admin.post("/ui/admin/users/new", data={
         "email": "Existing_Dup_Email@Test.com",  # Already exists
-        "password": "pass123",
+        "password": "Password123456789!",
         "role": "staff",
         "csrf_token": csrf_token,
     }, headers=_h("admin"), follow_redirects=True)
@@ -726,7 +728,7 @@ def test_users_create_unit_portal_requires_tenant_department(client_admin):
             "username": "portal_user_ok",
             "email": email,
             "full_name": "Portal User OK",
-            "password": "password123",
+            "password": "Password123456789!",
             "role": "unit_portal",
             "department_id": dept_id,
             "csrf_token": csrf_token,
@@ -772,7 +774,7 @@ def test_users_create_unit_portal_uses_active_site_department_only(client_admin)
         data={
             "email": ok_email,
             "full_name": "Portal User OK",
-            "password": "password123",
+            "password": "Password123456789!",
             "role": "unit_portal",
             "department_id": ids["active_department_id"],
             "csrf_token": csrf_token,
@@ -802,7 +804,7 @@ def test_users_create_unit_portal_uses_active_site_department_only(client_admin)
         data={
             "email": other_email,
             "full_name": "Portal User Other",
-            "password": "password123",
+            "password": "Password123456789!",
             "role": "unit_portal",
             "department_id": ids["other_department_id"],
             "csrf_token": csrf_token,
@@ -826,7 +828,7 @@ def test_users_create_unit_portal_uses_active_site_department_only(client_admin)
         data={
             "email": foreign_email,
             "full_name": "Portal User Foreign",
-            "password": "password123",
+            "password": "Password123456789!",
             "role": "unit_portal",
             "department_id": ids["foreign_department_id"],
             "csrf_token": csrf_token,
@@ -876,7 +878,7 @@ def test_users_edit_form_renders(client_admin):
     
     assert resp.status_code == 200
     assert "Redigera användare" in html
-    assert "Användarnamn" not in html
+    assert 'name="username"' in html
     assert "edit_form_test@test.com" in html
     assert 'name="csrf_token"' in html
 
@@ -1097,7 +1099,7 @@ def test_users_create_unit_portal_rejects_cross_tenant_department(client_admin):
         data={
             "email": "portal_user_bad@test.com",
             "full_name": "Portal User Bad",
-            "password": "password123",
+            "password": "Password123456789!",
             "role": "unit_portal",
             "department_id": ids["foreign_department_id"],
             "csrf_token": csrf_token,
@@ -1112,6 +1114,220 @@ def test_users_create_unit_portal_rejects_cross_tenant_department(client_admin):
         try:
             row = db.execute(text("SELECT id FROM users WHERE lower(email) = 'portal_user_bad@test.com'")).fetchone()
             assert row is None
+        finally:
+            db.close()
+
+
+def test_users_create_accepts_custom_username_with_international_email(client_admin):
+    app = client_admin.application
+    email = "barbro@fantasiköket.se"
+    csrf_token = _form_csrf(client_admin, "/ui/admin/users/new")
+    response = client_admin.post(
+        "/ui/admin/users/new",
+        data={
+            "email": email,
+            "username": "Barbro.F",
+            "password": "Password123456789!",
+            "role": "staff",
+            "csrf_token": csrf_token,
+        },
+        headers=_h("admin"),
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    with app.app_context():
+        db = get_session()
+        try:
+            row = db.execute(
+                text("SELECT username, email FROM users WHERE lower(username) = 'barbro.f'")
+            ).fetchone()
+            assert row == ("barbro.f", email.lower())
+        finally:
+            db.close()
+
+
+def test_users_create_rejects_case_insensitive_custom_username_duplicate(client_admin):
+    app = client_admin.application
+    for email, username in (
+        ("barbro.one@example.com", "Barbro"),
+        ("barbro.two@example.com", "barbro"),
+    ):
+        csrf_token = _form_csrf(client_admin, "/ui/admin/users/new")
+        response = client_admin.post(
+            "/ui/admin/users/new",
+            data={
+                "email": email,
+                "username": username,
+                "full_name": "Barbro Test",
+                "password": "Password123456789!",
+                "role": "staff",
+                "csrf_token": csrf_token,
+            },
+            headers=_h("admin"),
+            follow_redirects=False,
+        )
+        if username == "barbro":
+            assert response.status_code == 200
+            html = response.data.decode("utf-8")
+            assert 'value="barbro.two@example.com"' in html
+            assert 'value="barbro"' in html
+            assert 'value="Barbro Test"' in html
+            assert re.search(r'<option value="staff"[^>]*selected', html)
+            assert 'id="username-error"' in html
+            assert 'aria-describedby="username-error"' in html
+            assert "autofocus" in html
+            assert "Password123456789!" not in html
+        else:
+            assert response.status_code == 302
+    with app.app_context():
+        db = get_session()
+        try:
+            count = db.execute(
+                text("SELECT COUNT(*) FROM users WHERE lower(username) = 'barbro'")
+            ).scalar_one()
+            assert count == 1
+        finally:
+            db.close()
+
+
+def test_users_create_rejects_invalid_email_without_mutation(client_admin):
+    app = client_admin.application
+    email = "barbro @fantasiköket.se"
+    csrf_token = _form_csrf(client_admin, "/ui/admin/users/new")
+    response = client_admin.post(
+        "/ui/admin/users/new",
+        data={
+            "email": email,
+            "username": "barbro.invalid",
+            "password": "Password123456789!",
+            "role": "staff",
+            "csrf_token": csrf_token,
+        },
+        headers=_h("admin"),
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+    assert 'value="barbro @fantasiköket.se"' in html
+    assert 'value="barbro.invalid"' in html
+    assert 'id="email-error"' in html
+    assert 'aria-describedby="email-error"' in html
+    assert "autofocus" in html
+    assert "Password123456789!" not in html
+    with app.app_context():
+        db = get_session()
+        try:
+            count = db.execute(
+                text("SELECT COUNT(*) FROM users WHERE lower(email) = :email"),
+                {"email": email.lower()},
+            ).scalar_one()
+            assert count == 0
+        finally:
+            db.close()
+
+
+def test_users_edit_rejects_invalid_email_without_mutation(client_admin):
+    app = client_admin.application
+    with app.app_context():
+        db = get_session()
+        try:
+            user_id = db.execute(
+                text(
+                    "INSERT INTO users (tenant_id, email, username, password_hash, role, is_active) "
+                    "VALUES (1, 'edit-valid@example.com', 'edit.valid', 'hash', 'staff', 1) "
+                    "RETURNING id"
+                )
+            ).scalar_one()
+            db.commit()
+        finally:
+            db.close()
+    csrf_token = _form_csrf(client_admin, f"/ui/admin/users/{user_id}/edit")
+    response = client_admin.post(
+        f"/ui/admin/users/{user_id}/edit",
+        data={
+            "email": "edit @fantasiköket.se",
+            "username": "edit.changed",
+            "role": "staff",
+            "csrf_token": csrf_token,
+        },
+        headers=_h("admin"),
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    with app.app_context():
+        db = get_session()
+        try:
+            row = db.execute(
+                text("SELECT email, username FROM users WHERE id = :user_id"),
+                {"user_id": user_id},
+            ).one()
+            assert row == ("edit-valid@example.com", "edit.valid")
+        finally:
+            db.close()
+
+
+def test_users_create_rejects_explicit_email_shaped_username(client_admin):
+    app = client_admin.application
+    csrf_token = _form_csrf(client_admin, "/ui/admin/users/new")
+    response = client_admin.post(
+        "/ui/admin/users/new",
+        data={
+            "email": "contact@example.com",
+            "username": "legacy@example.com",
+            "password": "Password123456789!",
+            "role": "staff",
+            "csrf_token": csrf_token,
+        },
+        headers=_h("admin"),
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    with app.app_context():
+        db = get_session()
+        try:
+            assert db.execute(
+                text("SELECT 1 FROM users WHERE lower(email) = 'contact@example.com'")
+            ).fetchone() is None
+        finally:
+            db.close()
+
+
+def test_users_edit_empty_username_preserves_existing_value(client_admin):
+    app = client_admin.application
+    with app.app_context():
+        db = get_session()
+        try:
+            user_id = db.execute(
+                text(
+                    "INSERT INTO users (tenant_id, email, username, password_hash, role, is_active) "
+                    "VALUES (1, 'preserve@example.com', 'preserve.me', 'hash', 'staff', 1) "
+                    "RETURNING id"
+                )
+            ).scalar_one()
+            db.commit()
+        finally:
+            db.close()
+    csrf_token = _form_csrf(client_admin, f"/ui/admin/users/{user_id}/edit")
+    response = client_admin.post(
+        f"/ui/admin/users/{user_id}/edit",
+        data={
+            "email": "preserve@example.com",
+            "username": "",
+            "role": "staff",
+            "csrf_token": csrf_token,
+        },
+        headers=_h("admin"),
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    with app.app_context():
+        db = get_session()
+        try:
+            username = db.execute(
+                text("SELECT username FROM users WHERE id = :user_id"),
+                {"user_id": user_id},
+            ).scalar_one()
+            assert username == "preserve.me"
         finally:
             db.close()
 # ============================================================================

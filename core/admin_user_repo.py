@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import re
 import secrets
 from typing import Optional
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash
 from .password_policy import validate_new_password
 
@@ -15,6 +17,49 @@ from .models import User
 
 def _normalize_email(email: Optional[str]) -> str:
     return str(email or "").strip().lower()
+
+
+def normalize_admin_email(email: Optional[str]) -> str:
+    value = str(email or "").strip()
+    if len(value) > 200 or value.count("@") != 1:
+        raise ValueError("Ange en giltig e-postadress.")
+    if any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in value):
+        raise ValueError("E-postadressen får inte innehålla blanksteg eller kontrolltecken.")
+    local_part, domain = value.split("@", 1)
+    if not local_part or not domain or len(local_part) > 64 or domain.startswith(".") or domain.endswith(".") or ".." in domain:
+        raise ValueError("Ange en giltig e-postadress.")
+    if len(domain.encode("utf-8")) > 253 or any(
+        not label
+        or label.startswith("-")
+        or label.endswith("-")
+        or len(label.encode("utf-8")) > 63
+        or any(not (character.isalnum() or character == "-") for character in label)
+        for label in domain.split(".")
+    ):
+        raise ValueError("Ange en giltig e-postdomän.")
+    if any(character in domain for character in "/\\,:;<>\"'"):
+        raise ValueError("Ange en giltig e-postdomän.")
+    return value.lower()
+
+
+_USERNAME_PATTERN = re.compile(r"[A-Za-z0-9._-]{1,100}\Z")
+
+
+def normalize_username(
+    username: Optional[str],
+    fallback_email: str,
+    *,
+    allow_legacy_email: bool = False,
+) -> str:
+    candidate = str(username or "").strip()
+    fallback = _normalize_email(fallback_email)
+    if not candidate:
+        return fallback
+    if allow_legacy_email and candidate.lower() == fallback.lower() and "@" in candidate:
+        return candidate
+    if not _USERNAME_PATTERN.fullmatch(candidate):
+        raise ValueError("Användarnamn får endast innehålla bokstäver, siffror, punkt, bindestreck och understreck.")
+    return candidate.lower()
 
 
 def _users_table_has_site_id(db) -> bool:
@@ -182,7 +227,7 @@ class AdminUserRepo:
     def create_user(
         self, 
         tenant_id: int,
-        username: str,
+        username: Optional[str],
         email: str,
         password: str,
         full_name: Optional[str] = None,
@@ -196,14 +241,15 @@ class AdminUserRepo:
         """
         validate_new_password(password)
         password_hash = generate_password_hash(password)
-        normalized_email = _normalize_email(email)
+        normalized_email = normalize_admin_email(email)
+        normalized_username = normalize_username(username, normalized_email, allow_legacy_email=True)
         
         db = get_session()
         try:
             # Use ORM for creation
             user = User(
                 tenant_id=tenant_id,
-                username=username,
+                username=normalized_username,
                 email=normalized_email,
                 password_hash=password_hash,
                 full_name=full_name,
@@ -213,7 +259,11 @@ class AdminUserRepo:
                 must_change_password=True,
             )
             db.add(user)
-            db.commit()
+            try:
+                db.commit()
+            except IntegrityError as exc:
+                db.rollback()
+                raise ValueError("Användarnamnet eller e-postadressen används redan.") from exc
             db.refresh(user)
             return user.id
         finally:
@@ -223,6 +273,7 @@ class AdminUserRepo:
         self,
         user_id: int,
         email: Optional[str] = None,
+        username: Optional[str] = None,
         full_name: Optional[str] = None,
         role: Optional[str] = None
         ,
@@ -234,13 +285,27 @@ class AdminUserRepo:
         """
         db = get_session()
         try:
+            current = db.execute(
+                text("SELECT email, username FROM users WHERE id = :uid"),
+                {"uid": user_id},
+            ).fetchone()
+            if current is None:
+                return False
             # Build dynamic update
             updates = []
             params = {"uid": user_id}
             
             if email is not None:
                 updates.append("email = :email")
-                params["email"] = _normalize_email(email)
+                params["email"] = normalize_admin_email(email)
+
+            if username is not None and str(username).strip():
+                updates.append("username = :username")
+                params["username"] = normalize_username(
+                    username,
+                    str(current[0] or ""),
+                    allow_legacy_email=True,
+                )
             
             if full_name is not None:
                 updates.append("full_name = :full_name")
@@ -258,8 +323,12 @@ class AdminUserRepo:
                 return True  # Nothing to update
             
             sql = f"UPDATE users SET {', '.join(updates)} WHERE id = :uid"
-            result = db.execute(text(sql), params)
-            db.commit()
+            try:
+                result = db.execute(text(sql), params)
+                db.commit()
+            except IntegrityError as exc:
+                db.rollback()
+                raise ValueError("Användarnamnet eller e-postadressen används redan.") from exc
             
             return result.rowcount > 0
         finally:
@@ -328,17 +397,20 @@ class AdminUserRepo:
 
     def username_exists(self, username: str, exclude_user_id: Optional[int] = None) -> bool:
         """Check if username already exists"""
+        normalized_username = str(username or "").strip().lower()
+        if not normalized_username:
+            return False
         db = get_session()
         try:
             if exclude_user_id:
                 row = db.execute(
-                    text("SELECT 1 FROM users WHERE username = :u AND id != :eid LIMIT 1"),
-                    {"u": username, "eid": exclude_user_id}
+                    text("SELECT 1 FROM users WHERE lower(username) = :u AND id != :eid LIMIT 1"),
+                    {"u": normalized_username, "eid": exclude_user_id}
                 ).fetchone()
             else:
                 row = db.execute(
-                    text("SELECT 1 FROM users WHERE username = :u LIMIT 1"),
-                    {"u": username}
+                    text("SELECT 1 FROM users WHERE lower(username) = :u LIMIT 1"),
+                    {"u": normalized_username}
                 ).fetchone()
             return row is not None
         finally:

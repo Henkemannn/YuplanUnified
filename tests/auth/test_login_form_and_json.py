@@ -30,6 +30,15 @@ def _seed_user(db, email: str, password: str, role: str = "superuser"):
     return u
 
 
+def _ensure_tenant(db):
+    tenant = db.query(Tenant).first()
+    if not tenant:
+        tenant = Tenant(name="Primary")
+        db.add(tenant)
+        db.flush()
+    return tenant
+
+
 def _make_isolated_app():
     db_fd, db_path = tempfile.mkstemp(prefix="login_form_", suffix=".db")
     os.close(db_fd)
@@ -63,6 +72,122 @@ def test_login_json_and_form_redirect(monkeypatch):
         assert rf.status_code in (301, 302)
         loc = rf.headers.get("Location") or ""
         assert "/ui/systemadmin/dashboard" in loc
+
+
+def test_login_accepts_custom_username_for_international_email(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "dev")
+    app = _make_isolated_app()
+    with app.app_context():
+        db = get_session()
+        tenant = _ensure_tenant(db)
+        user = User(
+            tenant_id=tenant.id,
+            email="barbro@fantasiköket.se",
+            username="barbro.f",
+            password_hash=generate_password_hash("Passw0rd!"),
+            role="superuser",
+        )
+        db.add(user)
+        db.commit()
+        response = app.test_client().post(
+            "/auth/login",
+            json={"email": "barbro.f", "password": "Passw0rd!"},
+            headers={"Accept": "application/json"},
+        )
+        assert response.status_code == 200
+
+
+def test_login_email_and_username_share_account_rate_limit(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "dev")
+    app = _make_isolated_app()
+    with app.app_context():
+        db = get_session()
+        tenant = _ensure_tenant(db)
+        db.add(
+            User(
+                tenant_id=tenant.id,
+                email="barbro@fantasiköket.se",
+                username="barbro.f",
+                password_hash=generate_password_hash("Passw0rd!"),
+                role="superuser",
+            )
+        )
+        db.commit()
+        client = app.test_client()
+        for _ in range(4):
+            response = client.post(
+                "/auth/login",
+                json={"email": "barbro@fantasiköket.se", "password": "wrong"},
+                headers={"Accept": "application/json"},
+            )
+            assert response.status_code == 401
+        response = client.post(
+            "/auth/login",
+            json={"email": "BARBRO.F", "password": "wrong"},
+            headers={"Accept": "application/json"},
+        )
+        assert response.status_code == 429
+
+
+@pytest.mark.parametrize("account_state", ("inactive", "deleted"))
+def test_login_rejects_username_for_ineligible_account(monkeypatch, account_state):
+    monkeypatch.setenv("APP_ENV", "dev")
+    app = _make_isolated_app()
+    with app.app_context():
+        db = get_session()
+        tenant = _ensure_tenant(db)
+        user = User(
+            tenant_id=tenant.id,
+            email="barbro@fantasiköket.se",
+            username="barbro.f",
+            password_hash=generate_password_hash("Passw0rd!"),
+            role="superuser",
+        )
+        if account_state == "inactive":
+            user.is_active = False
+        else:
+            user.deleted_at = datetime.now(timezone.utc)
+        db.add(user)
+        db.commit()
+        response = app.test_client().post(
+            "/auth/login",
+            json={"email": "barbro.f", "password": "Passw0rd!"},
+            headers={"Accept": "application/json"},
+        )
+        assert response.status_code == 401
+
+
+def test_login_fails_closed_for_case_insensitive_username_collision(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "dev")
+    app = _make_isolated_app()
+    with app.app_context():
+        db = get_session()
+        tenant = _ensure_tenant(db)
+        db.add_all(
+            [
+                User(
+                    tenant_id=tenant.id,
+                    email="barbro.one@example.com",
+                    username="Barbro",
+                    password_hash=generate_password_hash("Passw0rd!"),
+                    role="superuser",
+                ),
+                User(
+                    tenant_id=tenant.id,
+                    email="barbro.two@example.com",
+                    username="barbro",
+                    password_hash=generate_password_hash("Passw0rd!"),
+                    role="superuser",
+                ),
+            ]
+        )
+        db.commit()
+        response = app.test_client().post(
+            "/auth/login",
+            json={"email": "BARBRO", "password": "Passw0rd!"},
+            headers={"Accept": "application/json"},
+        )
+        assert response.status_code == 401
 
 
 @pytest.mark.parametrize("account_state", ("inactive", "deleted"))
