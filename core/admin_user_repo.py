@@ -125,10 +125,78 @@ def _set_user_site_binding(db, *, user_id: int, tenant_id: int, site_id: str) ->
     )
 
 
+def _resolve_user_scope(db, user_id: int) -> tuple[int | None, str | None, bool]:
+    has_user_site_id = _users_table_has_site_id(db)
+    has_kitchen_bindings = _kitchen_site_binding_table_exists(db)
+    columns = "id, tenant_id, role, department_id"
+    if has_user_site_id:
+        columns += ", site_id"
+    row = db.execute(
+        text(f"SELECT {columns} FROM users WHERE id=:uid LIMIT 1"),
+        {"uid": int(user_id)},
+    ).fetchone()
+    if not row:
+        return None, None, False
+
+    tenant_id = int(row[1]) if row[1] is not None else None
+    if tenant_id is None:
+        return None, None, False
+    sites: list[str] = []
+    invalid = False
+    if has_user_site_id and row[4]:
+        sites.append(str(row[4]).strip())
+
+    if has_kitchen_bindings:
+        for binding_tenant, binding_site in db.execute(
+            text("SELECT tenant_id, site_id FROM kitchen_user_sites WHERE user_id=:uid"),
+            {"uid": int(user_id)},
+        ).fetchall():
+            if binding_tenant is None or int(binding_tenant) != tenant_id or not binding_site:
+                invalid = True
+            else:
+                sites.append(str(binding_site).strip())
+
+    department_id = row[3]
+    if department_id:
+        department_row = db.execute(
+            text(
+                "SELECT d.site_id, s.tenant_id "
+                "FROM departments d JOIN sites s ON s.id=d.site_id "
+                "WHERE d.id=:did LIMIT 1"
+            ),
+            {"did": str(department_id)},
+        ).fetchone()
+        if not department_row or department_row[1] is None or int(department_row[1]) != tenant_id:
+            invalid = True
+        elif not department_row[0]:
+            invalid = True
+        else:
+            sites.append(str(department_row[0]).strip())
+
+    normalized_sites = {site for site in sites if site}
+    if len(normalized_sites) != 1:
+        invalid = True
+    site_id = next(iter(normalized_sites), None)
+    if site_id:
+        site_row = db.execute(
+            text("SELECT tenant_id FROM sites WHERE id=:sid LIMIT 1"),
+            {"sid": site_id},
+        ).fetchone()
+        if not site_row or site_row[0] is None or int(site_row[0]) != tenant_id:
+            invalid = True
+    return tenant_id, site_id, not invalid and site_id is not None
+
+
 class AdminUserRepo:
     """Repository for user CRUD operations in admin panel"""
 
-    def list_users_for_tenant(self, tenant_id: int) -> list[dict]:
+    def list_users_for_tenant(
+        self,
+        tenant_id: int,
+        *,
+        site_id: str | None = None,
+        include_superusers: bool = False,
+    ) -> list[dict]:
         """
         List all users for a given tenant.
         Returns list of dicts with user info.
@@ -136,6 +204,7 @@ class AdminUserRepo:
         db = get_session()
         try:
             # Query aligned columns from unified schema
+            role_filter = "" if include_superusers else "AND lower(COALESCE(u.role, '')) != 'superuser' "
             rows = db.execute(
                 text(
                     "SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.department_id, d.name, COALESCE(r.name, ''), s.name, u.must_change_password "
@@ -144,19 +213,30 @@ class AdminUserRepo:
                     "LEFT JOIN residences r ON r.id = d.residence_id "
                     "LEFT JOIN sites s ON s.id = d.site_id "
                     "WHERE u.tenant_id = :tid "
-                    "ORDER BY u.username, u.email"
+                    + role_filter
+                    + "ORDER BY u.username, u.email"
                 ),
                 {"tid": tenant_id}
             ).fetchall()
             
             users = []
             for row in rows:
-                site_id = _resolve_user_site_id(db, int(row[0]), tenant_id=tenant_id)
+                resolved_tenant_id, resolved_site_id, valid_scope = _resolve_user_scope(db, int(row[0]))
+                if (
+                    site_id is not None
+                    and (
+                        not valid_scope
+                        or resolved_tenant_id != int(tenant_id)
+                        or resolved_site_id != str(site_id).strip()
+                    )
+                ):
+                    continue
+                display_site_id = resolved_site_id
                 site_name = str(row[9] or "").strip()
-                if not site_name and site_id:
+                if not site_name and display_site_id:
                     site_row = db.execute(
                         text("SELECT name FROM sites WHERE id=:sid AND tenant_id=:tid LIMIT 1"),
-                        {"sid": site_id, "tid": int(tenant_id)},
+                        {"sid": display_site_id, "tid": int(tenant_id)},
                     ).fetchone()
                     site_name = str(site_row[0] or "").strip() if site_row else ""
                 users.append({
@@ -170,7 +250,7 @@ class AdminUserRepo:
                     "department_name": row[7],
                     "residence_name": str(row[8] or "").strip(),
                     "site_name": site_name,
-                    "site_id": site_id,
+                    "site_id": display_site_id,
                     "must_change_password": bool(row[10]) if row[10] is not None else False,
                 })
             return users
