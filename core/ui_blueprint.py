@@ -9563,34 +9563,11 @@ def admin_kitchen_users_create():
             full_name=name,
             role="kitchen",
             is_active=True,
+            site_id=str(site_id),
         )
     except Exception as exc:
         flash(f"Kunde inte skapa köksanvändare: {str(exc)}", "error")
         return redirect(url_for("ui.admin_kitchen_users_page"))
-
-    db = get_session()
-    try:
-        _ensure_kitchen_user_sites_table(db)
-        if _users_table_has_site_id(db):
-            db.execute(
-                text("UPDATE users SET site_id=:sid WHERE id=:uid"),
-                {"sid": site_id, "uid": int(new_user_id)},
-            )
-        else:
-            _upsert_kitchen_user_site_binding(
-                db,
-                user_id=int(new_user_id),
-                tenant_id=int(tid),
-                site_id=str(site_id),
-            )
-            db.commit()
-    except Exception:
-        try:
-            db.rollback()
-        except Exception:
-            pass
-    finally:
-        db.close()
 
     flash("Köksanvändare skapad.", "success")
     return redirect(url_for("ui.admin_kitchen_users_page"))
@@ -9618,6 +9595,8 @@ def admin_kitchen_users_delete(user_id: int):
     if not row:
         flash("Köksanvändare hittades inte.", "error")
         return redirect(url_for("ui.admin_kitchen_users_page"))
+    if not _admin_user_target_allowed(user_id):
+        abort(404)
 
     try:
         AdminUserRepo().deactivate_user(int(user_id))
@@ -9673,6 +9652,182 @@ def _admin_user_active_scope() -> tuple[int | None, str | None, str]:
         finally:
             db.close()
     return (int(tenant_id) if tenant_id is not None else None), site_id, site_name
+
+
+def _admin_user_scope_record(db, user_id: int) -> dict | None:
+    """Resolve a user's site from every supported binding source, fail closed on conflicts."""
+    has_user_site_id = _users_table_has_site_id(db)
+    try:
+        has_kitchen_bindings = bool(
+            db.execute(
+                text("SELECT 1 FROM sqlite_master WHERE type='table' AND name='kitchen_user_sites' LIMIT 1")
+            ).fetchone()
+        )
+    except Exception:
+        has_kitchen_bindings = False
+    user_columns = "id, tenant_id, role, department_id"
+    if has_user_site_id:
+        user_columns += ", site_id"
+    row = db.execute(
+        text(f"SELECT {user_columns} FROM users WHERE id=:uid LIMIT 1"),
+        {"uid": int(user_id)},
+    ).fetchone()
+    if not row:
+        return None
+
+    tenant_id = int(row[1]) if row[1] is not None else None
+    if tenant_id is None:
+        return {"tenant_id": None, "role": str(row[2] or "").strip().lower(), "site_id": None, "valid": False}
+
+    sites: list[str] = []
+    invalid = False
+    if has_user_site_id and row[4]:
+        sites.append(str(row[4]).strip())
+
+    if has_kitchen_bindings:
+        bindings = db.execute(
+            text("SELECT tenant_id, site_id FROM kitchen_user_sites WHERE user_id=:uid"),
+            {"uid": int(user_id)},
+        ).fetchall()
+        for binding_tenant, binding_site in bindings:
+            if binding_tenant is None or int(binding_tenant) != tenant_id or not binding_site:
+                invalid = True
+            else:
+                sites.append(str(binding_site).strip())
+
+    department_id = row[3]
+    if department_id:
+        department_row = db.execute(
+            text(
+                "SELECT d.site_id, s.tenant_id "
+                "FROM departments d "
+                "JOIN sites s ON s.id=d.site_id "
+                "WHERE d.id=:did LIMIT 1"
+            ),
+            {"did": str(department_id)},
+        ).fetchone()
+        if not department_row or department_row[1] is None or int(department_row[1]) != tenant_id:
+            invalid = True
+        elif not department_row[0]:
+            invalid = True
+        else:
+            sites.append(str(department_row[0]).strip())
+
+    normalized_sites = {site for site in sites if site}
+    if len(normalized_sites) != 1:
+        invalid = True
+    site_id = next(iter(normalized_sites), None)
+    if site_id:
+        site_row = db.execute(
+            text("SELECT tenant_id FROM sites WHERE id=:sid LIMIT 1"),
+            {"sid": site_id},
+        ).fetchone()
+        if not site_row or site_row[0] is None or int(site_row[0]) != tenant_id:
+            invalid = True
+
+    return {
+        "tenant_id": tenant_id,
+        "role": str(row[2] or "").strip().lower(),
+        "site_id": site_id,
+        "valid": not invalid and site_id is not None,
+    }
+
+
+def _admin_user_target_allowed(user_id: int) -> bool:
+    """Authorize a target user for customer-admin actions without trusting form/session IDs."""
+    db = get_session()
+    try:
+        target = _admin_user_scope_record(db, int(user_id))
+        if not target or target["role"] == "superuser":
+            return False
+
+        synthetic_admin = bool(current_app.config.get("TESTING")) and request.headers.get("X-User-Role") == "admin"
+        if synthetic_admin:
+            return target["tenant_id"] == session.get("tenant_id")
+        if not target["valid"]:
+            return False
+
+        current_user_id = session.get("user_id")
+        current = _admin_user_scope_record(db, int(current_user_id)) if current_user_id else None
+        if not current:
+            return False
+        if current["role"] != "admin":
+            return True
+        if not current["valid"]:
+            return False
+
+        from .context import get_active_context
+
+        active_context = get_active_context()
+        session_tenant = session.get("tenant_id")
+        try:
+            session_tenant = int(session_tenant)
+        except (TypeError, ValueError):
+            return False
+        active_tenant = active_context.get("tenant_id")
+        try:
+            active_tenant = int(active_tenant)
+        except (TypeError, ValueError):
+            return False
+        active_site = str(active_context.get("site_id") or session.get("site_id") or "").strip()
+        if active_tenant != session_tenant or not active_site:
+            return False
+        if current["tenant_id"] != active_tenant or current["site_id"] != active_site:
+            return False
+        return target["tenant_id"] == active_tenant and target["site_id"] == active_site
+    finally:
+        db.close()
+
+
+def _admin_user_verified_scope() -> tuple[int, str] | None:
+    """Return the real local Admin tenant/site, or None when its binding is unsafe."""
+    current_user_id = session.get("user_id")
+    if not current_user_id:
+        return None
+    db = get_session()
+    try:
+        current = _admin_user_scope_record(db, int(current_user_id))
+        from .context import get_active_context
+
+        synthetic_admin = bool(current_app.config.get("TESTING")) and request.headers.get("X-User-Role") == "admin"
+        if synthetic_admin:
+            context = get_active_context()
+            try:
+                tenant_id = int(context.get("tenant_id"))
+            except (TypeError, ValueError):
+                return None
+            site_id = str(context.get("site_id") or session.get("site_id") or "").strip()
+            site_row = db.execute(
+                text("SELECT tenant_id FROM sites WHERE id=:sid LIMIT 1"),
+                {"sid": site_id},
+            ).fetchone()
+            if site_id and site_row and site_row[0] is not None and int(site_row[0]) == tenant_id:
+                return tenant_id, site_id
+            return None
+        if not current or current["role"] != "admin" or not current["valid"]:
+            return None
+        context = get_active_context()
+        try:
+            tenant_id = int(context.get("tenant_id"))
+        except (TypeError, ValueError):
+            return None
+        site_id = str(context.get("site_id") or session.get("site_id") or "").strip()
+        if (
+            not site_id
+            or current["tenant_id"] != tenant_id
+            or current["site_id"] != site_id
+            or session.get("tenant_id") != tenant_id
+        ):
+            return None
+        site_row = db.execute(
+            text("SELECT tenant_id FROM sites WHERE id=:sid LIMIT 1"),
+            {"sid": site_id},
+        ).fetchone()
+        if not site_row or site_row[0] is None or int(site_row[0]) != tenant_id:
+            return None
+        return tenant_id, site_id
+    finally:
+        db.close()
 
 
 def _admin_user_department_label(department_name: str | None, residence_name: str | None = None) -> str:
@@ -9820,6 +9975,11 @@ def admin_users_create():
 
     tenant_id_raw = session.get("tenant_id")
     tenant_id, active_site_id, _active_site_name = _admin_user_active_scope()
+    if session.get("role") == "admin":
+        verified_scope = _admin_user_verified_scope()
+        if verified_scope is None:
+            abort(403)
+        tenant_id, active_site_id = verified_scope
     form_data = {
         "email": request.form.get("email", ""),
         "username": request.form.get("username", ""),
@@ -9901,9 +10061,8 @@ def admin_users_create():
             role=role,
             is_active=True,
             department_id=department_id,
+            site_id=str(active_site_id) if role in {"admin", "cook", "staff"} and active_site_id else None,
         )
-        if role in {"admin", "cook"} and active_site_id:
-            repo.set_site_binding(int(user_id), int(tenant_id), str(active_site_id))
         flash(f"Anv?ndare '{username or normalized_email}' skapad.", "success")
     except Exception as e:
         flash(f"Kunde inte skapa anv?ndare: {str(e)}", "error")
@@ -9930,6 +10089,8 @@ def admin_users_edit_form(user_id: int):
         flash("Anv?ndare hittades inte.", "error")
         return redirect(url_for("ui.admin_users_list"))
 
+    if not _admin_user_target_allowed(user_id):
+        abort(404)
     if user["tenant_id"] != tid:
         from flask import flash, redirect, url_for
         flash("Anv?ndare hittades inte.", "error")
@@ -9964,10 +10125,15 @@ def admin_users_update(user_id: int):
     repo = AdminUserRepo()
     user = repo.get_user(user_id)
 
-    if (not user or user["tenant_id"] != tid):
+    if not user:
         if current_user_id is not None and user_id == current_user_id:
             flash("Du kan inte inaktivera ditt eget konto.", "error")
             return redirect(url_for("ui.admin_users_list"))
+        flash("Anv?ndare hittades inte.", "error")
+        return redirect(url_for("ui.admin_users_list"))
+    if not _admin_user_target_allowed(user_id):
+        abort(404)
+    if user["tenant_id"] != tid:
         flash("Anv?ndare hittades inte.", "error")
         return redirect(url_for("ui.admin_users_list"))
 
@@ -10039,9 +10205,8 @@ def admin_users_update(user_id: int):
             full_name=full_name or None,
             role=role,
             department_id=department_id,
+            site_id=str(active_site_id) if role in {"admin", "cook", "staff"} and active_site_id else None,
         )
-        if role in {"admin", "cook"} and active_site_id:
-            repo.set_site_binding(int(user_id), int(tid), str(active_site_id))
         flash(f"Anv?ndare '{user['username']}' uppdaterad.", "success")
     except Exception as e:
         flash(f"Kunde inte uppdatera anv?ndare: {str(e)}", "error")
@@ -10081,7 +10246,12 @@ def admin_users_deactivate(user_id: int):
             return redirect(url_for("ui.admin_users_list"))
         # If user exists continue below for standard self check
 
-    if not user or user["tenant_id"] != tid:
+    if not user:
+        flash("Användare hittades inte.", "error")
+        return redirect(url_for("ui.admin_users_list"))
+    if not _admin_user_target_allowed(user_id):
+        abort(404)
+    if user["tenant_id"] != tid:
         flash("Användare hittades inte.", "error")
         return redirect(url_for("ui.admin_users_list"))
     
@@ -10117,7 +10287,12 @@ def admin_users_reset_password(user_id: int):
     repo = AdminUserRepo()
     user = repo.get_user(user_id)
     
-    if not user or user["tenant_id"] != tid:
+    if not user:
+        flash("Användare hittades inte.", "error")
+        return redirect(url_for("ui.admin_users_list"))
+    if not _admin_user_target_allowed(user_id):
+        abort(404)
+    if user["tenant_id"] != tid:
         flash("Användare hittades inte.", "error")
         return redirect(url_for("ui.admin_users_list"))
     

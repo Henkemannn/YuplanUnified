@@ -234,6 +234,7 @@ class AdminUserRepo:
         role: str = "staff",
         is_active: bool = True,
         department_id: Optional[str] = None,
+        site_id: Optional[str] = None,
     ) -> int:
         """
         Create a new user.
@@ -260,10 +261,21 @@ class AdminUserRepo:
             )
             db.add(user)
             try:
+                db.flush()
+                if site_id:
+                    _set_user_site_binding(
+                        db,
+                        user_id=int(user.id),
+                        tenant_id=int(tenant_id),
+                        site_id=str(site_id),
+                    )
                 db.commit()
             except IntegrityError as exc:
                 db.rollback()
                 raise ValueError("Användarnamnet eller e-postadressen används redan.") from exc
+            except Exception:
+                db.rollback()
+                raise
             db.refresh(user)
             return user.id
         finally:
@@ -277,7 +289,8 @@ class AdminUserRepo:
         full_name: Optional[str] = None,
         role: Optional[str] = None
         ,
-        department_id: Optional[str] = None
+        department_id: Optional[str] = None,
+        site_id: Optional[str] = None,
     ) -> bool:
         """
         Update user fields.
@@ -325,10 +338,27 @@ class AdminUserRepo:
             sql = f"UPDATE users SET {', '.join(updates)} WHERE id = :uid"
             try:
                 result = db.execute(text(sql), params)
+                if site_id:
+                    current_tenant = db.execute(
+                        text("SELECT tenant_id FROM users WHERE id=:uid LIMIT 1"),
+                        {"uid": int(user_id)},
+                    ).scalar()
+                    if current_tenant is None:
+                        db.rollback()
+                        return False
+                    _set_user_site_binding(
+                        db,
+                        user_id=int(user_id),
+                        tenant_id=int(current_tenant),
+                        site_id=str(site_id),
+                    )
                 db.commit()
             except IntegrityError as exc:
                 db.rollback()
                 raise ValueError("Användarnamnet eller e-postadressen används redan.") from exc
+            except Exception:
+                db.rollback()
+                raise
             
             return result.rowcount > 0
         finally:
