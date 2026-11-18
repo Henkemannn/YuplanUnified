@@ -10519,12 +10519,12 @@ def planera_day_ui_v2():
 # ----------------------------------------------------------------------------
 # Systemadmin – Switch Active Site and enter Admin
 # ----------------------------------------------------------------------------
-@ui_bp.get("/ui/systemadmin/switch-site-core/<site_id>")
-@require_roles("superuser", "admin")
+@ui_bp.post("/ui/systemadmin/switch-site-core/<site_id>")
+@require_roles("superuser")
 def systemadmin_switch_site(site_id: str):
-    """Delegate to canonical admin UI switch-site route to set session context."""
+    """Delegate POST site switching to the canonical route without bypassing CSRF."""
     from flask import redirect, url_for
-    return redirect(url_for("admin_ui.systemadmin_switch_site", site_id=site_id))
+    return redirect(url_for("admin_ui.systemadmin_switch_site", site_id=site_id), code=307)
 
 
 # ============================================================================

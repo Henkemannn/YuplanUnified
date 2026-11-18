@@ -43,6 +43,8 @@ def _max_age() -> int:
 
 
 def start_impersonation(tenant_id: int, reason: str) -> None:
+    if session.get("role") != "superuser":
+        raise PermissionError("superuser_required")
     now = int(time.time())
     roles = session.get("roles") or ([] if not session.get("role") else [session.get("role")])
     state = {

@@ -2470,14 +2470,7 @@ def systemadmin_customer_sites_create(tenant_id: int):
             except Exception:
                 pass
         db.commit()
-        try:
-            open_admin_url = url_for("admin_ui.systemadmin_switch_site", site_id=site_id)
-        except Exception:
-            open_admin_url = f"/ui/systemadmin/switch-site/{site_id}"
-        flash(
-            f"Site ‘{name}’ skapad. <a class=\"sa-btn sa-btn-primary sa-btn-small\" href=\"{open_admin_url}\">Öppna admin</a>",
-            "success",
-        )
+        flash(f"Site ‘{name}’ skapad. Öppna admin från site-listan.", "success")
     except Exception as e:
         try:
             db.rollback()
@@ -2672,21 +2665,31 @@ def systemadmin_customer_create():
     return redirect(url_for("admin_ui.systemadmin_customers"))
 
 
-@admin_ui_bp.get("/ui/systemadmin/switch-site/<site_id>")
-@require_roles("superuser", "admin")
+@admin_ui_bp.post("/ui/systemadmin/switch-site/<site_id>")
+@require_roles("superuser")
 def systemadmin_switch_site(site_id: str):
-    """Start impersonation for the tenant mapped to given site, then go to admin dashboard."""
+    """Start impersonation for a site selected from the systemadmin tenant view."""
+    requested_tenant = (request.form.get("tenant_id") or "").strip()
+    try:
+        requested_tenant_id = int(requested_tenant)
+    except (TypeError, ValueError):
+        flash("Ingen giltig kund valdes för siten.", "danger")
+        return redirect(url_for("admin_ui.systemadmin_customers"))
+
     db = get_session()
     tenant_id = None
     try:
-        row = db.execute(text("SELECT tenant_id FROM sites WHERE id=:id"), {"id": site_id}).fetchone()
+        row = db.execute(
+            text("SELECT tenant_id FROM sites WHERE id=:id AND tenant_id=:tenant_id"),
+            {"id": site_id, "tenant_id": requested_tenant_id},
+        ).fetchone()
         if row and row[0] is not None:
             tenant_id = int(row[0])
     finally:
         db.close()
     if tenant_id is None:
-        flash("Kunde inte hitta tenant för vald site.", "danger")
-        return redirect(url_for("admin_ui.systemadmin_customers"))
+        flash("Siten hittades inte för vald kund.", "danger")
+        return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=requested_tenant_id))
     try:
         # Persist selected site context and start impersonation for tenant
         from flask import session as _sess

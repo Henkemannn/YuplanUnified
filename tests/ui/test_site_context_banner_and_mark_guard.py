@@ -100,7 +100,11 @@ def test_A_query_param_site_id_does_not_switch_site_and_shows_banner(app_session
     site_b = _get_site_id_by_name(app_session, "Site B-CTX")
 
     # Switch to Site A and open admin; ensure topbar contains Site A
-    client.get(f"/ui/systemadmin/switch-site/{site_a}", follow_redirects=True)
+    client.post(
+        f"/ui/systemadmin/switch-site/{site_a}",
+        data={"tenant_id": ta},
+        follow_redirects=True,
+    )
     page = client.get(f"/ui/admin?site_id={site_b}", follow_redirects=True)
     assert page.status_code == 200
     body = page.data
@@ -120,7 +124,11 @@ def test_B_mark_done_wrong_site_returns_403_and_no_write(app_session, client: Fl
     site_b = _get_site_id_by_name(app_session, "Site B-MARK")
 
     # Switch to Site A and create a department
-    client.get(f"/ui/systemadmin/switch-site/{site_a}", follow_redirects=True)
+    client.post(
+        f"/ui/systemadmin/switch-site/{site_a}",
+        data={"tenant_id": ta},
+        follow_redirects=True,
+    )
     _create_department(client, app_session, site_a, "Avd Mark A")
 
     # Lookup department id

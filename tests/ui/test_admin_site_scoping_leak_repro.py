@@ -161,7 +161,11 @@ def test_admin_isolation_leak_repro(app_session, client: FlaskClient):
         site_b = _get_site_id_by_name(app_session, "aaa Site B")
 
         # Switch to Site A admin
-        resp = client.get(f"/ui/systemadmin/switch-site/{site_a}", follow_redirects=True)
+        resp = client.post(
+            f"/ui/systemadmin/switch-site/{site_a}",
+            data={"tenant_id": tid_a},
+            follow_redirects=True,
+        )
         assert resp.status_code == 200
         # Ensure session site context is set to Site A (guard can clear on tenant switch)
         with client.session_transaction() as sess:
@@ -193,7 +197,11 @@ def test_admin_isolation_leak_repro(app_session, client: FlaskClient):
         assert resp.status_code == 200
 
         # Switch to Site B admin
-        resp = client.get(f"/ui/systemadmin/switch-site/{site_b}", follow_redirects=True)
+        resp = client.post(
+            f"/ui/systemadmin/switch-site/{site_b}",
+            data={"tenant_id": tid_b},
+            follow_redirects=True,
+        )
         assert resp.status_code == 200
         with client.session_transaction() as sess:
             sess["site_id"] = site_b

@@ -43,7 +43,11 @@
                   <tr>
                     <td>{{ s.name }}</td>
                     <td>
-                      <a class="sa-btn sa-btn-secondary sa-btn-small" href="{{ url_for('admin_ui.systemadmin_switch_site', site_id=s.id) }}">Öppna admin</a>
+                      <form method="post" action="{{ url_for('admin_ui.systemadmin_switch_site', site_id=s.id) }}" style="display:inline-block;">
+                        {{ csrf_token_input()|safe }}
+                        <input type="hidden" name="tenant_id" value="{{ vm.tenant_id }}">
+                        <button class="sa-btn sa-btn-secondary sa-btn-small" type="submit">Öppna admin</button>
+                      </form>
                     </td>
                   </tr>
                 {% endfor %}
