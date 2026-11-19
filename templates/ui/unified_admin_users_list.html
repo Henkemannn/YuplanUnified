@@ -1,14 +1,21 @@
-﻿{% extends "ui/unified_admin_base.html" %}
+{% extends "ui/unified_admin_base.html" %}
+
+{% block admin_head_extra %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_users.css') }}">
+  <script src="{{ url_for('static', filename='js/admin_users.js') }}" defer></script>
+{% endblock %}
 
 {% block admin_title %}Användare{% endblock %}
-{% block admin_subtitle %}Skapa och hantera användare för verksamheten.{% endblock %}
+{% block admin_subtitle %}{% endblock %}
+{% block admin_context_meta %}{% endblock %}
+{% block admin_week_meta %}{% endblock %}
 
 {% block admin_header_actions %}
   <a href="{{ url_for('ui.admin_users_new_form') }}" class="yp-button yp-button-primary">+ Skapa användare</a>
 {% endblock %}
 
 {% block admin_main %}
-<section class="ua-section">
+<section class="ua-section admin-users">
   <div class="ua-card admin-users-list">
     {% if vm.users %}
       <div class="table-responsive">
@@ -17,23 +24,33 @@
             <tr>
               <th>Namn</th>
               <th>E-post</th>
-              <th>Typ</th>
-              <th>Scope</th>
+              <th>Roll</th>
+              <th>Har tillgång till</th>
               <th>Status</th>
               <th>Åtgärder</th>
             </tr>
           </thead>
           <tbody>
             {% for user in vm.users %}
+              {% set user_name = (user.full_name or '')|trim %}
+              {% set user_email = (user.email or '')|trim %}
               <tr class="{% if not user.is_active %}inactive-row{% endif %}">
-                <td>
-                  <div class="user-name-cell">
-                    <strong>{{ user.full_name or user.email or '-' }}</strong>
-                  </div>
+                <td class="user-name">
+                  {% if user_name and user_name|lower != user_email|lower %}
+                    <strong>{{ user_name }}</strong>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
                 </td>
-                <td>{{ user.email }}</td>
+                <td class="user-email">
+                  {% if user_email %}
+                    <a href="mailto:{{ user_email }}">{{ user_email }}</a>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
                 <td>
-                  <span class="yp-badge {% if user.role == 'admin' %}yp-badge-secondary{% elif user.role in ['cook', 'kitchen'] %}yp-badge-warning{% elif user.role == 'unit_portal' %}yp-badge-info{% else %}yp-badge-muted{% endif %}">
+                  <span class="yp-badge user-role-badge">
                     {{ user.display_role }}
                   </span>
                 </td>
@@ -41,20 +58,29 @@
                 <td>
                   <span class="yp-badge {% if user.is_active %}yp-badge-success{% else %}yp-badge-muted{% endif %}">{{ user.status_label }}</span>
                 </td>
-                <td class="actions-cell">
-                  {% if user.is_active %}
-                    <a href="{{ url_for('ui.admin_users_edit_form', user_id=user.id) }}" class="yp-button yp-button-secondary yp-button-sm">Redigera</a>
-                    <form method="post" action="{{ url_for('ui.admin_users_reset_password', user_id=user.id) }}" class="inline-form" onsubmit="return confirm('Återställa lösenord för {{ user.username }}?');">
-                      {{ csrf_token_input()|safe }}
-                      <button type="submit" class="yp-button yp-button-warning yp-button-sm">Återställ lösenord</button>
-                    </form>
-                    <form method="post" action="{{ url_for('ui.admin_users_deactivate', user_id=user.id) }}" class="inline-form" onsubmit="return confirm('Inaktivera användare {{ user.username }}?');">
-                      {{ csrf_token_input()|safe }}
-                      <button type="submit" class="yp-button yp-button-danger yp-button-sm">Inaktivera</button>
-                    </form>
-                  {% else %}
-                    <span class="text-muted">Inaktiverad</span>
-                  {% endif %}
+                <td class="user-actions">
+                  <div class="user-actions__inner">
+                    <button type="button" class="yp-button yp-button-secondary yp-button-sm user-menu-trigger" data-user-menu-trigger data-menu-id="user-menu-{{ user.id }}" aria-controls="user-menu-{{ user.id }}" aria-haspopup="true" aria-expanded="false" aria-label="Fler åtgärder för {{ user_name or user_email }}" title="Fler åtgärder">⋯</button>
+                    <div id="user-menu-{{ user.id }}" class="user-menu" data-user-menu hidden aria-label="Fler åtgärder för {{ user_name or user_email }}">
+                      {% if user.is_active %}
+                        <a href="{{ url_for('ui.admin_users_edit_form', user_id=user.id) }}" class="yp-button yp-button-secondary yp-button-sm">Redigera</a>
+                        <form method="post" action="{{ url_for('ui.admin_users_reset_password', user_id=user.id) }}" class="user-protected-form" data-confirm-message="Återställa lösenord för {{ user.username }}?">
+                          {{ csrf_token_input()|safe }}
+                          <button type="submit" class="yp-button yp-button-warning yp-button-sm" disabled>Återställ lösenord</button>
+                        </form>
+                        <form method="post" action="{{ url_for('ui.admin_users_deactivate', user_id=user.id) }}" class="user-protected-form" data-confirm-message="Inaktivera användare {{ user.username }}?">
+                          {{ csrf_token_input()|safe }}
+                          <button type="submit" class="yp-button yp-button-danger yp-button-sm" disabled>Inaktivera</button>
+                        </form>
+                      {% else %}
+                        <a href="{{ url_for('ui.admin_users_edit_form', user_id=user.id) }}" class="yp-button yp-button-secondary yp-button-sm">Redigera</a>
+                        <form method="post" action="{{ url_for('ui.admin_users_activate', user_id=user.id) }}" class="user-protected-form" data-confirm-message="Aktivera användare {{ user.username }}?">
+                          {{ csrf_token_input()|safe }}
+                          <button type="submit" class="yp-button yp-button-secondary yp-button-sm" disabled>Aktivera</button>
+                        </form>
+                      {% endif %}
+                    </div>
+                  </div>
                 </td>
               </tr>
             {% endfor %}
@@ -69,61 +95,4 @@
     {% endif %}
   </div>
 </section>
-
-<style>
-.admin-users-list {
-  max-width: 1200px;
-}
-
-.table-responsive {
-  overflow-x: auto;
-}
-
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.data-table th,
-.data-table td {
-  padding: 0.9rem 1rem;
-  vertical-align: top;
-}
-
-.data-table thead {
-  background: rgba(0, 0, 0, 0.03);
-}
-
-.data-table tbody tr + tr td {
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.inactive-row {
-  opacity: 0.65;
-}
-
-.user-name-cell {
-  display: grid;
-  gap: 0.15rem;
-}
-
-.actions-cell {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.inline-form {
-  display: inline-flex;
-  margin: 0;
-}
-
-.empty-state {
-  display: grid;
-  gap: 0.75rem;
-  justify-items: start;
-  padding: 1rem;
-}
-</style>
 {% endblock %}

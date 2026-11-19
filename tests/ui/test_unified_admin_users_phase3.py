@@ -13,6 +13,7 @@ Tests cover:
 
 import re
 import uuid
+from pathlib import Path
 import pytest
 from sqlalchemy import text
 
@@ -281,6 +282,51 @@ def test_users_list_shows_roles(client_admin):
     assert "Admin" in html  # Role badge
 
 
+def test_users_list_uses_harmonized_role_badges(client_admin):
+    """All supported administrative roles use one compact badge structure."""
+    app = client_admin.application
+    roles = {
+        "superuser": "Superanvändare",
+        "admin": "Admin",
+        "cook": "Kök",
+        "unit_portal": "Avdelning",
+    }
+    with app.app_context():
+        db = get_session()
+        try:
+            for index, (role, label) in enumerate(roles.items()):
+                db.execute(
+                    text(
+                        "INSERT INTO users (tenant_id, email, password_hash, role, username, full_name, is_active) "
+                        "VALUES (1, :email, 'hash', :role, :username, :full_name, 1)"
+                    ),
+                    {
+                        "email": f"role-pill-{index}-{uuid.uuid4().hex[:8]}@example.com",
+                        "role": role,
+                        "username": f"role-pill-{index}-{uuid.uuid4().hex[:8]}",
+                        "full_name": f"Role Pill {index}",
+                    },
+                )
+            db.commit()
+        finally:
+            db.close()
+
+    response = client_admin.get("/ui/admin/users", headers=_h("admin"))
+    html = response.data.decode("utf-8")
+    assert response.status_code == 200
+    for role, label in roles.items():
+        assert label in html
+        assert html.count('class="yp-badge user-role-badge"') >= len(roles)
+    assert "user-role-badge--admin" not in html
+    assert "user-role-badge--kitchen" not in html
+    assert "user-role-badge--unit-portal" not in html
+    assert "user-role-badge--superuser" not in html
+    superuser_row = re.search(r"<tr[^>]*>.*?Role Pill 0.*?</tr>", html, flags=re.DOTALL)
+    admin_row = re.search(r"<tr[^>]*>.*?Role Pill 1.*?</tr>", html, flags=re.DOTALL)
+    assert superuser_row is not None and "<td>—</td>" in superuser_row.group(0)
+    assert admin_row is not None and "<td>—</td>" in admin_row.group(0)
+
+
 def test_users_list_shows_active_status(client_admin):
     """Test users list shows active/inactive status"""
     app = client_admin.application
@@ -316,6 +362,285 @@ def test_users_list_shows_active_status(client_admin):
     assert resp.status_code == 200
     assert "Aktiv" in html
     assert "Inaktiv" in html
+
+
+def test_users_list_keeps_compact_action_structure(client_admin):
+    """Active users retain all actions while inactive users remain action-free."""
+    app = client_admin.application
+    active_email = f"actions-active-{uuid.uuid4().hex[:8]}@example.com"
+    inactive_email = f"actions-inactive-{uuid.uuid4().hex[:8]}@example.com"
+    with app.app_context():
+        db = get_session()
+        try:
+            db.execute(
+                text(
+                    "INSERT INTO users (tenant_id, email, password_hash, role, username, full_name, is_active) "
+                    "VALUES (1, :email, 'hash', 'staff', :username, :full_name, :is_active)"
+                ),
+                {
+                    "email": active_email,
+                    "username": "actions-active",
+                    "full_name": "Actions Active",
+                    "is_active": 1,
+                },
+            )
+            db.execute(
+                text(
+                    "INSERT INTO users (tenant_id, email, password_hash, role, username, full_name, is_active) "
+                    "VALUES (1, :email, 'hash', 'staff', :username, :full_name, :is_active)"
+                ),
+                {
+                    "email": inactive_email,
+                    "username": "actions-inactive",
+                    "full_name": "Actions Inactive",
+                    "is_active": 0,
+                },
+            )
+            db.commit()
+            active_id = db.execute(
+                text("SELECT id FROM users WHERE email = :email"),
+                {"email": active_email},
+            ).scalar_one()
+            inactive_id = db.execute(
+                text("SELECT id FROM users WHERE email = :email"),
+                {"email": inactive_email},
+            ).scalar_one()
+        finally:
+            db.close()
+
+    response = client_admin.get("/ui/admin/users", headers=_h("admin"))
+    html = response.data.decode("utf-8")
+    assert response.status_code == 200
+    assert '<table class="yp-table data-table">' in html
+    assert "<th>Namn</th>" in html
+    assert "<th>E-post</th>" in html
+    assert "<th>Roll</th>" in html
+    assert "<th>Har tillgång till</th>" in html
+    assert "<th>Status</th>" in html
+    assert "<th>Åtgärder</th>" in html
+    assert "Har tillgång till" in html
+    assert '<td class="user-name">' in html
+    assert '<strong>Actions Active</strong>' in html
+    assert re.search(
+        rf'<td class="user-email">\s*<a href="mailto:{re.escape(active_email)}">'
+        rf'{re.escape(active_email)}</a>\s*</td>',
+        html,
+    )
+
+    active_row = re.search(
+        r'<tr[^>]*>.*?Actions Active.*?</tr>',
+        html,
+        flags=re.DOTALL,
+    )
+    assert active_row is not None
+    active_html = active_row.group(0)
+    assert f'href="/ui/admin/users/{active_id}/edit"' in active_html
+    assert f'action="/ui/admin/users/{active_id}/reset-password"' in active_html
+    assert f'action="/ui/admin/users/{active_id}/deactivate"' in active_html
+    assert active_html.count('name="csrf_token"') == 2
+    assert "⋯" in active_html
+    assert 'aria-label="Fler åtgärder för Actions Active"' in active_html
+    assert 'data-user-menu-trigger' in active_html
+    assert 'aria-haspopup="true"' in active_html
+    assert 'data-confirm-message="Återställa lösenord för actions-active?"' in active_html
+    assert 'data-confirm-message="Inaktivera användare actions-active?"' in active_html
+    assert 'disabled>Återställ lösenord</button>' in active_html
+    assert 'disabled>Inaktivera</button>' in active_html
+    assert 'role="menu"' not in active_html
+    assert 'role="menuitem"' not in active_html
+    assert 'onsubmit=' not in active_html
+    assert "Återställa lösenord för actions-active?" in active_html
+    assert "Inaktivera användare actions-active?" in active_html
+    assert '<link rel="stylesheet" href="/static/css/admin_users.css">' in html
+    assert '<script src="/static/js/admin_users.js" defer></script>' in html
+    assert "<style" not in html
+    assert "onsubmit=" not in html
+
+    inactive_row = re.search(
+        r'<tr class="inactive-row">.*?Actions Inactive.*?</tr>',
+        html,
+        flags=re.DOTALL,
+    )
+    assert inactive_row is not None
+    inactive_html = inactive_row.group(0)
+    assert f'href="/ui/admin/users/{inactive_id}/edit"' in inactive_html
+    assert "reset-password" not in inactive_html
+    assert "deactivate" not in inactive_html
+    assert f'action="/ui/admin/users/{inactive_id}/activate"' in inactive_html
+    assert 'data-confirm-message="Aktivera användare actions-inactive?"' in inactive_html
+    assert "⋯" in inactive_html
+    assert "Inaktiv" in inactive_html
+
+
+def test_users_list_does_not_duplicate_email_identity(client_admin):
+    """Missing or email-valued names render the address only once."""
+    app = client_admin.application
+    missing_name_email = f"missing-name-{uuid.uuid4().hex[:8]}@example.com"
+    same_name_email = f"same-name-{uuid.uuid4().hex[:8]}@example.com"
+    with app.app_context():
+        db = get_session()
+        try:
+            db.execute(
+                text(
+                    "INSERT INTO users (tenant_id, email, password_hash, role, username, full_name, is_active) "
+                    "VALUES (1, :email, 'hash', 'staff', :username, NULL, 1)"
+                ),
+                {"email": missing_name_email, "username": f"missing-name-{uuid.uuid4().hex[:8]}"},
+            )
+            db.execute(
+                text(
+                    "INSERT INTO users (tenant_id, email, password_hash, role, username, full_name, is_active) "
+                    "VALUES (1, :email, 'hash', 'staff', :username, :full_name, 1)"
+                ),
+                {
+                    "email": same_name_email,
+                    "username": f"same-name-{uuid.uuid4().hex[:8]}",
+                    "full_name": same_name_email.upper(),
+                },
+            )
+            db.commit()
+        finally:
+            db.close()
+
+    response = client_admin.get("/ui/admin/users", headers=_h("admin"))
+    html = response.data.decode("utf-8")
+    assert response.status_code == 200
+    assert html.count(f'href="mailto:{missing_name_email}"') == 1
+    assert html.count(f'href="mailto:{same_name_email}"') == 1
+    email_cells = re.findall(r'<td class="user-email">.*?</td>', html, flags=re.DOTALL)
+    missing_email_cell = next(cell for cell in email_cells if missing_name_email in cell)
+    same_email_cell = next(cell for cell in email_cells if same_name_email in cell)
+    assert missing_email_cell.count(f'href="mailto:{missing_name_email}"') == 1
+    assert same_email_cell.count(f'href="mailto:{same_name_email}"') == 1
+    name_cells = re.findall(r'<td class="user-name">.*?</td>', html, flags=re.DOTALL)
+    assert next(cell for cell in name_cells if missing_name_email not in cell).count(missing_name_email) == 0
+    assert next(cell for cell in name_cells if same_name_email not in cell).count(same_name_email) == 0
+
+
+def test_inactive_user_can_be_reactivated_with_existing_csrf_flow(client_admin):
+    """Inactive rows expose activation and the protected POST restores active status."""
+    app = client_admin.application
+    email = f"activate-{uuid.uuid4().hex[:8]}@example.com"
+    with app.app_context():
+        db = get_session()
+        try:
+            db.execute(
+                text(
+                    "INSERT INTO users (tenant_id, email, password_hash, role, username, full_name, is_active) "
+                    "VALUES (1, :email, 'hash', 'staff', :username, :full_name, 0)"
+                ),
+                {
+                    "email": email,
+                    "username": "activate-user",
+                    "full_name": "Activate User",
+                },
+            )
+            db.commit()
+            user_id = db.execute(
+                text("SELECT id FROM users WHERE email=:email"),
+                {"email": email},
+            ).scalar_one()
+        finally:
+            db.close()
+
+    csrf_token = _list_csrf(client_admin)
+    response = client_admin.post(
+        f"/ui/admin/users/{user_id}/activate",
+        data={"csrf_token": csrf_token},
+        headers=_h("admin"),
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    assert "aktiverad" in response.data.decode("utf-8").lower()
+    with app.app_context():
+        db = get_session()
+        try:
+            assert db.execute(
+                text("SELECT is_active FROM users WHERE id=:uid"),
+                {"uid": user_id},
+            ).scalar_one() == 1
+        finally:
+            db.close()
+
+
+def test_active_user_activation_is_idempotent(client_admin):
+    """Activating an already active user does not mutate other account fields."""
+    app = client_admin.application
+    email = f"already-active-{uuid.uuid4().hex[:8]}@example.com"
+    with app.app_context():
+        db = get_session()
+        try:
+            db.execute(
+                text(
+                    "INSERT INTO users (tenant_id, email, password_hash, role, username, full_name, is_active) "
+                    "VALUES (1, :email, 'hash', 'staff', :username, :full_name, 1)"
+                ),
+                {
+                    "email": email,
+                    "username": "already-active",
+                    "full_name": "Already Active",
+                },
+            )
+            db.commit()
+            user_id = db.execute(
+                text("SELECT id FROM users WHERE email=:email"),
+                {"email": email},
+            ).scalar_one()
+            before = db.execute(
+                text("SELECT email, username, role, is_active FROM users WHERE id=:uid"),
+                {"uid": user_id},
+            ).one()
+        finally:
+            db.close()
+
+    response = client_admin.post(
+        f"/ui/admin/users/{user_id}/activate",
+        data={"csrf_token": _list_csrf(client_admin)},
+        headers=_h("admin"),
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    assert "redan aktiv" in response.data.decode("utf-8").lower()
+    with app.app_context():
+        db = get_session()
+        try:
+            after = db.execute(
+                text("SELECT email, username, role, is_active FROM users WHERE id=:uid"),
+                {"uid": user_id},
+            ).one()
+            assert tuple(after) == tuple(before)
+        finally:
+            db.close()
+
+
+def test_users_list_keeps_alt2_selector_scoped():
+    """The Alt2 cell rule must not be coupled to ordinary table headers."""
+    css = (Path(__file__).parents[2] / "static" / "unified_ui.css").read_text(encoding="utf-8")
+    assert ".yp-table th,\n" not in css
+    assert ".weekview-all .weekview td.is-alt2 {" in css
+
+
+def test_users_list_portal_menu_keeps_body_host_styling():
+    """Portal menus retain selectors and theme-token synchronization after moving."""
+    css = (Path(__file__).parents[2] / "static" / "css" / "admin_users.css").read_text(encoding="utf-8")
+    js = (Path(__file__).parents[2] / "static" / "js" / "admin_users.js").read_text(encoding="utf-8")
+    assert ".admin-users .user-menu {" in css
+    assert ".admin-users .user-menu[hidden] {" in css
+    assert ".admin-users .user-menu form {" in css
+    assert ".admin-users .user-menu .yp-button {" in css
+    assert ".admin-users .user-menu .yp-button-warning" in css
+    assert ".admin-users .user-menu .yp-button-danger" in css
+    assert ".admin-users.user-menu-host.app-shell--dark" in css
+    assert "color: #eaf7f8 !important;" in css
+    assert "color: #ffffff !important;" in css
+    assert "position: fixed;" in css
+    assert "var(--yp-color-warning-light)" not in css
+    assert "var(--yp-color-danger-light)" in css
+    assert "background: #fff4d6" not in css
+    assert "background: #fde7e7" not in css
+    assert "menuHost.className = \"admin-users user-menu-host\"" in js
+    assert "syncMenuHostTheme(menuHost)" in js
+    assert "MutationObserver" in js
 
 
 # ============================================================================

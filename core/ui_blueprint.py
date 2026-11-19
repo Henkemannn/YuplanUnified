@@ -10289,6 +10289,54 @@ def admin_users_deactivate(user_id: int):
     return redirect(url_for("ui.admin_users_list"))
 
 
+@ui_bp.post("/ui/admin/users/<int:user_id>/activate")
+@require_roles(*ADMIN_ROLES)
+def admin_users_activate(user_id: int):
+    """Reactivate an eligible user within the current verified admin scope."""
+    from flask import flash, redirect, url_for
+    from core.admin_user_repo import AdminUserRepo
+
+    tid = session.get("tenant_id")
+    db = get_session()
+    try:
+        row = db.execute(
+            text(
+                "SELECT tenant_id, role, is_active, deleted_at "
+                "FROM users WHERE id=:uid LIMIT 1"
+            ),
+            {"uid": int(user_id)},
+        ).fetchone()
+    finally:
+        db.close()
+
+    if not row:
+        flash("Användare hittades inte.", "error")
+        return redirect(url_for("ui.admin_users_list"))
+    if row[3] is not None or str(row[1] or "").strip().lower() == "superuser":
+        abort(404)
+    if not _admin_user_target_allowed(user_id):
+        abort(404)
+    try:
+        if int(row[0]) != int(tid):
+            flash("Användare hittades inte.", "error")
+            return redirect(url_for("ui.admin_users_list"))
+    except (TypeError, ValueError):
+        abort(404)
+
+    if bool(row[2]):
+        flash("Användaren är redan aktiv.", "info")
+        return redirect(url_for("ui.admin_users_list"))
+
+    try:
+        if AdminUserRepo().activate_user(int(user_id)):
+            flash("Användare aktiverad.", "success")
+        else:
+            flash("Användare hittades inte.", "error")
+    except Exception as exc:
+        flash(f"Kunde inte aktivera användaren: {str(exc)}", "error")
+    return redirect(url_for("ui.admin_users_list"))
+
+
 @ui_bp.post("/ui/admin/users/<int:user_id>/reset-password")
 @require_roles(*ADMIN_ROLES)
 def admin_users_reset_password(user_id: int):
