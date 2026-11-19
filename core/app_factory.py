@@ -1106,6 +1106,8 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 from .db import get_site_tenant
                 site_tenant = get_site_tenant(str(s_sess))
                 if site_tenant is not None and int(site_tenant) != int(t_sess):
+                    if _sess.get("impersonate"):
+                        return Response("Åtkomst nekad: supportsite tillhör en annan tenant", status=403)
                     if (request.args.get("site_id") or "").strip() and request.path.startswith("/ui/weekview"):
                         return Response("\u00c5tkomst nekad: site tillh\u00f6r en annan tenant", status=403)
                     _sess.pop("site_id", None)

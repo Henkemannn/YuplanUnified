@@ -120,10 +120,13 @@ def require_roles(*roles: str):
             primary = _jwt_primary_secret()
             secrets_list = current_app.config.get("JWT_SECRETS") or []
             # Always prefer bearer header if present (stateless override of session)
-            if auth_header.lower().startswith("bearer "):
+            auth_parts = auth_header.split(None, 1)
+            if auth_parts and auth_parts[0].lower() == "bearer":
                 if not primary:
                     return _json_error("auth required", 401)
-                token = auth_header.split(None, 1)[1].strip()
+                token = auth_parts[1].strip() if len(auth_parts) > 1 else ""
+                if not token:
+                    return _json_error("auth required", 401)
                 cfg = current_app.config
                 try:
                     payload = jwt_decode(
@@ -167,9 +170,18 @@ def require_roles(*roles: str):
                 if int(session.get("auth_version")) != active_auth_version:
                     _clear_authenticated_session()
                     return _json_error("auth required", 401)
+                try:
+                    from .impersonation import synchronize_authenticated_context
+
+                    synchronize_authenticated_context(
+                        user_id=active_user.id,
+                        role=_normalize_role(active_user.role),
+                        tenant_id=int(active_user.tenant_id),
+                    )
+                except PermissionError as exc:
+                    return _json_error(str(exc), 403)
                 session["user_id"] = active_user.id
                 session["role"] = _normalize_role(active_user.role)
-                session["tenant_id"] = active_user.tenant_id
                 session["auth_version"] = active_auth_version
                 if _user_must_change_password(active_user):
                     path = request.path or ""

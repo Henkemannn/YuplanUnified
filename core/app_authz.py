@@ -65,8 +65,13 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
             sess = get_session()
             try:
                 auth_header = request.headers.get("Authorization", "")
-                if (sess is None or not sess.get("user_id")) and auth_header.lower().startswith("bearer "):
-                    token = auth_header.split(None, 1)[1].strip()
+                auth_parts = auth_header.split(None, 1)
+                if auth_parts and auth_parts[0].lower() == "bearer":
+                    token = auth_parts[1].strip() if len(auth_parts) > 1 else ""
+                    if not token:
+                        from .app_sessions import SessionError
+
+                        raise SessionError("authentication required")
                     # Require configured secret; do not use weak fallback defaults.
                     import os as _os
                     primary = current_app.config.get("JWT_SECRET") or _os.getenv("JWT_SECRET")
@@ -97,14 +102,17 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
                         raise SessionError("authentication required")
                     # Populate session-like dict for downstream checks
                     session["user_id"] = payload.get("sub")
-                    session["role"] = payload.get("role")
+                    from .auth import _normalize_role
+
+                    session["role"] = _normalize_role(payload.get("role"))
                     session["tenant_id"] = payload.get("tenant_id")
                     session["auth_version"] = auth_version
                     # Re-fetch to reflect new values
                     sess = get_session()
-            except JWTError:
-                # Invalid bearer -> treat as no auth; centralized handler will map to 401
-                pass
+            except JWTError as exc:
+                from .app_sessions import SessionError
+
+                raise SessionError("authentication required") from exc
             if sess is None:
                 # No session -> unauthorized
                 from .app_sessions import SessionError  # local import to avoid cycle
@@ -132,6 +140,16 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
                     from .app_sessions import SessionError  # local import to avoid cycle
 
                     raise SessionError("authentication required")
+                try:
+                    from .impersonation import synchronize_authenticated_context
+
+                    synchronize_authenticated_context(
+                        user_id=active_user.id,
+                        role=str(active_user.role),
+                        tenant_id=int(active_user.tenant_id),
+                    )
+                except PermissionError as exc:
+                    raise AuthzError(str(exc)) from exc
                 if _user_must_change_password(active_user) and request.endpoint not in password_change_exempt_endpoints:
                     if request.endpoint and request.endpoint.startswith("ui.") and (request.method or "").upper() == "GET":
                         from flask import redirect, url_for
@@ -143,7 +161,6 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
                     raise SessionError("authentication required")
                 session["user_id"] = active_user.id
                 session["role"] = active_user.role
-                session["tenant_id"] = active_user.tenant_id
                 session["auth_version"] = active_auth_version
                 session["must_change_password"] = _user_must_change_password(active_user)
                 role_value = to_canonical(cast(RoleLike, active_user.role))
