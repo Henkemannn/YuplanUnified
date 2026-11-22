@@ -29,7 +29,7 @@ def test_post_without_token_forbidden(tmp_path, monkeypatch):
     app = _make_app(tmp_path, monkeypatch)
     client = app.test_client()
     # Provide Origin to ensure CSRF evaluated before route handler might reject
-    r = client.post("/tasks/", json={"title": "X"}, headers={"Origin": "http://localhost"})
+    r = client.post("/features/set", json={"name": "csrf_test", "enabled": True}, headers={"Origin": "http://localhost"})
     if r.status_code == 401:
         # Auth layer fired first; acceptable, skip strict assertion
         return
@@ -64,7 +64,7 @@ def test_origin_mismatch_blocked(tmp_path, monkeypatch):
     app = _make_app(tmp_path, monkeypatch)
     client = app.test_client()
     # Supply an Origin that is not the host
-    r = client.post("/tasks/", json={"title": "Z"}, headers={"Origin": "http://evil.example"})
+    r = client.post("/features/set", json={"name": "csrf_origin", "enabled": True}, headers={"Origin": "http://evil.example"})
     if r.status_code == 401:
         return  # auth took precedence
     assert r.status_code == 403
@@ -76,7 +76,7 @@ def test_safe_methods_ok_without_token(tmp_path, monkeypatch):
     app = _make_app(tmp_path, monkeypatch)
     client = app.test_client()
     for method in ("GET", "HEAD", "OPTIONS"):
-        resp = client.open(path="/tasks/", method=method)
+        resp = client.open(path="/features", method=method)
         # Unauthenticated may yield 401; CSRF should not interfere with safe methods.
         assert resp.status_code in {200, 401, 404}
 
@@ -87,7 +87,7 @@ def test_prod_exempt_paths_require_token_for_write(tmp_path, monkeypatch):
     # /auth/ login (POST) is exempt in production, but should allow without CSRF; test expectation clarified.
     # For metrics POST (simulate ingest) -> we expect exemption too.
     # So here we assert that a non-exempt path still blocks while exempt path passes.
-    r_block = client.post("/tasks/", json={"title": "NeedToken"})
+    r_block = client.post("/features/set", json={"name": "csrf_write", "enabled": True})
     if r_block.status_code not in (401, 403):
         # Without auth or CSRF must be blocked somehow
         assert False, r_block.get_data(as_text=True)

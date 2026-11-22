@@ -5,7 +5,8 @@ from core import metrics as metrics_mod
 
 def _login_viewer(client):
     from core.db import get_session
-    from core.models import User
+    from core.models import Site, User
+    from sqlalchemy import text
 
     db = get_session()
     try:
@@ -19,6 +20,22 @@ def _login_viewer(client):
             user.is_active = True
             user.auth_version = 1
         db.commit()
+        if db.get(Site, "deprecation-site") is None:
+            db.add(Site(id="deprecation-site", tenant_id=1, name="Deprecation Site"))
+            db.commit()
+        db.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS kitchen_user_sites "
+                "(user_id INTEGER, tenant_id INTEGER, site_id TEXT)"
+            )
+        )
+        db.execute(
+            text(
+                "INSERT OR REPLACE INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                "VALUES (1, 1, 'deprecation-site')"
+            )
+        )
+        db.commit()
     finally:
         db.close()
     with client.session_transaction() as sess:
@@ -26,6 +43,7 @@ def _login_viewer(client):
         sess["user_id"] = 1
         sess["auth_version"] = 1
         sess["role"] = "viewer"
+        sess["site_id"] = "deprecation-site"
 
 
 def test_notes_alias_has_deprecation_headers(client):
@@ -66,8 +84,5 @@ def test_tasks_alias_has_deprecation_headers(client):
     metrics_mod.set_metrics(rec)
     _login_viewer(client)
     r = client.get("/tasks/")
-    assert r.status_code == 200
-    assert r.headers.get("X-Deprecated-Alias") == "tasks"
-    assert any(
-        n == "deprecation.alias.emitted" and c.get("endpoint") == "tasks" for n, c in rec.calls
-    )
+    assert r.status_code == 404
+    assert not any(c.get("endpoint") == "tasks" for _, c in rec.calls)

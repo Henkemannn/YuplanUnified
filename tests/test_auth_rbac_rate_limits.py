@@ -6,7 +6,9 @@ from werkzeug.security import generate_password_hash
 
 from core.app_factory import create_app
 from core.db import get_session
-from core.models import Tenant, User
+from core.models import Site, Task, Tenant, User
+from core.tasks_service import update_task as service_update_task
+from core.app_authz import AuthzError
 
 
 @pytest.fixture(scope="module")
@@ -53,6 +55,23 @@ def app():
         ]
         sess.add_all(users)
         sess.commit()
+        sess.add(Site(id="test-site", tenant_id=t1.id, name="Test Site"))
+        sess.commit()
+        sess.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS kitchen_user_sites "
+                "(user_id INTEGER, tenant_id INTEGER, site_id TEXT)"
+            )
+        )
+        for user in users:
+            sess.execute(
+                text(
+                    "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                    "VALUES (:uid, :tid, :sid)"
+                ),
+                {"uid": user.id, "tid": t1.id, "sid": "test-site"},
+            )
+        sess.commit()
     finally:
         sess.close()
     yield app
@@ -80,19 +99,15 @@ def test_auth_flow_and_unauthorized(client):
     # login userA
     data = login(client, "a@example.com")
     access = data["access_token"]
-    # access tasks list (should be 200 even if empty)
-    r = client.get("/tasks/", headers={"Authorization": f"Bearer {access}", "X-Tenant-Id": "1"})
-    assert (
-        r.status_code in (200, 404) or r.get_json().get("ok") is True
-    )  # allow flexibility if tasks not present
+    r = client.get("/auth/me", headers={"Authorization": f"Bearer {access}", "X-Tenant-Id": "1"})
+    assert r.status_code == 200
     # missing token
-    r2 = client.get("/tasks/", headers={"X-Tenant-Id": "1"})
-    if r2.status_code == 401:
-        j = r2.get_json()
-        assert j.get("status") == 401 and j.get("type", " ").endswith("/unauthorized")
-    else:
-        # In some test client states session stays; just ensure shape ok
-        assert r2.status_code in (200, 403)
+    with client.session_transaction() as sess:
+        sess.clear()
+    r2 = client.get("/auth/me", headers={"X-Tenant-Id": "1"})
+    assert r2.status_code == 401
+    j = r2.get_json()
+    assert j.get("error") == "authentication required"
 
 
 def test_refresh_rotation(client):
@@ -117,66 +132,50 @@ def test_refresh_rotation(client):
 
 
 def test_rbac_ownership_and_admin_override(client):
-    # enable flag via admin API first
-    admin_login = login(client, "admin@example.com")
-    access_admin = admin_login["access_token"]
-    client.post(
-        "/admin/feature_flags",
-        json={"name": "allow_legacy_cook_create", "enabled": True},
-        headers={"Authorization": f"Bearer {access_admin}", "X-Tenant-Id": "1"},
-    )
-    # userA (cook) creates a task
-    a = login(client, "a@example.com")
-    accessA = a["access_token"]
-    create = client.post(
-        "/tasks/",
-        json={"title": "Owned by A", "status": "todo"},
-        headers={"Authorization": f"Bearer {accessA}", "X-Tenant-Id": "1"},
-    )
-    assert create.status_code == 201, create.get_json()
-    task_id = create.get_json()["task"]["id"]
-    # userB attempts to update -> 403
-    b = login(client, "b@example.com")
-    accessB = b["access_token"]
-    # fetch identities
-    meA = client.get(
-        "/auth/me", headers={"Authorization": f"Bearer {accessA}", "X-Tenant-Id": "1"}
-    ).get_json()
-    meB = client.get(
-        "/auth/me", headers={"Authorization": f"Bearer {accessB}", "X-Tenant-Id": "1"}
-    ).get_json()
-    assert meA["user_id"] != meB["user_id"], "Test requires distinct user ids"
-    fetch = client.get(
-        f"/tasks/{task_id}", headers={"Authorization": f"Bearer {accessA}", "X-Tenant-Id": "1"}
-    ).get_json()["task"]
-    assert fetch["creator_user_id"] == meA["user_id"]
-    upd = client.put(
-        f"/tasks/{task_id}",
-        json={"status": "doing"},
-        headers={"Authorization": f"Bearer {accessB}", "X-Tenant-Id": "1"},
-    )
-    assert upd.status_code == 403, f"Expected 403, got {upd.status_code} body={upd.get_json()}"
-    # admin can update
-    adm = login(client, "admin@example.com")
-    accessAd = adm["access_token"]
-    upd2 = client.put(
-        f"/tasks/{task_id}",
-        json={"status": "doing"},
-        headers={"Authorization": f"Bearer {accessAd}", "X-Tenant-Id": "1"},
-    )
-    assert upd2.status_code == 200
+    db = get_session()
+    try:
+        users = {u.email: u.id for u in db.query(User).all()}
+        task = Task(
+            tenant_id=1,
+            task_type="prep",
+            title="Owned by A",
+            creator_user_id=users["a@example.com"],
+            status="todo",
+            done=False,
+        )
+        db.add(task)
+        db.commit()
+        with pytest.raises(AuthzError):
+            service_update_task(
+                db,
+                tenant_id=1,
+                user_id=users["b@example.com"],
+                role="cook",
+                task_id=task.id,
+                payload={"status": "doing"},
+            )
+        result = service_update_task(
+            db,
+            tenant_id=1,
+            user_id=users["admin@example.com"],
+            role="admin",
+            task_id=task.id,
+            payload={"status": "doing"},
+        )
+        assert result == {"ok": True, "updated": True}
+    finally:
+        db.close()
 
 
-def test_rate_limits_tasks_and_features(client):
-    # login admin for both tasks + features endpoints
+def test_rate_limits_active_features(client):
+    # Login admin and exercise an active feature endpoint.
     d = login(client, "admin@example.com")
     access = d["access_token"]
-    # hit tasks create 4 times -> expect 429 on last
     codes = []
     for _ in range(4):
         r = client.post(
-            "/tasks/",
-            json={"title": f"T{_}", "status": "todo"},
+            "/features/set",
+            json={"name": f"inline_ui_{_}", "enabled": True},
             headers={
                 "Authorization": f"Bearer {access}",
                 "X-Tenant-Id": "1",
@@ -185,49 +184,28 @@ def test_rate_limits_tasks_and_features(client):
         )
         codes.append(r.status_code)
     assert 429 in codes
-    # feature flag set spam
-    for _ in range(4):
-        r = client.post(
-            "/features/set",
-            json={"name": "inline_ui", "enabled": True},
-            headers={
-                "Authorization": f"Bearer {access}",
-                "X-Tenant-Id": "1",
-                "X-Force-Rate-Limit": "1",
-            },
-        )
-    # last should or one of them be 429
-    assert any(c == 429 for c in [r.status_code])
 
 
 def test_error_shapes(client):
     # unauthorized
-    r = client.get("/tasks/", headers={"X-Tenant-Id": "1"})
+    r = client.get("/features", headers={"X-Tenant-Id": "1"})
     assert r.status_code == 401
     j = r.get_json()
     assert j.get("status") == 401 and j.get("type", " ").endswith("/unauthorized")
-    # attempt forbidden via ownership again
-    a = login(client, "a@example.com")
-    b = login(client, "b@example.com")
-    task = client.post(
-        "/tasks/",
-        json={"title": "Own check", "status": "todo"},
-        headers={"Authorization": f"Bearer {a['access_token']}", "X-Tenant-Id": "1"},
-    ).get_json()["task"]
-    forb = client.put(
-        f"/tasks/{task['id']}",
-        json={"status": "doing"},
-        headers={"Authorization": f"Bearer {b['access_token']}", "X-Tenant-Id": "1"},
+    viewer = login(client, "a@example.com")
+    forb = client.get(
+        "/features",
+        headers={"Authorization": f"Bearer {viewer['access_token']}", "X-Tenant-Id": "1"},
     )
     assert forb.status_code == 403
     jf = forb.get_json()
     assert jf.get("status") == 403 and jf.get("type", " ").endswith("/forbidden")
-    # rate limited shape (force by monkeypatch)
+    # Rate-limited shape on an active endpoint.
     a2 = login(client, "admin@example.com")
     # first call consumes 1, then hammer to exceed using forced tiny limit of 1
     client.post(
-        "/tasks/",
-        json={"title": "Priming", "status": "todo"},
+        "/features/set",
+        json={"name": "rate_shape_priming", "enabled": True},
         headers={
             "Authorization": f"Bearer {a2['access_token']}",
             "X-Tenant-Id": "1",
@@ -236,8 +214,8 @@ def test_error_shapes(client):
         },
     )
     rl = client.post(
-        "/tasks/",
-        json={"title": "RL", "status": "todo"},
+        "/features/set",
+        json={"name": "rate_shape", "enabled": True},
         headers={
             "Authorization": f"Bearer {a2['access_token']}",
             "X-Tenant-Id": "1",
@@ -263,6 +241,14 @@ def test_deactivated_or_deleted_session_cannot_access_protected_routes(client, a
             role="admin",
         )
         sess.add(user)
+        sess.commit()
+        sess.execute(
+            text(
+                "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                "VALUES (:uid, :tid, :sid)"
+            ),
+            {"uid": user.id, "tid": tenant.id, "sid": "test-site"},
+        )
         sess.commit()
 
         login(client, email)

@@ -241,14 +241,8 @@ def test_export_notes_rejects_site_switch_and_missing_binding(client, seeded):
 def test_export_tasks_csv_separator_and_bom(client, seeded):
     assert login(client, "exp_admin@example.com", seeded["site_id"]).status_code == 200
     rv = client.get("/export/tasks.csv?sep=;&bom=1")
-    assert rv.status_code == 200
-    text = rv.get_data(as_text=True)
-    # BOM present
-    assert text.startswith("\ufeff")
-    first_line = text.splitlines()[0]
-    assert ";" in first_line  # custom separator
-    # Expect new timestamp columns in header
-    assert "created_at" in first_line and "updated_at" in first_line
+    assert rv.status_code == 404
+    assert "Public Note" not in rv.get_data(as_text=True)
 
 
 def test_export_streaming_large(client, seeded):

@@ -24,6 +24,7 @@ from .db import get_session
 from .deprecation import apply_deprecation
 from .deprecation_warn import should_warn, warn_phase_enabled
 from .http_errors import forbidden as forbidden_response
+from .http_errors import not_found
 from .errors import APIError, NotFoundError
 from .metrics import increment
 from .models import Dish, Site, Task
@@ -37,6 +38,11 @@ from .tasks_service import (
 )
 
 bp = Blueprint("tasks_api", __name__, url_prefix="/tasks")
+
+
+@bp.before_request
+def quarantine_legacy_tasks():
+    return not_found()
 
 READ_ROLES = (
     "viewer",

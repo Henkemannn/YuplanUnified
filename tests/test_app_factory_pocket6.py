@@ -1,9 +1,10 @@
 import pytest
+from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 
 from core.app_factory import create_app
 from core.db import get_session
-from core.models import Base, Tenant, User
+from core.models import Base, Site, Tenant, User
 
 
 @pytest.fixture(scope="module")
@@ -32,6 +33,23 @@ def app():
         )
         sess.add_all([u_admin, u_view])
         sess.commit()
+        sess.add(Site(id="test-site", tenant_id=t.id, name="Test Site"))
+        sess.commit()
+        sess.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS kitchen_user_sites "
+                "(user_id INTEGER, tenant_id INTEGER, site_id TEXT)"
+            )
+        )
+        for user in (u_admin, u_view):
+            sess.execute(
+                text(
+                    "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                    "VALUES (:uid, :tid, :sid)"
+                ),
+                {"uid": user.id, "tid": t.id, "sid": "test-site"},
+            )
+        sess.commit()
     finally:
         sess.close()
     return app
@@ -55,7 +73,7 @@ def login(client, email: str):
 
 def test_401_envelope(client):
     # Access protected endpoint without token -> unauthorized
-    r = client.get("/tasks/", headers={"X-Tenant-Id": "1"})
+    r = client.get("/features", headers={"X-Tenant-Id": "1"})
     assert r.status_code == 401
     j = r.get_json()
     assert j.get("type") and j.get("status") == 401, j
@@ -64,8 +82,8 @@ def test_401_envelope(client):
 
 def test_session_login_and_access(client):
     token = login(client, "admin@example.com")
-    r = client.get("/tasks/", headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": "1"})
-    assert r.status_code in (200, 404)
+    r = client.get("/auth/me", headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": "1"})
+    assert r.status_code == 200
 
 
 def test_403_role_mismatch(client):
@@ -83,7 +101,7 @@ def test_403_role_mismatch(client):
 def test_404_not_found_resource(client):
     token = login(client, "admin@example.com")
     r = client.get(
-        "/tasks/999999", headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": "1"}
+        "/notes/999999", headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": "1"}
     )
     assert r.status_code in (404, 403)  # if forbidden due to tenant mismatch logic
     if r.status_code == 404:

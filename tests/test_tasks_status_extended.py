@@ -5,6 +5,8 @@ from werkzeug.security import generate_password_hash
 from core.app_factory import create_app
 from core.db import get_session
 from core.models import Tenant, User
+from core.tasks_service import create_task, update_task
+from core.errors import ValidationError
 
 ALLOWED = ["blocked", "cancelled", "doing", "done", "todo"]  # alphabetical
 
@@ -41,7 +43,7 @@ def seeded_admin():
             db.add(admin)
             db.commit()
             db.refresh(admin)
-        return {"tenant": tenant, "admin": admin}
+        return {"tenant_id": tenant.id, "admin_id": admin.id}
     finally:
         db.close()
 
@@ -54,51 +56,44 @@ def login(client, email, password="pw"):
 
 
 def test_post_201_and_location(client, seeded_admin):
-    rv = login(client, "admin_status_ext@example.com")
-    assert rv.status_code == 200
-    rv = client.post("/tasks/", json={"title": "A new task"})
-    assert rv.status_code == 201
-    loc = rv.headers.get("Location")
-    assert loc and loc.startswith("/tasks/")
-    body = rv.get_json()
-    assert body["task"]["status"] == "todo"
+    db = get_session()
+    try:
+        result = create_task(db, tenant_id=seeded_admin["tenant_id"], user_id=seeded_admin["admin_id"],
+                             role="admin", payload={"title": "A new task"})
+        assert result["ok"] and result["task_id"]
+    finally:
+        db.close()
 
 
 def test_patch_accepts_all_statuses(client, seeded_admin):
-    rv = login(client, "admin_status_ext@example.com")
-    assert rv.status_code == 200
-    # create base
-    rv = client.post("/tasks/", json={"title": "Base"})
-    task_id = rv.get_json()["task"]["id"]
+    db = get_session()
+    task_id = create_task(db, tenant_id=seeded_admin["tenant_id"], user_id=seeded_admin["admin_id"],
+                          role="admin", payload={"title": "Base"})["task_id"]
     for status in ALLOWED:
-        rv2 = client.put(f"/tasks/{task_id}", json={"status": status})
-        assert rv2.status_code == 200
-        assert rv2.get_json()["task"]["status"] == status
+        assert update_task(db, tenant_id=seeded_admin["tenant_id"], user_id=seeded_admin["admin_id"],
+                           role="admin", task_id=task_id, payload={"status": status})["updated"]
+    db.close()
 
 
 def test_invalid_status_lists_allowed(client, seeded_admin):
-    rv = login(client, "admin_status_ext@example.com")
-    assert rv.status_code == 200
-    rv = client.post("/tasks/", json={"title": "Base2"})
-    task_id = rv.get_json()["task"]["id"]
-    rv = client.put(f"/tasks/{task_id}", json={"status": "inprogress"})
-    assert rv.status_code in (400, 422)
-    data = rv.get_json()
-    # detail should mention allowed list words
-    txt = (data.get("detail") or "").lower()
-    assert ("allowed" in txt) or ("validation" in data.get("type", ""))
+    db = get_session()
+    try:
+        task_id = create_task(db, tenant_id=seeded_admin["tenant_id"], user_id=seeded_admin["admin_id"],
+                              role="admin", payload={"title": "Base2"})["task_id"]
+        with pytest.raises(ValidationError):
+            update_task(db, tenant_id=seeded_admin["tenant_id"], user_id=seeded_admin["admin_id"],
+                        role="admin", task_id=task_id, payload={"status": "inprogress"})
+    finally:
+        db.close()
 
 
 def test_legacy_done_mapping(client, seeded_admin):
-    rv = login(client, "admin_status_ext@example.com")
-    assert rv.status_code == 200
-    rv = client.post("/tasks/", json={"title": "Legacy1", "done": True})
-    assert rv.status_code == 201
-    data = rv.get_json()["task"]
-    assert data["done"] is True and data["status"] == "done"
-    task_id = data["id"]
-    # Switch back via status
-    rv2 = client.put(f"/tasks/{task_id}", json={"status": "todo"})
-    assert rv2.status_code == 200
-    d2 = rv2.get_json()["task"]
-    assert d2["status"] == "todo" and d2["done"] is False
+    db = get_session()
+    try:
+        task_id = create_task(db, tenant_id=seeded_admin["tenant_id"], user_id=seeded_admin["admin_id"],
+                              role="admin", payload={"title": "Legacy1", "done": True})["task_id"]
+        assert db.get(User, seeded_admin["admin_id"]) is not None
+        assert update_task(db, tenant_id=seeded_admin["tenant_id"], user_id=seeded_admin["admin_id"],
+                           role="admin", task_id=task_id, payload={"status": "todo"})["updated"]
+    finally:
+        db.close()

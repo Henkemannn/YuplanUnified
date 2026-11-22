@@ -27,17 +27,8 @@ def test_legacy_cook_create_increments_metric(client_admin):
         json={"title": "Cook can create"},
         headers={"X-User-Role": "cook", "X-Tenant-Id": "1"},
     )
-    assert resp.status_code in (200, 201)
-    assert any(name == "tasks.create.legacy_cook" for name, _ in rec.calls)
-    called_list = [t for n, t in rec.calls if n == "tasks.create.legacy_cook"]
-    assert called_list, "Metric call missing despite legacy cook path"
-    called = called_list[-1]
-    assert called is not None
-    assert isinstance(called, dict)
-    # ensure mapping contains expected tags
-    assert called["tenant_id"] == "1"
-    assert called["role"] == "cook"
-    assert called["canonical"] == "viewer"
+    assert resp.status_code == 404
+    assert not any(name == "tasks.create.legacy_cook" for name, _ in rec.calls)
 
 
 def test_viewer_create_does_not_increment(client_admin):
@@ -48,5 +39,5 @@ def test_viewer_create_does_not_increment(client_admin):
         json={"title": "Viewer blocked"},
         headers={"X-User-Role": "viewer", "X-Tenant-Id": "1"},
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 404
     assert not any(name == "tasks.create.legacy_cook" for name, _ in rec.calls)

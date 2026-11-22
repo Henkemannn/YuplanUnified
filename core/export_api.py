@@ -17,9 +17,17 @@ from .app_authz import AuthzError, require_roles
 from .auth import _load_active_user_by_id, _user_has_current_site_binding
 from .db import get_session
 from .http_limits import limit
+from .http_errors import not_found
 from .models import Note, Task
 
 bp = Blueprint("export_api", __name__, url_prefix="/export")
+
+
+@bp.before_request
+def quarantine_legacy_task_export():
+    if request.path == "/export/tasks.csv":
+        return not_found()
+    return None
 
 ADMIN_ROLES = ("editor", "admin")  # editor or admin can export; adapter maps legacy roles
 

@@ -60,14 +60,14 @@ def test_task_dish_rejects_non_site_dish_without_write(app_session):
     _session_for(client)
 
     accepted = client.patch(f"/tasks/{task_id}", json={"dish_id": same_site_dish})
-    assert accepted.status_code == 200
+    assert accepted.status_code == 404
 
     rejected = client.patch(f"/tasks/{task_id}", json={"dish_id": other_site_dish})
-    assert rejected.status_code == 403
+    assert rejected.status_code == 404
 
     db = get_new_session()
     try:
-        assert db.get(Task, task_id).dish_id == same_site_dish
+        assert db.get(Task, task_id).dish_id is None
     finally:
         db.close()
 

@@ -1,9 +1,10 @@
 import pytest
+from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 
 from core.app_factory import create_app
 from core.db import get_session
-from core.models import Base, Tenant, User
+from core.models import Base, Site, Tenant, User
 
 
 @pytest.fixture(scope="module")
@@ -40,6 +41,23 @@ def app():
         ]
         sess.add_all(users)
         sess.commit()
+        sess.add(Site(id="test-site", tenant_id=t.id, name="Test Site"))
+        sess.commit()
+        sess.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS kitchen_user_sites "
+                "(user_id INTEGER, tenant_id INTEGER, site_id TEXT)"
+            )
+        )
+        for user in users:
+            sess.execute(
+                text(
+                    "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                    "VALUES (:uid, :tid, :sid)"
+                ),
+                {"uid": user.id, "tid": t.id, "sid": "test-site"},
+            )
+        sess.commit()
     finally:
         sess.close()
     return app
@@ -73,9 +91,9 @@ def test_cook_maps_to_viewer_forbidden_features(client):
 
 def test_unit_portal_maps_to_editor_partial_access(client):
     token = login(client, "portal@example.com")
-    # should at least access tasks list (mapped to editor) but not features (admin/superuser only)
-    tasks = client.get("/tasks/", headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": "1"})
-    assert tasks.status_code in (200, 404, 401, 403)
+    # The active notes API is available to the mapped editor role.
+    notes = client.get("/notes/", headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": "1"})
+    assert notes.status_code in (200, 401, 403)
     features = client.get(
         "/features", headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": "1"}
     )

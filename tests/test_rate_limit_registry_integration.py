@@ -31,7 +31,8 @@ def _app(
 
 def _seed_session(client):
     from core.db import get_session
-    from core.models import User
+    from core.models import Site, User
+    from sqlalchemy import text
 
     db = get_session()
     try:
@@ -45,6 +46,22 @@ def _seed_session(client):
             user.is_active = True
             user.auth_version = 1
         db.commit()
+        if db.get(Site, "rate-registry-site") is None:
+            db.add(Site(id="rate-registry-site", tenant_id=1, name="Rate Registry Site"))
+            db.commit()
+        db.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS kitchen_user_sites "
+                "(user_id INTEGER, tenant_id INTEGER, site_id TEXT)"
+            )
+        )
+        db.execute(
+            text(
+                "INSERT OR REPLACE INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                "VALUES (1, 1, 'rate-registry-site')"
+            )
+        )
+        db.commit()
     finally:
         db.close()
     with client.session_transaction() as sess:
@@ -52,6 +69,7 @@ def _seed_session(client):
         sess["user_id"] = 1
         sess["auth_version"] = 1
         sess["role"] = "admin"
+        sess["site_id"] = "rate-registry-site"
 
 
 def test_export_uses_tenant_override(monkeypatch):
@@ -74,11 +92,16 @@ def test_export_uses_tenant_override(monkeypatch):
     r3 = client.get("/export/notes.csv")
     _ = r3.get_data()
     assert r3.status_code == 429
+    assert "Retry-After" in r3.headers
+    assert int(r3.headers["Retry-After"]) >= 0
+    data = r3.get_json()
+    assert data["status"] == 429
+    assert data["type"].endswith("/rate_limited")
     assert any(e[0] == "rate_limit.lookup" and e[1]["source"] == "tenant" for e in events)
 
 
 def test_export_uses_default_when_no_tenant_entry(monkeypatch):
-    app = _app(defaults={"export_tasks_csv": {"quota": 3, "per": 60}})
+    app = _app(defaults={"export_notes_csv": {"quota": 3, "per": 60}})
     events: list[tuple[str, dict[str, str]]] = []
     from core import metrics as metrics_mod
 
@@ -89,12 +112,14 @@ def test_export_uses_default_when_no_tenant_entry(monkeypatch):
     with app.test_client() as client:
         _seed_session(client)
         for _i in range(3):
-            r = client.get("/export/tasks.csv")
+            r = client.get("/export/notes.csv")
             assert r.status_code == 200
             _ = r.get_data()
-        r4 = client.get("/export/tasks.csv")
+        r4 = client.get("/export/notes.csv")
         _ = r4.get_data()
         assert r4.status_code == 429
+        assert "Retry-After" in r4.headers
+        assert r4.get_json()["type"].endswith("/rate_limited")
     assert any(e[0] == "rate_limit.lookup" and e[1]["source"] == "default" for e in events)
 
 

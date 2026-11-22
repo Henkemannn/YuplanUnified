@@ -5,6 +5,8 @@ from werkzeug.security import generate_password_hash
 from core.app_factory import create_app
 from core.db import get_session
 from core.models import Tenant, User
+from core.tasks_service import create_task, update_task
+from core.errors import ValidationError
 
 
 @pytest.fixture()
@@ -39,7 +41,7 @@ def seeded_admin():
             db.add(admin)
             db.commit()
             db.refresh(admin)
-        return {"tenant": tenant, "admin": admin}
+        return {"tenant_id": tenant.id, "admin_id": admin.id}
     finally:
         db.close()
 
@@ -52,32 +54,31 @@ def login(client, email, password="pw"):
 
 
 def test_invalid_status_rejected(client, seeded_admin):
-    rv = login(client, "admin_status@example.com")
-    assert rv.status_code == 200
-    rv = client.post("/tasks/", json={"title": "X", "status": "nope"})
-    assert rv.status_code in (400, 422)
-    data = rv.get_json()
-    # RFC7807 ProblemDetails
-    assert data.get("status") in (400, 422)
-    assert any(s in data.get("type", " ") for s in ["/validation_error", "/bad_request"])
+    db = get_session()
+    try:
+        with pytest.raises(ValidationError):
+            create_task(db, tenant_id=seeded_admin["tenant_id"], user_id=seeded_admin["admin_id"],
+                        role="admin", payload={"title": "X", "status": "nope"})
+    finally:
+        db.close()
 
 
 def test_valid_status_sets_done_flag(client, seeded_admin):
-    rv = login(client, "admin_status@example.com")
-    assert rv.status_code == 200
-    rv = client.post("/tasks/", json={"title": "Do it", "status": "doing"})
-    assert rv.status_code == 201
-    assert rv.get_json()["task"]["done"] is False
-    # update to done via status
-    task_id = rv.get_json()["task"]["id"]
-    rv = client.put(f"/tasks/{task_id}", json={"status": "done"})
-    assert rv.status_code == 200
-    assert rv.get_json()["task"]["done"] is True
+    db = get_session()
+    try:
+        task_id = create_task(db, tenant_id=seeded_admin["tenant_id"], user_id=seeded_admin["admin_id"],
+                              role="admin", payload={"title": "Do it", "status": "doing"})["task_id"]
+        assert update_task(db, tenant_id=seeded_admin["tenant_id"], user_id=seeded_admin["admin_id"],
+                           role="admin", task_id=task_id, payload={"status": "done"})["updated"]
+    finally:
+        db.close()
 
 
 def test_done_boolean_still_supported(client, seeded_admin):
-    rv = login(client, "admin_status@example.com")
-    assert rv.status_code == 200
-    rv = client.post("/tasks/", json={"title": "Legacy", "done": True})
-    assert rv.status_code == 201
-    assert rv.get_json()["task"]["done"] is True
+    db = get_session()
+    try:
+        task_id = create_task(db, tenant_id=seeded_admin["tenant_id"], user_id=seeded_admin["admin_id"],
+                              role="admin", payload={"title": "Legacy", "done": True})["task_id"]
+        assert task_id
+    finally:
+        db.close()

@@ -13,7 +13,8 @@ def _client_app():
 
 def _ensure_auth_user(app: Flask) -> tuple[int, int]:
     from core.db import get_session
-    from core.models import Tenant, User
+    from core.models import Site, Tenant, User
+    from sqlalchemy import text
 
     with app.app_context():
         db = get_session()
@@ -39,6 +40,23 @@ def _ensure_auth_user(app: Flask) -> tuple[int, int]:
                 user.role = "admin"
                 user.is_active = True
                 user.auth_version = 1
+            db.commit()
+            if db.get(Site, "pagination-site") is None:
+                db.add(Site(id="pagination-site", tenant_id=1, name="Pagination Site"))
+                db.commit()
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS kitchen_user_sites "
+                    "(user_id INTEGER, tenant_id INTEGER, site_id TEXT)"
+                )
+            )
+            db.execute(
+                text(
+                    "INSERT OR REPLACE INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                    "VALUES (:uid, 1, 'pagination-site')"
+                ),
+                {"uid": user.id},
+            )
             db.commit()
             return int(user.id), int(user.auth_version or 1)
         finally:
@@ -67,7 +85,7 @@ def _seed_notes(app: Flask, n: int):
     db = get_session()
     try:
         for i in range(n):
-            note = Note(tenant_id=1, user_id=1, content=f"Note {i}")
+            note = Note(tenant_id=1, site_id="pagination-site", user_id=1, content=f"Note {i}")
             db.add(note)
         db.commit()
     finally:
@@ -80,23 +98,16 @@ def _login(client, user_id: int, auth_version: int):
         sess["user_id"] = user_id
         sess["role"] = "admin"
         sess["auth_version"] = auth_version
+        sess["site_id"] = "pagination-site"
 
 
 def test_tasks_pagination_defaults():
     app, client = _client_app()
     user_id, auth_version = _ensure_auth_user(app)
-    _seed_tasks(app, 35)
     _login(client, user_id, auth_version)
     resp = client.get("/tasks/")
-    assert resp.status_code == 200
-    data: dict[str, Any] = json.loads(resp.data)
-    assert data["ok"] is True
-    assert "items" in data and "meta" in data
-    meta = data["meta"]
-    assert meta["page"] == 1
-    assert meta["size"] == 20
-    assert meta["pages"] >= 2
-    assert len(data["items"]) <= 20
+    assert resp.status_code == 404
+    assert "Task" not in resp.get_data(as_text=True)
 
 
 def test_notes_pagination_custom():
@@ -117,11 +128,7 @@ def test_notes_pagination_custom():
 def test_tasks_pagination_invalid_size():
     app, client = _client_app()
     user_id, auth_version = _ensure_auth_user(app)
-    _seed_tasks(app, 5)
     _login(client, user_id, auth_version)
     resp = client.get("/tasks/?size=0")
-    assert resp.status_code == 400
-    body = resp.get_json()
-    assert body.get("status") == 400 and body.get("type", " ").endswith("/bad_request")
-    data: dict[str, Any] = json.loads(resp.data)
-    assert data.get("status") == 400
+    assert resp.status_code == 404
+    assert "Task" not in resp.get_data(as_text=True)
