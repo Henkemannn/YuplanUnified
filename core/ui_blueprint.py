@@ -8,7 +8,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.security import check_password_hash, generate_password_hash
 from .password_policy import PasswordPolicyError, validate_new_password
 
-from .auth import require_roles
+from .auth import (
+    _load_active_user_by_id,
+    _user_has_current_site_binding,
+    require_roles,
+)
 from .config import auth_bypass_allowed
 from .db import get_session
 from .models import Note, Task, User
@@ -1628,6 +1632,45 @@ def cook_week_overview_unified(year: int, week: int):
 
 SAFE_UI_ROLES = ("superuser", "admin", "cook", "unit_portal")
 ADMIN_ROLES = ("admin", "superuser")
+
+
+def _authorize_report_scope(site_id: str | None, department_id: str | None = None) -> tuple[str, str]:
+    """Resolve and authorize a report site before reading any report data."""
+    requested_site_id = (site_id or "").strip() or str(session.get("site_id") or "").strip()
+    tenant_id = session.get("tenant_id")
+    user_id = session.get("user_id")
+    if not requested_site_id or tenant_id is None or user_id is None:
+        abort(403)
+
+    db = get_session()
+    try:
+        site_row = db.execute(
+            text("SELECT id, name, tenant_id FROM sites WHERE id=:site_id"),
+            {"site_id": requested_site_id},
+        ).fetchone()
+        if not site_row:
+            abort(404)
+        if site_row[2] is None or int(site_row[2]) != int(tenant_id):
+            abort(403)
+
+        user = _load_active_user_by_id(db, user_id)
+        if user is None or not _user_has_current_site_binding(db, user, requested_site_id):
+            abort(403)
+
+        if department_id:
+            department = db.execute(
+                text("SELECT 1 FROM departments WHERE id=:department_id AND site_id=:site_id"),
+                {"department_id": department_id, "site_id": requested_site_id},
+            ).fetchone()
+            if not department:
+                department_exists = db.execute(
+                    text("SELECT 1 FROM departments WHERE id=:department_id"),
+                    {"department_id": department_id},
+                ).fetchone()
+                abort(403 if department_exists else 404)
+        return str(site_row[0]), str(site_row[1])
+    finally:
+        db.close()
 COOK_ALLOWED_ROLES = ("cook", "admin", "superuser", "unit_portal")
 ACCOUNT_ALLOWED_ROLES = ("admin", "superuser", "kitchen", "cook", "unit_portal")
 
@@ -6121,6 +6164,7 @@ def weekview_overview_ui():
 def weekview_report_ui():  # TODO Phase 2.E.1: real aggregation; currently placeholder
     site_id = (request.args.get("site_id") or "").strip()
     department_id = (request.args.get("department_id") or "").strip() or None
+    site_id, site_name = _authorize_report_scope(site_id, department_id)
     # Default year/week to current ISO week if missing
     today = _date.today()
     iso = today.isocalendar()
@@ -6136,17 +6180,6 @@ def weekview_report_ui():  # TODO Phase 2.E.1: real aggregation; currently place
         return jsonify({"error": "bad_request", "message": "Invalid week"}), 400
     db = get_session()
     try:
-        site_name = None
-        if site_id:
-            row = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
-            site_name = row[0] if row else None
-        else:
-            # Strict isolation: require active site; redirect handled by caller routes
-            site_id = None
-            site_name = None
-        if not site_name:
-            # Allow unknown site_id for report UI; render empty report
-            site_name = site_id or ""
         departments: list[tuple[str, str]] = []
         if department_id:
             r = db.execute(text("SELECT id, name FROM departments WHERE id=:d AND site_id=:s"), {"d": department_id, "s": site_id}).fetchone()
@@ -6226,13 +6259,9 @@ def reports_weekly():
     from .context import get_active_context as _get_ctx
     ctx = _get_ctx()
     if not site_id:
-        # Prefer active context site id; if missing, redirect to selector (strict scoping)
         site_id = ctx.get("site_id") or ""
         if not site_id:
-            try:
-                return redirect(url_for("ui.select_site", next=request.url))
-            except Exception:
-                return jsonify({"error": "bad_request", "message": "Ingen site vald"}), 400
+            abort(403)
     try:
         year = int(request.args.get("year", ""))
         week = int(request.args.get("week", ""))
@@ -6241,21 +6270,7 @@ def reports_weekly():
         today = date.today()
         iso = today.isocalendar()
         year, week = iso[0], iso[1]
-    # Resolve site name
-    db = get_session()
-    try:
-        row = db.execute(text("SELECT name FROM sites WHERE id = :id"), {"id": site_id}).fetchone()
-        site_name = row[0] if row else None
-        if not site_name:
-            fallback = db.execute(text("SELECT id, name FROM sites ORDER BY name LIMIT 1")).fetchone()
-            if fallback:
-                site_id = str(fallback[0])
-                site_name = fallback[1]
-                g.site_context_banner = True
-            else:
-                return jsonify({"error": "not_found", "message": "Site not found"}), 404
-    finally:
-        db.close()
+    site_id, site_name = _authorize_report_scope(site_id, request.args.get("department_id"))
     tid = session.get("tenant_id") or 1
     role = session.get("role")
     report_service = ReportService()
@@ -6444,13 +6459,11 @@ def reports_weekly_csv():
     if week < 1 or week > 53:
         return jsonify({"error": "bad_request", "message": "Invalid week"}), 400
 
+    site_id, site_name = _authorize_report_scope(site_id)
+
     # Resolve site and departments (same logic as HTML report)
     db = get_session()
     try:
-        row = db.execute(text("SELECT name FROM sites WHERE id = :id"), {"id": site_id}).fetchone()
-        site_name = row[0] if row else None
-        if not site_name:
-            return jsonify({"error": "not_found", "message": "Site not found"}), 404
         deps = db.execute(
             text(
                 "SELECT id, name FROM departments "
@@ -6617,13 +6630,11 @@ def reports_weekly_xlsx():
     if week < 1 or week > 53:
         return jsonify({"error": "bad_request", "message": "Invalid week"}), 400
 
+    site_id, site_name = _authorize_report_scope(site_id)
+
     # Resolve site and departments (mirror HTML report)
     db = get_session()
     try:
-        row = db.execute(text("SELECT name FROM sites WHERE id = :id"), {"id": site_id}).fetchone()
-        site_name = row[0] if row else None
-        if not site_name:
-            return jsonify({"error": "not_found", "message": "Site not found"}), 404
         deps = db.execute(
             text(
                 "SELECT id, name FROM departments "
@@ -6692,15 +6703,7 @@ def reports_weekly_pdf():
     if week < 1 or week > 53:
         return jsonify({"error": "bad_request", "message": "Invalid week"}), 400
 
-    # Resolve site name
-    db = get_session()
-    try:
-        row = db.execute(text("SELECT name FROM sites WHERE id = :id"), {"id": site_id}).fetchone()
-        site_name = row[0] if row else None
-        if not site_name:
-            return jsonify({"error": "not_found", "message": "Site not found"}), 404
-    finally:
-        db.close()
+    site_id, site_name = _authorize_report_scope(site_id)
 
     tid = session.get("tenant_id")
     role = session.get("role")

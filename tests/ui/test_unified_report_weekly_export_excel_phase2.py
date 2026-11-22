@@ -1,33 +1,80 @@
+import uuid
+
 from sqlalchemy import text
 
-HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
+from core.models import User
 
 
-def _seed_site_and_department():
+def _bound_client(app_session):
     from core.db import get_session
+
     conn = get_session()
     try:
-        site = conn.execute(text("SELECT id FROM sites WHERE id='00000000-0000-0000-0000-000000000000'"))
-        if not site.fetchone():
-            conn.execute(text("INSERT INTO sites (id, name) VALUES ('00000000-0000-0000-0000-000000000000', 'Test Site')"))
-        dep = conn.execute(text("SELECT id FROM departments WHERE id='00000000-0000-0000-0000-000000000001'"))
-        if not dep.fetchone():
-            conn.execute(text("INSERT INTO departments (id, site_id, name, resident_count_mode, resident_count_fixed) VALUES ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000000', 'Avd Alpha', 'fixed', 5)"))
+        conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+                "user_id INTEGER NOT NULL, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL, "
+                "UNIQUE(user_id, tenant_id, site_id))"
+            )
+        )
+        site_id = "00000000-0000-0000-0000-000000000000"
+        department_id = "00000000-0000-0000-0000-000000000001"
+        conn.execute(
+            text(
+                "INSERT OR IGNORE INTO sites (id, tenant_id, name) "
+                "VALUES (:id, 1, 'Test Site')"
+            ),
+            {"id": site_id},
+        )
+        conn.execute(text("UPDATE sites SET tenant_id=1 WHERE id=:id"), {"id": site_id})
+        conn.execute(
+            text(
+                "INSERT OR IGNORE INTO departments "
+                "(id, site_id, name, resident_count_mode, resident_count_fixed) "
+                "VALUES (:id, :site_id, 'Avd Alpha', 'fixed', 5)"
+            ),
+            {"id": department_id, "site_id": site_id},
+        )
+        user = User(
+            tenant_id=1,
+            email=f"report-phase2-{uuid.uuid4().hex}@example.test",
+            password_hash="fixture-only",
+            role="admin",
+            auth_version=1,
+        )
+        conn.add(user)
+        conn.flush()
+        conn.execute(
+            text(
+                "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                "VALUES (:user_id, 1, :site_id)"
+            ),
+            {"user_id": user.id, "site_id": site_id},
+        )
         conn.commit()
+        client = app_session.test_client()
+        with client.session_transaction() as session:
+            session.update(
+                {
+                    "user_id": user.id,
+                    "role": "admin",
+                    "tenant_id": 1,
+                    "site_id": site_id,
+                    "auth_version": 1,
+                }
+            )
+        return client, site_id
     finally:
         conn.close()
 
 
 def test_weekly_excel_export_happy_path(app_session):
-    client = app_session.test_client()
-    _seed_site_and_department()
+    client, site_id = _bound_client(app_session)
 
-    site_id = "00000000-0000-0000-0000-000000000000"
     year = 2025
     week = 48
     resp = client.get(
         f"/ui/reports/weekly.xlsx?site_id={site_id}&year={year}&week={week}",
-        headers=HEADERS,
     )
     assert resp.status_code == 200
     assert resp.headers.get("Content-Type") == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -40,15 +87,12 @@ def test_weekly_excel_export_happy_path(app_session):
 
 
 def test_weekly_excel_export_no_data(app_session):
-    client = app_session.test_client()
-    _seed_site_and_department()
+    client, site_id = _bound_client(app_session)
 
-    site_id = "00000000-0000-0000-0000-000000000000"
     year = 2099
     week = 1
     resp = client.get(
         f"/ui/reports/weekly.xlsx?site_id={site_id}&year={year}&week={week}",
-        headers=HEADERS,
     )
     assert resp.status_code == 200
     body = resp.data

@@ -1,6 +1,8 @@
 import uuid
 import pytest
 
+from core.models import User
+
 
 def _h(role):
     return {"X-User-Role": role, "X-Tenant-Id": "1"}
@@ -32,11 +34,52 @@ def test_weekview_report_api_and_ui_skeleton(client_admin):
         create_all()
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0)"), {"i": site_id, "n": "TestSite"})
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+                    "user_id INTEGER NOT NULL, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL, "
+                    "UNIQUE(user_id, tenant_id, site_id))"
+                )
+            )
+            db.execute(
+                text(
+                    "INSERT INTO sites(id, tenant_id, name, version) "
+                    "VALUES(:i,1,:n,0)"
+                ),
+                {"i": site_id, "n": "TestSite"},
+            )
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',0,0)"), {"i": dep_id, "s": site_id, "n": "Avd X"})
+            user = User(
+                tenant_id=1,
+                email=f"report-skeleton-{uuid.uuid4().hex}@example.test",
+                password_hash="fixture-only",
+                role="admin",
+                auth_version=1,
+            )
+            db.add(user)
+            db.flush()
+            db.execute(
+                text(
+                    "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                    "VALUES (:user_id, 1, :site_id)"
+                ),
+                {"user_id": user.id, "site_id": site_id},
+            )
+            user_id = user.id
             db.commit()
         finally:
             db.close()
+
+    with client_admin.session_transaction() as session:
+        session.update(
+            {
+                "user_id": user_id,
+                "role": "admin",
+                "tenant_id": 1,
+                "site_id": site_id,
+                "auth_version": 1,
+            }
+        )
 
     # API single department
     r_api = client_admin.get(f"/api/reports/weekview?site_id={site_id}&year={year}&week={week}&department_id={dep_id}", headers=_h("admin"))
