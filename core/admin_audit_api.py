@@ -12,7 +12,7 @@ bp = Blueprint("admin_audit", __name__, url_prefix="/admin")
 
 
 @bp.get("/audit")
-@require_roles("admin")
+@require_roles("superuser")
 def list_audit_events():  # type: ignore[return-value]
     args = request.args
     tenant_id = args.get("tenant_id")

@@ -26,7 +26,7 @@ from .deprecation_warn import should_warn, warn_phase_enabled
 from .http_errors import forbidden as forbidden_response
 from .errors import APIError, NotFoundError
 from .metrics import increment
-from .models import Task
+from .models import Dish, Site, Task
 from .pagination import make_page_response, parse_page_params
 from .rate_limit import RateLimitExceeded, allow, rate_limited_response
 from .roles import to_canonical
@@ -53,6 +53,27 @@ def _tenant_id():
     if not tid:
         raise ValueError("tenant missing")
     return tid
+
+
+def _validate_dish_for_site(db, *, tenant_id: int, site_id: str | None, dish_id: object) -> int:
+    requested_site = str(site_id or "").strip()
+    if not requested_site:
+        raise APIError("site binding required", error="site_binding_required", status=403)
+    site = db.query(Site).filter(Site.id == requested_site, Site.tenant_id == tenant_id).first()
+    if site is None:
+        raise APIError("site binding invalid", error="site_binding_invalid", status=403)
+    try:
+        requested_dish = int(dish_id)
+    except (TypeError, ValueError):
+        raise APIError("dish not found", error="dish_not_found", status=400) from None
+    dish = db.query(Dish).filter(Dish.id == requested_dish).first()
+    if dish is None:
+        raise APIError("dish not found", error="dish_not_found", status=400)
+    if int(dish.tenant_id or 0) != int(tenant_id):
+        raise APIError("dish tenant mismatch", error="dish_tenant_mismatch", status=403)
+    if str(dish.site_id or "") != requested_site:
+        raise APIError("dish site mismatch", error="dish_site_mismatch", status=403)
+    return requested_dish
 
 
 def _serialize(t: Task):
@@ -214,6 +235,13 @@ def get_task(task_id: int):
         user_id = session.get("user_id")
         if t.private_flag and t.creator_user_id != user_id and role not in ("admin", "superuser"):
             raise AuthzError("forbidden", required="admin")
+        if t.dish_id is not None:
+            _validate_dish_for_site(
+                db,
+                tenant_id=int(tid),
+                site_id=session.get("site_id"),
+                dish_id=t.dish_id,
+            )
         return jsonify({"ok": True, "task": _serialize(t)})
     finally:
         db.close()
@@ -250,6 +278,14 @@ def update_task(task_id: int) -> TaskUpdateResponse | Response:
         except RateLimitExceeded:
             return rate_limited_response()
         data = request.get_json(silent=True) or {}
+        validated_dish_id = None
+        if "dish_id" in data and data.get("dish_id") is not None:
+            validated_dish_id = _validate_dish_for_site(
+                db,
+                tenant_id=int(tid),
+                site_id=session.get("site_id"),
+                dish_id=data.get("dish_id"),
+            )
         if "title" in data:
             title = (data.get("title") or "").strip()
             if not title:
@@ -288,7 +324,7 @@ def update_task(task_id: int) -> TaskUpdateResponse | Response:
         if "menu_id" in data:
             t.menu_id = data.get("menu_id")
         if "dish_id" in data:
-            t.dish_id = data.get("dish_id")
+            t.dish_id = validated_dish_id
         # touch updated_at if column exists
         if hasattr(t, "updated_at"):
             from contextlib import suppress

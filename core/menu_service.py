@@ -5,13 +5,14 @@ from typing import Any, TypedDict
 
 import os
 
+from sqlalchemy import inspect as sqlalchemy_inspect
 from sqlalchemy import text
 from flask import current_app, g, has_app_context
 
 from .db import get_new_session
 from .models import Dish, Menu, MenuVariant
 from datetime import date, datetime, timezone
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 
 _MISMATCH_LOGGED: set[str] = set()
@@ -210,6 +211,18 @@ class MenuServiceDB:
         if not row or row[0] is None:
             return None
         return int(row[0])
+
+    def _verified_site_tenant_id(self, db, site_id: str) -> int | None:
+        if not site_id:
+            return None
+        row = db.execute(
+            text(
+                "SELECT tenant_id FROM sites "
+                "WHERE id=:sid AND tenant_id IS NOT NULL LIMIT 1"
+            ),
+            {"sid": str(site_id).strip()},
+        ).fetchone()
+        return int(row[0]) if row and row[0] is not None else None
 
     def _resolve_site_tenant_id(self, db, site_id: str, fallback_tenant_id: int | None) -> int | None:
         site_tenant_id = self._site_tenant_id(db, site_id)
@@ -463,98 +476,242 @@ class MenuServiceDB:
             db.close()
 
     def create_or_get_menu(self, tenant_id: int, site_id: str, week: int, year: int) -> Menu:
-        if not site_id:
-            raise ValueError("site_id required")
         db = get_new_session()
         try:
-            site_tenant_id = self._resolve_site_tenant_id(db, site_id, tenant_id)
-            if site_tenant_id is None:
-                raise ValueError("site_tenant_required")
-            existing: Menu | None = (
+            menu = self._create_or_get_menu_in_session(db, tenant_id, site_id, week, year)
+            db.commit()
+            db.refresh(menu)
+            return menu
+        except IntegrityError:
+            db.rollback()
+            site_tenant_id = self._verified_site_tenant_id(db, site_id)
+            exact_match: Menu | None = (
                 db.query(Menu)
-                .filter_by(site_id=site_id, week=week, year=year)
+                .filter_by(
+                    tenant_id=site_tenant_id,
+                    site_id=site_id,
+                    week=week,
+                    year=year,
+                )
                 .first()
             )
-            if existing is not None:
-                if existing.tenant_id != site_tenant_id:
-                    env_val = (os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").lower()
-                    if env_val in ("dev", "development"):
-                        existing.tenant_id = site_tenant_id
-                        db.commit()
-                        db.refresh(existing)
-                    else:
-                        self._log_tenant_mismatch_once(
-                            action="create_or_get_menu",
-                            menu_id=existing.id,
-                            site_id=site_id,
-                            menu_tenant_id=int(existing.tenant_id) if existing.tenant_id is not None else None,
-                            site_tenant_id=int(site_tenant_id) if site_tenant_id is not None else None,
-                        )
-                        raise ValueError(
-                            f"menu_tenant_mismatch: menu_id={existing.id} site_id={site_id} "
-                            f"menu_tenant_id={existing.tenant_id} site_tenant_id={site_tenant_id}"
-                        )
-                return existing
+            if exact_match is not None:
+                return exact_match
+            legacy_conflict: Menu | None = (
+                db.query(Menu)
+                .filter_by(tenant_id=site_tenant_id, week=week, year=year)
+                .first()
+            )
+            if legacy_conflict is not None:
+                raise ValueError(
+                    f"menu_site_conflict: menu_id={legacy_conflict.id} "
+                    f"menu_site_id={legacy_conflict.site_id} requested_site_id={site_id}"
+                )
+            raise
+        finally:
+            db.close()
 
-            # Legacy schema compatibility: some environments still enforce
-            # UNIQUE(tenant_id, week, year) without site_id in the constraint.
-            # In that case, reuse the tenant+week+year row and bind it to the
-            # requested site to avoid insert IntegrityError during menu import.
+    def _create_or_get_menu_in_session(
+        self,
+        db,
+        tenant_id: int,
+        site_id: str,
+        week: int,
+        year: int,
+    ) -> Menu:
+        if not site_id:
+            raise ValueError("site_id required")
+        site_tenant_id = self._resolve_site_tenant_id(db, site_id, tenant_id)
+        if site_tenant_id is None:
+            raise ValueError("site_tenant_required")
+        if int(site_tenant_id) != int(tenant_id):
+            raise ValueError(
+                f"site_tenant_mismatch: site_id={site_id} "
+                f"site_tenant_id={site_tenant_id} tenant_id={tenant_id}"
+            )
+        existing: Menu | None = (
+            db.query(Menu)
+            .filter_by(
+                tenant_id=site_tenant_id,
+                site_id=site_id,
+                week=week,
+                year=year,
+            )
+            .first()
+        )
+        if existing is not None:
+            return existing
+        conflicting_tenant_menu: Menu | None = (
+            db.query(Menu)
+            .filter_by(site_id=site_id, week=week, year=year)
+            .first()
+        )
+        if conflicting_tenant_menu is not None:
+            self._log_tenant_mismatch_once(
+                action="create_or_get_menu",
+                menu_id=conflicting_tenant_menu.id,
+                site_id=site_id,
+                menu_tenant_id=(
+                    int(conflicting_tenant_menu.tenant_id)
+                    if conflicting_tenant_menu.tenant_id is not None
+                    else None
+                ),
+                site_tenant_id=int(site_tenant_id),
+            )
+            raise ValueError(
+                f"menu_tenant_mismatch: menu_id={conflicting_tenant_menu.id} "
+                f"site_id={site_id} menu_tenant_id={conflicting_tenant_menu.tenant_id} "
+                f"site_tenant_id={site_tenant_id}"
+            )
+
+        # Legacy schemas may still enforce UNIQUE(tenant_id, week, year)
+        # without site_id. Never rebind that row to another site.
+        if self._has_legacy_menu_uniqueness(db):
             legacy_tenant_week: Menu | None = (
                 db.query(Menu)
                 .filter_by(tenant_id=site_tenant_id, week=week, year=year)
                 .first()
             )
             if legacy_tenant_week is not None:
-                current_site = str(legacy_tenant_week.site_id or "").strip()
-                if current_site != site_id:
-                    legacy_tenant_week.site_id = site_id
-                    legacy_tenant_week.tenant_id = site_tenant_id
-                    db.commit()
-                    db.refresh(legacy_tenant_week)
-                return legacy_tenant_week
-
-            legacy: Menu | None = (
-                db.query(Menu)
-                .filter_by(tenant_id=site_tenant_id, site_id=None, week=week, year=year)
-                .first()
-            )
-            if legacy is not None:
-                legacy.site_id = site_id
-                legacy.tenant_id = site_tenant_id
-                db.commit()
-                db.refresh(legacy)
-                return legacy
-            new_menu = Menu(
-                tenant_id=site_tenant_id,
-                site_id=site_id,
-                week=week,
-                year=year,
-                updated_at=datetime.now(timezone.utc),
-            )
-            db.add(new_menu)
-            try:
-                db.commit()
-            except IntegrityError:
-                db.rollback()
-                fallback: Menu | None = (
-                    db.query(Menu)
-                    .filter_by(tenant_id=site_tenant_id, week=week, year=year)
-                    .first()
+                raise ValueError(
+                    f"menu_site_conflict: menu_id={legacy_tenant_week.id} "
+                    f"menu_site_id={legacy_tenant_week.site_id} requested_site_id={site_id}"
                 )
-                if fallback is None:
-                    raise
-                current_site = str(fallback.site_id or "").strip()
-                if current_site != site_id:
-                    fallback.site_id = site_id
-                    fallback.tenant_id = site_tenant_id
-                    db.commit()
-                    db.refresh(fallback)
-                return fallback
-            db.refresh(new_menu)
-            return new_menu
+        new_menu = Menu(
+            tenant_id=site_tenant_id,
+            site_id=site_id,
+            week=week,
+            year=year,
+            updated_at=datetime.now(timezone.utc),
+        )
+        db.add(new_menu)
+        db.flush()
+        return new_menu
+
+    def set_variant_atomic(
+        self,
+        tenant_id: int,
+        site_id: str,
+        week: int,
+        year: int,
+        day: str,
+        meal: str,
+        variant_type: str,
+        dish_id: int | None,
+        dish_name: str | None = None,
+    ) -> tuple[int, int]:
+        db = get_new_session()
+        try:
+            menu = self._create_or_get_menu_in_session(
+                db, tenant_id, site_id, week, year
+            )
+            mv = self._set_variant_in_session(
+                db=db,
+                tenant_id=tenant_id,
+                site_id=site_id,
+                menu=menu,
+                day=day,
+                meal=meal,
+                variant_type=variant_type,
+                dish_id=dish_id,
+                dish_name=dish_name,
+            )
+            db.commit()
+            return int(menu.id), int(mv.id)
+        except (ValueError, IntegrityError, SQLAlchemyError):
+            db.rollback()
+            raise
         finally:
             db.close()
+
+    def _resolve_site_dish(
+        self,
+        db,
+        *,
+        tenant_id: int,
+        site_id: str,
+        dish_id: int | None,
+        dish_name: str | None,
+    ) -> int | None:
+        if dish_id is not None:
+            dish = db.query(Dish).filter_by(id=dish_id).first()
+            if dish is None:
+                raise ValueError("dish_not_found")
+            if int(dish.tenant_id or 0) != int(tenant_id):
+                raise ValueError("dish_tenant_mismatch")
+            if str(dish.site_id or "") != str(site_id):
+                raise ValueError("dish_site_mismatch")
+            return int(dish.id)
+        if not dish_name:
+            return None
+        dish = (
+            db.query(Dish)
+            .filter_by(tenant_id=tenant_id, site_id=site_id, name=dish_name)
+            .first()
+        )
+        if dish is None:
+            dish = Dish(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                name=dish_name,
+                category=None,
+            )
+            db.add(dish)
+            db.flush()
+        return int(dish.id)
+
+    def _set_variant_in_session(
+        self,
+        *,
+        db,
+        tenant_id: int,
+        site_id: str,
+        menu: Menu,
+        day: str,
+        meal: str,
+        variant_type: str,
+        dish_id: int | None,
+        dish_name: str | None = None,
+    ) -> MenuVariant:
+        if (
+            int(menu.tenant_id or 0) != int(tenant_id)
+            or str(menu.site_id or "") != str(site_id)
+        ):
+            raise ValueError("menu_site_mismatch")
+        if self._verified_site_tenant_id(db, site_id) != int(tenant_id):
+            raise ValueError("site_tenant_mismatch")
+        resolved_dish_id = self._resolve_site_dish(
+            db,
+            tenant_id=tenant_id,
+            site_id=site_id,
+            dish_id=dish_id,
+            dish_name=dish_name,
+        )
+        values = {
+            "menu_id": menu.id,
+            "day": day.strip(),
+            "meal": meal.strip(),
+            "variant_type": variant_type.strip(),
+        }
+        mv = db.query(MenuVariant).filter_by(**values).first()
+        if mv is None:
+            mv = MenuVariant(**values, dish_id=resolved_dish_id)
+            db.add(mv)
+        else:
+            mv.dish_id = resolved_dish_id
+        return mv
+
+    @staticmethod
+    def _has_legacy_menu_uniqueness(db) -> bool:
+        identity = {"tenant_id", "week", "year"}
+        inspector = sqlalchemy_inspect(db.bind)
+        for constraint in inspector.get_unique_constraints("menus"):
+            if set(constraint.get("column_names") or ()) == identity:
+                return True
+        for index in inspector.get_indexes("menus"):
+            if index.get("unique") and set(index.get("column_names") or ()) == identity:
+                return True
+        return False
 
     def set_variant(
         self,
@@ -574,22 +731,21 @@ class MenuServiceDB:
             menu = db.query(Menu).filter_by(id=menu_id).first()
             if not menu:
                 raise ValueError("menu not found")
-            if int(menu.tenant_id or 0) != int(tenant_id):
-                raise ValueError("menu_tenant_mismatch")
-            mv = (
-                db.query(MenuVariant)
-                .filter_by(menu_id=menu_id, day=day, meal=meal, variant_type=variant_type)
-                .first()
+            mv = self._set_variant_in_session(
+                db=db,
+                tenant_id=tenant_id,
+                site_id=str(menu.site_id or ""),
+                menu=menu,
+                day=day,
+                meal=meal,
+                variant_type=variant_type,
+                dish_id=dish_id,
             )
-            if mv:
-                mv.dish_id = dish_id
-            else:
-                mv = MenuVariant(
-                    menu_id=menu_id, day=day, meal=meal, variant_type=variant_type, dish_id=dish_id
-                )
-                db.add(mv)
             db.commit()
             return mv.id
+        except (ValueError, IntegrityError, SQLAlchemyError):
+            db.rollback()
+            raise
         finally:
             db.close()
 

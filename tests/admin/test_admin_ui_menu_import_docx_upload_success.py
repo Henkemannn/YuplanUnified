@@ -7,6 +7,8 @@ try:
 except Exception:  # pragma: no cover
     docx = None  # type: ignore
 
+from tests.admin.test_admin_f01a_scope import bind_current_test_site
+
 ADMIN_HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 
@@ -27,6 +29,7 @@ def _build_minimal_docx() -> bytes:
 @pytest.mark.skipif(docx is None, reason="python-docx not installed")
 def test_docx_upload_returns_success(client_admin) -> None:
     client: FlaskClient = client_admin
+    bind_current_test_site(client.application, client)
     data = {"menu_file": (BytesIO(_build_minimal_docx()), "test_menu.docx")}
     resp = client.post(
         "/ui/admin/menu-import/upload",

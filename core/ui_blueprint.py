@@ -5777,16 +5777,27 @@ def admin_menu_import_week_save(year: int, week: int):
     try:
         from admin.ui_blueprint import admin_menu_import_week_save as _impl  # type: ignore
         return _impl(year, week)  # type: ignore[misc]
-    except Exception:
+    except (ImportError, AttributeError):
         # Minimal fallback mirroring Phase 9 expectations
         from flask import redirect, url_for, flash
         from core.menu_service import MenuServiceDB
         from core.db import get_session
         from core.models import Dish, MenuVariant, Menu
         from core.etag_utils import validate_etag
+        from admin.ui_blueprint import (
+            _MenuImportSiteForbidden,
+            _resolve_menu_import_site_context,
+        )
 
         tenant_id = 1
-        site_id = request.args.get("site_id") or session.get("site_id")
+        try:
+            site_id, site_tenant_id = _resolve_menu_import_site_context()
+        except _MenuImportSiteForbidden:
+            return jsonify({"ok": False, "error": "site_forbidden"}), 403
+        if not site_id or site_tenant_id is None:
+            flash("Saknar verifierad site för meny.", "warning")
+            return redirect(url_for("ui.admin_menu_import_list"))
+        tenant_id = int(site_tenant_id)
         menu_service = MenuServiceDB()
         week_view = menu_service.get_week_view(tenant_id, site_id, week, year)
         if not week_view or not week_view.get("menu_id"):
@@ -5827,19 +5838,36 @@ def admin_menu_import_week_save(year: int, week: int):
                                 mv.dish_id = None
                             else:
                                 # Non-empty -> ensure dish exists (trimmed)
-                                dish = db.query(Dish).filter_by(tenant_id=tenant_id, name=val).first()
+                                dish = db.query(Dish).filter_by(
+                                    tenant_id=tenant_id,
+                                    site_id=site_id,
+                                    name=val,
+                                ).first()
                                 if not dish:
-                                    dish = Dish(tenant_id=tenant_id, name=val, category=None)
+                                    dish = Dish(
+                                        tenant_id=tenant_id,
+                                        site_id=site_id,
+                                        name=val,
+                                        category=None,
+                                    )
                                     db.add(dish)
                                     db.flush()
                                 mv.dish_id = dish.id
                         updates += 1
             # Bump menu updated_at to change ETag
             menu_obj = db.query(Menu).filter_by(id=menu_id).first()
+            if menu_obj and (
+                int(menu_obj.tenant_id or 0) != tenant_id
+                or str(menu_obj.site_id or "") != str(site_id)
+            ):
+                raise ValueError("menu_site_mismatch")
             if menu_obj:
                 from datetime import datetime, timezone
                 menu_obj.updated_at = datetime.now(timezone.utc)
             db.commit()
+        except Exception:
+            db.rollback()
+            raise
         finally:
             db.close()
 

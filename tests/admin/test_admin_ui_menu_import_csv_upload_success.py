@@ -2,11 +2,14 @@ from flask.testing import FlaskClient
 from io import BytesIO
 import os
 
+from tests.admin.test_admin_f01a_scope import bind_current_test_site
+
 ADMIN_HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 
 def test_csv_upload_returns_success(client_admin) -> None:
     client: FlaskClient = client_admin
+    bind_current_test_site(client.application, client)
     # Load fixture CSV
     fixture_path = os.path.join(os.path.dirname(__file__), "..", "fixtures", "sample_menu.csv")
     with open(fixture_path, "rb") as f:

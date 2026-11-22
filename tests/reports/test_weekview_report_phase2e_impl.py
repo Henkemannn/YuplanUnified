@@ -68,6 +68,13 @@ def test_weekview_report_aggregation_api_and_ui(client_admin):
         finally:
             db.close()
 
+    resp = client_admin.post(
+        "/features/set",
+        json={"name": "ff.weekview.enabled", "enabled": True},
+        headers=_h("admin"),
+    )
+    assert resp.status_code == 200
+
     # Materialize baseline weekviews and set data
     # A: residents lunch Mon=10, Tue=8; dinner Tue=5; mark Gluten Mon lunch and Wed lunch; Laktos Tue dinner
     base_a = f"/api/weekview?year={year}&week={week}&department_id={dep_a}"

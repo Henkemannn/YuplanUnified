@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from flask import Blueprint, render_template, request, current_app, redirect, url_for, flash, make_response, jsonify
+from flask import Blueprint, render_template, request, current_app, redirect, url_for, flash, make_response, jsonify, session
 from core.app_authz import require_roles
+from core.admin_user_repo import _resolve_user_scope
 from core.db import get_session
 from core.admin_repo import DepartmentsRepo, SitesRepo, DietTypesRepo, tenant_exists
 from core.commun_builder_projection import _get_builder_menu_context_flow
 from core.menu_service import MenuServiceDB
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.security import generate_password_hash
 from core.models import MenuVariant, Tenant, User
 from core.impersonation import start_impersonation
@@ -15,6 +17,10 @@ from datetime import date, datetime, timedelta, timezone
 import uuid
 
 admin_ui_bp = Blueprint("admin_ui", __name__)
+
+
+class _MenuImportSiteForbidden(Exception):
+    """Raised when the requested menu-import site is outside the actor's scope."""
 
 
 def _next_menu_updated_at(previous_updated_at: datetime | None) -> datetime:
@@ -29,21 +35,29 @@ def _resolve_menu_import_site_context():
     from core.db import get_site_tenant
 
     site_id = request.args.get("site_id") or session.get("site_id")
-    if not site_id and current_app.config.get("TESTING"):
-        try:
-            from core.context import get_single_site_id_for_tenant
-
-            tid = session.get("tenant_id")
-            if tid:
-                site_id = get_single_site_id_for_tenant(int(tid))
-        except Exception:
-            site_id = None
-
     if not site_id:
         return None, None
     site_tenant_id = get_site_tenant(str(site_id))
     if site_tenant_id is None:
         return str(site_id), None
+    role = str(session.get("role") or "").strip().lower()
+    if role != "superuser":
+        user_id = session.get("user_id")
+        if not user_id:
+            raise _MenuImportSiteForbidden()
+        db = get_session()
+        try:
+            resolved_tenant_id, bound_site_id, valid_scope = _resolve_user_scope(db, int(user_id))
+        except (TypeError, ValueError, SQLAlchemyError):
+            raise _MenuImportSiteForbidden()
+        finally:
+            db.close()
+        if not (
+            valid_scope
+            and resolved_tenant_id == int(site_tenant_id)
+            and bound_site_id == str(site_id).strip()
+        ):
+            raise _MenuImportSiteForbidden()
     return str(site_id), int(site_tenant_id)
 
 
@@ -671,7 +685,10 @@ def admin_menu_import() -> str:  # type: ignore[override]
     iso = _dt.date.today().isocalendar()
     current_year = int(iso[0])
     current_week = int(iso[1])
-    site_id, site_tenant_id = _resolve_menu_import_site_context()
+    try:
+        site_id, site_tenant_id = _resolve_menu_import_site_context()
+    except _MenuImportSiteForbidden:
+        return jsonify({"ok": False, "error": "site_forbidden"}), 403
     if not site_id:
         flash("Saknar site för menylistan.", "warning")
         return render_template(
@@ -757,7 +774,10 @@ def admin_menu_import_new() -> str:  # type: ignore[override]
     from core.commun_builder_projection import _get_builder_menu_context_flow
     from core.models import Menu
 
-    site_id, site_tenant_id = _resolve_menu_import_site_context()
+    try:
+        site_id, site_tenant_id = _resolve_menu_import_site_context()
+    except _MenuImportSiteForbidden:
+        return jsonify({"ok": False, "error": "site_forbidden"}), 403
     if not site_id:
         payload = {"ok": False, "error": "site_missing", "message": "Saknar site för meny."}
         return jsonify(payload), 400
@@ -808,15 +828,25 @@ def admin_menu_import_new() -> str:  # type: ignore[override]
             .filter_by(tenant_id=int(site_tenant_id), site_id=site_id, year=year, week=week)
             .first()
         )
-        if existing_menu is None:
-            existing_menu = (
+        legacy_conflict = False
+        if existing_menu is None and MenuServiceDB()._has_legacy_menu_uniqueness(db):
+            legacy_conflict = (
                 db.query(Menu)
-                .filter_by(tenant_id=int(site_tenant_id), site_id=None, year=year, week=week)
-                .first()
+                .filter_by(tenant_id=int(site_tenant_id), year=year, week=week)
+                .count()
+                > 0
             )
 
         conflict = existing_menu is not None
         open_url = url_for("admin_ui.admin_menu_import_week", year=year, week=week)
+        if legacy_conflict:
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": "menu_site_conflict",
+                    "message": "En separat meny kan inte skapas för denna site innan databasen migrerats.",
+                }
+            ), 409
         if action == "preview":
             return jsonify(
                 {
@@ -872,7 +902,33 @@ def admin_menu_import_new() -> str:  # type: ignore[override]
             if conflict and existing_menu is not None:
                 menu = existing_menu
             else:
-                menu = menu_service.create_or_get_menu(int(site_tenant_id), site_id, week, year)
+                try:
+                    menu = menu_service.create_or_get_menu(
+                        int(site_tenant_id), site_id, week, year
+                    )
+                except ValueError as exc:
+                    error_code = str(exc).split(":", 1)[0]
+                    if error_code == "menu_site_conflict":
+                        return jsonify(
+                            {
+                                "ok": False,
+                                "error": "menu_site_conflict",
+                                "message": "En separat meny kan inte skapas för denna site innan databasen migrerats.",
+                            }
+                        ), 409
+                    if error_code in {
+                        "site_tenant_mismatch",
+                        "menu_tenant_mismatch",
+                        "site_tenant_required",
+                    }:
+                        return jsonify(
+                            {
+                                "ok": False,
+                                "error": "site_unavailable",
+                                "message": "Vald site är inte tillgänglig.",
+                            }
+                        ), 403
+                    raise
 
             builder_flow = _get_builder_menu_context_flow()
             if builder_flow is None:
@@ -938,7 +994,7 @@ def admin_menu_import_new() -> str:  # type: ignore[override]
 def admin_menu_import_upload() -> str:  # type: ignore[override]
     """Handle menu file upload and import (CSV and DOCX; PDF placeholder)."""
     from core.menu_csv_parser import parse_menu_csv, csv_rows_to_import_result, MenuCSVParseError
-    from core.menu_import_service import MenuImportService
+    from core.menu_import_service import MenuImportOperationError, MenuImportService
     from core.menu_service import MenuServiceDB
     from flask import session as _sess
     import os as _os
@@ -1010,20 +1066,13 @@ def admin_menu_import_upload() -> str:  # type: ignore[override]
     try:
         menu_service = MenuServiceDB()
         import_service = MenuImportService(menu_service)
-        site_id = request.args.get("site_id") or session.get("site_id")
-        if not site_id and current_app.config.get("TESTING"):
-            try:
-                from core.context import get_single_site_id_for_tenant
-
-                tid = session.get("tenant_id")
-                if tid:
-                    site_id = get_single_site_id_for_tenant(int(tid))
-            except Exception:
-                site_id = None
+        try:
+            site_id, site_tenant_id = _resolve_menu_import_site_context()
+        except _MenuImportSiteForbidden:
+            return jsonify({"ok": False, "error": "site_forbidden"}), 403
         if not site_id:
             flash("Saknar site för import.", "danger")
             return redirect(url_for("admin_ui.admin_menu_import"))
-        site_tenant_id = get_site_tenant(str(site_id))
         if site_tenant_id is None:
             flash("Kunde inte hitta tenant för vald site.", "danger")
             return redirect(url_for("admin_ui.admin_menu_import"))
@@ -1061,6 +1110,13 @@ def admin_menu_import_upload() -> str:  # type: ignore[override]
     except MenuCSVParseError as e:
         flash(f"Ogiltigt menyformat: {e}", "danger")
         return redirect(url_for("admin_ui.admin_menu_import"))
+    except MenuImportOperationError as e:
+        flash(
+            f"Import ofärdig; manuell granskning krävs "
+            f"(operation_id={e.operation_id}).",
+            "danger",
+        )
+        return redirect(url_for("admin_ui.admin_menu_import"))
     except Exception as e:
         flash(f"Importfel: {e}", "danger")
         return redirect(url_for("admin_ui.admin_menu_import"))
@@ -1075,24 +1131,16 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
     from core.models import Menu
     from datetime import datetime, timezone
     
-    from core.db import get_site_tenant
     from core.commun_builder_linkage import CommunBuilderMenuLinkService
     from core.commun_builder_projection import get_shadow_projection_reader
 
-    site_id = request.args.get("site_id") or session.get("site_id")
-    if not site_id and current_app.config.get("TESTING"):
-        try:
-            from core.context import get_single_site_id_for_tenant
-
-            tid = session.get("tenant_id")
-            if tid:
-                site_id = get_single_site_id_for_tenant(int(tid))
-        except Exception:
-            site_id = None
+    try:
+        site_id, site_tenant_id = _resolve_menu_import_site_context()
+    except _MenuImportSiteForbidden:
+        return jsonify({"ok": False, "error": "site_forbidden"}), 403
     if not site_id:
         flash("Saknar site för meny.", "warning")
         return redirect(url_for("admin_ui.admin_menu_import"))
-    site_tenant_id = get_site_tenant(str(site_id))
     if site_tenant_id is None:
         flash("Kunde inte hitta tenant för vald site.", "warning")
         return redirect(url_for("admin_ui.admin_menu_import"))
@@ -1531,22 +1579,13 @@ def admin_menu_import_week_edit(year: int, week: int) -> str:  # type: ignore[ov
     from core.models import Menu
     from datetime import datetime, timezone
     
-    from core.db import get_site_tenant
-
-    site_id = request.args.get("site_id") or session.get("site_id")
-    if not site_id and current_app.config.get("TESTING"):
-        try:
-            from core.context import get_single_site_id_for_tenant
-
-            tid = session.get("tenant_id")
-            if tid:
-                site_id = get_single_site_id_for_tenant(int(tid))
-        except Exception:
-            site_id = None
+    try:
+        site_id, site_tenant_id = _resolve_menu_import_site_context()
+    except _MenuImportSiteForbidden:
+        return jsonify({"ok": False, "error": "site_forbidden"}), 403
     if not site_id:
         flash("Saknar site för meny.", "warning")
         return redirect(url_for("admin_ui.admin_menu_import"))
-    site_tenant_id = get_site_tenant(str(site_id))
     if site_tenant_id is None:
         flash("Kunde inte hitta tenant för vald site.", "warning")
         return redirect(url_for("admin_ui.admin_menu_import"))
@@ -1602,43 +1641,35 @@ def admin_menu_import_week_save(year: int, week: int) -> str:  # type: ignore[ov
     from core.models import Dish, Menu, MenuVariant
     from core.etag_utils import validate_etag
     
-    from core.db import get_site_tenant
-
-    site_id = request.args.get("site_id") or session.get("site_id")
-    if not site_id and current_app.config.get("TESTING"):
-        try:
-            from core.context import get_single_site_id_for_tenant
-
-            tid = session.get("tenant_id")
-            if tid:
-                site_id = get_single_site_id_for_tenant(int(tid))
-        except Exception:
-            site_id = None
+    try:
+        site_id, site_tenant_id = _resolve_menu_import_site_context()
+    except _MenuImportSiteForbidden:
+        return jsonify({"ok": False, "error": "site_forbidden"}), 403
     if not site_id:
         flash("Saknar site för meny.", "danger")
         return redirect(url_for("admin_ui.admin_menu_import"))
-    site_tenant_id = get_site_tenant(str(site_id))
     if site_tenant_id is None:
         flash("Kunde inte hitta tenant för vald site.", "danger")
         return redirect(url_for("admin_ui.admin_menu_import"))
     
     db = get_session()
-    try:
-        menu = db.query(Menu).filter_by(tenant_id=site_tenant_id, site_id=site_id, year=year, week=week).first()
-        if (not menu) and site_id:
-            orphan = db.query(Menu).filter_by(tenant_id=site_tenant_id, year=year, week=week, site_id=None).first()
-            if orphan:
-                orphan.site_id = site_id
-                orphan.tenant_id = site_tenant_id
-                db.commit()
-                menu = orphan
-        if not menu:
-            flash(f"Ingen meny hittades för vecka {week}/{year}.", "danger")
-            return redirect(url_for("admin_ui.admin_menu_import"))
-        menu_id = menu.id
-        menu_updated_at = menu.updated_at
-    finally:
+    menu = db.query(Menu).filter_by(
+        tenant_id=site_tenant_id, site_id=site_id, year=year, week=week
+    ).first()
+    if (not menu) and site_id:
+        orphan = db.query(Menu).filter_by(
+            tenant_id=site_tenant_id, year=year, week=week, site_id=None
+        ).first()
+        if orphan:
+            orphan.site_id = site_id
+            orphan.tenant_id = site_tenant_id
+            menu = orphan
+    if not menu:
         db.close()
+        flash(f"Ingen meny hittades för vecka {week}/{year}.", "danger")
+        return redirect(url_for("admin_ui.admin_menu_import"))
+    menu_id = menu.id
+    menu_updated_at = menu.updated_at
     
     # Validate ETag from If-Match header or form data
     if_match = request.headers.get("If-Match") or request.form.get("_etag")
@@ -1653,6 +1684,8 @@ def admin_menu_import_week_save(year: int, week: int) -> str:  # type: ignore[ov
         is_valid, error_msg = validate_etag(if_match, menu_id, menu_updated_at)
     
     if not is_valid:
+        db.rollback()
+        db.close()
         # Return 412 Precondition Failed for AJAX, flash for form submit
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             return jsonify({
@@ -1749,9 +1782,18 @@ def admin_menu_import_week_save(year: int, week: int) -> str:  # type: ignore[ov
                 dish_text = (request.form.get(field_name) or "").strip()
                 dish_id = None
                 if dish_text:
-                    dish = db.query(Dish).filter_by(tenant_id=site_tenant_id, name=dish_text).first()
+                    dish = db.query(Dish).filter_by(
+                        tenant_id=site_tenant_id,
+                        site_id=site_id,
+                        name=dish_text,
+                    ).first()
                     if not dish:
-                        dish = Dish(tenant_id=site_tenant_id, name=dish_text, category=None)
+                        dish = Dish(
+                            tenant_id=site_tenant_id,
+                            site_id=site_id,
+                            name=dish_text,
+                            category=None,
+                        )
                         db.add(dish)
                         db.flush()
                     dish_id = dish.id
@@ -1777,6 +1819,9 @@ def admin_menu_import_week_save(year: int, week: int) -> str:  # type: ignore[ov
         if menu:
             menu.updated_at = _next_menu_updated_at(menu.updated_at)
         db.commit()
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
     
@@ -1789,22 +1834,14 @@ def admin_menu_import_week_save(year: int, week: int) -> str:  # type: ignore[ov
 def admin_menu_import_week_publish(year: int, week: int) -> str:  # type: ignore[override]
     """Publish a menu week (set status to 'published')."""
     from core.etag_utils import validate_etag
-    from core.db import get_site_tenant
-    
-    site_id = request.args.get("site_id") or session.get("site_id")
-    if not site_id and current_app.config.get("TESTING"):
-        try:
-            from core.context import get_single_site_id_for_tenant
 
-            tid = session.get("tenant_id")
-            if tid:
-                site_id = get_single_site_id_for_tenant(int(tid))
-        except Exception:
-            site_id = None
+    try:
+        site_id, site_tenant_id = _resolve_menu_import_site_context()
+    except _MenuImportSiteForbidden:
+        return jsonify({"ok": False, "error": "site_forbidden"}), 403
     if not site_id:
         flash("Saknar site för meny.", "danger")
         return redirect(url_for("admin_ui.admin_menu_import"))
-    site_tenant_id = get_site_tenant(str(site_id))
     if site_tenant_id is None:
         flash("Kunde inte hitta tenant för vald site.", "danger")
         return redirect(url_for("admin_ui.admin_menu_import"))
@@ -1848,22 +1885,14 @@ def admin_menu_import_week_publish(year: int, week: int) -> str:  # type: ignore
 def admin_menu_import_week_unpublish(year: int, week: int) -> str:  # type: ignore[override]
     """Unpublish a menu week (set status to 'draft')."""
     from core.etag_utils import validate_etag
-    from core.db import get_site_tenant
-    
-    site_id = request.args.get("site_id") or session.get("site_id")
-    if not site_id and current_app.config.get("TESTING"):
-        try:
-            from core.context import get_single_site_id_for_tenant
 
-            tid = session.get("tenant_id")
-            if tid:
-                site_id = get_single_site_id_for_tenant(int(tid))
-        except Exception:
-            site_id = None
+    try:
+        site_id, site_tenant_id = _resolve_menu_import_site_context()
+    except _MenuImportSiteForbidden:
+        return jsonify({"ok": False, "error": "site_forbidden"}), 403
     if not site_id:
         flash("Saknar site för meny.", "danger")
         return redirect(url_for("admin_ui.admin_menu_import"))
-    site_tenant_id = get_site_tenant(str(site_id))
     if site_tenant_id is None:
         flash("Kunde inte hitta tenant för vald site.", "danger")
         return redirect(url_for("admin_ui.admin_menu_import"))

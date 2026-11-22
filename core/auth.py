@@ -5,7 +5,7 @@ from collections.abc import Callable
 from functools import wraps
 
 from flask import Blueprint, current_app, flash, jsonify, make_response, redirect, request, session, render_template, url_for
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -117,11 +117,13 @@ def require_roles(*roles: str):
         @wraps(fn)
         def wrapper(*args, **kwargs):
             auth_header = request.headers.get("Authorization", "")
+            bearer_auth = False
             primary = _jwt_primary_secret()
             secrets_list = current_app.config.get("JWT_SECRETS") or []
             # Always prefer bearer header if present (stateless override of session)
             auth_parts = auth_header.split(None, 1)
             if auth_parts and auth_parts[0].lower() == "bearer":
+                bearer_auth = True
                 if not primary:
                     return _json_error("auth required", 401)
                 token = auth_parts[1].strip() if len(auth_parts) > 1 else ""
@@ -138,6 +140,8 @@ def require_roles(*roles: str):
                         leeway=cfg.get("JWT_LEEWAY_SECONDS", 60),
                         max_age=cfg.get("JWT_MAX_AGE_SECONDS"),
                     )
+                    if payload.get("type") != "access":
+                        return _json_error("auth required", 401)
                     auth_version = payload.get("auth_version")
                     if not isinstance(auth_version, int):
                         return _json_error("auth required", 401)
@@ -161,10 +165,31 @@ def require_roles(*roles: str):
                     return _login_rate_limit_error_response(csrf_token)
                 try:
                     active_user = _load_active_user_by_id(db, session.get("user_id"))
+                    active_auth_version = _user_auth_version(active_user)
+                    session_tenant_id = session.get("tenant_id")
+                    site_context = session.get("site_id")
+                    if bearer_auth and not site_context:
+                        site_context = _request_site_context()
+                    site_binding_valid = bool(
+                        active_user
+                        and _user_has_current_site_binding(
+                            db,
+                            active_user,
+                            site_context,
+                        )
+                    )
                 finally:
                     db.close()
-                active_auth_version = _user_auth_version(active_user)
-                if not active_user or active_auth_version is None or session.get("auth_version") is None:
+                if (
+                    not active_user
+                    or active_auth_version is None
+                    or session.get("auth_version") is None
+                    or (
+                        session_tenant_id is not None
+                        and int(session_tenant_id) != int(active_user.tenant_id)
+                    )
+                    or not site_binding_valid
+                ):
                     _clear_authenticated_session()
                     return _json_error("auth required", 401)
                 if int(session.get("auth_version")) != active_auth_version:
@@ -182,7 +207,10 @@ def require_roles(*roles: str):
                     return _json_error(str(exc), 403)
                 session["user_id"] = active_user.id
                 session["role"] = _normalize_role(active_user.role)
+                session["tenant_id"] = active_user.tenant_id
                 session["auth_version"] = active_auth_version
+                if bearer_auth and site_context:
+                    session["site_id"] = site_context
                 if _user_must_change_password(active_user):
                     path = request.path or ""
                     if path.startswith("/static/") or path.startswith("/ui/static/"):
@@ -316,6 +344,50 @@ def _user_auth_version(user: User | None) -> int | None:
         return None
 
 
+def _user_has_current_site_binding(db, user: User, site_id: str | None) -> bool:
+    if _normalize_role(user.role) == "superuser":
+        return True
+    requested_site_id = str(site_id or "").strip()
+    if not requested_site_id or user.tenant_id is None:
+        return False
+    try:
+        site_row = db.execute(
+            text(
+                "SELECT 1 FROM sites "
+                "WHERE id=:sid AND tenant_id=:tid LIMIT 1"
+            ),
+            {"sid": requested_site_id, "tid": int(user.tenant_id)},
+        ).fetchone()
+        if not site_row:
+            return False
+        user_site_id = getattr(user, "site_id", None)
+        if user_site_id and str(user_site_id).strip() == requested_site_id:
+            return True
+        binding_row = db.execute(
+            text(
+                "SELECT 1 FROM kitchen_user_sites "
+                "WHERE user_id=:uid AND tenant_id=:tid AND site_id=:sid LIMIT 1"
+            ),
+            {
+                "uid": int(user.id),
+                "tid": int(user.tenant_id),
+                "sid": requested_site_id,
+            },
+        ).fetchone()
+        return binding_row is not None
+    except (SQLAlchemyError, TypeError, ValueError):
+        return False
+
+
+def _request_site_context() -> str | None:
+    site_id = request.args.get("site_id") or request.form.get("site_id")
+    if not site_id:
+        payload = request.get_json(silent=True)
+        if isinstance(payload, dict):
+            site_id = payload.get("site_id")
+    return str(site_id).strip() or None if site_id else None
+
+
 def _user_must_change_password(user: User | None) -> bool:
     if user is None:
         return False
@@ -384,6 +456,7 @@ def login():
         resp.set_cookie("yp_demo", role, httponly=True, samesite="Lax")
         _emit_dev_auth_fingerprint("login_ok")
         return resp
+    _clear_authenticated_session()
     data = request.get_json(silent=True) or {}
     # Fallback to form fields when JSON isn't provided (browser form posts)
     if not data:
@@ -482,6 +555,67 @@ def login():
             resp.headers["Retry-After"] = str(max(1, success_decision.retry_after))
             set_csrf_cookie(resp, csrf_token)
             return resp
+        # Resolve site binding before issuing any token or persisting auth state.
+        role_norm = _normalize_role(user.role)
+        bound_site = None
+        if role_norm != "superuser":
+            try:
+                from sqlalchemy import text as _t
+
+                sid_attr = getattr(user, "site_id", None)
+                if sid_attr:
+                    row_site = db.execute(
+                        _t(
+                            "SELECT 1 FROM sites "
+                            "WHERE id=:sid AND tenant_id=:tid LIMIT 1"
+                        ),
+                        {"sid": str(sid_attr), "tid": int(user.tenant_id)},
+                    ).fetchone()
+                    if row_site:
+                        bound_site = str(sid_attr)
+                if (not bound_site) and user.tenant_id is not None:
+                    row_k = db.execute(
+                        _t(
+                            "SELECT kus.site_id FROM kitchen_user_sites kus "
+                            "JOIN sites s ON s.id=kus.site_id "
+                            "WHERE kus.user_id=:uid AND kus.tenant_id=:tid "
+                            "AND s.tenant_id=:tid LIMIT 1"
+                        ),
+                        {"uid": int(user.id), "tid": int(user.tenant_id)},
+                    ).fetchone()
+                    if row_k and row_k[0]:
+                        bound_site = str(row_k[0])
+            except Exception:
+                bound_site = None
+            if not bound_site and not _user_must_change_password(user):
+                if _login_wants_html() and role_norm == "unit_portal":
+                    resp = redirect(url_for("portal_dept_ui.portal_department_home_ui"))
+                    set_csrf_cookie(resp, csrf_token)
+                    return resp
+                if _login_wants_html():
+                    resp = make_response(
+                        """<!doctype html><html lang='sv'><head><meta charset='utf-8'>
+<title>Åtkomst nekad</title><meta name='robots' content='noindex'>
+<style>body{font-family:system-ui;margin:3rem;color:#111}h1{font-size:1.8rem;margin-bottom:.5rem}p{margin:.25rem 0}</style>
+</head><body><h1>Åtkomst nekad</h1>
+<p>Ditt konto är inte kopplat till någon arbetsplats.</p>
+<p>Kontakta systemadministratör.</p></body></html>""",
+                        403,
+                    )
+                    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+                else:
+                    resp = make_response(
+                        jsonify(
+                            {
+                                "ok": False,
+                                "error": "forbidden",
+                                "message": "site_binding_required",
+                            }
+                        ),
+                        403,
+                    )
+                set_csrf_cookie(resp, csrf_token)
+                return resp
         secrets_list = current_app.config.get("JWT_SECRETS") or []
         primary = _jwt_primary_secret()
         if not primary:
@@ -506,7 +640,6 @@ def login():
         session["tenant_id"] = user.tenant_id
         session["auth_version"] = current_auth_version
         session["must_change_password"] = _user_must_change_password(user)
-        pre_login_site = str(session.get("site_id") or "").strip() or None
         # Reset active site context on each successful login to avoid leaking
         # a previous user's site binding in the same browser session.
         try:
@@ -528,81 +661,13 @@ def login():
         except Exception:
             pass
         # Enforce site-lock contract for non-superusers: bind active site when available
-        try:
-            role_norm = (session.get("role") or "").strip().lower()
-            if role_norm != "superuser":
-                # Prefer user.site_id; otherwise auto-select single site for tenant
-                bound_site = None
-                try:
-                    sid_attr = getattr(user, "site_id", None)
-                    bound_site = str(sid_attr) if sid_attr else None
-                except Exception:
-                    bound_site = None
-                if (not bound_site) and user.tenant_id is not None:
-                    # Pilot fallback: use explicit user-site binding when users.site_id is unavailable.
-                    try:
-                        if role_norm in ("kitchen", "admin"):
-                            from sqlalchemy import text as _t
-
-                            row_k = db.execute(
-                                _t(
-                                    "SELECT site_id FROM kitchen_user_sites "
-                                    "WHERE user_id=:uid AND tenant_id=:tid LIMIT 1"
-                                ),
-                                {"uid": int(user.id), "tid": int(user.tenant_id)},
-                            ).fetchone()
-                            if row_k and row_k[0]:
-                                bound_site = str(row_k[0])
-                    except Exception:
-                        pass
-                if (not bound_site) and user.tenant_id is not None:
-                    try:
-                        from .context import get_single_site_id_for_tenant as _one_site
-                        bound_site = _one_site(int(user.tenant_id))
-                    except Exception:
-                        bound_site = None
-                if (not bound_site) and bool(current_app.config.get("TESTING")) and pre_login_site:
-                    # Test helpers may pre-seed site context before login. Accept it only when
-                    # tenant sites are unknown/empty, or when it matches a known tenant site.
-                    try:
-                        if pre_login_site == "test-site":
-                            # Legacy test fixtures widely use this sentinel site id.
-                            bound_site = pre_login_site
-                        else:
-                            allowed = False
-                            known_sites = []
-                            any_sites = []
-                            if user.tenant_id is not None:
-                                from .admin_repo import SitesRepo as _SitesRepo
-
-                                repo = _SitesRepo()
-                                known_sites = repo.list_sites_for_tenant(int(user.tenant_id)) or []
-                                any_sites = repo.list_sites() or []
-                            if not known_sites and not any_sites:
-                                allowed = True
-                            else:
-                                for _site in known_sites:
-                                    sid = (_site.get("id") if isinstance(_site, dict) else None)
-                                    if sid and str(sid) == pre_login_site:
-                                        allowed = True
-                                        break
-                            if allowed:
-                                bound_site = pre_login_site
-                    except Exception:
-                        pass
-                if bound_site:
-                    session["site_id"] = bound_site
-                    session["site_lock"] = True
-                    try:
-                        session["site_context_version"] = int(session.get("site_context_version") or 0) + 1
-                    except Exception:
-                        session["site_context_version"] = 1
-                else:
-                    # No active site could be derived; HTML flow returns 403 below for multi-site tenants,
-                    # JSON/API flow will receive a 403 when we build response.
-                    pass
-        except Exception:
-            pass
+        if bound_site:
+            session["site_id"] = bound_site
+            session["site_lock"] = True
+            try:
+                session["site_context_version"] = int(session.get("site_context_version") or 0) + 1
+            except Exception:
+                session["site_context_version"] = 1
         # CSRF token issuance (double submit). Provide if not present already.
         # csrf_token already prepared above
         try:
@@ -620,7 +685,6 @@ def login():
         wants_html = _login_wants_html()
         if wants_html:
             # HTML form flow: for non-superusers without active site, deny access instead of selector
-            from flask import redirect, url_for
             target = None
             try:
                 if _user_must_change_password(user):
@@ -661,7 +725,11 @@ def login():
             # JSON/API: if non-superuser and active site is missing, enforce 403
             try:
                 role_norm = (session.get("role") or "").strip().lower()
-                if role_norm != "superuser" and not (session.get("site_id") or "").strip():
+                if (
+                    role_norm != "superuser"
+                    and not _user_must_change_password(user)
+                    and not (session.get("site_id") or "").strip()
+                ):
                     resp = make_response(jsonify({"ok": False, "error": "forbidden", "message": "site_binding_required"}), 403)
                     set_csrf_cookie(resp, csrf_token)
                     return resp
@@ -856,13 +924,19 @@ def refresh():
         user = db.query(User).filter(User.id == payload.get("sub")).first()
         if not _user_is_auth_eligible(user):
             return _json_error("invalid token", 401)
+        current_auth_version = _user_auth_version(user)
+        if (
+            current_auth_version is None
+            or payload.get("auth_version") != current_auth_version
+        ):
+            return _json_error("invalid token", 401)
         if _user_must_change_password(user):
             return _json_error("invalid token", 401)
         if user.refresh_token_jti != payload.get("jti"):
             return _json_error("invalid token", 401)
         # rotate
         signing_secret = select_signing_secret(primary, secrets_list)
-        current_auth_version = _user_auth_version(user) or 1
+        current_auth_version = current_auth_version or 1
         access, new_refresh, new_jti = issue_token_pair(
             user_id=user.id,
             role=user.role,
@@ -904,6 +978,8 @@ def me():
         token = auth.split(None, 1)[1].strip()
         try:
             payload = jwt_decode(token, secret=primary, secrets_list=secrets_list)
+            if payload.get("type") != "access":
+                return _json_error("auth required", 401)
             user_id = payload.get("sub")
             role = payload.get("role")
             tenant_id = payload.get("tenant_id")
@@ -922,10 +998,28 @@ def me():
     db = get_session()
     try:
         active_user = _load_active_user_by_id(db, user_id)
+        active_auth_version = _user_auth_version(active_user)
+        site_binding_valid = bool(
+            active_user
+            and _user_has_current_site_binding(
+                db,
+                active_user,
+                session.get("site_id"),
+            )
+        )
     finally:
         db.close()
-    active_auth_version = _user_auth_version(active_user)
-    if not active_user or active_auth_version is None or auth_version is None or int(auth_version) != active_auth_version:
+    if (
+        not active_user
+        or active_auth_version is None
+        or auth_version is None
+        or int(auth_version) != active_auth_version
+        or (
+            tenant_id is not None
+            and int(tenant_id) != int(active_user.tenant_id)
+        )
+        or not site_binding_valid
+    ):
         _clear_authenticated_session()
         return _json_error("auth required", 401)
     if _user_must_change_password(active_user):
@@ -933,6 +1027,7 @@ def me():
         return _json_error("auth required", 401)
     session["user_id"] = active_user.id
     session["role"] = _normalize_role(active_user.role)
+    session["tenant_id"] = active_user.tenant_id
     session["tenant_id"] = active_user.tenant_id
     session["auth_version"] = active_auth_version
     return jsonify(

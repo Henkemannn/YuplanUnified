@@ -19,7 +19,14 @@ from typing import ParamSpec, TypeVar, cast
 
 from .app_sessions import SessionData, get_session
 from flask import request, current_app, session
-from .auth import _clear_authenticated_session, _load_active_user_by_id, _user_auth_version, _user_must_change_password
+from .auth import (
+    _clear_authenticated_session,
+    _load_active_user_by_id,
+    _user_auth_version,
+    _user_has_current_site_binding,
+    _request_site_context,
+    _user_must_change_password,
+)
 from .db import get_session as get_db_session
 from .jwt_utils import decode as jwt_decode, JWTError
 from .roles import CanonicalRole, RoleLike, to_canonical
@@ -64,9 +71,11 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
             # Prefer Bearer Authorization header to infer identity for stateless UI/API access
             sess = get_session()
             try:
+                bearer_auth = False
                 auth_header = request.headers.get("Authorization", "")
                 auth_parts = auth_header.split(None, 1)
                 if auth_parts and auth_parts[0].lower() == "bearer":
+                    bearer_auth = True
                     token = auth_parts[1].strip() if len(auth_parts) > 1 else ""
                     if not token:
                         from .app_sessions import SessionError
@@ -89,14 +98,19 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
 
                         raise SessionError("authentication required")
                     secrets_list = current_app.config.get("JWT_SECRETS") or []
-                    # Loosen validation for UI routes: skip issuer/audience checks
                     payload = jwt_decode(
                         token,
                         secret=primary,
                         secrets_list=secrets_list,
+                        issuer=current_app.config.get("JWT_ISSUER"),
+                        audience=current_app.config.get("JWT_AUDIENCE"),
                         leeway=current_app.config.get("JWT_LEEWAY_SECONDS", 60),
                         max_age=current_app.config.get("JWT_MAX_AGE_SECONDS"),
                     )
+                    if payload.get("type") != "access":
+                        from .app_sessions import SessionError
+
+                        raise SessionError("authentication required")
                     auth_version = payload.get("auth_version")
                     if not isinstance(auth_version, int):
                         raise SessionError("authentication required")
@@ -127,10 +141,31 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
                 db = get_db_session()
                 try:
                     active_user = _load_active_user_by_id(db, sess["user_id"])
+                    active_auth_version = _user_auth_version(active_user)
+                    session_tenant_id = session.get("tenant_id")
+                    site_context = session.get("site_id")
+                    if bearer_auth and not site_context:
+                        site_context = _request_site_context()
+                    site_binding_valid = bool(
+                        active_user
+                        and _user_has_current_site_binding(
+                            db,
+                            active_user,
+                            site_context,
+                        )
+                    )
                 finally:
                     db.close()
-                active_auth_version = _user_auth_version(active_user)
-                if active_user is None or active_auth_version is None or session.get("auth_version") is None:
+                if (
+                    active_user is None
+                    or active_auth_version is None
+                    or session.get("auth_version") is None
+                    or (
+                        session_tenant_id is not None
+                        and int(session_tenant_id) != int(active_user.tenant_id)
+                    )
+                    or not site_binding_valid
+                ):
                     _clear_authenticated_session()
                     from .app_sessions import SessionError  # local import to avoid cycle
 
@@ -161,7 +196,10 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
                     raise SessionError("authentication required")
                 session["user_id"] = active_user.id
                 session["role"] = active_user.role
+                session["tenant_id"] = active_user.tenant_id
                 session["auth_version"] = active_auth_version
+                if bearer_auth and site_context:
+                    session["site_id"] = site_context
                 session["must_change_password"] = _user_must_change_password(active_user)
                 role_value = to_canonical(cast(RoleLike, active_user.role))
             if role_value not in canonical_allowed:

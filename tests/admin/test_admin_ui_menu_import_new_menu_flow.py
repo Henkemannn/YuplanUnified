@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy import text
 from werkzeug.datastructures import MultiDict
 
+from tests.admin.test_admin_f01a_scope import bind_test_user_to_site
 
 ADMIN_HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
@@ -20,6 +21,7 @@ def _seed_site_and_session(app_session, site_id: str) -> None:
     finally:
         db.close()
 
+    bind_test_user_to_site(app_session, site_id)
     client = app_session.test_client()
     with client.session_transaction() as sess:
         sess["site_id"] = site_id

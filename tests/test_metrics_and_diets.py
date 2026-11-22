@@ -60,7 +60,7 @@ def test_diet_type_crud_and_feature_toggle(tmp_path):
                 "name": "MunicipalX",
                 "modules": ["municipal"],
                 "admin_email": "a@b.c",
-                "admin_password": "pw",
+                "admin_password": "admin-password-456",
             },
         )
         assert rv.status_code == 200
@@ -80,7 +80,7 @@ def test_diet_type_crud_and_feature_toggle(tmp_path):
         # Bind session site before admin login
         with client.session_transaction() as sess:
             sess["site_id"] = "test-site"
-        rv = client.post("/auth/login", json={"email": "a@b.c", "password": "pw"})
+        rv = client.post("/auth/login", json={"email": "a@b.c", "password": "admin-password-456"})
         assert rv.status_code == 200
         # Create diet type
         rv = client.post("/diet/types", json={"name": "Glutenfri", "default_select": True})

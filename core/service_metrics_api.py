@@ -30,7 +30,7 @@ def ingest_metrics() -> IngestResponse | ErrorResponse:
     payload = request.get_json(silent=True) or {}
     rows = payload.get("rows") or []
     svc = current_app.service_metrics_service  # type: ignore[attr-defined]
-    res = svc.ingest(tenant_id, rows)
+    res = svc.ingest(tenant_id, rows, site_id=session.get("site_id"))
     return cast(IngestResponse, res)
 
 

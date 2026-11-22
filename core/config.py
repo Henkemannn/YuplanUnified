@@ -6,6 +6,34 @@ from dataclasses import dataclass, field
 
 LOCAL_AUTH_BYPASS_ENVS = frozenset({"dev", "development", "local", "test", "testing"})
 DEPLOYED_AUTH_BYPASS_ENVS = frozenset({"staging", "pilot", "prod", "production"})
+PRODUCTION_SECRET_KEY_MIN_LENGTH = 32
+KNOWN_WEAK_SECRET_KEYS = frozenset(
+    {
+        "change-me",
+        "changeme",
+        "secret",
+        "test",
+        "password",
+        "default",
+        "dev-secret",
+        "dev-static-secret-key-0123456789abcdef0123456789abcdef",
+    }
+)
+
+
+def validate_production_secret_key(secret_key: str | None) -> None:
+    value = (secret_key or "").strip()
+    normalized = value.lower()
+    if (
+        len(value) < PRODUCTION_SECRET_KEY_MIN_LENGTH
+        or normalized in KNOWN_WEAK_SECRET_KEYS
+        or normalized.startswith(("test-", "dev-", "example-", "placeholder-"))
+        or "change-me" in normalized
+        or "changeme" in normalized
+    ):
+        raise RuntimeError(
+            "SECRET_KEY must be explicitly configured with a strong production value"
+        )
 
 
 def auth_bypass_allowed(*, testing: bool = False) -> bool:

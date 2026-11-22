@@ -1551,6 +1551,15 @@ def _persist_import_session(session: dict[str, Any], items: list[dict[str, Any]]
     store["items"][session["session_id"]] = [dict(item) for item in items]
 
 
+def _session_belongs_to_actor(session: dict[str, Any] | None, actor: ActorContext | None) -> bool:
+    if session is None or actor is None or not str(actor.site_id or "").strip():
+        return False
+    return (
+        int(session.get("source_tenant_id") or -1) == int(actor.tenant_id)
+        and str(session.get("source_site_id") or "").strip() == str(actor.site_id).strip()
+    )
+
+
 def _validate_import_source_context(payload: dict[str, Any]) -> dict[str, Any] | None:
     menu_id = str(payload.get("source_menu_id") or "").strip()
     menu_detail_id = str(payload.get("source_menu_detail_id") or "").strip()
@@ -1653,7 +1662,11 @@ def _list_import_sessions() -> list[dict[str, Any]]:
     return sorted(sessions, key=lambda item: str(item.get("created_at") or ""), reverse=True)
 
 
-def _load_import_session(session_id: str) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+def _load_import_session(
+    session_id: str,
+    *,
+    actor: ActorContext | None = None,
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
     session_id_value = str(session_id or "").strip()
     if not session_id_value:
         return None, []
@@ -1681,12 +1694,18 @@ def _load_import_session(session_id: str) -> tuple[dict[str, Any] | None, list[d
             row_dict["components"] = list(json.loads(str(row_dict.get("components_json") or "[]")))
             row_dict["hints"] = list(json.loads(str(row_dict.get("hints_json") or "[]")))
             items.append(row_dict)
-        return dict(session_row), items
+        session = dict(session_row)
+        if actor is not None and not _session_belongs_to_actor(session, actor):
+            return None, []
+        return session, items
 
     store = _session_store()
     session = store["sessions"].get(session_id_value)
     items = store["items"].get(session_id_value, [])
-    return (dict(session) if isinstance(session, dict) else None), [dict(item) for item in items]
+    session_dict = dict(session) if isinstance(session, dict) else None
+    if actor is not None and not _session_belongs_to_actor(session_dict, actor):
+        return None, []
+    return session_dict, [dict(item) for item in items]
 
 
 def _save_import_session_item(session_id: str, item: dict[str, Any]) -> None:
@@ -2849,6 +2868,15 @@ def create_import_session():
         source_context = _validate_import_source_context(payload)
     except ValueError as exc:
         return _bad_request(str(exc))
+    actor = _get_builder_actor()
+    if actor is None or not str(actor.site_id or "").strip():
+        return _bad_request("authenticated site is required for an import session")
+    session_context = {
+        "source_tenant_id": int(actor.tenant_id),
+        "source_site_id": str(actor.site_id).strip(),
+    }
+    if source_context:
+        session_context.update(source_context)
 
     draft_items: list[dict[str, Any]] = []
     raw_items = payload.get("items")
@@ -2905,7 +2933,7 @@ def create_import_session():
             draft_items=draft_items,
             import_type=import_type,
             source_name=source_name,
-            source_context=source_context,
+            source_context=session_context,
         )
         _persist_import_session(session, items)
     except (ValueError, sqlite3.IntegrityError) as exc:
@@ -2927,7 +2955,12 @@ def create_import_session():
 @bp.get("/import/sessions")
 @require_roles("editor", "admin", "superuser")
 def list_import_sessions():
-    sessions = _list_import_sessions()
+    actor = _get_builder_actor()
+    sessions = [
+        item
+        for item in _list_import_sessions()
+        if _session_belongs_to_actor(item, actor)
+    ]
     pending_count = sum(int(item.get("pending_review_count") or 0) for item in sessions)
     return jsonify({"ok": True, "count": len(sessions), "pending_count": pending_count, "sessions": sessions})
 
@@ -2935,7 +2968,7 @@ def list_import_sessions():
 @bp.get("/import/sessions/<session_id>")
 @require_roles("editor", "admin", "superuser")
 def get_import_session(session_id: str):
-    session, items = _load_import_session(session_id)
+    session, items = _load_import_session(session_id, actor=_get_builder_actor())
     if session is None:
         return _bad_request(f"import session not found: {session_id}")
 
@@ -2960,7 +2993,7 @@ def update_import_session_item(session_id: str, item_id: str):
     if isinstance(payload, tuple):
         return payload
 
-    session, items = _load_import_session(session_id)
+    session, items = _load_import_session(session_id, actor=_get_builder_actor())
     if session is None:
         return _bad_request(f"import session not found: {session_id}")
 
@@ -3002,7 +3035,7 @@ def update_import_session_item(session_id: str, item_id: str):
 @bp.post("/import/sessions/<session_id>/ignore-selected")
 @require_roles("editor", "admin", "superuser")
 def ignore_import_session_selected(session_id: str):
-    session, items = _load_import_session(session_id)
+    session, items = _load_import_session(session_id, actor=_get_builder_actor())
     if session is None:
         return _bad_request(f"import session not found: {session_id}")
 
@@ -3024,7 +3057,7 @@ def ignore_import_session_selected(session_id: str):
 @bp.post("/import/sessions/<session_id>/publish-selected")
 @require_roles("editor", "admin", "superuser")
 def publish_import_session_selected(session_id: str):
-    session, items = _load_import_session(session_id)
+    session, items = _load_import_session(session_id, actor=_get_builder_actor())
     if session is None:
         return _bad_request(f"import session not found: {session_id}")
 
@@ -3072,7 +3105,7 @@ def import_publish_review_drafts():
 
     session_id = _optional_str(payload, "session_id")
     if session_id:
-        session, items = _load_import_session(session_id)
+        session, items = _load_import_session(session_id, actor=_get_builder_actor())
         if session is None:
             return _bad_request(f"import session not found: {session_id}")
 

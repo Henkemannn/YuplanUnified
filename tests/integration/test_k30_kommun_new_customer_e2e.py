@@ -12,6 +12,7 @@ from core.admin_repo import (
     SitesRepo,
 )
 from core.app_factory import create_app
+from core.builder.library_scope import ActorContext, ObjectScope
 from core.builder_sqlite import initialize_builder_sqlite
 from core.commun_builder_linkage import CommunBuilderMenuLinkService
 from core.commun_builder_publication import CommunBuilderPublicationService
@@ -36,7 +37,15 @@ WEEK = SERVICE_DATE.isocalendar().week
 MEAL = "lunch"
 
 
-def _configure_builder_context(app, *, site_id: str, builder_menu_id: str, year: int, week: int) -> None:
+def _configure_builder_context(
+    app,
+    *,
+    tenant_id: int,
+    site_id: str,
+    builder_menu_id: str,
+    year: int,
+    week: int,
+) -> None:
     from flask import current_app
     from scripts.seed_product2_e2e import _build_builder_flow
 
@@ -55,7 +64,23 @@ def _configure_builder_context(app, *, site_id: str, builder_menu_id: str, year:
         ("k30-comp-alt1", "K30 Lunch Alt 1", 10),
         ("k30-comp-alt2", "K30 Lunch Alt 2", 20),
     ):
-        builder_flow.create_composition(composition_id=composition_id, composition_name=title)
+        builder_flow.create_composition(
+            composition_id=composition_id,
+            composition_name=title,
+            actor=ActorContext(
+                tenant_id=tenant_id,
+                user_id=1,
+                site_id=site_id,
+                role="admin",
+            ),
+            scope=ObjectScope(
+                tenant_id=tenant_id,
+                owner_scope="site",
+                owner_site_id=site_id,
+                owner_user_id=None,
+                visibility="site",
+            ),
+        )
         menu_context_flow.add_composition_menu_row(
             menu_id=builder_menu_id,
             day="mon",
@@ -191,6 +216,7 @@ def test_k30_kommun_new_customer_e2e(tmp_path, monkeypatch):
         builder_menu_id = "k30-integration-builder-menu"
         _configure_builder_context(
             app,
+            tenant_id=tenant_id,
             site_id=site_id,
             builder_menu_id=builder_menu_id,
             year=YEAR,

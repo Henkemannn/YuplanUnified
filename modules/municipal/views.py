@@ -67,12 +67,30 @@ def set_menu_variant():
     tenant_id_raw = session.get("tenant_id")
     if tenant_id_raw is None:
         return jsonify({"ok": False, "error": "missing tenant context"}), 400
+    site_id = str(session.get("site_id") or "").strip()
+    if not site_id:
+        return jsonify({"ok": False, "error": "site_binding_required"}), 403
     tenant_id = int(tenant_id_raw)
     svc = _menu_service()
-    # Ensure menu exists
-    menu = svc.create_or_get_menu(tenant_id, week, year)
     try:
-        mv_id = svc.set_variant(tenant_id, menu.id, day, meal, variant_type, dish_id)
+        menu_id, mv_id = svc.set_variant_atomic(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            week=week,
+            year=year,
+            day=day,
+            meal=meal,
+            variant_type=variant_type,
+            dish_id=dish_id,
+        )
     except ValueError as e:
-        return jsonify({"ok": False, "error": str(e)}), 400
-    return {"ok": True, "menu_id": menu.id, "menu_variant_id": mv_id}
+        error = str(e)
+        status = 403 if error in {
+            "dish_tenant_mismatch",
+            "dish_site_mismatch",
+            "site_tenant_mismatch",
+            "site_tenant_required",
+            "menu_site_mismatch",
+        } else 400
+        return jsonify({"ok": False, "error": error}), status
+    return {"ok": True, "menu_id": menu_id, "menu_variant_id": mv_id}

@@ -208,7 +208,18 @@ def _restore_session_database_engine(request):
             from core.db import init_engine
 
             init_engine(f"sqlite:///{state['main_db'].as_posix()}", force=True)
-    yield
+    try:
+        yield
+    finally:
+        if state is not None:
+            from core import db as db_mod
+            from core.db import init_engine
+
+            if db_mod._SessionFactory is not None:
+                db_mod._SessionFactory.remove()
+            if db_mod._engine is not None:
+                db_mod._engine.dispose()
+            init_engine(f"sqlite:///{state['main_db'].as_posix()}", force=True)
 
 
 @pytest.fixture(scope="function")

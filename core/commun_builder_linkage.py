@@ -7,7 +7,7 @@ from typing import Any
 from flask import current_app, has_app_context
 
 from .admin_repo import SitesRepo
-from .db import get_session
+from .db import get_new_session
 from .models import CommunBuilderMenuLink
 from .models import Menu
 from .week_key import parse_week_key
@@ -162,7 +162,7 @@ class CommunBuilderMenuLinkService:
             legacy_menu_id=legacy_menu_id,
         )
 
-        db = get_session()
+        db = get_new_session()
         try:
             request = CommunBuilderMenuLinkRequest(
                 tenant_id=tenant_id_value,
@@ -203,7 +203,7 @@ class CommunBuilderMenuLinkService:
             raise ValueError("week must be between 1 and 53")
 
         self._validate_site_tenant_access(tenant_id_value, site_id_value)
-        db = get_session()
+        db = get_new_session()
         try:
             return self._repository.get_link_for_week(
                 db,
@@ -233,7 +233,7 @@ class CommunBuilderMenuLinkService:
             raise ValueError("week must be between 1 and 53")
 
         self._validate_site_tenant_access(tenant_id_value, site_id_value)
-        db = get_session()
+        db = get_new_session()
         try:
             removed = self._repository.delete_link(
                 db,
@@ -277,7 +277,7 @@ class CommunBuilderMenuLinkService:
     ) -> int | None:
         if legacy_menu_id is None:
             return None
-        db = get_session()
+        db = get_new_session()
         try:
             menu = db.query(Menu).filter_by(id=int(legacy_menu_id)).one_or_none()
         finally:

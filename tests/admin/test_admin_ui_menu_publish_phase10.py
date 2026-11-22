@@ -40,10 +40,44 @@ class _PublicationScopeRepository:
 
 @pytest.fixture
 def client_admin(app_session):
+    _bind_admin_to_site("site-publish-10")
     client = app_session.test_client()
     with client.session_transaction() as sess:
         sess["site_id"] = "site-publish-10"
     return client
+
+
+def _bind_admin_to_site(site_id: str) -> None:
+    from core.db import get_session
+
+    db = get_session()
+    try:
+        db.execute(
+            text(
+                "INSERT OR IGNORE INTO users "
+                "(id, tenant_id, username, email, password_hash, role, is_active) "
+                "VALUES (1, 1, 'publish-admin', 'publish-admin@example.test', "
+                "'not-used', 'admin', 1)"
+            )
+        )
+        db.execute(text("UPDATE users SET tenant_id=1, role='admin', is_active=1 WHERE id=1"))
+        db.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS kitchen_user_sites "
+                "(user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
+            )
+        )
+        db.execute(text("DELETE FROM kitchen_user_sites WHERE user_id=1"))
+        db.execute(
+            text(
+                "INSERT INTO kitchen_user_sites (user_id, tenant_id, site_id) "
+                "VALUES (1, 1, :site_id)"
+            ),
+            {"site_id": site_id},
+        )
+        db.commit()
+    finally:
+        db.close()
 
 
 def _seed_canonical_builder_menu(app_session, *, site_id: str, year: int, week: int) -> None:

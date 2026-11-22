@@ -8,6 +8,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from flask import Blueprint, jsonify, request, session
+from sqlalchemy import text
 
 from .app_authz import AuthzError, require_roles
 from .db import get_session
@@ -36,9 +37,25 @@ WRITE_ROLES: tuple[RoleLike, RoleLike, RoleLike, RoleLike] = (
 
 def _tenant_id():
     tid = session.get("tenant_id")
-    if not tid:
-        raise ValueError("tenant missing")
-    return tid
+    if tid is None:
+        raise AuthzError("tenant missing")
+    try:
+        return int(tid)
+    except (TypeError, ValueError) as exc:
+        raise AuthzError("tenant missing") from exc
+
+
+def _site_id_for_tenant(db, tenant_id: int) -> str:
+    site_id = str(session.get("site_id") or "").strip()
+    if not site_id:
+        raise AuthzError("site required")
+    site = db.execute(
+        text("SELECT id FROM sites WHERE id = :site_id AND tenant_id = :tenant_id"),
+        {"site_id": site_id, "tenant_id": tenant_id},
+    ).fetchone()
+    if site is None:
+        raise AuthzError("site forbidden")
+    return site_id
 
 
 def _serialize(note: Note):
@@ -47,6 +64,7 @@ def _serialize(note: Note):
         "content": note.content,
         "private_flag": note.private_flag,
         "user_id": note.user_id,
+        "site_id": note.site_id,
         "created_at": note.created_at.isoformat() if note.created_at else None,
         "updated_at": note.updated_at.isoformat() if note.updated_at else None,
     }
@@ -60,8 +78,12 @@ def list_notes():
     db = get_session()
     try:
         user_id = session.get("user_id")
+        site_id = _site_id_for_tenant(db, tid)
         role = session.get("role")
-        base_q = db.query(Note).filter(Note.tenant_id == tid)
+        base_q = db.query(Note).filter(
+            Note.tenant_id == tid,
+            Note.site_id == site_id,
+        )
         if role not in ("admin", "superuser"):
             base_q = base_q.filter((~Note.private_flag) | (Note.user_id == user_id))  # type: ignore
         # Stable deterministic ordering: created_at DESC, id DESC
@@ -92,8 +114,10 @@ def create_note():
         raise ValidationError("content required")
     db = get_session()
     try:
+        site_id = _site_id_for_tenant(db, tid)
         note = Note(
             tenant_id=tid,
+            site_id=site_id,
             user_id=session.get("user_id"),
             content=content,
             private_flag=private_flag,
@@ -117,7 +141,16 @@ def update_note(note_id: int):
     tid = _tenant_id()
     db = get_session()
     try:
-        note = db.query(Note).filter(Note.id == note_id, Note.tenant_id == tid).first()
+        site_id = _site_id_for_tenant(db, tid)
+        note = (
+            db.query(Note)
+            .filter(
+                Note.id == note_id,
+                Note.tenant_id == tid,
+                Note.site_id == site_id,
+            )
+            .first()
+        )
         if not note:
             raise NotFoundError("note not found")
         role = session.get("role")
@@ -147,7 +180,16 @@ def delete_note(note_id: int):
     tid = _tenant_id()
     db = get_session()
     try:
-        note = db.query(Note).filter(Note.id == note_id, Note.tenant_id == tid).first()
+        site_id = _site_id_for_tenant(db, tid)
+        note = (
+            db.query(Note)
+            .filter(
+                Note.id == note_id,
+                Note.tenant_id == tid,
+                Note.site_id == site_id,
+            )
+            .first()
+        )
         if not note:
             raise NotFoundError("note not found")
         role = session.get("role")

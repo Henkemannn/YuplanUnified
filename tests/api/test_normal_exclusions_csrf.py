@@ -48,6 +48,21 @@ def _make_app(tmp_path):
                 user.role = "admin"
                 user.is_active = True
             db.commit()
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+                    "user_id INTEGER NOT NULL, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL, "
+                    "PRIMARY KEY (user_id, site_id))"
+                )
+            )
+            db.execute(
+                text(
+                    "INSERT OR IGNORE INTO kitchen_user_sites (user_id, tenant_id, site_id) "
+                    "VALUES (:uid, :tid, :sid)"
+                ),
+                {"uid": 1, "tid": 1, "sid": "site-csrf-1"},
+            )
+            db.commit()
         finally:
             db.close()
     return app
@@ -73,6 +88,7 @@ def test_toggle_without_csrf_is_forbidden(tmp_path):
         sess["user_id"] = 1
         sess["role"] = "admin"
         sess["tenant_id"] = "1"
+        sess["site_id"] = "site-csrf-1"
         sess["auth_version"] = 1
     r = client.post(
         "/api/kitchen/planering/normal_exclusions/toggle",
@@ -89,6 +105,7 @@ def test_toggle_with_csrf_passes(tmp_path):
         sess["user_id"] = 1
         sess["role"] = "admin"
         sess["tenant_id"] = "1"
+        sess["site_id"] = "site-csrf-1"
         sess["auth_version"] = 1
         sess["CSRF_TOKEN"] = "tok123"
     r = client.post(

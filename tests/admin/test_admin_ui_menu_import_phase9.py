@@ -8,6 +8,8 @@ import pytest
 import re
 from sqlalchemy import text
 
+from tests.admin.test_admin_f01a_scope import bind_test_user_to_site
+
 
 ADMIN_HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
@@ -17,6 +19,7 @@ def client_admin(app_session):
     client = app_session.test_client()
     with client.session_transaction() as sess:
         sess["site_id"] = "site-import-9"
+    bind_test_user_to_site(app_session, "site-import-9")
     return client
 
 
@@ -85,6 +88,7 @@ def client_admin_imported(app_session):
     client = app_session.test_client()
     with client.session_transaction() as sess:
         sess["site_id"] = "site-import-11"
+    bind_test_user_to_site(app_session, "site-import-11")
     return client
 
 
@@ -200,6 +204,7 @@ def seeded_week_nav_cross_year(app_session):
     client = app_session.test_client()
     with client.session_transaction() as sess:
         sess["site_id"] = "site-import-nav"
+    bind_test_user_to_site(app_session, "site-import-nav")
     return client
 
 

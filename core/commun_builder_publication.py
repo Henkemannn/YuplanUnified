@@ -10,7 +10,12 @@ from sqlalchemy.orm import Session
 
 from .builder_sqlite import builder_transaction
 from .db import get_session
-from .models import CommunBuilderMenuLink, CommunBuilderPublicationPin, CommunBuilderPublicationRevision
+from .models import (
+    CommunBuilderMenuLink,
+    CommunBuilderPublicationPin,
+    CommunBuilderPublicationRevision,
+    MenuImportGuard,
+)
 
 
 @dataclass(frozen=True)
@@ -362,6 +367,23 @@ class CommunBuilderPublicationService:
 
         owns_db = db is None
         db = db or get_session()
+        guard = (
+            db.query(MenuImportGuard)
+            .filter(
+                MenuImportGuard.tenant_id == int(tenant_id),
+                MenuImportGuard.site_id == str(site_id),
+                MenuImportGuard.year == int(year),
+                MenuImportGuard.week == int(week),
+                MenuImportGuard.status.in_(("in_progress", "needs_review")),
+            )
+            .first()
+        )
+        if guard is not None:
+            if owns_db:
+                db.close()
+            raise RuntimeError(
+                f"menu_import_not_ready:{guard.status}:{guard.operation_id}"
+            )
         link = CommunBuilderMenuLinkService().get_link_for_week(
             tenant_id=tenant_id,
             site_id=site_id,

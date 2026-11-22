@@ -13,6 +13,36 @@ SUPERUSER_HEADERS = {"X-User-Role": "superuser", "X-Tenant-Id": "1"}
 
 
 def _client_with_site(app, site_id: str):
+    from core.db import get_session
+
+    db = get_session()
+    try:
+        db.execute(
+            text(
+                "INSERT OR IGNORE INTO users "
+                "(id, tenant_id, username, email, password_hash, role, is_active) "
+                "VALUES (1, 1, 'permissions-admin', 'permissions-admin@example.test', "
+                "'not-used', 'admin', 1)"
+            )
+        )
+        db.execute(text("UPDATE users SET tenant_id=1, role='admin', is_active=1 WHERE id=1"))
+        db.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS kitchen_user_sites "
+                "(user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
+            )
+        )
+        db.execute(text("DELETE FROM kitchen_user_sites WHERE user_id=1"))
+        db.execute(
+            text(
+                "INSERT INTO kitchen_user_sites (user_id, tenant_id, site_id) "
+                "VALUES (1, 1, :site_id)"
+            ),
+            {"site_id": site_id},
+        )
+        db.commit()
+    finally:
+        db.close()
     client = app.test_client()
     with client.session_transaction() as sess:
         sess["site_id"] = site_id

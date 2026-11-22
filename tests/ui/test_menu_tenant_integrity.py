@@ -36,6 +36,26 @@ def test_menu_import_uses_site_tenant_id_and_publish():
                 ),
                 {"id": "pilotsite", "n": "Pilot Site", "t": tenant_id},
             )
+            db.execute(
+                text(
+                    "INSERT INTO users(id, tenant_id, username, email, password_hash, role, is_active) "
+                    "VALUES(9911, :tenant_id, 'site-admin', 'site-admin@example.test', 'hash', 'admin', 1)"
+                ),
+                {"tenant_id": tenant_id},
+            )
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS kitchen_user_sites("
+                    "user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
+                )
+            )
+            db.execute(
+                text(
+                    "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                    "VALUES(9911, :tenant_id, 'pilotsite')"
+                ),
+                {"tenant_id": tenant_id},
+            )
             db.commit()
         finally:
             db.close()
@@ -43,19 +63,22 @@ def test_menu_import_uses_site_tenant_id_and_publish():
     client = app.test_client()
     with client.session_transaction() as sess:
         sess["site_id"] = "pilotsite"
+        sess["tenant_id"] = tenant_id
+        sess["user_id"] = 9911
+        sess["role"] = "admin"
 
     data = {"menu_file": (io.BytesIO(SAMPLE_CSV.encode("utf-8")), "menu.csv")}
     resp = client.post(
         "/ui/admin/menu-import/upload",
         data=data,
         content_type="multipart/form-data",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "2"},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "2", "X-User-ID": "9911"},
     )
     assert resp.status_code in (302, 200)
 
     list_resp = client.get(
         "/ui/admin/menu-import",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "2"},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "2", "X-User-ID": "9911"},
     )
     assert list_resp.status_code == 200
     html = list_resp.data.decode("utf-8")
@@ -64,7 +87,7 @@ def test_menu_import_uses_site_tenant_id_and_publish():
 
     week_resp = client.get(
         "/ui/admin/menu-import/week/2026/9",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "2"},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "2", "X-User-ID": "9911"},
     )
     assert week_resp.status_code == 200
     etag = week_resp.headers.get("ETag")
@@ -75,6 +98,7 @@ def test_menu_import_uses_site_tenant_id_and_publish():
         headers={
             "X-User-Role": "admin",
             "X-Tenant-Id": "2",
+            "X-User-ID": "9911",
             "If-Match": etag,
         },
     )
@@ -82,7 +106,7 @@ def test_menu_import_uses_site_tenant_id_and_publish():
 
     list_pub = client.get(
         "/ui/admin/menu-import",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "2"},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "2", "X-User-ID": "9911"},
     )
     assert list_pub.status_code == 200
     html_pub = list_pub.data.decode("utf-8")

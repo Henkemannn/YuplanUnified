@@ -6,7 +6,7 @@ from typing import Any, TypedDict, cast
 from sqlalchemy import and_, func
 
 from .db import get_session
-from .models import ServiceMetric
+from .models import Dish, ServiceMetric, Site
 
 
 class IngestRow(TypedDict, total=False):
@@ -55,7 +55,13 @@ class SummaryDayRow(TypedDict):
 
 
 class ServiceMetricsService:
-    def ingest(self, tenant_id: int, rows: list[IngestRow]) -> IngestResult:
+    def ingest(
+        self,
+        tenant_id: int,
+        rows: list[IngestRow],
+        *,
+        site_id: str | None = None,
+    ) -> IngestResult:
         db = get_session()
         inserted = 0
         updated = 0
@@ -64,6 +70,13 @@ class ServiceMetricsService:
             for r in rows:
                 try:
                     norm = self._normalize_row(r)
+                    if norm["dish_id"] is not None:
+                        self._validate_dish_for_site(
+                            db,
+                            tenant_id=tenant_id,
+                            site_id=site_id,
+                            dish_id=norm["dish_id"],
+                        )
                 except ValueError as e:
                     errors.append(str(e))
                     continue
@@ -156,6 +169,26 @@ class ServiceMetricsService:
             db.close()
 
     # --- Helpers ---
+    @staticmethod
+    def _validate_dish_for_site(db, *, tenant_id: int, site_id: str | None, dish_id: object) -> None:
+        requested_site = str(site_id or "").strip()
+        if not requested_site:
+            raise ValueError("site_binding_required")
+        site = db.query(Site).filter(Site.id == requested_site, Site.tenant_id == tenant_id).first()
+        if site is None:
+            raise ValueError("site_binding_invalid")
+        try:
+            requested_dish = int(dish_id)
+        except (TypeError, ValueError):
+            raise ValueError("dish_not_found") from None
+        dish = db.query(Dish).filter(Dish.id == requested_dish).first()
+        if dish is None:
+            raise ValueError("dish_not_found")
+        if int(dish.tenant_id or 0) != int(tenant_id):
+            raise ValueError("dish_tenant_mismatch")
+        if str(dish.site_id or "") != requested_site:
+            raise ValueError("dish_site_mismatch")
+
     def _normalize_row(
         self, r: IngestRow
     ) -> dict[str, Any]:  # validated normalized dict with concrete python types

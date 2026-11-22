@@ -2,6 +2,7 @@ from flask.testing import FlaskClient
 from sqlalchemy import text
 
 from core.builder import BuilderFlow
+from core.builder.library_scope import ActorContext, ObjectScope
 from core.builder_menu_context_flow import BuilderMenuContextFlow
 from core.commun_builder_linkage import CommunBuilderMenuLinkService
 from core.components import (
@@ -20,6 +21,30 @@ from core.menu_service import MenuServiceDB
 YEAR = 2025
 WEEK = 47
 DEPT_ID = "77777777-1111-2222-3333-999999999999"
+
+
+class _ObjectScopeRepository:
+    def __init__(self) -> None:
+        self.scopes: dict[tuple[str, str], ObjectScope] = {}
+
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+        return self.scopes.get((object_type, object_id))
+
+    def find_private_fork_id(
+        self,
+        object_type: str,
+        source_object_id: str,
+        *,
+        tenant_id: int,
+        owner_user_id: int,
+    ) -> str | None:
+        return None
+
+    def set_scope(self, object_type: str, object_id: str, scope: ObjectScope) -> None:
+        self.scopes[(object_type, object_id)] = scope
+
+    def delete_scope(self, object_type: str, object_id: str) -> None:
+        self.scopes.pop((object_type, object_id), None)
 
 
 def _seed_required_choice_week(
@@ -82,6 +107,7 @@ def _seed_required_choice_week(
         alias_repository = InMemoryCompositionAliasRepository()
         recipe_repository = InMemoryRecipeRepository()
         ingredient_repository = InMemoryRecipeIngredientLineRepository()
+        scope_repository = _ObjectScopeRepository()
 
         builder_flow = BuilderFlow(
             component_service=ComponentService(repository=component_repository),
@@ -89,6 +115,7 @@ def _seed_required_choice_week(
             composition_repository=composition_repository,
             alias_repository=alias_repository,
             component_alias_repository=InMemoryComponentAliasRepository(),
+            object_scope_repository=scope_repository,
         )
         menu_context_flow = BuilderMenuContextFlow(
             menu_service=MenuService(composition_repository=composition_repository),
@@ -105,11 +132,19 @@ def _seed_required_choice_week(
 
         def _upsert(composition_id: str, composition_name: str, *, use_custom_menu_name: bool = False, menu_name: str | None = None) -> None:
             if composition_service.get_composition(composition_id) is None:
-                composition_service.create_composition(
+                builder_flow.create_composition(
                     composition_id=composition_id,
                     composition_name=composition_name,
                     use_custom_menu_name=use_custom_menu_name,
                     menu_name=menu_name,
+                    actor=ActorContext(tenant_id=1, user_id=1, site_id=site_id, role="admin"),
+                    scope=ObjectScope(
+                        tenant_id=1,
+                        owner_scope="site",
+                        owner_site_id=site_id,
+                        owner_user_id=None,
+                        visibility="site",
+                    ),
                 )
             else:
                 composition_service.update_composition_metadata(

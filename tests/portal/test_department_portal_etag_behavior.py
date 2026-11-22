@@ -11,6 +11,7 @@ Scope: Does not introduce new production logic; only asserts existing behavior.
 from __future__ import annotations
 
 from typing import Dict
+import pytest
 from sqlalchemy import text
 from core.db import get_session
 
@@ -18,6 +19,35 @@ YEAR = 2025
 WEEK = 47
 DEPT_ID = "99999999-1111-2222-3333-444444444444"
 SITE_ID = "ssssssss-tttt-uuuu-vvvv-wwwwwwwwwwww"
+
+
+@pytest.fixture(autouse=True)
+def clean_portal_publication_history(app_session):
+    with app_session.app_context():
+        db = get_session()
+        try:
+            params = {
+                "tenant_id": 1,
+                "site_id": SITE_ID,
+                "year": YEAR,
+                "week": WEEK,
+            }
+            for table in (
+                "commun_builder_publication_revisions",
+                "commun_builder_publication_pins",
+                "commun_builder_menu_links",
+            ):
+                db.execute(
+                    text(
+                        f"DELETE FROM {table} "
+                        "WHERE tenant_id=:tenant_id AND site_id=:site_id "
+                        "AND year=:year AND week=:week"
+                    ),
+                    params,
+                )
+            db.commit()
+        finally:
+            db.close()
 
 
 def _h():  # minimal required headers for current auth approach (claims via environ_overrides)

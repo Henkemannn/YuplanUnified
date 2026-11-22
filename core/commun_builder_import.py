@@ -63,6 +63,7 @@ def import_menu_result_to_builder_canonical(
     site_id: str,
     import_type: str = "menu",
     legacy_menu_ids_by_week: dict[tuple[int, int], int] | None = None,
+    restore_on_error: bool = True,
 ) -> list[CommunBuilderCanonicalImportOutcome]:
     flow = _get_builder_menu_context_flow()
     linkage_service = CommunBuilderMenuLinkService(builder_menu_context_flow=flow)
@@ -102,8 +103,18 @@ def import_menu_result_to_builder_canonical(
             outcomes.append(outcome)
         return outcomes
     except Exception as exc:
-        _restore_snapshots(flow, linkage_service, snapshots)
-        raise CommunBuilderCanonicalImportError("canonical import failed", recovery_state={"restored": True}) from exc
+        recovery_state: dict[str, Any] = {
+            "restored": False,
+            "automatic_recovery": bool(restore_on_error),
+        }
+        if restore_on_error:
+            recovery_state.update(_restore_snapshots(flow, linkage_service, snapshots))
+        else:
+            recovery_state["manual_review_required"] = True
+        raise CommunBuilderCanonicalImportError(
+            "canonical import failed",
+            recovery_state=recovery_state,
+        ) from exc
 
 
 def _import_week(
@@ -260,38 +271,43 @@ def _restore_snapshots(
     flow: BuilderMenuContextFlow,
     linkage_service: CommunBuilderMenuLinkService,
     snapshots: dict[str, _WeekSnapshot],
-) -> None:
+) -> dict[str, Any]:
+    errors: list[str] = []
     for menu_id, snapshot in snapshots.items():
         current_menu = flow._menu_service.get_menu(menu_id)
         if current_menu is not None:
             try:
                 flow._menu_service.delete_menu(menu_id)
-            except Exception:
-                pass
+            except Exception as exc:
+                errors.append(f"{menu_id}:delete_menu:{type(exc).__name__}")
+                continue
         if snapshot.menu is not None:
-            flow.create_menu(
-                menu_id=snapshot.menu.menu_id,
-                site_id=snapshot.menu.site_id,
-                week_key=snapshot.menu.week_key,
-                title=snapshot.menu.title,
-                version=snapshot.menu.version,
-                status=snapshot.menu.status,
-            )
-            for detail in snapshot.details:
-                flow._menu_service.add_menu_detail(
-                    menu_detail_id=detail.menu_detail_id,
-                    menu_id=detail.menu_id,
-                    day=detail.day,
-                    meal_slot=detail.meal_slot,
-                    composition_ref_type=detail.composition_ref_type,
-                    composition_id=detail.composition_id,
-                    unresolved_text=detail.unresolved_text,
-                    note=detail.note,
-                    sort_order=detail.sort_order,
-                    display_label=detail.display_label,
-                    row_kind=detail.row_kind,
-                    selection_group_id=detail.selection_group_id,
+            try:
+                flow.create_menu(
+                    menu_id=snapshot.menu.menu_id,
+                    site_id=snapshot.menu.site_id,
+                    week_key=snapshot.menu.week_key,
+                    title=snapshot.menu.title,
+                    version=snapshot.menu.version,
+                    status=snapshot.menu.status,
                 )
+                for detail in snapshot.details:
+                    flow._menu_service.add_menu_detail(
+                        menu_detail_id=detail.menu_detail_id,
+                        menu_id=detail.menu_id,
+                        day=detail.day,
+                        meal_slot=detail.meal_slot,
+                        composition_ref_type=detail.composition_ref_type,
+                        composition_id=detail.composition_id,
+                        unresolved_text=detail.unresolved_text,
+                        note=detail.note,
+                        sort_order=detail.sort_order,
+                        display_label=detail.display_label,
+                        row_kind=detail.row_kind,
+                        selection_group_id=detail.selection_group_id,
+                    )
+            except Exception as exc:
+                errors.append(f"{menu_id}:restore_menu:{type(exc).__name__}")
         if snapshot.link is None:
             try:
                 linkage_service.delete_link(
@@ -300,8 +316,8 @@ def _restore_snapshots(
                     year=snapshot.year,
                     week=snapshot.week,
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                errors.append(f"{menu_id}:delete_link:{type(exc).__name__}")
         else:
             try:
                 linkage_service.create_or_replace_link(
@@ -314,8 +330,13 @@ def _restore_snapshots(
                     source=str(snapshot.link.source),
                     projection_version=int(snapshot.link.projection_version),
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                errors.append(f"{menu_id}:restore_link:{type(exc).__name__}")
+    return {
+        "restored": not errors,
+        "recovery_errors": errors,
+        "manual_review_required": bool(errors),
+    }
 
 
 def _canonical_meal_slot(item: ImportedMenuItem) -> str:

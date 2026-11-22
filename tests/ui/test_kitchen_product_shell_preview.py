@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from flask import current_app
 from core.builder import BuilderFlow
+from core.builder.library_scope import ObjectScope
 from core.builder_menu_context_flow import BuilderMenuContextFlow
 from core.components import (
     ComponentService,
@@ -49,6 +50,30 @@ class _FixedTodayIsoBoundary(_date):
         return cls(2027, 1, 4)
 
 
+class _ObjectScopeRepository:
+    def __init__(self) -> None:
+        self.scopes: dict[tuple[str, str], ObjectScope] = {}
+
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+        return self.scopes.get((object_type, object_id))
+
+    def find_private_fork_id(
+        self,
+        object_type: str,
+        source_object_id: str,
+        *,
+        tenant_id: int,
+        owner_user_id: int,
+    ) -> str | None:
+        return None
+
+    def set_scope(self, object_type: str, object_id: str, scope: ObjectScope) -> None:
+        self.scopes[(object_type, object_id)] = scope
+
+    def delete_scope(self, object_type: str, object_id: str) -> None:
+        self.scopes.pop((object_type, object_id), None)
+
+
 def _headers(role: str = "admin", tenant_id: str | None = "1") -> dict[str, str]:
     headers = {"X-User-Role": role}
     if tenant_id is not None:
@@ -72,12 +97,17 @@ def _seed_site(app, *, site_name: str = "Preview Site", tenant_id: int = 1) -> s
     return site["id"]
 
 
-def _build_builder_menu_context_flow() -> tuple[BuilderMenuContextFlow, CompositionService]:
+def _build_builder_menu_context_flow() -> tuple[
+    BuilderMenuContextFlow,
+    CompositionService,
+    _ObjectScopeRepository,
+]:
     component_repository = InMemoryComponentRepository()
     composition_repository = InMemoryCompositionRepository()
     alias_repository = InMemoryCompositionAliasRepository()
     recipe_repository = InMemoryRecipeRepository()
     ingredient_repository = InMemoryRecipeIngredientLineRepository()
+    scope_repository = _ObjectScopeRepository()
 
     builder_flow = BuilderFlow(
         component_service=ComponentService(repository=component_repository),
@@ -85,6 +115,7 @@ def _build_builder_menu_context_flow() -> tuple[BuilderMenuContextFlow, Composit
         composition_repository=composition_repository,
         alias_repository=alias_repository,
         component_alias_repository=InMemoryComponentAliasRepository(),
+        object_scope_repository=scope_repository,
     )
     menu_context_flow = BuilderMenuContextFlow(
         menu_service=MenuService(composition_repository=composition_repository),
@@ -94,7 +125,7 @@ def _build_builder_menu_context_flow() -> tuple[BuilderMenuContextFlow, Composit
         ingredient_repository=ingredient_repository,
         library_flow=builder_flow,
     )
-    return menu_context_flow, CompositionService(repository=composition_repository)
+    return menu_context_flow, CompositionService(repository=composition_repository), scope_repository
 
 
 def _seed_product2_publication(
@@ -233,7 +264,7 @@ def _seed_product2_publication(
         ]
     )
     with app.app_context():
-        builder_flow, composition_service = _build_builder_menu_context_flow()
+        builder_flow, composition_service, scope_repository = _build_builder_menu_context_flow()
         current_app.extensions["builder_menu_context_flow"] = builder_flow
         current_app.extensions["builder_flow"] = builder_flow
         builder_flow.create_menu(
@@ -248,6 +279,17 @@ def _seed_product2_publication(
             composition_service.create_composition(
                 composition_id=composition_id,
                 composition_name=str(row["composition_name"]),
+            )
+            scope_repository.set_scope(
+                "composition",
+                composition_id,
+                ObjectScope(
+                    tenant_id=1,
+                    owner_scope="site",
+                    owner_site_id=site_id,
+                    owner_user_id=None,
+                    visibility="site",
+                ),
             )
             builder_flow.add_composition_menu_row(
                 menu_id=builder_menu_id,

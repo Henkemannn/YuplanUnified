@@ -34,6 +34,8 @@ class TestAdminPhaseB:
         site = r.get_json()
         site_etag = r.headers.get("ETag")
         assert site_etag and site_etag.startswith('W/"admin:site:')
+        with c.session_transaction() as sess:
+            sess["site_id"] = site["id"]
 
         # Create department
         r = c.post(
@@ -71,6 +73,8 @@ class TestAdminPhaseB:
 
         # Create site + dept
         s = c.post("/admin/sites", headers=headers, json={"name": "East"}).get_json()
+        with c.session_transaction() as sess:
+            sess["site_id"] = s["id"]
         d = c.post(
             "/admin/departments",
             headers=headers,
@@ -216,6 +220,8 @@ class TestAdminPhaseB:
         headers = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
         # Create site+dept
         s = c.post("/admin/sites", headers=headers, json={"name": "West"}).get_json()
+        with c.session_transaction() as sess:
+            sess["site_id"] = s["id"]
         d = c.post(
             "/admin/departments",
             headers=headers,

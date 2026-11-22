@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy import text
 
 from core.builder import BuilderFlow
+from core.builder.library_scope import ObjectScope
 from core.builder_menu_context_flow import BuilderMenuContextFlow
 from core.builder_sqlite import initialize_builder_sqlite
 from core.components import (
@@ -37,12 +38,76 @@ YEAR = 2026
 WEEK = 35
 
 
+class _ObjectScopeRepository:
+    def __init__(self) -> None:
+        self.scopes: dict[tuple[str, str], ObjectScope] = {}
+
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+        return self.scopes.get((object_type, object_id))
+
+    def find_private_fork_id(
+        self,
+        object_type: str,
+        source_object_id: str,
+        *,
+        tenant_id: int,
+        owner_user_id: int,
+    ) -> str | None:
+        return None
+
+    def set_scope(self, object_type: str, object_id: str, scope: ObjectScope) -> None:
+        self.scopes[(object_type, object_id)] = scope
+
+    def delete_scope(self, object_type: str, object_id: str) -> None:
+        self.scopes.pop((object_type, object_id), None)
+
+
 @pytest.fixture
 def client_admin(app_session):
+    _bind_admin_to_site(SITE_ID)
     client = app_session.test_client()
     with client.session_transaction() as sess:
         sess["site_id"] = SITE_ID
     return client
+
+
+def _bind_admin_to_site(site_id: str) -> None:
+    db = get_session()
+    try:
+        db.execute(
+            text(
+                "INSERT OR IGNORE INTO users "
+                "(id, tenant_id, username, email, password_hash, role, is_active) "
+                "VALUES (1, :tenant_id, 'canonical-menu-admin', "
+                "'canonical-menu-admin@example.test', 'not-used', 'admin', 1)"
+            ),
+            {"tenant_id": TENANT_ID},
+        )
+        db.execute(
+            text(
+                "UPDATE users SET tenant_id=:tenant_id, role='admin', is_active=1 "
+                "WHERE id=1"
+            ),
+            {"tenant_id": TENANT_ID},
+        )
+        db.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+                "user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, "
+                "site_id TEXT NOT NULL)"
+            )
+        )
+        db.execute(text("DELETE FROM kitchen_user_sites WHERE user_id=1"))
+        db.execute(
+            text(
+                "INSERT INTO kitchen_user_sites (user_id, tenant_id, site_id) "
+                "VALUES (1, :tenant_id, :site_id)"
+            ),
+            {"tenant_id": TENANT_ID, "site_id": site_id},
+        )
+        db.commit()
+    finally:
+        db.close()
 
 
 def _seed_scope_rows() -> None:
@@ -85,6 +150,7 @@ def _build_builder_context(app_session) -> BuilderMenuContextFlow:
     alias_repository = InMemoryCompositionAliasRepository()
     recipe_repository = InMemoryRecipeRepository()
     ingredient_repository = InMemoryRecipeIngredientLineRepository()
+    scope_repository = _ObjectScopeRepository()
 
     builder_flow = BuilderFlow(
         component_service=ComponentService(repository=component_repository),
@@ -92,6 +158,7 @@ def _build_builder_context(app_session) -> BuilderMenuContextFlow:
         composition_repository=composition_repository,
         alias_repository=alias_repository,
         component_alias_repository=InMemoryComponentAliasRepository(),
+        object_scope_repository=scope_repository,
     )
     menu_context_flow = BuilderMenuContextFlow(
         menu_service=MenuService(composition_repository=composition_repository),
@@ -111,6 +178,7 @@ def _seed_builder_menu_for_kommun(app_session) -> str:
     with app_session.app_context():
         flow = _build_builder_context(app_session)
         composition_service = CompositionService(repository=flow._composition_repository)
+        scope_repository = flow._library_flow._object_scope_repository
 
         monday_rows = {
             "comp_monday_alt1": "Köttbullar med gräddsås och potatis",
@@ -122,6 +190,17 @@ def _seed_builder_menu_for_kommun(app_session) -> str:
             composition_service.create_composition(
                 composition_id=composition_id,
                 composition_name=composition_name,
+            )
+            scope_repository.set_scope(
+                "composition",
+                composition_id,
+                ObjectScope(
+                    tenant_id=TENANT_ID,
+                    owner_scope="site",
+                    owner_site_id=SITE_ID,
+                    owner_user_id=None,
+                    visibility="site",
+                ),
             )
 
         items = [
@@ -542,6 +621,7 @@ def test_admin_menu_import_week_fresh_get_hydrates_canonical_builder_rows(app_se
             db.commit()
         finally:
             db.close()
+        _bind_admin_to_site(site_id)
 
         initialize_builder_sqlite(str(builder_db_path))
         conn = sqlite3.connect(builder_db_path)
@@ -599,6 +679,7 @@ def test_admin_menu_publish_without_builder_link_fails_closed(app_session):
         db.commit()
     finally:
         db.close()
+    _bind_admin_to_site(site_id)
 
     client = app_session.test_client()
     with client.session_transaction() as sess:

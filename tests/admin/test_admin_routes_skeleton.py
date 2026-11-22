@@ -144,11 +144,20 @@ class TestAdminRBAC:
             ("/admin/departments", "post"),
             ("/admin/menu-import", "post"),
         ]
+        site_response = client.post(
+            "/admin/sites",
+            headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+            json={"name": "Scope Site"},
+        )
+        assert site_response.status_code == 201
+        scope_site_id = site_response.get_json()["id"]
+        with client.session_transaction() as sess:
+            sess["site_id"] = scope_site_id
         
         for endpoint, method in write_endpoints:
             # Admin should succeed (201 for create endpoints)
             if method == "post":
-                body = {"name": "S"} if endpoint.endswith("sites") else {"name": "D", "site_id": "dummy-site", "resident_count_mode": "fixed"}
+                body = {"name": "S"} if endpoint.endswith("sites") else {"name": "D", "site_id": scope_site_id, "resident_count_mode": "fixed"}
                 if endpoint.endswith("sites"):
                     response = client.post(endpoint, headers={"X-User-Role": "admin", "X-Tenant-Id": "1"}, json=body)
                     # site creation requires name only

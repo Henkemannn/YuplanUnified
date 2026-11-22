@@ -13,7 +13,9 @@ from openpyxl import Workbook
 from core.app_factory import create_app
 from core.builder_sqlite import initialize_builder_sqlite
 from core.db import create_all, get_session
+from core.models import User
 from sqlalchemy import text
+from werkzeug.security import generate_password_hash
 
 HEADERS = {
     "X-User-Role": "admin",
@@ -2596,6 +2598,178 @@ def test_import_sessions_create_list_and_open_detail() -> None:
     detail_body = detail.get_json() or {}
     grouped = detail_body.get("grouped") or {}
     assert len(grouped.get("components") or []) == 1
+
+
+def test_import_sessions_are_isolated_by_tenant_and_site_and_block_writes() -> None:
+    db_dir = tempfile.mkdtemp(prefix="builder_import_scope_")
+    _TEMP_DB_DIRS.append(db_dir)
+    app = _app_with_builder_db(os.path.join(db_dir, "builder.db"))
+
+    site_a = app.test_client()
+    site_b = app.test_client()
+    tenant_b = app.test_client()
+    _seed_session(site_a, role="admin", tenant_id=1, user_id=11)
+    _seed_session(site_b, role="admin", tenant_id=1, user_id=22)
+    _seed_session(tenant_b, role="admin", tenant_id=2, user_id=33)
+    for client, site_id in ((site_a, "site-a"), (site_b, "site-b"), (tenant_b, "site-c")):
+        with client.session_transaction() as sess:
+            sess["site_id"] = site_id
+
+    create_response = site_a.post(
+        "/api/builder/import/sessions",
+        json={
+            "source_name": "Site A import",
+            "import_type": "component_list",
+            "items": [
+                {
+                    "selected": True,
+                    "item_type": "component",
+                    "raw_text": "Site A component",
+                    "name": "Site A component",
+                    "components": [],
+                }
+            ],
+        },
+        headers=HEADERS,
+    )
+    assert create_response.status_code == 201
+    body = create_response.get_json() or {}
+    session_id = str((body.get("session") or {}).get("session_id") or "")
+    item_id = str(((body.get("items") or [{}])[0]).get("item_id") or "")
+    assert session_id and item_id
+
+    for foreign_client in (site_b, tenant_b):
+        listed = foreign_client.get("/api/builder/import/sessions", headers=HEADERS)
+        assert listed.status_code == 200
+        assert (listed.get_json() or {}).get("sessions") == []
+
+        detail = foreign_client.get(
+            f"/api/builder/import/sessions/{session_id}",
+            headers=HEADERS,
+        )
+        assert detail.status_code == 400
+
+        patch = foreign_client.patch(
+            f"/api/builder/import/sessions/{session_id}/items/{item_id}",
+            json={"name": "Foreign mutation"},
+            headers=HEADERS,
+        )
+        assert patch.status_code == 400
+
+        publish = foreign_client.post(
+            f"/api/builder/import/sessions/{session_id}/publish-selected",
+            json={},
+            headers=HEADERS,
+        )
+        assert publish.status_code == 400
+
+    owner_detail = site_a.get(
+        f"/api/builder/import/sessions/{session_id}",
+        headers=HEADERS,
+    )
+    assert owner_detail.status_code == 200
+    owner_item = (owner_detail.get_json() or {}).get("items", [])[0]
+    assert owner_item.get("cleaned_name") == "Site A component"
+    assert owner_item.get("item_status") == "draft"
+
+
+def test_import_session_access_stops_after_site_binding_revocation() -> None:
+    db_dir = tempfile.mkdtemp(prefix="builder_import_revoke_")
+    _TEMP_DB_DIRS.append(db_dir)
+    builder_db_path = os.path.join(db_dir, "builder.db")
+    app = _app_with_builder_db(builder_db_path)
+    site_id = "revoked-site"
+
+    with app.app_context():
+        db = get_session()
+        db.execute(
+            text(
+                "INSERT OR REPLACE INTO sites (id, name, tenant_id, version) "
+                "VALUES (:site_id, 'Revoked Site', 1, 0)"
+            ),
+            {"site_id": site_id},
+        )
+        db.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+                "user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
+            )
+        )
+        db.query(User).filter(User.email == "builder-revoke@example.test").delete(
+            synchronize_session=False
+        )
+        user = User(
+            tenant_id=1,
+            username="builder-revoke",
+            email="builder-revoke@example.test",
+            password_hash=generate_password_hash("Passw0rd!"),
+            role="admin",
+            is_active=True,
+            auth_version=1,
+        )
+        db.add(user)
+        db.flush()
+        db.execute(
+            text(
+                "INSERT OR REPLACE INTO kitchen_user_sites (user_id, tenant_id, site_id) "
+                "VALUES (:user_id, 1, :site_id)"
+            ),
+            {"user_id": int(user.id), "site_id": site_id},
+        )
+        db.commit()
+
+    client = app.test_client()
+    login = client.post(
+        "/auth/login",
+        json={"email": "builder-revoke@example.test", "password": "Passw0rd!"},
+        headers={"Accept": "application/json"},
+    )
+    assert login.status_code == 200
+    created = client.post(
+        "/api/builder/import/sessions",
+        json={
+            "source_name": "Revocation import",
+            "items": [
+                {
+                    "selected": True,
+                    "item_type": "component",
+                    "raw_text": "Protected component",
+                    "name": "Protected component",
+                    "components": [],
+                }
+            ],
+        },
+    )
+    assert created.status_code == 201
+    session_id = str((created.get_json() or {}).get("session", {}).get("session_id") or "")
+    assert session_id
+
+    with sqlite3.connect(builder_db_path) as conn:
+        before = conn.execute(
+            "SELECT item_status, cleaned_name FROM builder_import_session_items WHERE session_id=?",
+            (session_id,),
+        ).fetchone()
+
+    with app.app_context():
+        db = get_session()
+        db.execute(
+            text("DELETE FROM kitchen_user_sites WHERE user_id = (SELECT id FROM users WHERE email=:email)"),
+            {"email": "builder-revoke@example.test"},
+        )
+        db.commit()
+
+    denied = client.post(
+        f"/api/builder/import/sessions/{session_id}/publish-selected",
+        json={},
+    )
+    assert denied.status_code == 401
+
+    with sqlite3.connect(builder_db_path) as conn:
+        after = conn.execute(
+            "SELECT item_status, cleaned_name FROM builder_import_session_items WHERE session_id=?",
+            (session_id,),
+        ).fetchone()
+    assert after == before
 
 
 def test_import_sessions_item_update_and_publish_selected() -> None:

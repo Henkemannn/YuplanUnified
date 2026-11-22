@@ -6,7 +6,9 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy import text
 
 from core.builder import BuilderFlow
+from core.builder.library_scope import ObjectScope
 from core.builder_menu_context_flow import BuilderMenuContextFlow
+from core.db import get_session
 from core.components import (
     ComponentService,
     CompositionService,
@@ -24,7 +26,61 @@ from core.menu import MenuService, InMemoryCompositionAliasRepository
 ADMIN_HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 
+class _ObjectScopeRepository:
+    def __init__(self) -> None:
+        self.scopes: dict[tuple[str, str], ObjectScope] = {}
+
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+        return self.scopes.get((object_type, object_id))
+
+    def find_private_fork_id(
+        self,
+        object_type: str,
+        source_object_id: str,
+        *,
+        tenant_id: int,
+        owner_user_id: int,
+    ) -> str | None:
+        return None
+
+    def set_scope(self, object_type: str, object_id: str, scope: ObjectScope) -> None:
+        self.scopes[(object_type, object_id)] = scope
+
+    def delete_scope(self, object_type: str, object_id: str) -> None:
+        self.scopes.pop((object_type, object_id), None)
+
+
 def _client_with_site(app, site_id: str):
+    from core.db import get_session
+
+    db = get_session()
+    try:
+        db.execute(
+            text(
+                "INSERT OR IGNORE INTO users "
+                "(id, tenant_id, username, email, password_hash, role, is_active) "
+                "VALUES (1, 1, 'etag-admin', 'etag-admin@example.test', "
+                "'not-used', 'admin', 1)"
+            )
+        )
+        db.execute(text("UPDATE users SET tenant_id=1, role='admin', is_active=1 WHERE id=1"))
+        db.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS kitchen_user_sites "
+                "(user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
+            )
+        )
+        db.execute(text("DELETE FROM kitchen_user_sites WHERE user_id=1"))
+        db.execute(
+            text(
+                "INSERT INTO kitchen_user_sites (user_id, tenant_id, site_id) "
+                "VALUES (1, 1, :site_id)"
+            ),
+            {"site_id": site_id},
+        )
+        db.commit()
+    finally:
+        db.close()
     client = app.test_client()
     with client.session_transaction() as sess:
         sess["site_id"] = site_id
@@ -38,6 +94,7 @@ def _seed_canonical_builder_menu(app_session, *, site_id: str, year: int, week: 
         alias_repository = InMemoryCompositionAliasRepository()
         recipe_repository = InMemoryRecipeRepository()
         ingredient_repository = InMemoryRecipeIngredientLineRepository()
+        scope_repository = _ObjectScopeRepository()
 
         builder_flow = BuilderFlow(
             component_service=ComponentService(repository=component_repository),
@@ -45,6 +102,7 @@ def _seed_canonical_builder_menu(app_session, *, site_id: str, year: int, week: 
             composition_repository=composition_repository,
             alias_repository=alias_repository,
             component_alias_repository=InMemoryComponentAliasRepository(),
+            object_scope_repository=scope_repository,
         )
         menu_context_flow = BuilderMenuContextFlow(
             menu_service=MenuService(composition_repository=composition_repository),
@@ -61,6 +119,17 @@ def _seed_canonical_builder_menu(app_session, *, site_id: str, year: int, week: 
         composition_service.create_composition(
             composition_id="comp_kottbullar",
             composition_name="Köttbullar",
+        )
+        scope_repository.set_scope(
+            "composition",
+            "comp_kottbullar",
+            ObjectScope(
+                tenant_id=1,
+                owner_scope="site",
+                owner_site_id=site_id,
+                owner_user_id=None,
+                visibility="site",
+            ),
         )
 
         import_menu_result_to_builder_canonical(
@@ -389,6 +458,84 @@ def test_concurrent_edit_scenario(seeded_menu_with_updated_at):
     assert response_b_save.status_code == 302
     response_b_redirect = client.get(response_b_save.location, headers=ADMIN_HEADERS)
     assert b"Konflikt:" in response_b_redirect.data
+
+
+def test_edit_and_save_reject_foreign_same_tenant_and_cross_tenant_sites(
+    seeded_menu_with_updated_at,
+):
+    client = _client_with_site(seeded_menu_with_updated_at, "site-etag")
+    db = get_session()
+    try:
+        db.execute(
+            text(
+                "INSERT OR REPLACE INTO sites (id, name, tenant_id, version) "
+                "VALUES ('site-edit-foreign', 'Foreign same tenant', 1, 0), "
+                "('site-edit-other-tenant', 'Foreign tenant', 2, 0)"
+            )
+        )
+        db.execute(
+            text(
+                "INSERT OR REPLACE INTO tenants (id, name, active) "
+                "VALUES (2, 'Other tenant', 1)"
+            )
+        )
+        db.execute(
+            text(
+                "INSERT OR REPLACE INTO menus "
+                "(id, tenant_id, site_id, week, year, status, updated_at) "
+                "VALUES (103, 1, 'site-edit-foreign', 48, 2025, 'draft', :updated), "
+                "(104, 2, 'site-edit-other-tenant', 48, 2025, 'draft', :updated)"
+            ),
+            {"updated": datetime.now(timezone.utc)},
+        )
+        db.execute(
+            text(
+                "INSERT OR REPLACE INTO menu_variants "
+                "(id, menu_id, day, meal, variant_type, dish_id) "
+                "VALUES (1031, 103, 'Måndag', 'Lunch', 'alt1', NULL), "
+                "(1041, 104, 'Måndag', 'Lunch', 'alt1', NULL)"
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    def snapshot(menu_id: int) -> tuple:
+        db = get_session()
+        try:
+            return (
+                db.execute(
+                    text("SELECT status, updated_at FROM menus WHERE id=:id"),
+                    {"id": menu_id},
+                ).one(),
+                tuple(
+                    db.execute(
+                        text(
+                            "SELECT day, meal, variant_type, dish_id "
+                            "FROM menu_variants WHERE menu_id=:id ORDER BY id"
+                        ),
+                        {"id": menu_id},
+                    ).fetchall()
+                ),
+            )
+        finally:
+            db.close()
+
+    for foreign_site in ("site-edit-foreign", "site-edit-other-tenant"):
+        before = snapshot(103 if foreign_site == "site-edit-foreign" else 104)
+        edit = client.get(
+            f"/ui/admin/menu-import/week/2025/48/edit?site_id={foreign_site}",
+            headers=ADMIN_HEADERS,
+        )
+        assert edit.status_code == 403
+
+        save = client.post(
+            f"/ui/admin/menu-import/week/2025/48/save?site_id={foreign_site}",
+            data={"_etag": "foreign-etag", "Måndag_Lunch_alt1": "Changed"},
+            headers={**ADMIN_HEADERS, "X-Requested-With": "XMLHttpRequest"},
+        )
+        assert save.status_code == 403
+        assert snapshot(103 if foreign_site == "site-edit-foreign" else 104) == before
 
 
 def test_next_menu_updated_at_advances_at_least_one_millisecond(monkeypatch):

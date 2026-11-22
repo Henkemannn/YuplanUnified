@@ -41,7 +41,7 @@ from .auth import (
     ensure_dev_superuser_henrik,
     ensure_dev_sync_superuser_from_env,
 )
-from .config import LOCAL_AUTH_BYPASS_ENVS, Config
+from .config import LOCAL_AUTH_BYPASS_ENVS, Config, validate_production_secret_key
 from .config import auth_bypass_allowed
 from .db import get_session, init_engine, sqlite_file_path_from_url, _is_protected_pilot_db_path
 from .diet_api import bp as diet_api_bp
@@ -184,14 +184,15 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     if testing_flag and sqlite_file and _is_protected_pilot_db_path(sqlite_file):
         raise RuntimeError("Refusing to start TESTING app against protected pilot database")
 
+    secret_env = os.getenv("SECRET_KEY") or ""
+    if secret_env:
+        app.config["SECRET_KEY"] = secret_env
     if is_pilot_or_prod:
+        validate_production_secret_key(app.config.get("SECRET_KEY"))
         jwt_secret = (app.config.get("JWT_SECRET") or "").strip()
         if len(jwt_secret) < 32:
             raise RuntimeError("JWT_SECRET missing/weak in pilot/prod")
 
-    secret_env = os.getenv("SECRET_KEY") or ""
-    if secret_env:
-        app.config["SECRET_KEY"] = secret_env
     if env_lower == "development" and len(app.config.get("SECRET_KEY") or "") < 32:
         app.config["SECRET_KEY"] = "dev-static-secret-key-0123456789abcdef0123456789abcdef"
         try:
@@ -206,7 +207,6 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         pid = os.getpid()
         secret_value = app.config.get("SECRET_KEY") or ""
         secret_len = len(secret_value) if secret_value else 0
-        secret_prefix = secret_value[:6] if secret_value else ""
         secret_hash = ""
         if secret_value:
             try:
@@ -278,7 +278,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 sessions_count = "error"
         try:
             app.logger.info(
-                "sqlite_fingerprint: tag=%s db_url=%s sqlite_file=%s exists=%s size=%s mtime=%s sha256=%s users=%s tenants=%s sites=%s sessions=%s secret_key_sha256=%s secret_key_len=%s secret_key_prefix=%s werkzeug_run_main=%s",
+                "sqlite_fingerprint: tag=%s db_url=%s sqlite_file=%s exists=%s size=%s mtime=%s sha256=%s users=%s tenants=%s sites=%s sessions=%s secret_key_sha256=%s secret_key_len=%s werkzeug_run_main=%s",
                 tag,
                 db_url,
                 sqlite_file or "",
@@ -292,7 +292,6 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 sessions_count,
                 secret_hash,
                 secret_len,
-                secret_prefix,
                 werkzeug_flag,
             )
         except Exception:
@@ -301,7 +300,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             f"SQLITE_FINGERPRINT {tag} db_url={db_url} sqlite_file={sqlite_file or ''} "
             f"exists={exists} size={size} mtime={mtime} sha256={digest} "
             f"users={users_count} tenants={tenants_count} sites={sites_count} sessions={sessions_count} "
-            f"secret_key_sha256={secret_hash} secret_key_len={secret_len} secret_key_prefix={secret_prefix} "
+            f"secret_key_sha256={secret_hash} secret_key_len={secret_len} "
             f"WERKZEUG_RUN_MAIN={werkzeug_flag}",
             flush=True,
         )
@@ -317,7 +316,6 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         pid = os.getpid()
         secret_value = app.config.get("SECRET_KEY") or ""
         secret_len = len(secret_value) if secret_value else 0
-        secret_prefix = secret_value[:6] if secret_value else ""
         secret_hash = ""
         if secret_value:
             try:
@@ -395,7 +393,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             f"AUTH_FINGERPRINT {tag} pid={pid} WERKZEUG_RUN_MAIN={werkzeug_flag} "
             f"db_url={db_url} sqlite_file={sqlite_file or ''} exists={exists} size={size} mtime={mtime} sha256={digest} "
             f"users={users_count} sessions={sessions_count} secret_key_sha256={secret_hash} "
-            f"secret_key_len={secret_len} secret_key_prefix={secret_prefix} "
+            f"secret_key_len={secret_len} "
             f"request_host={request_host} host_header={host_header} forwarded_host={forwarded_host} server_name={server_name}",
             flush=True,
         )

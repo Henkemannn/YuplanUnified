@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from flask import Blueprint, current_app, jsonify, request, session
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from core.auth import require_roles
+from core.admin_user_repo import _resolve_user_scope
 
 from .db import get_session
-from .models import Dish
 
 bp = Blueprint("menu_api", __name__, url_prefix="/menu")
 
@@ -21,6 +23,37 @@ def _resolve_site_id_for_testing(tenant_id: int) -> str | None:
             {"t": tenant_id},
         ).fetchone()
         return str(row[0]) if row and row[0] else None
+    finally:
+        db.close()
+
+
+def _variant_site_is_authorized(tenant_id: int, site_id: str) -> bool:
+    """Require the requested site to match the authenticated user's scope."""
+    user_id = session.get("user_id")
+    role = str(session.get("role") or "").strip().lower()
+    if not user_id:
+        return False
+
+    db = get_session()
+    try:
+        if role == "superuser":
+            row = db.execute(
+                text("SELECT tenant_id FROM sites WHERE id=:site_id LIMIT 1"),
+                {"site_id": str(site_id)},
+            ).fetchone()
+            return bool(row and row[0] is not None and int(row[0]) == int(tenant_id))
+
+        resolved_tenant_id, bound_site_id, valid_scope = _resolve_user_scope(
+            db, int(user_id)
+        )
+        return bool(
+            valid_scope
+            and resolved_tenant_id == int(tenant_id)
+            and bound_site_id == str(site_id).strip()
+        )
+    except (TypeError, ValueError, SQLAlchemyError):
+        current_app.logger.exception("Unable to resolve menu variant site authorization")
+        return False
     finally:
         db.close()
 
@@ -51,6 +84,8 @@ def get_week():
                 "detail": "site_id required",
             }
         ), 400
+    if not _variant_site_is_authorized(int(tenant_id), str(site_id)):
+        return jsonify({"ok": False, "error": "site_forbidden"}), 403
     svc = current_app.menu_service  # type: ignore[attr-defined]
     view = svc.get_week_view(tenant_id, str(site_id), week, year)
     # Translate canonical keys to legacy labels expected by API tests
@@ -102,13 +137,20 @@ def set_variant():
     variant_type = data["variant_type"]
     dish_id = data.get("dish_id")
     dish_name = data.get("dish_name")
+    if "site_id" in data and data["site_id"] is None:
+        return jsonify(
+            {
+                "type": "https://unified.example/errors/bad-request",
+                "title": "Bad Request",
+                "status": 400,
+                "detail": "site_id required",
+            }
+        ), 400
     site_id = (
         data.get("site_id")
         or session.get("site_id")
         or request.headers.get("X-Site-Id")
     )
-    if not site_id and current_app.config.get("TESTING"):
-        site_id = _resolve_site_id_for_testing(tenant_id)
     if not site_id:
         return jsonify(
             {
@@ -118,26 +160,48 @@ def set_variant():
                 "detail": "site_id required",
             }
         ), 400
-    # Create or get menu
+    if not _variant_site_is_authorized(tenant_id, str(site_id)):
+        return jsonify(
+            {
+                "ok": False,
+                "error": "site_unavailable",
+                "status": 403,
+            }
+        ), 403
     menu_svc = current_app.menu_service  # type: ignore[attr-defined]
-    menu = menu_svc.create_or_get_menu(tenant_id, str(site_id), week, year)
-    # Optional on-the-fly dish creation
-    if dish_id is None and dish_name:
-        db = get_session()
-        try:
-            existing = db.query(Dish).filter_by(tenant_id=tenant_id, name=dish_name).first()
-            if existing:
-                dish_id = existing.id
-            else:
-                d = Dish(tenant_id=tenant_id, name=dish_name, category=None)
-                db.add(d)
-                db.commit()
-                db.refresh(d)
-                dish_id = d.id
-        finally:
-            db.close()
     try:
-        mv_id = menu_svc.set_variant(tenant_id, menu.id, day, meal, variant_type, dish_id)
-    except ValueError as e:
-        return jsonify({"ok": False, "error": str(e)}), 400
-    return {"ok": True, "menu_id": menu.id, "menu_variant_id": mv_id}
+        menu_id, mv_id = menu_svc.set_variant_atomic(
+            tenant_id=tenant_id,
+            site_id=str(site_id),
+            week=week,
+            year=year,
+            day=day,
+            meal=meal,
+            variant_type=variant_type,
+            dish_id=dish_id,
+            dish_name=dish_name,
+        )
+    except ValueError as exc:
+        error_code = str(exc).split(":", 1)[0]
+        if error_code == "menu_site_conflict":
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": "menu_site_conflict",
+                    "status": 409,
+                }
+            ), 409
+        if error_code in {
+            "site_tenant_mismatch",
+            "menu_tenant_mismatch",
+            "site_tenant_required",
+        }:
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": "site_unavailable",
+                    "status": 403,
+                }
+            ), 403
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return {"ok": True, "menu_id": menu_id, "menu_variant_id": mv_id}

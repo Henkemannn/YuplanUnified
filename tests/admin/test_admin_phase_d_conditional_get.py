@@ -26,7 +26,9 @@ class TestAdminPhaseDConditionalGET:
         c = app.test_client()
         headers = {"X-User-Role": "editor", "X-Tenant-Id": "1"}
         # Create one site via admin (requires admin role)
-        c.post("/admin/sites", headers={**headers, "X-User-Role": "admin"}, json={"name": "S1"})
+        site = c.post("/admin/sites", headers={**headers, "X-User-Role": "admin"}, json={"name": "S1"}).get_json()
+        with c.session_transaction() as sess:
+            sess["site_id"] = site["id"]
         r1 = c.get("/admin/sites", headers=headers)
         assert r1.status_code == 200
         etag = r1.headers.get("ETag")
@@ -40,6 +42,8 @@ class TestAdminPhaseDConditionalGET:
         c = app.test_client()
         headers = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
         s = c.post("/admin/sites", headers=headers, json={"name": "North"}).get_json()
+        with c.session_transaction() as sess:
+            sess["site_id"] = s["id"]
         c.post("/admin/departments", headers=headers, json={"site_id": s["id"], "name": "Ward A", "resident_count_mode": "fixed", "resident_count_fixed": 10})
         r1 = c.get(f"/admin/departments?site={s['id']}", headers=headers)
         assert r1.status_code == 200
@@ -54,6 +58,8 @@ class TestAdminPhaseDConditionalGET:
         c = app.test_client()
         headers = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
         s = c.post("/admin/sites", headers=headers, json={"name": "East"}).get_json()
+        with c.session_transaction() as sess:
+            sess["site_id"] = s["id"]
         d = c.post("/admin/departments", headers=headers, json={"site_id": s["id"], "name": "Ward B", "resident_count_mode": "fixed", "resident_count_fixed": 5}).get_json()
         r1 = c.get(f"/admin/diet-defaults?department={d['id']}", headers=headers)
         assert r1.status_code == 200
@@ -73,6 +79,8 @@ class TestAdminPhaseDConditionalGET:
         headers = {"X-User-Role": "editor", "X-Tenant-Id": "1"}
         # Seed a site for scope
         s = c.post("/admin/sites", headers={**headers, "X-User-Role": "admin"}, json={"name": "S1"}).get_json()
+        with c.session_transaction() as sess:
+            sess["site_id"] = s["id"]
         r1 = c.get(f"/admin/alt2?week=12&site={s['id']}", headers=headers)
         assert r1.status_code == 200
         et = r1.headers.get("ETag")
@@ -85,6 +93,8 @@ class TestAdminPhaseDConditionalGET:
         c = app.test_client()
         headers = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
         s = c.post("/admin/sites", headers=headers, json={"name": "N"}).get_json()
+        with c.session_transaction() as sess:
+            sess["site_id"] = s["id"]
         d = c.post("/admin/departments", headers=headers, json={"site_id": s["id"], "name": "Dept", "resident_count_mode": "fixed", "resident_count_fixed": 0}).get_json()
         r1 = c.get(f"/admin/notes?scope=department&department_id={d['id']}", headers=headers)
         assert r1.status_code == 200

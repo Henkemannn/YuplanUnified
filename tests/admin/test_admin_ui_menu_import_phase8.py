@@ -5,8 +5,14 @@ import io
 import pytest
 from sqlalchemy import text
 
+from tests.admin.test_admin_f01a_scope import bind_current_test_site
 
 ADMIN_HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
+
+
+@pytest.fixture(autouse=True)
+def _bind_default_admin_site(app_session, client_admin):
+    bind_current_test_site(app_session, client_admin)
 
 
 # Sample CSV content for testing

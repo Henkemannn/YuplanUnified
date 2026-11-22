@@ -30,7 +30,7 @@ def _ensure_menu_for_week(tenant_id: int, site_id: str, year: int, week: int) ->
     menu = svc.create_or_get_menu(tenant_id, site_id, week, year)
     db = get_new_session()
     try:
-        d = Dish(tenant_id=tenant_id, name="Köttbullar", category=None)
+        d = Dish(tenant_id=tenant_id, site_id=site_id, name="Köttbullar", category=None)
         db.add(d)
         db.commit()
         db.refresh(d)

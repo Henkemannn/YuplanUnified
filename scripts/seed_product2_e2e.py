@@ -347,6 +347,7 @@ def _seed_menu_choices(departments: dict[str, dict[str, Any]]) -> dict[str, int]
 
 def _build_builder_flow():
     from core.builder import BuilderFlow
+    from core.builder.library_scope import ObjectScope
     from core.builder_menu_context_flow import BuilderMenuContextFlow
     from core.components import (
         ComponentService,
@@ -359,14 +360,39 @@ def _build_builder_flow():
     )
     from core.menu import InMemoryCompositionAliasRepository, MenuService
 
+    class _ObjectScopeRepository:
+        def __init__(self) -> None:
+            self.scopes: dict[tuple[str, str], ObjectScope] = {}
+
+        def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+            return self.scopes.get((object_type, object_id))
+
+        def find_private_fork_id(
+            self,
+            object_type: str,
+            source_object_id: str,
+            *,
+            tenant_id: int,
+            owner_user_id: int,
+        ) -> str | None:
+            return None
+
+        def set_scope(self, object_type: str, object_id: str, scope: ObjectScope) -> None:
+            self.scopes[(object_type, object_id)] = scope
+
+        def delete_scope(self, object_type: str, object_id: str) -> None:
+            self.scopes.pop((object_type, object_id), None)
+
     component_repository = InMemoryComponentRepository()
     composition_repository = InMemoryCompositionRepository()
+    scope_repository = _ObjectScopeRepository()
     builder_flow = BuilderFlow(
         component_service=ComponentService(repository=component_repository),
         composition_service=CompositionService(repository=composition_repository),
         composition_repository=composition_repository,
         alias_repository=InMemoryCompositionAliasRepository(),
         component_alias_repository=InMemoryComponentAliasRepository(),
+        object_scope_repository=scope_repository,
     )
     menu_context_flow = BuilderMenuContextFlow(
         menu_service=MenuService(composition_repository=composition_repository),
@@ -380,6 +406,7 @@ def _build_builder_flow():
 
 
 def _seed_publication(app) -> dict[str, str]:
+    from core.builder.library_scope import ActorContext, ObjectScope
     from core.commun_builder_linkage import CommunBuilderMenuLinkService
     from core.commun_builder_publication import CommunBuilderPublicationRepository
     from core.commun_builder_projection import get_shadow_projection_reader
@@ -399,7 +426,23 @@ def _seed_publication(app) -> dict[str, str]:
             status="published",
         )
         for composition_id, _, title, variant_type, sort_order in OPTION_DEFINITIONS:
-            builder_flow.create_composition(composition_id=composition_id, composition_name=title)
+            builder_flow.create_composition(
+                composition_id=composition_id,
+                composition_name=title,
+                actor=ActorContext(
+                    tenant_id=TENANT_ID,
+                    user_id=1,
+                    site_id=SITE_ID,
+                    role="admin",
+                ),
+                scope=ObjectScope(
+                    tenant_id=TENANT_ID,
+                    owner_scope="site",
+                    owner_site_id=SITE_ID,
+                    owner_user_id=None,
+                    visibility="site",
+                ),
+            )
             menu_context_flow.add_composition_menu_row(
                 menu_id=BUILDER_MENU_ID,
                 day=PUBLISHED_DAYS[0],

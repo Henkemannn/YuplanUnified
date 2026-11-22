@@ -16,6 +16,7 @@ from sqlalchemy import text
 
 from core.admin_repo import DepartmentsRepo
 from core.builder import BuilderFlow
+from core.builder.library_scope import ActorContext, ObjectScope
 from core.builder_menu_context_flow import BuilderMenuContextFlow
 from core.commun_builder_publication import CommunBuilderPublicationRepository
 from core.commun_builder_projection import get_shadow_projection_reader
@@ -61,6 +62,30 @@ class Product2SeedWorkspace:
     script: Path
     main_db: Path
     builder_db: Path
+
+
+class _ObjectScopeRepository:
+    def __init__(self) -> None:
+        self.scopes: dict[tuple[str, str], ObjectScope] = {}
+
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+        return self.scopes.get((object_type, object_id))
+
+    def find_private_fork_id(
+        self,
+        object_type: str,
+        source_object_id: str,
+        *,
+        tenant_id: int,
+        owner_user_id: int,
+    ) -> str | None:
+        return None
+
+    def set_scope(self, object_type: str, object_id: str, scope: ObjectScope) -> None:
+        self.scopes[(object_type, object_id)] = scope
+
+    def delete_scope(self, object_type: str, object_id: str) -> None:
+        self.scopes.pop((object_type, object_id), None)
 
 
 def _python_executable() -> str:
@@ -134,11 +159,12 @@ def _cleanup_seed_db_state() -> None:
             pass
 
 
-def _build_builder_menu_context_flow() -> tuple[BuilderMenuContextFlow, CompositionService]:
+def _build_builder_menu_context_flow() -> tuple[BuilderMenuContextFlow, BuilderFlow, CompositionService]:
     component_repository = InMemoryComponentRepository()
     composition_repository = InMemoryCompositionRepository()
     recipe_repository = InMemoryRecipeRepository()
     ingredient_repository = InMemoryRecipeIngredientLineRepository()
+    scope_repository = _ObjectScopeRepository()
 
     builder_flow = BuilderFlow(
         component_service=ComponentService(repository=component_repository),
@@ -146,6 +172,7 @@ def _build_builder_menu_context_flow() -> tuple[BuilderMenuContextFlow, Composit
         composition_repository=composition_repository,
         alias_repository=InMemoryCompositionAliasRepository(),
         component_alias_repository=InMemoryComponentAliasRepository(),
+        object_scope_repository=scope_repository,
     )
     menu_context_flow = BuilderMenuContextFlow(
         menu_service=MenuService(composition_repository=composition_repository),
@@ -155,7 +182,7 @@ def _build_builder_menu_context_flow() -> tuple[BuilderMenuContextFlow, Composit
         ingredient_repository=ingredient_repository,
         library_flow=builder_flow,
     )
-    return menu_context_flow, CompositionService(repository=composition_repository)
+    return menu_context_flow, builder_flow, CompositionService(repository=composition_repository)
 
 
 def _seed_minimal_publication(
@@ -169,13 +196,13 @@ def _seed_minimal_publication(
     variant_types: tuple[str, ...] = ("alt1",),
 ) -> dict[str, str]:
     with app.app_context():
-        builder_flow, composition_service = _build_builder_menu_context_flow()
+        menu_context_flow, builder_flow, composition_service = _build_builder_menu_context_flow()
         previous_builder_menu_context_flow = app.extensions.get("builder_menu_context_flow")
         previous_builder_flow = app.extensions.get("builder_flow")
-        app.extensions["builder_menu_context_flow"] = builder_flow
+        app.extensions["builder_menu_context_flow"] = menu_context_flow
         app.extensions["builder_flow"] = builder_flow
         try:
-            builder_flow.create_menu(
+            menu_context_flow.create_menu(
                 menu_id=builder_menu_id,
                 site_id=site_id,
                 week_key=f"{year}-W{week:02d}",
@@ -188,8 +215,19 @@ def _seed_minimal_publication(
             }
             for variant_type in variant_types:
                 composition_id, composition_name = composition_names.get(variant_type, (f"comp-{variant_type}", variant_type))
-                composition_service.create_composition(composition_id=composition_id, composition_name=composition_name)
-                builder_flow.add_composition_menu_row(
+                builder_flow.create_composition(
+                    composition_id=composition_id,
+                    composition_name=composition_name,
+                    actor=ActorContext(tenant_id=1, user_id=1, site_id=site_id, role="admin"),
+                    scope=ObjectScope(
+                        tenant_id=1,
+                        owner_scope="site",
+                        owner_site_id=site_id,
+                        owner_user_id=None,
+                        visibility="site",
+                    ),
+                )
+                menu_context_flow.add_composition_menu_row(
                     menu_id=builder_menu_id,
                     menu_detail_id=f"detail-{variant_type}",
                     day=day,

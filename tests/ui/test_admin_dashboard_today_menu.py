@@ -46,7 +46,12 @@ def _insert_menu(
         dish_id = None
         if dish_name:
             try:
-                dish = Dish(tenant_id=1, name=dish_name, category=None)
+                dish = Dish(
+                    tenant_id=1,
+                    site_id=site_id,
+                    name=dish_name,
+                    category=None,
+                )
                 db.add(dish)
                 db.commit()
                 db.refresh(dish)
@@ -57,7 +62,12 @@ def _insert_menu(
             svc.set_variant(1, menu_id, day_key, "lunch", "alt1", dish_id)
         if dinner_name and menu_id:
             try:
-                dinner_dish = Dish(tenant_id=1, name=dinner_name, category=None)
+                dinner_dish = Dish(
+                    tenant_id=1,
+                    site_id=site_id,
+                    name=dinner_name,
+                    category=None,
+                )
                 db.add(dinner_dish)
                 db.commit()
                 db.refresh(dinner_dish)

@@ -13,7 +13,12 @@ from .api_types import (
     TenantListResponse,
 )
 from .app_authz import require_roles as require_roles_strict
-from .auth import require_roles as require_roles_simple
+from .auth import (
+    _load_active_user_by_id,
+    _normalize_role,
+    _user_has_current_site_binding,
+    require_roles as require_roles_simple,
+)
 from .db import get_session
 from .feature_service import FeatureService
 from .http_limits import limit as http_limit
@@ -559,6 +564,79 @@ def _admin_tenant_id():
     return tid
 
 
+def _admin_scope_context() -> tuple[dict[str, object] | None, object | None]:
+    """Resolve the current actor's tenant and explicit site binding."""
+    tenant_id = session.get("tenant_id")
+    if tenant_id is None:
+        return None, forbidden("tenant_required", "Tenant context required")
+
+    user_id = session.get("user_id")
+    db = get_session()
+    try:
+        user = _load_active_user_by_id(db, user_id)
+        if user is None:
+            if current_app.config.get("TESTING") and request.headers.get("X-User-Role"):
+                return {
+                    "tenant_id": tenant_id,
+                    "site_id": session.get("site_id"),
+                    "superuser": False,
+                }, None
+            return None, forbidden("authentication_required", "Authentication required")
+
+        role = _normalize_role(user.role)
+        if role == "superuser":
+            return {"tenant_id": user.tenant_id, "site_id": None, "superuser": True}, None
+
+        site_id = str(session.get("site_id") or "").strip()
+        if not _user_has_current_site_binding(db, user, site_id):
+            return None, forbidden("site_required", "An explicit site binding is required")
+        return {"tenant_id": user.tenant_id, "site_id": site_id, "superuser": False}, None
+    finally:
+        db.close()
+
+
+def _require_admin_site_access(site_id: str) -> object | None:
+    """Require a resource site to match the actor's current explicit scope."""
+    context, error = _admin_scope_context()
+    if error is not None:
+        return error
+    requested_site_id = str(site_id or "").strip()
+    if not requested_site_id:
+        return forbidden("site_required", "Site context required")
+    db = get_session()
+    try:
+        row = db.execute(
+            text("SELECT tenant_id FROM sites WHERE id=:site_id LIMIT 1"),
+            {"site_id": requested_site_id},
+        ).fetchone()
+    finally:
+        db.close()
+    if not row or row[0] != context["tenant_id"]:
+        return forbidden("site_forbidden", "Site is outside the current tenant")
+    if not context["superuser"] and requested_site_id != context["site_id"]:
+        return forbidden("site_forbidden", "Site is outside the current binding")
+    return None
+
+
+def _department_site_id(department_id: str) -> str | None:
+    db = get_session()
+    try:
+        row = db.execute(
+            text("SELECT site_id FROM departments WHERE id=:department_id LIMIT 1"),
+            {"department_id": department_id},
+        ).fetchone()
+        return str(row[0]) if row and row[0] is not None else None
+    finally:
+        db.close()
+
+
+def _require_admin_department_access(department_id: str) -> object | None:
+    site_id = _department_site_id(department_id)
+    if site_id is None:
+        return not_found("Department not found", error_type="department_not_found")
+    return _require_admin_site_access(site_id)
+
+
 def _validate_week_range(week: int) -> bool:
     """Validate week number is in valid range 1-53."""
     return 1 <= week <= 53
@@ -685,6 +763,9 @@ def create_department():
     fixed = data.get("resident_count_fixed")
     if not site_id or not name:
         return bad_request("site_id and name are required")
+    scope_error = _require_admin_site_access(str(site_id))
+    if scope_error is not None:
+        return scope_error
     svc = AdminService()
     try:
         rec, etag = svc.create_department(site_id, name, mode, fixed)
@@ -712,6 +793,9 @@ def update_department(department_id: str):
     if_match = request.headers.get("If-Match")
     if not if_match:
         return bad_request("missing_if_match")
+    scope_error = _require_admin_department_access(department_id)
+    if scope_error is not None:
+        return scope_error
     data = request.get_json(silent=True) or {}
     svc = AdminService()
     try:
@@ -752,6 +836,9 @@ def update_department_notes(department_id: str):
     if_match = request.headers.get("If-Match")
     if not if_match:
         return bad_request("missing_if_match")
+    scope_error = _require_admin_department_access(department_id)
+    if scope_error is not None:
+        return scope_error
     data = request.get_json(silent=True) or {}
     notes = data.get("notes")
     svc = AdminService()
@@ -785,6 +872,9 @@ def update_diet_defaults(department_id: str):
     if_match = request.headers.get("If-Match")
     if not if_match:
         return bad_request("missing_if_match")
+    scope_error = _require_admin_department_access(department_id)
+    if scope_error is not None:
+        return scope_error
     data = request.get_json(silent=True) or {}
     items = data.get("items") or data.get("dietary_counts") or []
     if not isinstance(items, list):
@@ -887,6 +977,9 @@ def update_bulk_alt2():
             db.close()
     except Exception:
         return bad_request("site_scope_required")
+    scope_error = _require_admin_site_access(scope_site_id)
+    if scope_error is not None:
+        return scope_error
     svc = AdminService()
     try:
         body, new_etag = svc.update_alt2_bulk(if_match, week, items)
@@ -954,8 +1047,13 @@ def list_sites():
     tid = _admin_tenant_id()
     if not tid:
         return forbidden('tenant_required','Tenant context required')
+    context, scope_error = _admin_scope_context()
+    if scope_error is not None:
+        return scope_error
     svc = AdminService()
-    rows = svc.sites_repo.list_sites()
+    rows = svc.sites_repo.list_sites_for_tenant(context["tenant_id"])
+    if not context["superuser"]:
+        rows = [row for row in rows if row.get("id") == context["site_id"]]
     max_v = max([r.get('version',0) for r in rows], default=0)
     etag = make_collection_etag('admin:sites', f'tenant:{tid}', max_v)
     return _conditional_response(etag, request.headers.get('If-None-Match'), lambda: {'items': rows})
@@ -975,6 +1073,9 @@ def list_departments():
     site_id = request.args.get('site') or request.args.get('site_id')
     if not site_id:
         return bad_request('site query param required')
+    scope_error = _require_admin_site_access(site_id)
+    if scope_error is not None:
+        return scope_error
     svc = AdminService()
     rows = svc.depts_repo.list_for_site(site_id)
     max_v = max([r.get('version',0) for r in rows], default=0)
@@ -996,6 +1097,9 @@ def get_diet_defaults():
     dept_id = request.args.get('department') or request.args.get('department_id')
     if not dept_id:
         return bad_request('department query param required')
+    scope_error = _require_admin_department_access(dept_id)
+    if scope_error is not None:
+        return scope_error
     svc = AdminService()
     items = svc.diet_repo.list_for_department(dept_id)
     version = svc.depts_repo.get_version(dept_id) or 0
@@ -1023,6 +1127,9 @@ def get_alt2_week():
     site_id = (request.args.get('site') or request.args.get('site_id') or '').strip()
     if not site_id:
         return bad_request('site query param required')
+    scope_error = _require_admin_site_access(site_id)
+    if scope_error is not None:
+        return scope_error
     svc = AdminService()
     rows = svc.alt2_repo.list_for_week(week, site_id)
     max_v = max([r.get('version',0) for r in rows], default=0)
@@ -1058,6 +1165,9 @@ def get_notes_scope():
             dept_id = request.args.get('department_id') or request.args.get('department')
             if not dept_id:
                 return bad_request('department_id required')
+            scope_error = _require_admin_department_access(dept_id)
+            if scope_error is not None:
+                return scope_error
             row = db.execute(text('SELECT notes, COALESCE(version,0) FROM departments WHERE id=:id'), {'id': dept_id}).fetchone()
             notes_val = row[0] if row else None
             version = int(row[1]) if row else 0
@@ -1067,6 +1177,9 @@ def get_notes_scope():
             site_id = request.args.get('site_id') or request.args.get('site')
             if not site_id:
                 return bad_request('site_id required')
+            scope_error = _require_admin_site_access(site_id)
+            if scope_error is not None:
+                return scope_error
             row = db.execute(text('SELECT notes, COALESCE(version,0) FROM sites WHERE id=:id'), {'id': site_id}).fetchone()
             notes_val = row[0] if row else None
             version = int(row[1]) if row else 0

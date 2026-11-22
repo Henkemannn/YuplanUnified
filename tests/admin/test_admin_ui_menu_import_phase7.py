@@ -7,6 +7,8 @@ from flask import Flask
 from flask.testing import FlaskClient
 from io import BytesIO
 
+from tests.admin.test_admin_f01a_scope import bind_test_user_to_site
+
 # Auth headers for admin routes
 ADMIN_HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
@@ -57,6 +59,7 @@ def app_with_menu(app_session: Flask):
         text("INSERT OR REPLACE INTO sites (id, name, tenant_id, version) VALUES (:id, :name, :tid, 0)"),
         {"id": "site-import-7", "name": "Site Import 7", "tid": 1},
     )
+    bind_test_user_to_site(app_session, "site-import-7")
     
     # Seed menu for week 48/2025
     conn.execute(

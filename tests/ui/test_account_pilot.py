@@ -158,8 +158,8 @@ def test_account_password_change_success(client_admin):
         headers=_h("admin", user_id),
         data={
             "current_password": "old-pass-123",
-            "new_password": "new-pass-456",
-            "confirm_password": "new-pass-456",
+            "new_password": "new-password-456",
+            "confirm_password": "new-password-456",
             "csrf_token": csrf,
         },
         follow_redirects=True,
@@ -172,7 +172,7 @@ def test_account_password_change_success(client_admin):
     try:
         row = db.execute(text("SELECT password_hash FROM users WHERE id=:uid"), {"uid": user_id}).fetchone()
         assert row is not None
-        assert check_password_hash(str(row[0]), "new-pass-456")
+        assert check_password_hash(str(row[0]), "new-password-456")
     finally:
         db.close()
 
@@ -197,8 +197,8 @@ def test_account_password_change_rejects_wrong_current_password(client_admin):
         headers=_h("admin", user_id),
         data={
             "current_password": "definitely-wrong",
-            "new_password": "new-pass-456",
-            "confirm_password": "new-pass-456",
+            "new_password": "new-password-456",
+            "confirm_password": "new-password-456",
             "csrf_token": csrf,
         },
         follow_redirects=True,
@@ -212,7 +212,7 @@ def test_account_password_change_rejects_wrong_current_password(client_admin):
         row = db.execute(text("SELECT password_hash FROM users WHERE id=:uid"), {"uid": user_id}).fetchone()
         assert row is not None
         assert check_password_hash(str(row[0]), "old-pass-123")
-        assert not check_password_hash(str(row[0]), "new-pass-456")
+        assert not check_password_hash(str(row[0]), "new-password-456")
     finally:
         db.close()
 
@@ -237,7 +237,7 @@ def test_account_password_change_rejects_mismatched_confirmation(client_admin):
         headers=_h("admin", user_id),
         data={
             "current_password": "old-pass-123",
-            "new_password": "new-pass-456",
+            "new_password": "new-password-456",
             "confirm_password": "different-pass-999",
             "csrf_token": csrf,
         },
@@ -252,7 +252,7 @@ def test_account_password_change_rejects_mismatched_confirmation(client_admin):
         row = db.execute(text("SELECT password_hash FROM users WHERE id=:uid"), {"uid": user_id}).fetchone()
         assert row is not None
         assert check_password_hash(str(row[0]), "old-pass-123")
-        assert not check_password_hash(str(row[0]), "new-pass-456")
+        assert not check_password_hash(str(row[0]), "new-password-456")
     finally:
         db.close()
 

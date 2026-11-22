@@ -182,8 +182,16 @@ class Dish(Base):
     __tablename__ = "dishes"
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
+    site_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("sites.id"),
+        nullable=True,
+    )
     name: Mapped[str] = mapped_column(String(200))
     category: Mapped[str] = mapped_column(String(50), nullable=True)
+    __table_args__ = (
+        Index("ix_dishes_tenant_site", "tenant_id", "site_id"),
+    )
 
 
 class Recipe(Base):
@@ -203,6 +211,56 @@ class Menu(Base):
     year: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(20), default="draft")
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "site_id",
+            "year",
+            "week",
+            name="uq_menu_tenant_site_year_week",
+        ),
+    )
+
+
+class MenuImportGuard(Base):
+    __tablename__ = "menu_import_guards"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    operation_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    active_key: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    error_code: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "operation_id",
+            "year",
+            "week",
+            name="uq_menu_import_guards_operation_week",
+        ),
+        CheckConstraint(
+            "status IN ('in_progress', 'completed', 'needs_review')",
+            name="ck_menu_import_guards_status",
+        ),
+        CheckConstraint("year > 0", name="ck_menu_import_guards_year_positive"),
+        CheckConstraint(
+            "week BETWEEN 1 AND 53",
+            name="ck_menu_import_guards_week_range",
+        ),
+    )
 
 
 def _new_link_id() -> str:
@@ -809,12 +867,20 @@ class Note(Base):
     __tablename__ = "notes"
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
+    site_id: Mapped[str | None] = mapped_column(
+        ForeignKey("sites.id"),
+        nullable=True,
+    )
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     content: Mapped[str] = mapped_column(Text)
     # Use timezone-aware UTC timestamps.
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     private_flag: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    __table_args__ = (
+        Index("ix_notes_tenant_site", "tenant_id", "site_id"),
+    )
 
 
 # --- Audit Events ---

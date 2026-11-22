@@ -85,10 +85,10 @@ def test_kitchen_menu_overview_renders(tmp_path, monkeypatch):
         menu = svc.create_or_get_menu(1, site_id, week, year)
         db2 = get_new_session()
         try:
-            d1 = Dish(tenant_id=1, name="Alt1 Gryta", category=None)
-            d2 = Dish(tenant_id=1, name="Alt2 Sallad", category=None)
-            d3 = Dish(tenant_id=1, name="Dessert Frukt", category=None)
-            d4 = Dish(tenant_id=1, name="Kvällsmat Soppa", category=None)
+            d1 = Dish(tenant_id=1, site_id=site_id, name="Alt1 Gryta", category=None)
+            d2 = Dish(tenant_id=1, site_id=site_id, name="Alt2 Sallad", category=None)
+            d3 = Dish(tenant_id=1, site_id=site_id, name="Dessert Frukt", category=None)
+            d4 = Dish(tenant_id=1, site_id=site_id, name="Kvällsmat Soppa", category=None)
             db2.add_all([d1, d2, d3, d4])
             db2.commit()
             db2.refresh(d1)
@@ -211,6 +211,12 @@ def test_kitchen_menu_overview_hides_draft_menu(tmp_path, monkeypatch):
             db.close()
         svc = MenuServiceDB()
         menu = svc.create_or_get_menu(1, site_id, week, year)
+        db2 = get_new_session()
+        try:
+            db2.add(Dish(id=1, tenant_id=1, site_id=site_id, name="Draft dish", category=None))
+            db2.commit()
+        finally:
+            db2.close()
         svc.set_variant(1, menu.id, "mon", "lunch", "main", 1)
 
     client: FlaskClient = app.test_client()

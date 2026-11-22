@@ -79,6 +79,13 @@ def test_weekview_happy_path_with_menu_data(client_admin):
         finally:
             db.close()
 
+    resp = client_admin.post(
+        "/features/set",
+        json={"name": "ff.weekview.enabled", "enabled": True},
+        headers=_h("admin"),
+    )
+    assert resp.status_code == 200
+
     # Set up resident counts
     # Ensure session site context matches our seeded site
     # Set session site context directly (selector is superuser-only)
@@ -248,6 +255,13 @@ def test_weekview_alt2_highlighting_visible(client_admin):
         finally:
             db.close()
 
+    resp = client_admin.post(
+        "/features/set",
+        json={"name": "ff.weekview.enabled", "enabled": True},
+        headers=_h("admin"),
+    )
+    assert resp.status_code == 200
+
     # Set alt2 flag for Monday
     # Ensure session site context matches our seeded site
     with client_admin.session_transaction() as sess:
@@ -387,6 +401,13 @@ def test_weekview_dinner_columns_hidden_when_no_dinner(client_admin):
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt1", dish_id=d1.id)
         finally:
             db.close()
+
+    resp = client_admin.post(
+        "/features/set",
+        json={"name": "ff.weekview.enabled", "enabled": True},
+        headers=_h("admin"),
+    )
+    assert resp.status_code == 200
 
     # Materialize weekview
     r0 = client_admin.get(f"/api/weekview?year={year}&week={week}&department_id={dep_id}", headers=_h("admin"))
