@@ -1,6 +1,40 @@
 # Yuplan Unified — Security Baseline
 
-**Status:** Living engineering security baseline, reviewed 2026-11-07. This file records security controls and verified evidence; it does **not** grant pilot or production approval. The current release/gate authority remains [Kommun 1.1 Live Acceptance](../KOMMUN_1_1_LIVE_ACCEPTANCE.md). Do not add a competing MVP tracker here.
+## SEC-01 current remediation overlay — 2026-11-22
+
+**Latest verified source checkpoint:** feature branch feat/planera-app-shell-2026-03-03, product/security HEAD **eca346d2fa6368843d1486b3fb124cfd7297cb11** (owner-verified local/remote matched, worktree clean). This overlay supersedes dated 2026-11-07 next-step claims below. The **one operational task/status authority** is [Kommun 1.1 Live Acceptance](../KOMMUN_1_1_LIVE_ACCEPTANCE.md).
+
+**Astra SEC-01:** 15 findings (F01–F11 HIGH; F12–F15 MEDIUM), plus a separate JWT RS256/HMAC algorithm concern.
+
+| Finding | Disposition from targeted code/test reports |
+| --- | --- |
+| F01 Admin/Notes/Audit authorization | Scoped CLOSED |
+| F02 Menu API authorization | Scoped CLOSED |
+| F03 Dish/Menu site/tenant relationships, Municipal, import, Builder and reference paths | CLOSED for audited paths; tested copy migration through 0054 |
+| F04 Builder import auth/session | Scoped CLOSED |
+| F05 denied-login stale session | Scoped CLOSED |
+| F06 refresh-token accepted as Bearer | Scoped CLOSED |
+| F07 revoked/deactivated user binding | Scoped CLOSED |
+| F08 export data leakage | **OPEN — NEXT** |
+| F09 Planera cross-site | **OPEN** |
+| F10 anonymous real-data demo | **OPEN** |
+| F11 strong SECRET_KEY | Code/scoped CLOSED; deployment configuration validation OPEN |
+| F12 support scope | **OPEN** |
+| F13 upload bounds | **OPEN** |
+| F14 temporary password flash | **OPEN** |
+| F15 Weekview runtime schema repair | **OPEN** |
+| JWT RS256 confusion under HMAC JWT_SECRETS | **OPEN, separately track** |
+
+**F03 evidence/limits:** focused Dish/Municipal 29 passed; Builder/import 17 passed; migrations 13 passed; selected combined suite 290 passed / 1 existing skip; prior Admin+Core suite 302 passed / 1 existing skip. Pilot database was migrated **only as an isolated copy** from 0050 to 0054, preserving 2 tenants, 2 sites, 10 users, 23 menus, 248 dishes, 520 variants and validating zero cross-site/cross-tenant variant links. Original remains 0050 and SHA-256 **acf627a87ebb2bed9ec6521a982ea76bd1b3de53b3a8c11795fcef5e3b5de6f2**. 2,862 tests were collected, **not** run as one complete suite; old Task/metrics login fixtures still fail. No pilot or deployment approval.
+
+**Pilot-minimal import protection:** persistent 0054 guard marks in_progress/completed/needs_review and blocks unsafe overlapping import/publication, without automated cross-store Saga or crash recovery. Manual needs_review handling is an operational gate. Do not claim full distributed atomicity or automatic rollback.
+
+**Focus:** F08 → F09 → F10, then JWT RS256/F12–F15 in bounded risk-based gates. Fix real leaks, not speculative future features. Keep prior accepted A–Ö UI and Kitchen/Planera behavior frozen without reproduction. Release acceptance later needs full regression, a live multi-role walkthrough, provider reset end-to-end, new staging and backup/restore; historical Fly is not current development environment.
+
+---
+
+
+**Status:** Living engineering security baseline, reviewed 2026-11-22 (current overlay below; 2026-11-07 historical detail retained). This file records security controls and verified evidence; it does **not** grant pilot or production approval. The current release/gate authority remains [Kommun 1.1 Live Acceptance](../KOMMUN_1_1_LIVE_ACCEPTANCE.md). Do not add a competing MVP tracker here.
 
 **Current verified product/security code checkpoint before docs-only commits:** `97c9cd6721f7a17b27de0e0f5650babf2cc81e12` — Gates 03H.5/03H.5B login recovery navigation and missing-HMAC test isolation, pushed 2026-11-07; prior login HTML fix `a8fed697` and reset expiry `c53b9452` also pushed. **Not deployed or hosted-live-verified.** The sole next-gate authority is `docs/KOMMUN_1_1_LIVE_ACCEPTANCE.md`.
 

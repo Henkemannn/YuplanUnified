@@ -1,7 +1,84 @@
 # Kommun 1.1 — Live Acceptance & UX Race
 
+## CURRENT — 2026-11-22 — status, A–Ö, SEC-01 and next handover
 
-## CURRENT — 2026-11-18 — authoritative operational status
+**Authority:** This dated section supersedes older CURRENT/next-gate claims below; retain the detailed 2026-11-18 A–Ö matrix as the per-ID acceptance ledger. Earlier snapshots, old HEADs and next-order statements are historical. No overall Kommun 1.1 PILOT GO, no Yuplan 1.0 release GO, and no fresh staging GO.
+
+### Latest Git and database checkpoint (owner terminal verified)
+
+- Repository: Henkemannn/YuplanUnified. Active branch: feat/planera-app-shell-2026-03-03.
+- **Product/security commit and remote branch head: eca346d2fa6368843d1486b3fb124cfd7297cb11**, 2026-11-22; message: security: consolidate tenant-site isolation and pilot fixes. Owner verified commit, push, remote HEAD equal to local HEAD and CLEAN worktree. 79 files committed (+7,052/-495 lines). **Any docs-only commit after this checkpoint changes remote HEAD and requires a guarded local fast-forward before further development.**
+- Development Alembic head: **0054_add_menu_import_guards**. Original local pilot database **instance/yuplan_mvp.db** remains at **0050_add_password_reset_storage**; it was NOT migrated during SEC-01/F03. Verified original SHA-256: **acf627a87ebb2bed9ec6521a982ea76bd1b3de53b3a8c11795fcef5e3b5de6f2**.
+- F03-09: SQLite online-backup and separate working copy under SEC_F03_09_MIGRATION_20261122 were migrated **0050 → 0051 → 0052 → 0053 → 0054**, without manual stamp. Counts unchanged: tenants 2, sites 2, users 10, menus 23, dishes 248, variants 520. Zero NULL-site menus/dishes, zero cross-tenant/site MenuVariant/Dish relations, zero duplicate site/week menus, zero missing Dish refs in the migrated copy. This **proves that particular migration rehearsal**, not deployment or production migration approval.
+- Old Fly installation is a stale historical environment; do not use it as an active development target, migrate it blindly, or claim code was deployed. User decision: finish Kommun locally, then build **fresh staging**.
+
+### SEC-01 status (Astra independent review → scoped Copilot remediations)
+
+Astra reported 15 numbered findings: 11 high (F01–F11), 4 medium (F12–F15). An additional RS256/JWT algorithm concern was recorded. Current disposition from targeted Copilot reports and local tests, **not a new independent full security audit**:
+
+| ID | Status 2026-11-22 | Evidence / next action |
+| --- | --- | --- |
+| F01 | **Scoped CLOSED** | Admin target scope, Notes site scope (0052), Audit superuser boundary; targeted tests. |
+| F02 | **Scoped CLOSED** | Menu API role/resource checks; targeted tests. |
+| F03 | **CLOSED for the audited Dish/menu/import paths** | Cross-tenant/site Dish ID checks; atomic legacy variant write; migration 0051/0053; Municipal; Task/ServiceMetric Dish references; Builder/legacy session fix and 0054 import guard. F03-09 migration and focus regressions passed. No blanket proof of all operations. |
+| F04 | **Scoped CLOSED** | Builder import auth/session scope; earlier targeted tests; include in release regression. |
+| F05 | **Scoped CLOSED** | Denied login must not retain auth session. |
+| F06 | **Scoped CLOSED** | Refresh JWT rejected where access Bearer required. |
+| F07 | **Scoped CLOSED** | Revoked/deactivated user and live DB-bound access checks. |
+| F08 | **OPEN — next P0** | Export authorization/data leakage. Reproduce active endpoints, correct only concrete tenant/site leak. |
+| F09 | **OPEN — P0** | Planera cross-site authorization and resource ID scope. |
+| F10 | **OPEN — P0** | Anonymous demo portal and possible real-data access. |
+| F11 | **Code/scoped CLOSED; deployment acceptance OPEN** | Strong SECRET_KEY configuration policy, requires actual fresh-staging secrets and negative runtime checks. |
+| F12 | **OPEN — P1** | Support authorization scope. |
+| F13 | **OPEN — P1** | Upload limits and failure handling. |
+| F14 | **OPEN — P1** | Temporary password flashed to screen: verify/remove unsafe exposure. |
+| F15 | **OPEN — P1** | Weekview schema repair during request: deny unsafe runtime mutations, keep migrations explicit. |
+| JWT RS256 | **OPEN — focused check** | Reject algorithm confusion when HMAC JWT_SECRETS are configured. |
+
+**Hard delivery rule:** Complete F08 → F09 → F10 first, then RS256/F12–F15 by real pilot risk. One narrow security order → Copilot report → project lead review → tests → guarded commit. Avoid broad architectural rewrites, speculative threats and endless rounds; do not reopen F01–F07/F11 or accepted A–Ö without reproduced regression.
+
+### F03 final evidence and honest limitations
+
+- Most recent reported focused runs: 29/29 Dish/Municipal security, 17/17 Builder/import guards, 13/13 migration, and 290 passed + 1 pre-existing skip in an Admin/API/menu/site combined suite. Prior integration run: 302 passed + 1 skip. **These are overlapping runs; do not add their counts into a fake total.**
+- **2,862 pytest cases collected, not executed as one full suite**. Known older Task-status and metrics/diet tests still fail at login HTTP 403 due to fixture/engine/context mismatch. Other historical Portal/Page2 UI fixture issues must be verified rather than hidden. Do not claim whole Yuplan regression-free.
+- 0054 minimal **menu_import_guards** (tenant/site/year/week, operation ID, in_progress/completed/needs_review) blocks overlapping unfinished imports and blocks publication until verified. It **does not** implement automatic saga rollback, crash resume or distributed transactions. Failed imports require safe manual review, with an operational procedure before pilot. **Completed import is not the same as publication.** Do not add a Saga engine for the pilot.
+- Read-only F03-08 Builder check found no newly reproduced active Dish/menu leak; F03-09 copy migration passed. Original database migration requires explicit separate approval, backup, verification and a real release window.
+
+### Product and A–Ö (owner-accepted numbered ledger remains binding)
+
+The detailed table immediately below (recorded 2026-11-18) remains the accepted per-ID evidence. **No A–Ö acceptance has been silently changed by the SEC work.**
+
+- **16 CLOSED:** AÖ-01, 03, 05, 06, 07, 08, 12, 13, 14, 16, 17, 20, 21, 24, 25, 26.
+- **9 OPEN:** AÖ-02 (Användare encoding); 04 (create diet type inline); 09 (Admin Users responsive table/actions); 10 (deactivate/delete decision); 11 (replace visible SCOPE); 18 (design consistency read-only census); 22 (Page3 heading cosmetics); 23 (Overview reversible dish/all selector); 27 (Weekview yellow highlight/Thursday polish).
+- **1 PARTIAL:** AÖ-19: publication, Kitchen Dish modal and Admin unpublish warning accepted; Kitchen site-scoped searchable Recept & rätter library decision still open. Automatic publication-change notifications/diffs explicitly **DEFERRED**.
+- **1 CANCELLED:** AÖ-15 rolled back. Never resurrect without new owner decision.
+- **Three ancillary OPEN:** AÖ-IPAD-PRINT-01 (Production Lists print toggles), AÖ-PWA-01 (role-aware installed start route), AÖ-KITCHEN-ALT2-01 (Alt2 contrast).
+- AÖ-09 Admin Users previously rejected as visually messy/unstable. Keep a full-width stable table (name/email, role, access, status, actions); no floating ellipsis that moves rows. Do not mark closed until owner accepts.
+- Accepted: Admin/Kitchen app shell and login, Menu Builder/Components→Dishes→Menus/import, publication and week selection, Page2 review/Planera Page1–3, normal/specialkost production, Weekview completion, K25–K27 production lists/serving/packing, chosen iPad/Safari print fixes. Preserve exact locked behavior; tests do not replace final real user acceptance.
+
+### Architecture and pilot acceptance rules
+
+- **Tenant = kund; Site = arbetsplats/kök.** Ordinary users are DB-bound to exactly their site; never offer a site picker or implicit default. System superuser is separate from customer Users list and portal. No implicit cross-tenant or cross-site sharing; later permissioned multi-site features are out of pilot.
+- Planera 2.0 Core uses canonical business/menu context. Distinguish **Specialkost** recipient needs from **Serveringsanpassning** department serving/packing instructions. Menu choice Alt2 yellow and completed green are independent truth.
+- Kommun pilot golden path: new customer/site → account/roles → departments, resident/needs quantities and special diets → Builder menu import/create → publish → Department Portal menu choice → Planera Page1/2/3 → production/normal/specialkost → Production Lists/Servering/Packning → Kitchen Weekview mark done → reporting/export; then revisit with real reload, iPad/Safari print and negative permissions.
+- **Release blocker checks:** export/report consistency, login and real reset mail, inactive/revoked user denial, tenant/site/department denial, iPad portrait/landscape light/dark, PWA and print, backup/restore, new current-schema staging HTTPS/secrets/cookies, verified original-data migration after explicit owner authorization, manual handling for needs_review, owner signoff.
+- Postmark standalone SMTP delivery was owner-confirmed, but Yuplan hosted end-to-end reset flow not proven. Historical exposed provider token rotation confirmation pending. Never commit secrets.
+- Current execution after SEC completion: full test run + categorize failures; bounded manual golden-path acceptance; remaining P2 A–Ö items in owner-priority order; fresh staging and release gate. **No pilot GO before evidence.**
+- Future, not pilot blockers: Offshore 1.0 after Kommun freeze; then overall Yuplan 1.0. Event/Hotel/Bankett/Home and personal portable recipe library are future ideas, not active gates.
+
+### Immediate next Copilot gate
+
+**SEC-F08-A — READ-ONLY targeted export exposure audit** on the just-verified product commit. Identify actual active export routes, roles, request IDs, tenant/site filters, and reproducible same-tenant cross-site/cross-tenant attempts using synthetic data. Report exact source paths and minimal fix/test scope. Do not edit code, migrate databases, deploy, or create speculative export architecture. When F08-A report arrives, project lead issues one narrow repair only if evidence warrants.
+
+### Work discipline / local synchronization
+
+One order → one Copilot report → independent project lead review → tests + manual checks as needed → owner-approved guarded PowerShell commit/push → update this live ledger. Use verified branch, exact HEAD, dirty/staged manifest, git diff --check and pilot DB hash before consequential steps. A docs-only commit made directly on GitHub advances origin/branch while the user's local branch stays at eca346d2 until a **verified fast-forward**; never implement on top of stale local HEAD without syncing. Preserve prior backups and never force-push or auto-migrate the original pilot DB.
+
+---
+
+
+
+## HISTORICAL — 2026-11-18 — prior operational status
 
 > This section and the **current status/priority matrix** are the only current Kommun 1.1 delivery ledger. The dated 2026-11-08 intake rows, earlier 'next' statements, October baseline and September finishline are preserved as historical evidence, **not current implementation instructions**. **No final Kommun 1.1 PILOT GO or Yuplan 1.0 release GO is claimed.**
 
@@ -14,7 +91,7 @@
 
 **Status:** Kommun 1.1 remains under local development and final pilot acceptance. The user explicitly decided **finish Kommun 1.1 first, then prepare fresh staging/deploy**. Do **not** redeploy or migrate the old Fly installation as a shortcut. Keep completed UI/Builder/Planera/K25–K27 work frozen absent a reproduced regression.
 
-### 2026-11-18 canonical A–Ö status matrix (current authority)
+### 2026-11-18 detailed A–Ö per-ID matrix (owner-accepted evidence; retained under current overlay)
 
 **Meaning of status:** **CLOSED** = implemented, commit verified and owner acceptance recorded for that scoped issue; **CODE FIXED / ACCEPTANCE OPEN** = tested implementation exists but a distinct real-device/security/end-to-end release check remains; **PARTIAL** = listed subgates closed, remainder explicitly named; **OPEN** = still requires diagnosis, decision or correction; **DEFERRED** = not in active Kommun 1.1 scope by owner decision; **CANCELLED** = intentionally rolled back. A successful local test/commit never implies Fly deployment or Kommun pilot GO.
 
