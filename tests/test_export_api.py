@@ -1,13 +1,14 @@
 from contextlib import suppress
+import uuid
 
 import pytest
 from flask import Flask
+from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 
 from core.app_factory import create_app
 from core.db import create_all, get_session
-from core.admin_repo import SitesRepo
-from core.models import Note, Task, Tenant, User
+from core.models import Note, Site, Task, Tenant, User
 
 
 @pytest.fixture()
@@ -28,12 +29,10 @@ def seeded(client):
         create_all()
     db = get_session()
     try:
-        tenant = db.query(Tenant).first()
-        if not tenant:
-            tenant = Tenant(name="ExportT")
-            db.add(tenant)
-            db.commit()
-            db.refresh(tenant)
+        tenant = Tenant(name=f"ExportT-{uuid.uuid4().hex}")
+        db.add(tenant)
+        db.commit()
+        db.refresh(tenant)
         # Clean possible previous runs
         db.query(Note).delete()
         db.query(Task).delete()
@@ -41,6 +40,21 @@ def seeded(client):
             User.email.in_(["exp_admin@example.com", "exp_cook@example.com"])
         ).delete()
         db.commit()
+        db.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+                "user_id INTEGER NOT NULL, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL, "
+                "UNIQUE(user_id, tenant_id, site_id))"
+            )
+        )
+        tenant_b = Tenant(name=f"Export Other Tenant {uuid.uuid4().hex}")
+        db.add(tenant_b)
+        db.flush()
+        site_a = Site(id=f"export-site-a-{uuid.uuid4().hex}", tenant_id=tenant.id, name="Export Site A")
+        site_b = Site(id=f"export-site-b-{uuid.uuid4().hex}", tenant_id=tenant.id, name="Export Site B")
+        site_c = Site(id=f"export-site-c-{uuid.uuid4().hex}", tenant_id=tenant_b.id, name="Export Site C")
+        db.add_all([site_a, site_b, site_c])
+        db.flush()
         admin = User(
             tenant_id=tenant.id,
             email="exp_admin@example.com",
@@ -63,9 +77,64 @@ def seeded(client):
         admin_id = int(admin.id)
         cook_id = int(cook.id)
         # Seed some data
-        n1 = Note(tenant_id=tenant.id, user_id=admin.id, content="Public Note", private_flag=False)
-        n2 = Note(tenant_id=tenant.id, user_id=admin.id, content="Privat Note", private_flag=True)
-        db.add_all([n1, n2])
+        n1 = Note(
+            tenant_id=tenant.id,
+            site_id=site_a.id,
+            user_id=admin.id,
+            content="Public Note",
+            private_flag=False,
+        )
+        n2 = Note(
+            tenant_id=tenant.id,
+            site_id=site_a.id,
+            user_id=admin.id,
+            content="Privat Note",
+            private_flag=True,
+        )
+        n3 = Note(
+            tenant_id=tenant.id,
+            site_id=site_b.id,
+            user_id=admin.id,
+            content="Other Site Note",
+            private_flag=False,
+        )
+        n4 = Note(
+            tenant_id=tenant.id,
+            site_id=site_b.id,
+            user_id=admin.id,
+            content="Other Site Private Note",
+            private_flag=True,
+        )
+        n5 = Note(
+            tenant_id=tenant_b.id,
+            site_id=site_c.id,
+            user_id=admin.id,
+            content="Other Tenant Note",
+            private_flag=False,
+        )
+        n6 = Note(
+            tenant_id=tenant.id,
+            site_id=None,
+            user_id=admin.id,
+            content="Unscoped Note",
+            private_flag=False,
+        )
+        db.add_all([n1, n2, n3, n4, n5, n6])
+        db.commit()
+        db.execute(
+            text(
+                "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                "VALUES (:user_id, :tenant_id, :site_id)"
+            ),
+            {"user_id": admin.id, "tenant_id": tenant.id, "site_id": site_a.id},
+        )
+        db.execute(
+            text(
+                "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                "VALUES (:user_id, :tenant_id, :site_id)"
+            ),
+            {"user_id": cook.id, "tenant_id": tenant.id, "site_id": site_a.id},
+        )
         db.commit()
         t1 = Task(
             tenant_id=tenant.id,
@@ -86,15 +155,15 @@ def seeded(client):
         )
         db.add_all([t1, t2])
         db.commit()
-        # Ensure there is at least one valid site binding for login/session policy.
-        site_rows = SitesRepo().list_sites_for_tenant(tenant_id)
-        if site_rows:
-            site_id = str(site_rows[0].get("id"))
-        else:
-            site, _ = SitesRepo().create_site("Export Test Site", tenant_id=tenant_id)
-            site_id = str(site.get("id"))
+        site_id = site_a.id
         # Return primitive IDs to avoid DetachedInstance issues once session closed
-        return {"tenant_id": tenant_id, "admin_id": admin_id, "cook_id": cook_id, "site_id": site_id}
+        return {
+            "tenant_id": tenant_id,
+            "admin_id": admin_id,
+            "cook_id": cook_id,
+            "site_id": site_id,
+            "other_site_id": site_b.id,
+        }
     finally:
         db.close()
 
@@ -121,7 +190,52 @@ def test_export_notes_csv_basic(client, seeded):
     body = rv.get_data(as_text=True)
     # header + both notes (private still included because admin)
     assert "Public Note" in body and "Privat Note" in body
+    assert "Other Site Note" not in body
+    assert "Other Site Private Note" not in body
+    assert "Other Tenant Note" not in body
+    assert "Unscoped Note" not in body
     assert body.splitlines()[0].startswith("id,created_at")
+
+
+def test_export_notes_requires_bound_site_and_preserves_csv_options(client, seeded):
+    assert login(client, "exp_admin@example.com", seeded["site_id"]).status_code == 200
+    rv = client.get("/export/notes.csv?sep=;&bom=1")
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert body.startswith("\ufeff")
+    assert ";" in body.splitlines()[0]
+
+    with client.session_transaction() as session:
+        session.pop("site_id", None)
+    rv = client.get("/export/notes.csv")
+    assert rv.status_code in (401, 403)
+
+
+def test_export_notes_rejects_site_switch_and_missing_binding(client, seeded):
+    assert login(client, "exp_admin@example.com", seeded["site_id"]).status_code == 200
+
+    with client.session_transaction() as session:
+        session["site_id"] = seeded["other_site_id"]
+    rv = client.get("/export/notes.csv")
+    assert rv.status_code in (401, 403)
+    assert "Other Site Note" not in rv.get_data(as_text=True)
+
+    db = get_session()
+    try:
+        db.execute(
+            text(
+                "DELETE FROM kitchen_user_sites "
+                "WHERE user_id = :user_id AND tenant_id = :tenant_id"
+            ),
+            {"user_id": seeded["admin_id"], "tenant_id": seeded["tenant_id"]},
+        )
+        db.commit()
+    finally:
+        db.close()
+    with client.session_transaction() as session:
+        session["site_id"] = seeded["site_id"]
+    rv = client.get("/export/notes.csv")
+    assert rv.status_code in (401, 403)
 
 
 def test_export_tasks_csv_separator_and_bom(client, seeded):
@@ -145,6 +259,7 @@ def test_export_streaming_large(client, seeded):
             db.add(
                 Note(
                     tenant_id=seeded["tenant_id"],
+                    site_id=seeded["site_id"],
                     user_id=seeded["admin_id"],
                     content=f"Extra {i}",
                     private_flag=False,

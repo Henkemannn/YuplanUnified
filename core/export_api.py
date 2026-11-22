@@ -11,8 +11,10 @@ from datetime import UTC, datetime
 from io import StringIO
 
 from flask import Blueprint, Response, request, session, stream_with_context
+from sqlalchemy import text
 
-from .app_authz import require_roles
+from .app_authz import AuthzError, require_roles
+from .auth import _load_active_user_by_id, _user_has_current_site_binding
 from .db import get_session
 from .http_limits import limit
 from .models import Note, Task
@@ -27,6 +29,23 @@ def _tenant_id() -> int:
     if not tid:
         raise ValueError("tenant missing")
     return int(tid)
+
+
+def _site_id_for_tenant(db, tenant_id: int) -> str:
+    site_id = str(session.get("site_id") or "").strip()
+    user_id = session.get("user_id")
+    if not site_id or user_id is None:
+        raise AuthzError("site required")
+    site = db.execute(
+        text("SELECT id FROM sites WHERE id = :site_id AND tenant_id = :tenant_id"),
+        {"site_id": site_id, "tenant_id": tenant_id},
+    ).fetchone()
+    if site is None:
+        raise AuthzError("site forbidden")
+    user = _load_active_user_by_id(db, user_id)
+    if user is None or not _user_has_current_site_binding(db, user, site_id):
+        raise AuthzError("site forbidden")
+    return site_id
 
 
 def _csv_response(name: str, rows_iterable):
@@ -71,7 +90,12 @@ def export_notes():
     tid = _tenant_id()
     db = get_session()
     try:
-        q = db.query(Note).filter(Note.tenant_id == tid).order_by(Note.created_at.asc())
+        site_id = _site_id_for_tenant(db, tid)
+        q = (
+            db.query(Note)
+            .filter(Note.tenant_id == tid, Note.site_id == site_id)
+            .order_by(Note.created_at.asc())
+        )
 
         def rows():
             yield ["id", "created_at", "updated_at", "user_id", "private_flag", "content"]
