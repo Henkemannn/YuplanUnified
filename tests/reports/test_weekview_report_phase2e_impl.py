@@ -15,6 +15,42 @@ def _h(role):
     return {"X-User-Role": role, "X-Tenant-Id": "1"}
 
 
+def _bind_test_admin_to_site(client, site_id):
+    from core.db import get_session
+    from sqlalchemy import text
+
+    with client.application.app_context():
+        db = get_session()
+        try:
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+                    "user_id INTEGER NOT NULL, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL, "
+                    "UNIQUE(user_id, tenant_id, site_id))"
+                )
+            )
+            db.execute(
+                text(
+                    "INSERT OR IGNORE INTO users "
+                    "(id, tenant_id, username, email, password_hash, role, is_active, auth_version, must_change_password) "
+                    "VALUES (1, 1, 'report-admin', 'report-admin@example.test', 'test-hash', 'admin', 1, 1, 0)"
+                )
+            )
+            db.execute(
+                text(
+                    "INSERT OR IGNORE INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                    "VALUES (1, 1, :site_id)"
+                ),
+                {"site_id": site_id},
+            )
+            db.commit()
+        finally:
+            db.close()
+    with client.session_transaction() as sess:
+        sess["site_id"] = site_id
+        sess["tenant_id"] = 1
+
+
 def _canonical_diet_id(site_id: str, name: str, *, default_select: bool) -> int:
     row = next(row for row in DietTypesRepo().list_all(site_id=site_id) if row["name"] == name)
     assert row["semantics"] == "atomic"
@@ -54,7 +90,7 @@ def test_weekview_report_aggregation_api_and_ui(client_admin):
         db = get_session()
         try:
             # Site and departments
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0)"), {"i": site_id, "n": "ReportSite"})
+            db.execute(text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0)"), {"i": site_id, "n": "ReportSite"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',0,0)"), {"i": dep_a, "s": site_id, "n": "Avd A"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',0,0)"), {"i": dep_b, "s": site_id, "n": "Avd B"})
             # Diet defaults
@@ -67,6 +103,7 @@ def test_weekview_report_aggregation_api_and_ui(client_admin):
             db.commit()
         finally:
             db.close()
+    _bind_test_admin_to_site(client_admin, site_id)
 
     resp = client_admin.post(
         "/features/set",
@@ -232,6 +269,7 @@ def test_weekview_report_default_select_marked_specialkost_comes_from_weekview_p
                 {"day": 7, "meal": "dinner", "count": 0},
             ],
         )
+    _bind_test_admin_to_site(client_admin, site["id"])
 
     base = f"/api/weekview?year={year}&week={week}&department_id={dept['id']}"
     with client_admin.session_transaction() as sess:
@@ -292,7 +330,6 @@ def test_weekview_report_cohort_bridge_uses_group_completions_and_ignores_legacy
             0,
             [{"diet_type_id": gluten, "default_count": 9}],
         )
-
         groups = DepartmentRequirementGroupsRepo()
         completions = DepartmentRequirementGroupCompletionRepo()
 
@@ -307,6 +344,8 @@ def test_weekview_report_cohort_bridge_uses_group_completions_and_ignores_legacy
         completions.set_marked(dept_b["id"], group_b_done["id"], "2026-09-08", "lunch", True)
         completions.set_marked(dept_c["id"], group_c_gluten["id"], "2026-09-08", "lunch", True)
         completions.set_marked(dept_c["id"], group_c_veg["id"], "2026-09-08", "lunch", True)
+
+    _bind_test_admin_to_site(client_admin, site["id"])
 
     with client_admin.session_transaction() as sess:
         sess["site_id"] = site["id"]

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, abort, request, jsonify, session
 from sqlalchemy import text
 
 from .auth import require_roles
 from .db import get_session
-from .ui_blueprint import SAFE_UI_ROLES, get_meal_labels_for_site
+from .ui_blueprint import SAFE_UI_ROLES, _authorize_report_scope, get_meal_labels_for_site
 from .weekview_report_service import compute_weekview_report
 
 bp = Blueprint("weekview_report", __name__)
@@ -26,6 +26,14 @@ def weekview_report_api():  # TODO Phase 2.E.1: implement real aggregation per d
         return jsonify({"error": "bad_request", "message": "Invalid week"}), 400
 
     department_id = (request.args.get("department_id") or "").strip() or None
+
+    active_site_id = str(session.get("site_id") or "").strip()
+    if str(session.get("role") or "").strip().lower() != "superuser":
+        if not active_site_id or not site_id or site_id != active_site_id:
+            abort(403)
+
+    # Authorize the requested site before reading any site or department metadata.
+    _authorize_report_scope(site_id, department_id)
 
     db = get_session()
     try:
