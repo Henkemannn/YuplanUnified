@@ -22,6 +22,7 @@ from core.department_menu_choice_repo import MenuChoiceRepo
 from core.department_requirement_group_completion_repo import DepartmentRequirementGroupCompletionRepo
 from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
 from core.feature_service import FeatureService
+from core.models import User
 from core.menu_service import MenuServiceDB
 from core.planera_product2_page2_context import build_product2_page2_planning_context
 from core.planera_product2_page3_vm import build_product2_page3_vm
@@ -118,6 +119,28 @@ def test_k30_kommun_new_customer_e2e(tmp_path, monkeypatch):
         )
         site, _ = SitesRepo().create_site(SITE_NAME, tenant_id=tenant_id)
         site_id = str(site["id"])
+        db = get_session()
+        try:
+            admin = db.query(User).filter(User.email == "k30.integration@example.test").one()
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+                    "user_id INTEGER NOT NULL, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL, "
+                    "UNIQUE(user_id, tenant_id, site_id))"
+                )
+            )
+            db.execute(
+                text(
+                    "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                    "VALUES (:user_id, :tenant_id, :site_id)"
+                ),
+                {"user_id": admin.id, "tenant_id": tenant_id, "site_id": site_id},
+            )
+            db.commit()
+            admin_id = int(admin.id)
+            admin_auth_version = int(admin.auth_version)
+        finally:
+            db.close()
 
         fast, _ = DepartmentsRepo().create_department(
             site_id=site_id,
@@ -363,9 +386,22 @@ def test_k30_kommun_new_customer_e2e(tmp_path, monkeypatch):
             }
 
         client = app.test_client()
+        login_response = client.post(
+            "/auth/login",
+            json={
+                "email": "k30.integration@example.test",
+                "password": "k30-integration-password",
+            },
+            headers={"Accept": "application/json"},
+        )
+        assert login_response.status_code == 200
+        with client.session_transaction() as session:
+            assert session["user_id"] == admin_id
+            assert session["tenant_id"] == tenant_id
+            assert session["site_id"] == site_id
+            assert session["auth_version"] == admin_auth_version
         report_response = client.get(
             f"/api/reports/weekview?site_id={site_id}&year={YEAR}&week={WEEK}",
-            headers={"X-User-Role": "admin", "X-Tenant-Id": str(tenant_id)},
         )
         assert report_response.status_code == 200
         report_body = report_response.get_json()

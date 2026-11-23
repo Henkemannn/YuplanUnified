@@ -6,6 +6,7 @@ import uuid
 
 import pytest
 from sqlalchemy import text
+from werkzeug.security import generate_password_hash
 
 from core.admin_repo import DepartmentsRepo, SitesRepo
 from core.builder import BuilderFlow
@@ -29,6 +30,7 @@ from core.db import get_session
 from core.menu import InMemoryCompositionAliasRepository, MenuService
 from core.planning_option_review import PlanningOptionReviewService
 from core.csrf import CSRF_SESSION_KEY
+from core.models import Tenant, User
 from planera_product2_test_support import authenticate_product2_client
 
 
@@ -329,10 +331,6 @@ def _seed_page2_choices(site_id: str, service_date: date, dept_a: dict, dept_b: 
     MenuChoiceRepo().set_choice(tenant_id=1, site_id=site_id, department_id=dept_b["id"], year=year, week=week, weekday=weekday, selected_alt="alt2")
 
 
-def _headers(role: str = "admin") -> dict[str, str]:
-    return {"X-User-Role": role, "X-Tenant-Id": "1"}
-
-
 def _review_payload(destination_id: str, requirement_group_id: str, decision: str) -> dict[str, str]:
     return {
         "destination_id": destination_id,
@@ -613,30 +611,102 @@ def test_review_write_wrong_option_group_rejected(client_admin, app_session):
     assert resp.status_code == 400
 
 
-def test_review_write_cross_tenant_site_fails_closed(client_admin, app_session):
-    service_date, site_id, _year, _week, dept_a, dept_b, _dept_c, group_a, group_b, _group_c, option_ids = _seed_scenario(app_session)
+def _login_isolated_review_admin(client, site_id: str) -> None:
+    email = f"review-cross-tenant-{uuid.uuid4().hex}@example.test"
+    password = f"Review-{uuid.uuid4().hex}"
     db = get_session()
     try:
-        db.execute(text("INSERT INTO tenants(id, name, active) VALUES (2, 'Tenant 2', 1)"))
+        db.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+                "user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
+            )
+        )
+        max_user_id = int(db.execute(text("SELECT COALESCE(MAX(id), 0) FROM users")).scalar() or 0)
+        max_binding_id = int(
+            db.execute(text("SELECT COALESCE(MAX(user_id), 0) FROM kitchen_user_sites")).scalar() or 0
+        )
+        user = User(
+            id=max(max_user_id, max_binding_id) + 1,
+            tenant_id=1,
+            username=email,
+            email=email,
+            password_hash=generate_password_hash(password),
+            role="admin",
+            auth_version=1,
+            is_active=True,
+        )
+        db.add(user)
+        user_id = int(user.id)
+        db.execute(
+            text(
+                "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                "VALUES (:user_id, 1, :site_id)"
+            ),
+            {"user_id": user_id, "site_id": site_id},
+        )
         db.commit()
     finally:
         db.close()
-    with client_admin.session_transaction() as sess:
-        sess["tenant_id"] = 2
-        sess["user_id"] = 1
-        sess["role"] = "admin"
-    resp = client_admin.post(
-        "/ui/kitchen/planering/day/review",
-        json={
-            "site_id": site_id,
-            "service_date": service_date.isoformat(),
-            "meal": "lunch",
-            "option_id": option_ids["alt1"],
-            "decisions": [_review_payload(dept_a["id"], group_a["id"], "NO_ADAPTATION_REQUIRED")],
-        },
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "2"},
+
+    response = client.post(
+        "/auth/login",
+        json={"email": email, "password": password},
+        headers={"Accept": "application/json"},
     )
-    assert resp.status_code in (403, 404)
+    assert response.status_code == 200
+    with client.session_transaction() as session:
+        assert session["user_id"] == user_id
+        assert session["tenant_id"] == 1
+        assert session["site_id"] == site_id
+        assert session["auth_version"] == 1
+
+
+def test_review_write_cross_tenant_site_fails_closed(client_admin, app_session):
+    service_date, site_id, _year, _week, dept_a, dept_b, _dept_c, group_a, group_b, _group_c, option_ids = _seed_scenario(app_session)
+    _login_isolated_review_admin(client_admin, site_id)
+    db = get_session()
+    try:
+        foreign_tenant = Tenant(name=f"Review Foreign Tenant {uuid.uuid4().hex}")
+        db.add(foreign_tenant)
+        db.flush()
+        foreign_site, _ = SitesRepo().create_site(
+            name=f"Review Foreign Site {uuid.uuid4().hex}",
+            tenant_id=int(foreign_tenant.id),
+        )
+        foreign_site_id = str(foreign_site["id"])
+        db.commit()
+    finally:
+        db.close()
+    token = _review_csrf_token(client_admin, app_session)
+    before = PlanningOptionReviewService().get_option_review_state(
+        tenant_id=1,
+        site_id=site_id,
+        service_date=service_date,
+        meal="lunch",
+        option_id=option_ids["alt1"],
+    )
+    resp = _csrf_review_request(
+        client_admin,
+        app_session,
+        foreign_site_id,
+        service_date,
+        option_ids["alt1"],
+        token=token,
+        strict=False,
+        decisions=[_review_payload(dept_a["id"], group_a["id"], "NO_ADAPTATION_REQUIRED")],
+        authenticate=False,
+    )
+    assert resp.status_code == 403
+    after = PlanningOptionReviewService().get_option_review_state(
+        tenant_id=1,
+        site_id=site_id,
+        service_date=service_date,
+        meal="lunch",
+        option_id=option_ids["alt1"],
+    )
+    assert after.review_state == before.review_state
+    assert after.decision_count == before.decision_count
 
 
 def test_review_write_historical_binding_cannot_switch_site(client_admin, app_session):

@@ -1,9 +1,8 @@
 from datetime import date as _date
+import uuid
 
 from sqlalchemy import text
-
-HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
-
+from werkzeug.security import generate_password_hash
 
 def _seed_site_and_department():
     from core.db import get_session
@@ -11,13 +10,70 @@ def _seed_site_and_department():
     try:
         site = conn.execute(text("SELECT id FROM sites WHERE id='00000000-0000-0000-0000-000000000000'"))
         if not site.fetchone():
-            conn.execute(text("INSERT INTO sites (id, name) VALUES ('00000000-0000-0000-0000-000000000000', 'Test Site')"))
+            conn.execute(
+                text(
+                    "INSERT INTO sites (id, name, tenant_id, version) "
+                    "VALUES ('00000000-0000-0000-0000-000000000000', 'Test Site', 1, 0)"
+                )
+            )
         dep = conn.execute(text("SELECT id FROM departments WHERE id='00000000-0000-0000-0000-000000000001'"))
         if not dep.fetchone():
             conn.execute(text("INSERT INTO departments (id, site_id, name, resident_count_mode, resident_count_fixed) VALUES ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000000', 'Avd Alpha', 'fixed', 5)"))
         conn.commit()
     finally:
         conn.close()
+
+
+def _login_bound_admin(client, site_id: str) -> None:
+    from core.db import get_session
+    from core.models import User
+
+    email = f"kommun-{uuid.uuid4().hex}@example.test"
+    password = "KommunPassw0rd!"
+    db = get_session()
+    try:
+        user = User(
+            tenant_id=1,
+            email=email,
+            username=email,
+            password_hash=generate_password_hash(password),
+            role="admin",
+            auth_version=1,
+            is_active=True,
+        )
+        db.add(user)
+        db.flush()
+        db.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+                "user_id INTEGER NOT NULL, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL, "
+                "UNIQUE(user_id, tenant_id, site_id))"
+            )
+        )
+        db.execute(
+            text(
+                "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                "VALUES (:user_id, 1, :site_id)"
+            ),
+            {"user_id": user.id, "site_id": site_id},
+        )
+        db.commit()
+        user_id = user.id
+        auth_version = user.auth_version
+    finally:
+        db.close()
+
+    response = client.post(
+        "/auth/login",
+        json={"email": email, "password": password},
+        headers={"Accept": "application/json"},
+    )
+    assert response.status_code == 200
+    with client.session_transaction() as session:
+        assert session["user_id"] == user_id
+        assert session["tenant_id"] == 1
+        assert session["site_id"] == site_id
+        assert session["auth_version"] == auth_version
 
 
 def _ensure_menu_for_week(tenant_id: int, site_id: str, year: int, week: int) -> None:
@@ -94,6 +150,7 @@ def test_end_to_end_department_choice_to_weekly_report(app_session):
     year = 2025
     week = 48
     tid = 1
+    _login_bound_admin(client, site_id)
 
     _ensure_menu_for_week(tid, site_id, year, week)
     _seed_weekview_expected_for_report(department_id, year, week)
@@ -111,14 +168,12 @@ def test_end_to_end_department_choice_to_weekly_report(app_session):
             "meal_type": "lunch",
             "registered": "1",
         },
-        headers=HEADERS,
         follow_redirects=True,
     )
 
     # Kitchen weekview shows Registered
     wk = client.get(
         f"/ui/weekview?site_id={site_id}&department_id={department_id}&year={year}&week={week}",
-        headers=HEADERS,
     )
     assert wk.status_code == 200
     assert "Registrerad" in wk.data.decode("utf-8")
@@ -126,7 +181,6 @@ def test_end_to_end_department_choice_to_weekly_report(app_session):
     # Weekly report HTML shows full coverage (100 procent) for the registered lunch
     rep = client.get(
         f"/ui/reports/weekly?site_id={site_id}&year={year}&week={week}",
-        headers=HEADERS,
     )
     assert rep.status_code == 200
     html = rep.data.decode("utf-8")
