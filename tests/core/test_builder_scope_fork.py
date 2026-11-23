@@ -302,8 +302,14 @@ def test_cook_read_resolution_reuses_existing_private_composition_fork_without_c
     assert resolved_shared is not None
     assert resolved_shared.composition_id == shared.composition_id
     assert resolved_shared.composition_name == "Shared plate"
-    assert resolved_anonymous is not None
-    assert resolved_anonymous.composition_id == shared.composition_id
+    assert resolved_anonymous is None
+    private_scope = scope_repo.get_scope("composition", private_target.composition_id)
+    assert private_scope is not None
+    assert private_scope.tenant_id == 1
+    assert private_scope.owner_scope == "user"
+    assert private_scope.owner_user_id == cook_a.user_id
+    assert private_scope.visibility == "private"
+    assert private_scope.source_object_id == shared.composition_id
     assert len(scope_repo.scopes) == scope_count_before
     assert len(flow._composition_service.list_compositions()) == composition_count_before
 

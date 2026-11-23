@@ -295,6 +295,7 @@ def test_offshore_demo_seed_reaches_work_menu_titles(tmp_path: Path) -> None:
         finally:
             db.close()
 
+        demo_actor = _demo_builder_actor()
         with app.test_request_context(
             "/offshore/work-menu",
             headers={"X-User-Role": "cook", "X-User-Name": "Henrik"},
@@ -307,6 +308,7 @@ def test_offshore_demo_seed_reaches_work_menu_titles(tmp_path: Path) -> None:
                 role="cook",
                 tenant_name="Demo Offshore",
                 site_name="Demo Offshore Site",
+                actor_user_id=demo_actor.user_id,
             )
 
     lunch_titles: list[str] = []

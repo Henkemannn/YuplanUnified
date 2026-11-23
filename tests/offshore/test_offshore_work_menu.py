@@ -179,9 +179,16 @@ def _seed_publication(app, *, tenant_id: int, site_id: str, day: date, builder_m
             db.close()
 
 
-def _seed_builder_menu(app, *, menu_id: str = "builder-menu-1") -> None:
+def _seed_builder_menu(
+    app,
+    *,
+    menu_id: str = "builder-menu-1",
+    scope_repo: _MemoryScopeRepository | None = None,
+) -> None:
     with app.app_context():
         flow = _get_builder_flow()
+        if scope_repo is not None:
+            flow._object_scope_repository = scope_repo  # type: ignore[attr-defined]
         menu_flow = _get_menu_context_flow()
         actor = ActorContext(tenant_id=1, user_id=42, site_id="demo-site", role="admin")
         seeded_compositions = [
@@ -508,7 +515,8 @@ def test_offshore_work_menu_uses_actor_private_builder_fork_without_creating_new
     app = _mk_app()
     site_id = _seed_site(app, tenant_id=1, name="Rig A")
     _seed_installation(app, tenant_id=1, site_id=site_id)
-    _seed_builder_menu(app)
+    scope_repo = _MemoryScopeRepository()
+    _seed_builder_menu(app, scope_repo=scope_repo)
     _seed_publication(app, tenant_id=1, site_id=site_id, day=TEST_WORK_MENU_DAY, builder_menu_id="builder-menu-1")
     period_id = _seed_period(app, tenant_id=1, site_id=site_id)
     with app.app_context():
@@ -516,9 +524,8 @@ def test_offshore_work_menu_uses_actor_private_builder_fork_without_creating_new
         menu_context_service.sync_service_event_context(tenant_id=1, site_id=site_id, work_period_id=period_id, service_event_id=events[0].id)
 
         flow = _get_builder_flow()
-        scope_repo = _MemoryScopeRepository()
-        flow._object_scope_repository = scope_repo  # type: ignore[attr-defined]
-        shared = flow.get_library_composition("demo_offshore_kott", actor=None)
+        shared_actor = ActorContext(tenant_id=1, user_id=42, site_id=site_id, role="cook")
+        shared = flow.get_library_composition("demo_offshore_kott", actor=shared_actor)
         assert shared is not None
         cook_a_actor = ActorContext(tenant_id=1, user_id=20, site_id=site_id, role="cook")
         cook_b_actor = ActorContext(tenant_id=1, user_id=30, site_id=site_id, role="cook")
@@ -541,7 +548,7 @@ def test_offshore_work_menu_uses_actor_private_builder_fork_without_creating_new
     client = app.test_client()
     _login(client, tenant_id=1, site_id=site_id, role="cook")
 
-    response_a = client.get("/offshore/work-menu")
+    response_a = client.get("/offshore/work-menu", headers=_headers("cook", user_id=20))
     assert response_a.status_code == 200
 
     response_b = client.get("/offshore/work-menu", headers=_headers("cook", user_id=30))
@@ -682,7 +689,8 @@ def test_offshore_work_menu_chooser_submits_real_builder_composition_and_is_pers
     app = _mk_app()
     site_id = _seed_site(app, tenant_id=1, name="Rig A")
     _seed_installation(app, tenant_id=1, site_id=site_id)
-    _seed_builder_menu(app)
+    scope_repo = _MemoryScopeRepository()
+    _seed_builder_menu(app, scope_repo=scope_repo)
     _seed_publication(app, tenant_id=1, site_id=site_id, day=TEST_WORK_MENU_DAY, builder_menu_id="builder-menu-1")
     period_id = _seed_period(app, tenant_id=1, site_id=site_id)
     with app.app_context():
@@ -690,9 +698,8 @@ def test_offshore_work_menu_chooser_submits_real_builder_composition_and_is_pers
         menu_context_service.sync_service_event_context(tenant_id=1, site_id=site_id, work_period_id=period_id, service_event_id=events[0].id)
 
         flow = _get_builder_flow()
-        scope_repo = _MemoryScopeRepository()
-        flow._object_scope_repository = scope_repo  # type: ignore[attr-defined]
-        shared = flow.get_library_composition("demo_offshore_kott", actor=None)
+        shared_actor = ActorContext(tenant_id=1, user_id=42, site_id=site_id, role="cook")
+        shared = flow.get_library_composition("demo_offshore_kott", actor=shared_actor)
         assert shared is not None
         cook_a_actor = ActorContext(tenant_id=1, user_id=20, site_id=site_id, role="cook")
         cook_b_actor = ActorContext(tenant_id=1, user_id=30, site_id=site_id, role="cook")
