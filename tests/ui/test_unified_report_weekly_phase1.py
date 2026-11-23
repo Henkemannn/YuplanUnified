@@ -25,6 +25,15 @@ def _h() -> dict:
     return {}
 
 
+def _clear_orphaned_bindings(db) -> None:
+    db.execute(
+        text(
+            "DELETE FROM kitchen_user_sites "
+            "WHERE user_id NOT IN (SELECT id FROM users)"
+        )
+    )
+
+
 def _bind_client_to_site(client, site_id: str, role: str) -> None:
     with client.application.app_context():
         db = get_session()
@@ -35,6 +44,7 @@ def _bind_client_to_site(client, site_id: str, role: str) -> None:
                     "user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
                 )
             )
+            _clear_orphaned_bindings(db)
             user = User(
                 tenant_id=1,
                 username=f"weekly-report-{uuid.uuid4().hex}",
@@ -107,13 +117,7 @@ def seed_site_and_departments(client_admin, bound_auth_clients):
         os.environ["YP_ENABLE_SQLITE_BOOTSTRAP"] = "1"
         create_all()
         sess = get_session()
-        
-        sess.execute(
-        text(
-            "DELETE FROM kitchen_user_sites "
-            "WHERE user_id NOT IN (SELECT id FROM users)"
-        )
-        )
+        _clear_orphaned_bindings(sess)
 
         # Create meal_registrations table
         sess.execute(text("""
