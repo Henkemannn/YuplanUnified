@@ -5,11 +5,13 @@ Covers layout elements, navigation, accessibility, and basic regressions.
 from datetime import date
 import uuid
 
+import pytest
+from core.models import User
 from sqlalchemy import text
 
 
-def _h(role: str = "admin"):
-    return {"X-User-Role": role, "X-Tenant-Id": "1"}
+def _h():
+    return {}
 
 
 def _seed_site_and_department(app, site_id: str, dept_id: str, site_name: str = "Test Site", dept_name: str = "Dept A"):
@@ -18,19 +20,75 @@ def _seed_site_and_department(app, site_id: str, dept_id: str, site_name: str = 
         db = get_session()
         try:
             db.execute(
-                text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"),
+                text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0)"),
                 {"i": site_id, "n": site_name},
             )
             db.execute(
                 text(
                     "INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version)\n"
-                    "VALUES(:i,:s,:n,'fixed',20,0) ON CONFLICT(id) DO NOTHING"
+                    "VALUES(:i,:s,:n,'fixed',20,0)"
                 ),
                 {"i": dept_id, "s": site_id, "n": dept_name},
             )
             db.commit()
         finally:
             db.close()
+
+
+def _bind_client_to_site(client, site_id: str, role: str):
+    from core.db import get_session
+
+    with client.application.app_context():
+        db = get_session()
+        try:
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+                    "user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
+                )
+            )
+            db.execute(
+                text(
+                    "DELETE FROM kitchen_user_sites "
+                    "WHERE user_id NOT IN (SELECT id FROM users)"
+                )
+            )
+            user = User(
+                tenant_id=1,
+                username=f"phase6-{role}-{uuid.uuid4().hex}@example.test",
+                email=f"phase6-{role}-{uuid.uuid4().hex}@example.test",
+                password_hash="fixture-only",
+                role=role,
+                is_active=True,
+                auth_version=1,
+                must_change_password=False,
+            )
+            db.add(user)
+            db.flush()
+            db.execute(
+                text(
+                    "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                    "VALUES (:user_id, 1, :site_id)"
+                ),
+                {"user_id": user.id, "site_id": site_id},
+            )
+            db.commit()
+            user_id = user.id
+        finally:
+            db.close()
+    with client.session_transaction() as sess:
+        sess["user_id"] = user_id
+        sess["role"] = role
+        sess["tenant_id"] = 1
+        sess["auth_version"] = 1
+        sess["site_id"] = site_id
+
+
+@pytest.fixture
+def client_cook(app_session):
+    client = app_session.test_client()
+    client.environ_base = {}
+    return client
 
 
 def _current_year_week():
@@ -40,13 +98,14 @@ def _current_year_week():
 
 def test_weekview_page_structure_and_assets(client_admin):
     app = client_admin.application
-    site_id, dept_id = "site_p6_assets", "dept_p6_assets"
+    site_id, dept_id = str(uuid.uuid4()), str(uuid.uuid4())
     _seed_site_and_department(app, site_id, dept_id)
+    _bind_client_to_site(client_admin, site_id, "admin")
     year, week = _current_year_week()
 
     r = client_admin.get(
         f"/ui/weekview?site_id={site_id}&department_id={dept_id}&year={year}&week={week}",
-        headers=_h("admin"),
+        headers=_h(),
     )
     assert r.status_code == 200
     html = r.get_data(as_text=True)
@@ -67,13 +126,14 @@ def test_weekview_page_structure_and_assets(client_admin):
 
 def test_weekview_has_7_day_cells(client_admin):
     app = client_admin.application
-    site_id, dept_id = "site_p6_days", "dept_p6_days"
+    site_id, dept_id = str(uuid.uuid4()), str(uuid.uuid4())
     _seed_site_and_department(app, site_id, dept_id)
+    _bind_client_to_site(client_admin, site_id, "admin")
     year, week = _current_year_week()
 
     r = client_admin.get(
         f"/ui/weekview?site_id={site_id}&department_id={dept_id}&year={year}&week={week}",
-        headers=_h("admin"),
+        headers=_h(),
     )
     assert r.status_code == 200
     html = r.get_data(as_text=True)
@@ -85,13 +145,14 @@ def test_weekview_has_7_day_cells(client_admin):
 
 def test_weekview_navigation_buttons_and_shortcuts_present(client_admin):
     app = client_admin.application
-    site_id, dept_id = "site_p6_nav", "dept_p6_nav"
+    site_id, dept_id = str(uuid.uuid4()), str(uuid.uuid4())
     _seed_site_and_department(app, site_id, dept_id)
+    _bind_client_to_site(client_admin, site_id, "admin")
     year, week = _current_year_week()
 
     r = client_admin.get(
         f"/ui/weekview?site_id={site_id}&department_id={dept_id}&year={year}&week={week}",
-        headers=_h("admin"),
+        headers=_h(),
     )
     assert r.status_code == 200
     html = r.get_data(as_text=True)
@@ -109,13 +170,14 @@ def test_weekview_navigation_buttons_and_shortcuts_present(client_admin):
 
 def test_weekview_meal_cells_accessible_with_badges(client_admin):
     app = client_admin.application
-    site_id, dept_id = "site_p6_a11y", "dept_p6_a11y"
+    site_id, dept_id = str(uuid.uuid4()), str(uuid.uuid4())
     _seed_site_and_department(app, site_id, dept_id)
+    _bind_client_to_site(client_admin, site_id, "admin")
     year, week = _current_year_week()
 
     r = client_admin.get(
         f"/ui/weekview?site_id={site_id}&department_id={dept_id}&year={year}&week={week}",
-        headers=_h("admin"),
+        headers=_h(),
     )
     assert r.status_code == 200
     html = r.get_data(as_text=True)
@@ -132,13 +194,14 @@ def test_weekview_meal_cells_accessible_with_badges(client_admin):
 
 def test_weekview_no_legacy_inline_styles_leftovers(client_admin):
     app = client_admin.application
-    site_id, dept_id = "site_p6_clean", "dept_p6_clean"
+    site_id, dept_id = str(uuid.uuid4()), str(uuid.uuid4())
     _seed_site_and_department(app, site_id, dept_id)
+    _bind_client_to_site(client_admin, site_id, "admin")
     year, week = _current_year_week()
 
     r = client_admin.get(
         f"/ui/weekview?site_id={site_id}&department_id={dept_id}&year={year}&week={week}",
-        headers=_h("admin"),
+        headers=_h(),
     )
     assert r.status_code == 200
     html = r.get_data(as_text=True)
@@ -148,13 +211,19 @@ def test_weekview_no_legacy_inline_styles_leftovers(client_admin):
     assert 'margin-top: 0.25rem;' not in html
 
 
-def test_regression_other_views_still_work(client_admin):
+def test_regression_other_views_still_work(client_admin, client_cook):
+    app = client_admin.application
+    site_id, dept_id = str(uuid.uuid4()), str(uuid.uuid4())
+    _seed_site_and_department(app, site_id, dept_id)
+    _bind_client_to_site(client_admin, site_id, "admin")
+    _bind_client_to_site(client_cook, site_id, "cook")
+
     # Cook dashboard
-    rc = client_admin.get('/ui/cook', headers=_h('cook'))
+    rc = client_cook.get('/ui/cook', headers=_h())
     assert rc.status_code == 200
 
     # Admin dashboard
-    ra = client_admin.get('/ui/admin', headers=_h('admin'))
+    ra = client_admin.get('/ui/admin', headers=_h())
     assert ra.status_code == 200
 
     # Reports weekly
@@ -162,5 +231,5 @@ def test_regression_other_views_still_work(client_admin):
     t = _d.today().isocalendar()
     ry = t[0]
     rw = t[1]
-    rr = client_admin.get(f'/ui/reports/weekly?year={ry}&week={rw}', headers=_h('admin'))
+    rr = client_admin.get(f'/ui/reports/weekly?year={ry}&week={rw}', headers=_h())
     assert rr.status_code == 200
