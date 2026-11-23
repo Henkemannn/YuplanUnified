@@ -31,6 +31,7 @@ FORM_FIELD = "csrf_token"
 ENFORCED_PREFIXES = [
     "/diet/",
     "/ui/admin/menu-import/",
+    "/ui/kitchen/planering/day/review",
     "/api/superuser/",
     "/api/kitchen/",
 ]

@@ -14,6 +14,7 @@ from .auth import (
     require_roles,
 )
 from .config import auth_bypass_allowed
+from .csrf import csrf_protect
 from .db import get_session
 from .models import Note, Task, User
 from .weekview.service import WeekviewService
@@ -1316,6 +1317,7 @@ def kitchen_planering_product2_day_production():
 
 @ui_bp.post("/ui/kitchen/planering/day/review")
 @require_roles(*KITCHEN_UI_ROLES)
+@csrf_protect
 def kitchen_planering_product2_day_review():
     data = request.get_json(silent=True) or {}
     site_id = str((data.get("site_id") or "").strip())
@@ -1346,6 +1348,8 @@ def kitchen_planering_product2_day_review():
         return jsonify({"error": "bad_request", "message": "Missing tenant or user context"}), 400
     if tenant_id <= 0 or user_id <= 0:
         return jsonify({"error": "bad_request", "message": "Missing tenant or user context"}), 400
+
+    site_id, _authorized_site_name = _authorize_product2_site(site_id, tenant_id)
 
     service = PlanningOptionReviewService()
     try:

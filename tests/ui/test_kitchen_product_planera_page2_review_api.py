@@ -28,6 +28,8 @@ from core.department_requirement_group_service_overrides_repo import DepartmentR
 from core.db import get_session
 from core.menu import InMemoryCompositionAliasRepository, MenuService
 from core.planning_option_review import PlanningOptionReviewService
+from core.csrf import CSRF_SESSION_KEY
+from planera_product2_test_support import authenticate_product2_client
 
 
 @dataclass
@@ -340,6 +342,7 @@ def _review_payload(destination_id: str, requirement_group_id: str, decision: st
 
 
 def _review_request(client, site_id: str, service_date: date, option_id: str, decisions: list[dict[str, str]] | None = None):
+    authenticate_product2_client(client, tenant_id=1, site_id=site_id, role="admin")
     return client.post(
         "/ui/kitchen/planering/day/review",
         json={
@@ -349,8 +352,182 @@ def _review_request(client, site_id: str, service_date: date, option_id: str, de
             "option_id": option_id,
             "decisions": decisions or [],
         },
-        headers=_headers(),
+        headers={},
     )
+
+
+def _review_csrf_token(client, app_session) -> str:
+    previous = {
+        "YUPLAN_STRICT_CSRF": app_session.config.get("YUPLAN_STRICT_CSRF"),
+        "STRICT_CSRF_IN_TESTS": app_session.config.get("STRICT_CSRF_IN_TESTS"),
+    }
+    app_session.config.update(
+        {
+            "YUPLAN_STRICT_CSRF": True,
+            "STRICT_CSRF_IN_TESTS": True,
+        }
+    )
+    try:
+        client.get("/health")
+        with client.session_transaction() as session:
+            token = session.get(CSRF_SESSION_KEY)
+        assert token
+        return str(token)
+    finally:
+        app_session.config.update(previous)
+
+
+def _csrf_review_request(
+    client,
+    app_session,
+    site_id: str,
+    service_date: date,
+    option_id: str,
+    *,
+    token: str | None,
+    strict: bool,
+    decisions: list[dict[str, str]] | None = None,
+    session_site_id: str | None = None,
+    authenticate: bool = True,
+):
+    if authenticate:
+        authenticate_product2_client(client, tenant_id=1, site_id=session_site_id or site_id, role="admin")
+    headers = {"X-CSRF-Token": token} if token is not None else {}
+    previous = {
+        "YUPLAN_STRICT_CSRF": app_session.config.get("YUPLAN_STRICT_CSRF"),
+        "STRICT_CSRF_IN_TESTS": app_session.config.get("STRICT_CSRF_IN_TESTS"),
+    }
+    app_session.config.update(
+        {
+            "YUPLAN_STRICT_CSRF": strict,
+            "STRICT_CSRF_IN_TESTS": True,
+        }
+    )
+    try:
+        return client.post(
+            "/ui/kitchen/planering/day/review",
+            json={
+                "site_id": site_id,
+                "service_date": service_date.isoformat(),
+                "meal": "lunch",
+                "option_id": option_id,
+                "decisions": decisions or [],
+            },
+            headers=headers,
+        )
+    finally:
+        app_session.config.update(previous)
+
+
+@pytest.mark.parametrize("strict", [False, True])
+def test_review_write_requires_csrf_in_both_modes(client_admin, app_session, strict):
+    service_date, site_id, _year, _week, dept_a, dept_b, _dept_c, group_a, _group_b, _group_c, option_ids = _seed_scenario(app_session)
+    _seed_page2_choices(site_id, service_date, dept_a, dept_b)
+    token = _review_csrf_token(client_admin, app_session)
+    valid = _csrf_review_request(
+        client_admin,
+        app_session,
+        site_id,
+        service_date,
+        option_ids["alt1"],
+        token=token,
+        strict=strict,
+        decisions=[_review_payload(dept_a["id"], group_a["id"], "NO_ADAPTATION_REQUIRED")],
+    )
+    assert valid.status_code == 200
+    before = PlanningOptionReviewService().get_option_review_state(
+        tenant_id=1,
+        site_id=site_id,
+        service_date=service_date,
+        meal="lunch",
+        option_id=option_ids["alt1"],
+    )
+    denied = _csrf_review_request(
+        client_admin,
+        app_session,
+        site_id,
+        service_date,
+        option_ids["alt1"],
+        token=None,
+        strict=strict,
+    )
+    assert denied.status_code == 403
+    after = PlanningOptionReviewService().get_option_review_state(
+        tenant_id=1,
+        site_id=site_id,
+        service_date=service_date,
+        meal="lunch",
+        option_id=option_ids["alt1"],
+    )
+    assert after.review_state == before.review_state
+    assert after.decision_count == before.decision_count
+
+
+def test_review_write_rejects_invalid_csrf_without_changing_review(client_admin, app_session):
+    service_date, site_id, _year, _week, dept_a, dept_b, _dept_c, group_a, _group_b, _group_c, option_ids = _seed_scenario(app_session)
+    _seed_page2_choices(site_id, service_date, dept_a, dept_b)
+    _review_csrf_token(client_admin, app_session)
+    denied = _csrf_review_request(
+        client_admin,
+        app_session,
+        site_id,
+        service_date,
+        option_ids["alt1"],
+        token="invalid-token",
+        strict=False,
+    )
+    assert denied.status_code == 403
+    state = PlanningOptionReviewService().get_option_review_state(
+        tenant_id=1,
+        site_id=site_id,
+        service_date=service_date,
+        meal="lunch",
+        option_id=option_ids["alt1"],
+    )
+    assert state.review_state == "UNREVIEWED"
+
+
+def test_review_write_with_valid_csrf_rejects_other_site_and_historical_binding(client_admin, app_session):
+    service_date, site_id, _year, _week, dept_a, dept_b, _dept_c, group_a, _group_b, _group_c, option_ids = _seed_scenario(app_session)
+    _seed_page2_choices(site_id, service_date, dept_a, dept_b)
+    other_site = f"review-other-{uuid.uuid4()}"
+    _seed_site(other_site)
+    authenticate_product2_client(client_admin, tenant_id=1, site_id=site_id, role="admin")
+    with client_admin.session_transaction() as session:
+        user_id = session["user_id"]
+    db = get_session()
+    try:
+        db.execute(
+            text(
+                "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                "VALUES (:user_id, 1, :site_id)"
+            ),
+            {"user_id": user_id, "site_id": other_site},
+        )
+        db.commit()
+    finally:
+        db.close()
+    token = _review_csrf_token(client_admin, app_session)
+    denied = _csrf_review_request(
+        client_admin,
+        app_session,
+        other_site,
+        service_date,
+        option_ids["alt1"],
+        token=token,
+        strict=False,
+        session_site_id=site_id,
+        authenticate=False,
+    )
+    assert denied.status_code == 403
+    state = PlanningOptionReviewService().get_option_review_state(
+        tenant_id=1,
+        site_id=site_id,
+        service_date=service_date,
+        meal="lunch",
+        option_id=option_ids["alt1"],
+    )
+    assert state.review_state == "UNREVIEWED"
 
 
 def test_review_write_all_unchecked_saves_explicit_no_decisions(client_admin, app_session):
@@ -462,13 +639,106 @@ def test_review_write_cross_tenant_site_fails_closed(client_admin, app_session):
     assert resp.status_code in (403, 404)
 
 
+def test_review_write_historical_binding_cannot_switch_site(client_admin, app_session):
+    service_date, site_id, _year, _week, dept_a, dept_b, _dept_c, group_a, group_b, _group_c, option_ids = _seed_scenario(app_session)
+    _seed_page2_choices(site_id, service_date, dept_a, dept_b)
+    initial = _review_request(
+        client_admin,
+        site_id,
+        service_date,
+        option_ids["alt1"],
+        [_review_payload(dept_a["id"], group_a["id"], "NO_ADAPTATION_REQUIRED")],
+    )
+    assert initial.status_code == 200
+    with app_session.app_context():
+        other_site, _ = SitesRepo().create_site(name="Historical Other Site", tenant_id=1)
+    with client_admin.session_transaction() as sess:
+        user_id = sess["user_id"]
+        active_site_id = sess["site_id"]
+    db = get_session()
+    try:
+        db.execute(
+            text(
+                "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                "VALUES (:user_id, 1, :site_id)"
+            ),
+            {"user_id": user_id, "site_id": other_site["id"]},
+        )
+        db.commit()
+    finally:
+        db.close()
+    denied = client_admin.post(
+        "/ui/kitchen/planering/day/review",
+        json={
+            "site_id": other_site["id"],
+            "service_date": service_date.isoformat(),
+            "meal": "lunch",
+            "option_id": option_ids["alt1"],
+            "decisions": [],
+        },
+        headers={},
+    )
+    assert denied.status_code == 403
+    state = PlanningOptionReviewService().get_option_review_state(
+        tenant_id=1,
+        site_id=active_site_id,
+        service_date=service_date,
+        meal="lunch",
+        option_id=option_ids["alt1"],
+    )
+    assert state.review_state == "REVIEWED_NO_DEVIATIONS"
+
+
+def test_review_write_without_active_site_or_binding_is_denied(client_admin, app_session):
+    service_date, site_id, _year, _week, dept_a, dept_b, _dept_c, group_a, _group_b, _group_c, option_ids = _seed_scenario(app_session)
+    _seed_page2_choices(site_id, service_date, dept_a, dept_b)
+    authenticate_product2_client(client_admin, tenant_id=1, site_id=site_id, role="admin")
+    with client_admin.session_transaction() as sess:
+        sess.pop("site_id", None)
+    no_site = client_admin.post(
+        "/ui/kitchen/planering/day/review",
+        json={
+            "site_id": site_id,
+            "service_date": service_date.isoformat(),
+            "meal": "lunch",
+            "option_id": option_ids["alt1"],
+            "decisions": [],
+        },
+        headers={},
+    )
+    assert no_site.status_code in (401, 403)
+    authenticate_product2_client(client_admin, tenant_id=1, site_id=site_id, role="admin")
+    with client_admin.session_transaction() as sess:
+        user_id = sess["user_id"]
+    db = get_session()
+    try:
+        db.execute(
+            text("DELETE FROM kitchen_user_sites WHERE user_id = :user_id AND site_id = :site_id"),
+            {"user_id": user_id, "site_id": site_id},
+        )
+        db.commit()
+    finally:
+        db.close()
+    no_binding = client_admin.post(
+        "/ui/kitchen/planering/day/review",
+        json={
+            "site_id": site_id,
+            "service_date": service_date.isoformat(),
+            "meal": "lunch",
+            "option_id": option_ids["alt1"],
+            "decisions": [],
+        },
+        headers={},
+    )
+    assert no_binding.status_code in (401, 403)
+
+
 def test_review_write_cannot_spoof_tenant_or_user_from_request(client_admin, app_session):
     service_date, site_id, _year, _week, dept_a, dept_b, _dept_c, group_a, group_b, _group_c, option_ids = _seed_scenario(app_session)
     _seed_page2_choices(site_id, service_date, dept_a, dept_b)
+    authenticate_product2_client(client_admin, tenant_id=1, site_id=site_id, role="admin")
     with client_admin.session_transaction() as sess:
-        sess["tenant_id"] = 1
-        sess["user_id"] = 7
-        sess["role"] = "admin"
+        authenticated_user_id = sess["user_id"]
     resp = client_admin.post(
         "/ui/kitchen/planering/day/review",
         json={
@@ -480,7 +750,7 @@ def test_review_write_cannot_spoof_tenant_or_user_from_request(client_admin, app
             "option_id": option_ids["alt1"],
             "decisions": [_review_payload(dept_a["id"], group_a["id"], "NO_ADAPTATION_REQUIRED")],
         },
-        headers=_headers(),
+        headers={},
     )
     assert resp.status_code == 200
     state = PlanningOptionReviewService().get_option_review_state(
@@ -490,7 +760,7 @@ def test_review_write_cannot_spoof_tenant_or_user_from_request(client_admin, app
         meal="lunch",
         option_id=option_ids["alt1"],
     )
-    assert state.reviewed_by_user_id == 1
+    assert state.reviewed_by_user_id == authenticated_user_id
 
 
 def test_review_write_rereview_replaces_prior_decisions(client_admin, app_session):
@@ -522,9 +792,10 @@ def test_review_write_current_truth_comes_from_server_context(client_admin, app_
         reviewed_by_user_id=1,
     )
     DepartmentRequirementGroupServiceOverridesRepo().set_override(group_a["id"], service_date, "lunch", 0)
+    authenticate_product2_client(client_admin, tenant_id=1, site_id=site_id, role="admin")
     resp = client_admin.get(
         f"/ui/kitchen/planering/day?ui=product2&site_id={site_id}&date={service_date.isoformat()}&meal=lunch",
-        headers=_headers(),
+        headers={},
     )
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
