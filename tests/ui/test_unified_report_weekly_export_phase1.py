@@ -13,8 +13,7 @@ def _bound_client(app_session):
         conn.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
-                "user_id INTEGER NOT NULL, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL, "
-                "UNIQUE(user_id, tenant_id, site_id))"
+                "user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
             )
         )
         site_id = "00000000-0000-0000-0000-000000000000"
@@ -47,12 +46,13 @@ def _bound_client(app_session):
         )
         conn.add(user)
         conn.flush()
+        conn.execute(text("DELETE FROM kitchen_user_sites WHERE user_id=:user_id"), {"user_id": user.id})
         conn.execute(
             text(
                 "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
-                "VALUES (:user_id, 1, :site_id)"
+                "VALUES (:user_id, :tenant_id, :site_id)"
             ),
-            {"user_id": user.id, "site_id": site_id},
+            {"user_id": user.id, "tenant_id": 1, "site_id": site_id},
         )
         conn.commit()
         client = app_session.test_client()
