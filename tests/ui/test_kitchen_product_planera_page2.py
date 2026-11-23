@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import gc
 from dataclasses import dataclass, field
 from datetime import date
+import shutil
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -11,6 +14,7 @@ from planera_product2_test_support import authenticate_product2_client
 from flask import current_app
 from sqlalchemy import text
 
+from core.app_factory import create_app
 from core.admin_repo import DepartmentsRepo, DietTypesRepo, SitesRepo
 from core.builder import BuilderFlow
 from core.builder.library_scope import ObjectScope
@@ -32,6 +36,8 @@ from core.department_requirement_group_service_overrides_repo import DepartmentR
 from core.menu import InMemoryCompositionAliasRepository, MenuService
 from core.planera_product2_page2_context import build_product2_page2_planning_context
 from core.ui_blueprint import _build_product2_page2_vm, _order_product2_page2_review_groups
+from core.db import get_session, init_engine
+from core.models import Base, Tenant
 
 
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
@@ -45,6 +51,53 @@ class _Page2UiState:
 
 
 _PAGE2_UI_STATE: _Page2UiState | None = None
+
+
+@pytest.fixture()
+def app_session(request):
+    state = request.config._yuplan_test_db_state
+    isolated_root = Path(tempfile.mkdtemp(prefix="yuplan-page2-"))
+    isolated_db = isolated_root / "main.db"
+    isolated_builder_db = isolated_root / "builder.db"
+    original_db_url = f"sqlite:///{state['main_db'].as_posix()}"
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "test",
+            "JWT_SECRET": "secret",
+            "database_url": f"sqlite:///{isolated_db.as_posix()}",
+            "BUILDER_DB_PATH": str(isolated_builder_db),
+            "FORCE_DB_REINIT": True,
+        }
+    )
+    db = get_session()
+    try:
+        engine = db.get_bind()
+        Base.metadata.drop_all(engine)
+        Base.metadata.create_all(engine)
+        db.add(Tenant(id=1, name="Page2 Test Tenant", active=True))
+        db.flush()
+        db.execute(
+            text(
+                "CREATE TABLE kitchen_user_sites "
+                "(user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
+            )
+        )
+        db.commit()
+        yield app
+    finally:
+        db.close()
+        from core import db as db_mod
+
+        if db_mod._SessionFactory is not None:
+            db_mod._SessionFactory.remove()
+        if db_mod._engine is not None:
+            db_mod._engine.dispose(close=True)
+        db_mod._SessionFactory = None
+        db_mod._engine = None
+        init_engine(original_db_url, force=True)
+        gc.collect()
+        shutil.rmtree(isolated_root)
 
 
 class _ObjectScopeRepository:
