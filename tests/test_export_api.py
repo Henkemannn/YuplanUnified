@@ -1,4 +1,7 @@
-from contextlib import suppress
+import gc
+from pathlib import Path
+import shutil
+import tempfile
 import uuid
 
 import pytest
@@ -7,14 +10,52 @@ from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 
 from core.app_factory import create_app
-from core.db import create_all, get_session
-from core.models import Note, Site, Task, Tenant, User
+from core.db import get_session, init_engine
+from core.models import Base, Note, Site, Task, Tenant, User
 
 
 @pytest.fixture()
-def app():
-    app = create_app({"TESTING": True, "SECRET_KEY": "test"})
-    return app
+def app(request):
+    state = request.config._yuplan_test_db_state
+    isolated_root = Path(tempfile.mkdtemp(prefix="yuplan-export-"))
+    isolated_db = isolated_root / "main.db"
+    isolated_builder_db = isolated_root / "builder.db"
+    original_db_url = f"sqlite:///{state['main_db'].as_posix()}"
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "test",
+            "database_url": f"sqlite:///{isolated_db.as_posix()}",
+            "BUILDER_DB_PATH": str(isolated_builder_db),
+            "FORCE_DB_REINIT": True,
+        }
+    )
+    db = get_session()
+    try:
+        engine = db.get_bind()
+        Base.metadata.drop_all(engine)
+        Base.metadata.create_all(engine)
+        db.execute(
+            text(
+                "CREATE TABLE kitchen_user_sites "
+                "(user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
+            )
+        )
+        db.commit()
+        yield app
+    finally:
+        db.close()
+        from core import db as db_mod
+
+        if db_mod._SessionFactory is not None:
+            db_mod._SessionFactory.remove()
+        if db_mod._engine is not None:
+            db_mod._engine.dispose(close=True)
+        db_mod._SessionFactory = None
+        db_mod._engine = None
+        init_engine(original_db_url, force=True)
+        gc.collect()
+        shutil.rmtree(isolated_root)
 
 
 @pytest.fixture()
@@ -24,9 +65,6 @@ def client(app: Flask):
 
 @pytest.fixture()
 def seeded(client):
-    # Ensure tables (if using clean SQLite file)
-    with suppress(Exception):
-        create_all()
     db = get_session()
     try:
         tenant = Tenant(name=f"ExportT-{uuid.uuid4().hex}")
@@ -40,13 +78,6 @@ def seeded(client):
             User.email.in_(["exp_admin@example.com", "exp_cook@example.com"])
         ).delete()
         db.commit()
-        db.execute(
-            text(
-                "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
-                "user_id INTEGER NOT NULL, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL, "
-                "UNIQUE(user_id, tenant_id, site_id))"
-            )
-        )
         tenant_b = Tenant(name=f"Export Other Tenant {uuid.uuid4().hex}")
         db.add(tenant_b)
         db.flush()
