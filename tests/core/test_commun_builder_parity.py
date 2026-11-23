@@ -86,10 +86,10 @@ def _seed_legacy_menu(
 
     db = get_new_session()
     try:
-        main = Dish(tenant_id=tenant_id, name=main_text, category=None)
+        main = Dish(tenant_id=tenant_id, site_id=site_id, name=main_text, category=None)
         db.add(main)
         if alt1_text is not None:
-            alt1 = Dish(tenant_id=tenant_id, name=alt1_text, category=None)
+            alt1 = Dish(tenant_id=tenant_id, site_id=site_id, name=alt1_text, category=None)
             db.add(alt1)
         db.commit()
         db.refresh(main)
@@ -556,8 +556,8 @@ def test_parity_realistic_transition_flow(parity_app):
 
             db = get_new_session()
             try:
-                d1 = Dish(tenant_id=tenant_id, name="Fish Plate", category=None)
-                d2 = Dish(tenant_id=tenant_id, name="Unknown Salad", category=None)
+                d1 = Dish(tenant_id=tenant_id, site_id=site_id, name="Fish Plate", category=None)
+                d2 = Dish(tenant_id=tenant_id, site_id=site_id, name="Unknown Salad", category=None)
                 db.add_all([d1, d2])
                 db.commit()
                 db.refresh(d1)
@@ -634,7 +634,7 @@ def test_parity_realistic_transition_flow(parity_app):
             assert mismatch.status == "version_mismatch"
             assert mismatch.go is False
 
-            alt2 = Dish(tenant_id=tenant_id, name="Soup Deluxe", category=None)
+            alt2 = Dish(tenant_id=tenant_id, site_id=site_id, name="Soup Deluxe", category=None)
             db = get_new_session()
             try:
                 db.add(alt2)
