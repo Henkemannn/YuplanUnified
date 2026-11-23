@@ -21,9 +21,9 @@ def _seed_base(app, site_id: str, dep_id: str, year: int, week: int):
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',15,0) ON CONFLICT(id) DO NOTHING"), {"i": dep_id, "s": site_id, "n": "Portal Avd"})
             db.commit()
             # Dishes for Monday lunch + dessert + alt2 highlighting
-            d1 = Dish(tenant_id=1, name="Köttbullar", category=None)
-            d2 = Dish(tenant_id=1, name="Fisk", category=None)
-            d3 = Dish(tenant_id=1, name="Chokladpudding", category=None)
+            d1 = Dish(tenant_id=1, site_id=site_id, name="Köttbullar", category=None)
+            d2 = Dish(tenant_id=1, site_id=site_id, name="Fisk", category=None)
+            d3 = Dish(tenant_id=1, site_id=site_id, name="Chokladpudding", category=None)
             db.add_all([d1, d2, d3]); db.commit()
             for d in [d1, d2, d3]: db.refresh(d)
             menu = app.menu_service.create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)

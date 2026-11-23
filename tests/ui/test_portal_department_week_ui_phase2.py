@@ -18,10 +18,13 @@ def _seed_menu(app, year, week):
         try:
             # basic site/department
             sid = str(uuid.uuid4()); did = str(uuid.uuid4())
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0)"), {"i": sid, "n": "Site"})
+            db.execute(
+                text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0)"),
+                {"i": sid, "n": "Site"},
+            )
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',10,0)"), {"i": did, "s": sid, "n": "Avd"})
             db.commit()
-            d1 = Dish(tenant_id=1, name="Köttbullar"); d2 = Dish(tenant_id=1, name="Fisk"); d3 = Dish(tenant_id=1, name="Glass")
+            d1 = Dish(tenant_id=1, site_id=sid, name="Köttbullar"); d2 = Dish(tenant_id=1, site_id=sid, name="Fisk"); d3 = Dish(tenant_id=1, site_id=sid, name="Glass")
             db.add_all([d1, d2, d3]); db.commit(); db.refresh(d1); db.refresh(d2); db.refresh(d3)
             menu = app.menu_service.create_or_get_menu(tenant_id=1, site_id=sid, week=week, year=year)
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt1", dish_id=d1.id)
@@ -119,6 +122,48 @@ def test_regression_views_ok(client_admin):
     _enable_weekview(client_admin)
     year, week = 2025, 51
     sid, did = _seed_menu(app, year, week)
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = sid
+    from core.db import get_session
+    with app.app_context():
+        from core.models import Tenant, User
+
+        db = get_session()
+        try:
+            if db.query(Tenant).filter(Tenant.id == 1).first() is None:
+                db.add(Tenant(id=1, name="Portal Test Tenant", active=True))
+                db.commit()
+            if db.query(User).filter(User.id == 1).first() is None:
+                db.add(
+                    User(
+                        id=1,
+                        tenant_id=1,
+                        username="portal-admin",
+                        email="portal-admin@example.test",
+                        password_hash="test-hash",
+                        role="admin",
+                        is_active=True,
+                    )
+                )
+                db.commit()
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+                    "user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
+                )
+            )
+            db.execute(text("UPDATE users SET tenant_id=1 WHERE id=1"))
+            db.execute(text("DELETE FROM kitchen_user_sites WHERE user_id=1"))
+            db.execute(
+                text(
+                    "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                    "VALUES(1, 1, :site_id)"
+                ),
+                {"site_id": sid},
+            )
+            db.commit()
+        finally:
+            db.close()
     # Portal
     r_portal = client_admin.get(f"/portal/week?site_id={sid}&department_id={did}&year={year}&week={week}", headers=ADMIN_HEADERS)
     assert r_portal.status_code == 200
