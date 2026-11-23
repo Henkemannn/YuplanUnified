@@ -95,8 +95,11 @@ def test_global_bearer_rejection_does_not_create_web_session(app_session, token_
     assert audit_response.status_code in (401, 403)
 
 
-@pytest.mark.parametrize("route", ["/admin/audit", "/ui/admin/users"])
-def test_bearer_identity_updates_request_context_for_both_decorators(app_session, route):
+@pytest.mark.parametrize(
+    ("route", "expected_status"),
+    [("/admin/audit", 403), ("/ui/admin/users", 200)],
+)
+def test_bearer_identity_updates_request_context_for_both_decorators(app_session, route, expected_status):
     data = _seed_scope(app_session)
     client = app_session.test_client()
     _login(client, data["superuser"], password="SuperPassw0rd!2026")
@@ -113,6 +116,30 @@ def test_bearer_identity_updates_request_context_for_both_decorators(app_session
     callbacks.append(observe_identity)
     try:
         response = client.get(route, headers={"Authorization": f"Bearer {token}"})
+    finally:
+        callbacks.remove(observe_identity)
+
+    assert response.status_code == expected_status
+    assert observed["g_user_id"] == bearer_user_id
+    with client.session_transaction() as session:
+        assert session["user_id"] == bearer_user_id
+        assert session["authenticated_user_id"] == bearer_user_id
+
+
+def test_superuser_bearer_can_access_audit(app_session):
+    data = _seed_scope(app_session)
+    client = app_session.test_client()
+    token, bearer_user_id = _access_token(app_session, data["superuser"])
+    observed = {}
+
+    def observe_identity(response):
+        observed["g_user_id"] = getattr(g, "user_id", None)
+        return response
+
+    callbacks = app_session.after_request_funcs.setdefault(None, [])
+    callbacks.append(observe_identity)
+    try:
+        response = client.get("/admin/audit", headers={"Authorization": f"Bearer {token}"})
     finally:
         callbacks.remove(observe_identity)
 
