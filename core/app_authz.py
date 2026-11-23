@@ -18,7 +18,7 @@ from functools import wraps
 from typing import ParamSpec, TypeVar, cast
 
 from .app_sessions import SessionData, get_session
-from flask import request, current_app, session
+from flask import current_app, g, request, session
 from .auth import (
     _clear_authenticated_session,
     _load_active_user_by_id,
@@ -142,30 +142,9 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
                 try:
                     active_user = _load_active_user_by_id(db, sess["user_id"])
                     active_auth_version = _user_auth_version(active_user)
-                    session_tenant_id = session.get("tenant_id")
-                    site_context = session.get("site_id")
-                    if bearer_auth and not site_context:
-                        site_context = _request_site_context()
-                    site_binding_valid = bool(
-                        active_user
-                        and _user_has_current_site_binding(
-                            db,
-                            active_user,
-                            site_context,
-                        )
-                    )
                 finally:
                     db.close()
-                if (
-                    active_user is None
-                    or active_auth_version is None
-                    or session.get("auth_version") is None
-                    or (
-                        session_tenant_id is not None
-                        and int(session_tenant_id) != int(active_user.tenant_id)
-                    )
-                    or not site_binding_valid
-                ):
+                if active_user is None or active_auth_version is None or session.get("auth_version") is None:
                     _clear_authenticated_session()
                     from .app_sessions import SessionError  # local import to avoid cycle
 
@@ -175,6 +154,7 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
                     from .app_sessions import SessionError  # local import to avoid cycle
 
                     raise SessionError("authentication required")
+                session_tenant_before_sync = session.get("tenant_id")
                 try:
                     from .impersonation import synchronize_authenticated_context
 
@@ -185,6 +165,33 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
                     )
                 except PermissionError as exc:
                     raise AuthzError(str(exc)) from exc
+                if session_tenant_before_sync is not None:
+                    try:
+                        tenant_matches = int(session_tenant_before_sync) == int(active_user.tenant_id)
+                    except (TypeError, ValueError):
+                        tenant_matches = False
+                    if not tenant_matches and not getattr(g, "impersonating", False):
+                        _clear_authenticated_session()
+                        from .app_sessions import SessionError  # local import to avoid cycle
+
+                        raise SessionError("authentication required")
+                site_context = session.get("site_id")
+                if bearer_auth and not site_context:
+                    site_context = _request_site_context()
+                db = get_db_session()
+                try:
+                    site_binding_valid = _user_has_current_site_binding(
+                        db,
+                        active_user,
+                        site_context,
+                    )
+                finally:
+                    db.close()
+                if not site_binding_valid:
+                    _clear_authenticated_session()
+                    from .app_sessions import SessionError  # local import to avoid cycle
+
+                    raise SessionError("authentication required")
                 if _user_must_change_password(active_user) and request.endpoint not in password_change_exempt_endpoints:
                     if request.endpoint and request.endpoint.startswith("ui.") and (request.method or "").upper() == "GET":
                         from flask import redirect, url_for
@@ -196,7 +203,6 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
                     raise SessionError("authentication required")
                 session["user_id"] = active_user.id
                 session["role"] = active_user.role
-                session["tenant_id"] = active_user.tenant_id
                 session["auth_version"] = active_auth_version
                 if bearer_auth and site_context:
                     session["site_id"] = site_context

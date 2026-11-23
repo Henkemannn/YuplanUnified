@@ -4,7 +4,7 @@ import os
 from collections.abc import Callable
 from functools import wraps
 
-from flask import Blueprint, current_app, flash, jsonify, make_response, redirect, request, session, render_template, url_for
+from flask import Blueprint, current_app, flash, g, jsonify, make_response, redirect, request, session, render_template, url_for
 from sqlalchemy import func, text
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -166,35 +166,15 @@ def require_roles(*roles: str):
                 try:
                     active_user = _load_active_user_by_id(db, session.get("user_id"))
                     active_auth_version = _user_auth_version(active_user)
-                    session_tenant_id = session.get("tenant_id")
-                    site_context = session.get("site_id")
-                    if bearer_auth and not site_context:
-                        site_context = _request_site_context()
-                    site_binding_valid = bool(
-                        active_user
-                        and _user_has_current_site_binding(
-                            db,
-                            active_user,
-                            site_context,
-                        )
-                    )
                 finally:
                     db.close()
-                if (
-                    not active_user
-                    or active_auth_version is None
-                    or session.get("auth_version") is None
-                    or (
-                        session_tenant_id is not None
-                        and int(session_tenant_id) != int(active_user.tenant_id)
-                    )
-                    or not site_binding_valid
-                ):
+                if not active_user or active_auth_version is None or session.get("auth_version") is None:
                     _clear_authenticated_session()
                     return _json_error("auth required", 401)
                 if int(session.get("auth_version")) != active_auth_version:
                     _clear_authenticated_session()
                     return _json_error("auth required", 401)
+                session_tenant_before_sync = session.get("tenant_id")
                 try:
                     from .impersonation import synchronize_authenticated_context
 
@@ -205,9 +185,31 @@ def require_roles(*roles: str):
                     )
                 except PermissionError as exc:
                     return _json_error(str(exc), 403)
+                if session_tenant_before_sync is not None:
+                    try:
+                        tenant_matches = int(session_tenant_before_sync) == int(active_user.tenant_id)
+                    except (TypeError, ValueError):
+                        tenant_matches = False
+                    if not tenant_matches and not getattr(g, "impersonating", False):
+                        _clear_authenticated_session()
+                        return _json_error("auth required", 401)
+                site_context = session.get("site_id")
+                if bearer_auth and not site_context:
+                    site_context = _request_site_context()
+                db = get_session()
+                try:
+                    site_binding_valid = _user_has_current_site_binding(
+                        db,
+                        active_user,
+                        site_context,
+                    )
+                finally:
+                    db.close()
+                if not site_binding_valid:
+                    _clear_authenticated_session()
+                    return _json_error("auth required", 401)
                 session["user_id"] = active_user.id
                 session["role"] = _normalize_role(active_user.role)
-                session["tenant_id"] = active_user.tenant_id
                 session["auth_version"] = active_auth_version
                 if bearer_auth and site_context:
                     session["site_id"] = site_context

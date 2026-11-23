@@ -1,7 +1,7 @@
 import pytest
 import time
 
-from flask import g
+from flask import g, request, session as flask_session
 from sqlalchemy import text
 
 from core.db import get_session
@@ -305,3 +305,82 @@ def test_real_local_admin_cannot_start_or_reuse_impersonation(app_session):
     with client.session_transaction() as session:
         assert session["tenant_id"] == data["tenant_a"]
         assert "site_id" not in session
+
+
+@pytest.mark.parametrize(
+    "route",
+    [
+        "/ui/admin/users",
+        "/api/reports/weekview?year=2026&week=1",
+    ],
+)
+def test_local_admin_cannot_use_manipulated_other_tenant_context(app_session, route):
+    data = _seed_scope(app_session)
+    client = app_session.test_client()
+    _login(client, data["admin_a"])
+    admin_id = _user_id(app_session, data["admin_a"])
+
+    with client.session_transaction() as session:
+        session["site_id"] = data["site_a"]
+
+    def tamper_effective_tenant():
+        if request.path == route.split("?", 1)[0]:
+            flask_session["tenant_id"] = data["tenant_b"]
+            flask_session["site_id"] = data["site_a"]
+
+    callbacks = app_session.before_request_funcs.setdefault(None, [])
+    callbacks.append(tamper_effective_tenant)
+    try:
+        response = client.get(route)
+    finally:
+        callbacks.remove(tamper_effective_tenant)
+
+    assert response.status_code in (401, 403)
+    with app_session.app_context():
+        db = get_session()
+        try:
+            binding = db.execute(
+                text(
+                    "SELECT tenant_id, site_id FROM kitchen_user_sites "
+                    "WHERE user_id=:user_id"
+                ),
+                {"user_id": admin_id},
+            ).one()
+        finally:
+            db.close()
+    assert tuple(binding) == (data["tenant_a"], data["site_a"])
+    with client.session_transaction() as session:
+        assert session.get("authenticated_tenant_id") == data["tenant_a"]
+        assert "impersonate" not in session
+
+
+def test_local_cook_cannot_use_superuser_support_exception(app_session):
+    data = _seed_scope(app_session)
+    cook_email = "08b-cook-cross-tenant@example.com"
+    _create_user(
+        app_session,
+        tenant_id=data["tenant_a"],
+        email=cook_email,
+        role="cook",
+        site_id=data["site_a"],
+    )
+    client = app_session.test_client()
+    _login(client, cook_email, password="TargetPassw0rd!2026")
+
+    with client.session_transaction() as session:
+        session["tenant_id"] = data["tenant_b"]
+        session["site_id"] = data["site_b"]
+        session["impersonate"] = {
+            "tenant_id": data["tenant_b"],
+            "reason": "forged",
+            "started_at": int(time.time()),
+            "expires_at": int(time.time()) + 900,
+            "admin_user_id": session["user_id"],
+            "admin_roles": ["superuser"],
+        }
+
+    response = client.get("/api/reports/weekview?year=2026&week=1")
+
+    assert response.status_code in (401, 403)
+    with client.session_transaction() as session:
+        assert "impersonate" not in session
