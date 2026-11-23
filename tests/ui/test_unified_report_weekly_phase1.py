@@ -15,17 +15,88 @@ import os
 import pytest
 from datetime import date, timedelta
 from core.db import get_session, create_all
+from core.models import User
 from sqlalchemy import text
 import uuid
 
 
-def _h(role: str) -> dict:
-    """Helper: headers for role-based auth."""
-    return {"X-User-Role": role, "X-Tenant-ID": "1", "X-User-ID": "1"}
+def _h() -> dict:
+    """Requests use the authenticated client session and no synthetic auth headers."""
+    return {}
+
+
+def _bind_client_to_site(client, site_id: str, role: str) -> None:
+    with client.application.app_context():
+        db = get_session()
+        try:
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+                    "user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
+                )
+            )
+            user = User(
+                tenant_id=1,
+                username=f"weekly-report-{uuid.uuid4().hex}",
+                email=f"weekly-report-{uuid.uuid4().hex}@example.test",
+                password_hash="fixture-only",
+                role=role,
+                is_active=True,
+                auth_version=1,
+                must_change_password=False,
+            )
+            db.add(user)
+            db.flush()
+            user_id = user.id
+            db.execute(
+                text(
+                    "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                    "VALUES (:user_id, 1, :site_id)"
+                ),
+                {"user_id": user_id, "site_id": site_id},
+            )
+            db.commit()
+        finally:
+            db.close()
+    with client.session_transaction() as session:
+        session.update(
+            {
+                "user_id": user_id,
+                "role": role,
+                "tenant_id": 1,
+                "site_id": site_id,
+                "auth_version": 1,
+            }
+        )
+
+
+@pytest.fixture(autouse=True)
+def bound_auth_clients(client_admin, client_user, client_superuser):
+    sites = {}
+    with client_admin.application.app_context():
+        db = get_session()
+        try:
+            for name in ("admin", "user", "superuser"):
+                site_id = str(uuid.uuid4())
+                db.execute(
+                    text(
+                        "INSERT INTO sites (id, tenant_id, name, version) "
+                        "VALUES (:id, 1, :name, 0)"
+                    ),
+                    {"id": site_id, "name": f"Weekly report {name} site"},
+                )
+                sites[name] = site_id
+            db.commit()
+        finally:
+            db.close()
+    _bind_client_to_site(client_admin, sites["admin"], "admin")
+    _bind_client_to_site(client_user, sites["user"], "cook")
+    _bind_client_to_site(client_superuser, sites["superuser"], "superuser")
+    return sites
 
 
 @pytest.fixture
-def seed_site_and_departments(client_admin):
+def seed_site_and_departments(client_admin, bound_auth_clients):
     """Seed site and 2 test departments."""
     app = client_admin.application
     site_id = str(uuid.uuid4())
@@ -37,6 +108,13 @@ def seed_site_and_departments(client_admin):
         create_all()
         sess = get_session()
         
+        sess.execute(
+        text(
+            "DELETE FROM kitchen_user_sites "
+            "WHERE user_id NOT IN (SELECT id FROM users)"
+        )
+        )
+
         # Create meal_registrations table
         sess.execute(text("""
             CREATE TABLE IF NOT EXISTS meal_registrations (
@@ -54,6 +132,7 @@ def seed_site_and_departments(client_admin):
         
         # Insert site
         sess.execute(text(f"INSERT OR IGNORE INTO sites (id, name, version) VALUES ('{site_id}', 'TestSite-Report', 0)"))
+        sess.execute(text("UPDATE sites SET tenant_id=1 WHERE id=:site_id"), {"site_id": site_id})
         
         # Insert departments
         sess.execute(text(f"""
@@ -62,11 +141,20 @@ def seed_site_and_departments(client_admin):
                 ('{dept1_id}', '{site_id}', 'Avd Alpha', 'fixed', 25, 0),
                 ('{dept2_id}', '{site_id}', 'Avd Beta', 'fixed', 30, 0)
         """))
+        sess.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS weekview_items ("
+                "id TEXT PRIMARY KEY, tenant_id INTEGER NOT NULL, department_id TEXT NOT NULL, "
+                "local_date TEXT NOT NULL, meal TEXT NOT NULL, title TEXT NOT NULL, notes TEXT, "
+                "status TEXT, version INTEGER NOT NULL DEFAULT 0, updated_at TEXT)"
+            )
+        )
         sess.commit()
     
     # Activate this site for the session to satisfy strict scoping
     with client_admin.session_transaction() as sess:
         sess["site_id"] = site_id
+    _bind_client_to_site(client_admin, site_id, "admin")
     yield {"site_id": site_id, "dept1": dept1_id, "dept2": dept2_id}
 
 
@@ -196,27 +284,33 @@ def seed_registrations(client_admin, seed_site_and_departments, seed_week_menus)
 def test_reports_weekly_requires_admin(client_admin, client_user, seed_site_and_departments):
     """Weekly report should require admin or superuser role."""
     # Staff denied
-    resp = client_user.get("/ui/reports/weekly", headers=_h("staff"))
+    _bind_client_to_site(client_user, seed_site_and_departments["site_id"], "staff")
+    resp = client_user.get("/ui/reports/weekly", headers=_h())
     assert resp.status_code == 403
     
     # Cook denied
-    resp = client_user.get("/ui/reports/weekly", headers=_h("cook"))
+    _bind_client_to_site(client_user, seed_site_and_departments["site_id"], "cook")
+    resp = client_user.get("/ui/reports/weekly", headers=_h())
     assert resp.status_code == 403
     
     # Admin OK
-    resp = client_admin.get("/ui/reports/weekly", headers=_h("admin"))
+    resp = client_admin.get("/ui/reports/weekly", headers=_h())
     assert resp.status_code == 200
 
 
 def test_reports_weekly_superuser_allowed(client_superuser, seed_site_and_departments):
     """Superuser should be able to access weekly report."""
-    resp = client_superuser.get("/ui/reports/weekly", headers=_h("superuser"))
+    _bind_client_to_site(client_superuser, seed_site_and_departments["site_id"], "superuser")
+    resp = client_superuser.get("/ui/reports/weekly", headers=_h())
     assert resp.status_code == 200
 
 
 def test_reports_weekly_editor_denied(client_user):
     """Editor role should not have access to reports."""
-    resp = client_user.get("/ui/reports/weekly", headers=_h("editor"))
+    with client_user.session_transaction() as session:
+        bound_site_id = session["site_id"]
+    _bind_client_to_site(client_user, bound_site_id, "editor")
+    resp = client_user.get("/ui/reports/weekly", headers=_h())
     assert resp.status_code == 403
 
 
@@ -226,7 +320,7 @@ def test_reports_weekly_editor_denied(client_user):
 
 def test_reports_weekly_renders_basic_structure(client_admin, seed_site_and_departments):
     """Report page should render with basic structure."""
-    resp = client_admin.get("/ui/reports/weekly", headers=_h("admin"))
+    resp = client_admin.get("/ui/reports/weekly", headers=_h())
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     
@@ -243,7 +337,7 @@ def test_reports_weekly_renders_basic_structure(client_admin, seed_site_and_depa
 
 def test_reports_weekly_filter_has_scoped_autosubmit_hook(client_admin, seed_site_and_departments):
     """Report filter should have page-scoped auto-submit wiring."""
-    resp = client_admin.get("/ui/reports/weekly", headers=_h("admin"))
+    resp = client_admin.get("/ui/reports/weekly", headers=_h())
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
 
@@ -256,7 +350,7 @@ def test_reports_weekly_filter_has_scoped_autosubmit_hook(client_admin, seed_sit
 
 def test_reports_weekly_calculates_coverage_correctly(client_admin, seed_registrations):
     """Report should calculate coverage percentages correctly."""
-    resp = client_admin.get("/ui/reports/weekly?year=2025&week=10", headers=_h("admin"))
+    resp = client_admin.get("/ui/reports/weekly?year=2025&week=10", headers=_h())
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     
@@ -274,7 +368,7 @@ def test_reports_weekly_context_pill_selected_department(client_admin, seed_site
     dept_id = seed_site_and_departments["dept1"]
     resp = client_admin.get(
         f"/ui/reports/weekly?year=2025&week=10&department_id={dept_id}",
-        headers=_h("admin"),
+        headers=_h(),
     )
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
@@ -283,23 +377,20 @@ def test_reports_weekly_context_pill_selected_department(client_admin, seed_site
     assert "Vecka 10, 2025" in html
 
 
-def test_reports_weekly_context_pill_mixed_id_formats(client_admin, seed_site_and_departments):
-    """Context pill should resolve label when selected id is a suffix/prefix."""
+def test_reports_weekly_context_pill_rejects_short_department_id(client_admin, seed_site_and_departments):
+    """A shortened department ID must not bypass exact scope authorization."""
     dept_id = seed_site_and_departments["dept1"]
     selected_id = dept_id[-6:]
     resp = client_admin.get(
         f"/ui/reports/weekly?year=2025&week=10&department_id={selected_id}",
-        headers=_h("admin"),
+        headers=_h(),
     )
-    assert resp.status_code == 200
-    html = resp.data.decode("utf-8")
-    assert "Avd Alpha" in html
-    assert "admin-report-week__context" in html
+    assert resp.status_code == 404
 
 
 def test_reports_weekly_zero_coverage(client_admin, seed_week_menus):
     """Report should handle zero registrations gracefully."""
-    resp = client_admin.get("/ui/reports/weekly?year=2025&week=10", headers=_h("admin"))
+    resp = client_admin.get("/ui/reports/weekly?year=2025&week=10", headers=_h())
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     
@@ -329,7 +420,7 @@ def test_reports_weekly_partial_coverage(client_admin, seed_site_and_departments
         """))
         sess.commit()
     
-    resp = client_admin.get("/ui/reports/weekly?year=2025&week=10", headers=_h("admin"))
+    resp = client_admin.get("/ui/reports/weekly?year=2025&week=10", headers=_h())
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     
@@ -346,7 +437,7 @@ def test_reports_weekly_partial_coverage(client_admin, seed_site_and_departments
 
 def test_reports_weekly_no_departments(client_admin):
     """Report should handle case with no departments."""
-    resp = client_admin.get("/ui/reports/weekly", headers=_h("admin"))
+    resp = client_admin.get("/ui/reports/weekly", headers=_h())
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     
@@ -357,7 +448,7 @@ def test_reports_weekly_no_departments(client_admin):
 
 def test_reports_weekly_no_menus(client_admin, seed_site_and_departments):
     """Report should handle week with no menu items."""
-    resp = client_admin.get("/ui/reports/weekly?year=2025&week=20", headers=_h("admin"))
+    resp = client_admin.get("/ui/reports/weekly?year=2025&week=20", headers=_h())
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     
@@ -372,7 +463,7 @@ def test_reports_weekly_no_menus(client_admin, seed_site_and_departments):
 
 def test_reports_weekly_defaults_to_current_week(client_admin, seed_site_and_departments):
     """Report should default to current ISO week if no params given."""
-    resp = client_admin.get("/ui/reports/weekly", headers=_h("admin"))
+    resp = client_admin.get("/ui/reports/weekly", headers=_h())
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     
@@ -387,7 +478,7 @@ def test_reports_weekly_defaults_to_current_week(client_admin, seed_site_and_dep
 
 def test_reports_weekly_navigation_links(client_admin, seed_site_and_departments):
     """Report should have correct week navigation links."""
-    resp = client_admin.get("/ui/reports/weekly?year=2025&week=10", headers=_h("admin"))
+    resp = client_admin.get("/ui/reports/weekly?year=2025&week=10", headers=_h())
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     
@@ -402,20 +493,20 @@ def test_reports_weekly_navigation_links(client_admin, seed_site_and_departments
 
 def test_regression_weekview_still_works(client_user):
     """Weekview UI should still work after reports module."""
-    resp = client_user.get("/ui/weekview", headers=_h("cook"), follow_redirects=True)
+    resp = client_user.get("/ui/weekview", headers=_h(), follow_redirects=True)
     # Should either show weekview or redirect to login - not crash
     assert resp.status_code in (200, 302, 404)  # 404 if no departments/data
 
 
 def test_regression_menu_planning_still_works(client_admin):
     """Menu planning should still work after reports module."""
-    resp = client_admin.get("/ui/admin/menu-planning", headers=_h("admin"))
+    resp = client_admin.get("/ui/admin/menu-planning", headers=_h())
     assert resp.status_code == 200
 
 
 def test_regression_departments_crud_still_works(client_admin, seed_site_and_departments):
     """Department CRUD should still work after reports module."""
-    resp = client_admin.get("/ui/admin/departments", headers=_h("admin"))
+    resp = client_admin.get("/ui/admin/departments", headers=_h())
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     assert "Avdelningar" in html
