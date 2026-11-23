@@ -8,6 +8,7 @@ from werkzeug.security import generate_password_hash
 from core.db import get_session
 from core.weekview.repo import WeekviewRepo
 from core.weekview.service import WeekviewService
+from tests._auth_site_helpers import login_bound_user, seed_bound_user
 
 
 def _enable_weekview_feature(client_admin) -> None:
@@ -154,30 +155,24 @@ def test_admin_can_create_and_deactivate_kitchen_user(client_admin):
 
 
 def test_ui_login_redirects_kitchen_user_to_kitchen_portal(client_admin):
-    db = get_session()
-    try:
-        db.execute(
-            text(
-                "INSERT INTO users (tenant_id, email, password_hash, role, username, full_name, is_active) "
-                "VALUES (1, :email, :password_hash, 'kitchen', :username, :full_name, 1)"
-            ),
-            {
-                "email": "kitchen.login@example.com",
-                "password_hash": generate_password_hash("kitchen-pass"),
-                "username": "kitchen.login@example.com",
-                "full_name": "Kitchen Login",
-            },
-        )
-        db.commit()
-    finally:
-        db.close()
+    site_id = f"site-{uuid.uuid4()}"
+    _seed_site(site_id)
 
+    email = "kitchen.login@example.com"
+    password = "kitchen-pass"
+    seed_bound_user(
+        client_admin,
+        site_id=site_id,
+        role="kitchen",
+        email=email,
+        password=password,
+    )
+    client_admin.get("/auth/logout")
     resp = client_admin.post(
         "/ui/login",
-        data={"email": "kitchen.login@example.com", "password": "kitchen-pass"},
+        data={"email": email, "password": password},
         follow_redirects=False,
     )
-
     assert resp.status_code in (301, 302)
     assert "/ui/kitchen" in (resp.headers.get("Location") or "")
 

@@ -145,7 +145,7 @@ def test_admin_department_service_addons_renders_compact_read_state_and_modal_co
     assert 'data-service-addon-quantity-panel' in html
     assert 'data-service-addon-count-field="lunch"' in html
     assert 'data-service-addon-count-field="dinner"' in html
-    assert '+ Skapa ny familj…' in html
+    assert '+ Skapa ny kategori…' in html
     assert 'Välj befintlig serveringsanpassning' in html
     assert 'Lägg till en återkommande anpassning för avdelningen.' not in html
     js = Path('static/js/admin_service_addons.js').read_text(encoding='utf-8')

@@ -1,16 +1,17 @@
 import uuid
 
 import pytest
+from tests._auth_site_helpers import login_bound_user
 
 ETAG_RE = __import__("re").compile(r'^W/"weekview:dept:.*:year:\d{4}:week:\d{1,2}:v\d+"$')
 
 
 def _get(client, role, path):
-    return client.get(path, headers={"X-User-Role": role, "X-Tenant-Id": "1"})
+    return client.get(path)
 
 
 def _patch(client, role, path, json=None, extra_headers=None):
-    headers = {"X-User-Role": role, "X-Tenant-Id": "1"}
+    headers = {}
     if extra_headers:
         headers.update(extra_headers)
     return client.patch(path, json=json or {}, headers=headers)
@@ -18,10 +19,12 @@ def _patch(client, role, path, json=None, extra_headers=None):
 
 @pytest.fixture
 def enable_weekview(client_admin):
+    with client_admin.session_transaction() as session:
+        site_id = session["site_id"]
+    login_bound_user(client_admin, site_id=site_id)
     resp = client_admin.post(
         "/features/set",
         json={"name": "ff.weekview.enabled", "enabled": True},
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
     assert resp.status_code == 200
 
@@ -31,10 +34,24 @@ def test_phase1_days_payload_includes_menu_alt2_and_residents(client_admin):
     year, week = 2025, 45
     dep_id = str(uuid.uuid4())
     site_id = str(uuid.uuid4())
+    with client_admin.application.app_context():
+        from core.db import get_session
+        from sqlalchemy import text
+        db = get_session()
+        try:
+            db.execute(
+                text(
+                    "INSERT INTO sites(id, name, tenant_id, version) "
+                    "VALUES(:id, 'Phase 1 Site', 1, 0)"
+                ),
+                {"id": site_id},
+            )
+            db.commit()
+        finally:
+            db.close()
     base = f"/api/weekview?year={year}&week={week}&department_id={dep_id}"
     # Align session site context
-    with client_admin.session_transaction() as sess:
-        sess["site_id"] = site_id
+    login_bound_user(client_admin, site_id=site_id)
 
     # Initial GET -> ETag + baseline payload
     r0 = _get(client_admin, "admin", base)
@@ -51,15 +68,13 @@ def test_phase1_days_payload_includes_menu_alt2_and_residents(client_admin):
     # Seed menu variants for Monday lunch (alt1 + alt2)
     app = client_admin.application
     with app.app_context():
-        # Ensure ORM tables present in ephemeral sqlite
-        from core.db import create_all, get_session
+        from core.db import get_session
         from core.models import Dish
 
-        create_all()
         db = get_session()
         try:
-            d1 = Dish(tenant_id=1, name="Köttbullar", category=None)
-            d2 = Dish(tenant_id=1, name="Fiskgratäng", category=None)
+            d1 = Dish(tenant_id=1, site_id=site_id, name="Köttbullar", category=None)
+            d2 = Dish(tenant_id=1, site_id=site_id, name="Fiskgratäng", category=None)
             db.add_all([d1, d2])
             db.commit()
             db.refresh(d1)
@@ -73,7 +88,6 @@ def test_phase1_days_payload_includes_menu_alt2_and_residents(client_admin):
     resp = client_admin.post(
         "/features/set",
         json={"name": "ff.weekview.enabled", "enabled": True},
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
     assert resp.status_code == 200
 
@@ -135,5 +149,5 @@ def test_phase1_days_payload_includes_menu_alt2_and_residents(client_admin):
     assert isinstance(ds1[0].get("alt2_days"), list)
 
     # Conditional GET (If-None-Match)
-    r_not_mod = client_admin.get(base, headers={"X-User-Role": "viewer", "X-Tenant-Id": "1", "If-None-Match": r1.headers.get("ETag")})
+    r_not_mod = client_admin.get(base, headers={"If-None-Match": r1.headers.get("ETag")})
     assert r_not_mod.status_code in (200, 304)

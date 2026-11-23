@@ -8,6 +8,7 @@ from core.admin_repo import SitesRepo, DepartmentsRepo, DietTypesRepo, Residence
 from core.weekview.service import WeekviewService
 from core.weekview.repo import WeekviewRepo
 from core.weekview_vm import build_weekview_vm
+from tests._auth_site_helpers import login_bound_user
 
 
 def _login_headers(role: str = "admin"):
@@ -55,12 +56,7 @@ def setup_data(app_session):
 
 def test_weekview_get_all_departments_renders_headers(client_admin, app_session):
     site, depA, depB, _dt = setup_data(app_session)
-    with client_admin.session_transaction() as sess:
-        sess["site_id"] = site["id"]
-        sess["tenant_id"] = 1
-        sess["role"] = "admin"
-        sess["user_id"] = 1
-
+    login_bound_user(client_admin, site_id=site["id"])
     # Default to current ISO week
     iso = _date.today().isocalendar()
     year, week = iso[0], iso[1]
@@ -219,12 +215,7 @@ def test_weekview_identity_hierarchy_renders_residence_names_and_no_avd_prefix(c
 
 def test_toggle_flow_marks_persist_and_report_shows_special(client_admin, app_session):
     site, depA, depB, dt_id = setup_data(app_session)
-    # Align session site context
-    with client_admin.session_transaction() as sess:
-        sess["site_id"] = site["id"]
-        sess["tenant_id"] = 1
-        sess["role"] = "admin"
-        sess["user_id"] = 1
+    login_bound_user(client_admin, site_id=site["id"])
 
     iso = _date.today().isocalendar()
     year, week = iso[0], iso[1]
@@ -247,7 +238,7 @@ def test_toggle_flow_marks_persist_and_report_shows_special(client_admin, app_se
         "weekday_abbr": "Mån",
         "marked": True,
     }
-    resp = client_admin.post("/api/weekview/specialdiets/mark", json=payload, headers={**_login_headers(), "If-Match": etag})
+    resp = client_admin.post("/api/weekview/specialdiets/mark", json=payload, headers={"If-Match": etag})
     assert resp.status_code == 200
     new_etag = resp.headers.get("ETag")
     assert new_etag and new_etag != etag
@@ -264,7 +255,7 @@ def test_toggle_flow_marks_persist_and_report_shows_special(client_admin, app_se
     assert not any(m.get("marked") for m in marksB), "Marks should not affect other departments"
 
     # Statistik/Rapport: special > 0 for depA
-    r = client_admin.get(f"/api/reports/weekview?site_id={site['id']}&year={year}&week={week}&department_id={depA['id']}", headers=_login_headers())
+    r = client_admin.get(f"/api/reports/weekview?site_id={site['id']}&year={year}&week={week}&department_id={depA['id']}")
     assert r.status_code == 200
     j = r.get_json()
     assert j and j.get("departments")

@@ -4,6 +4,7 @@ Phase 6.1: Demo & Legacy UI Cleanup
 - Core unified views should not link to demo assets or routes
 """
 from datetime import date
+from tests._auth_site_helpers import login_bound_user
 
 
 def _h(role: str = "admin"):
@@ -23,8 +24,11 @@ def test_demo_routes_disabled_by_default(client_admin):
 
 
 def test_core_views_have_no_demo_links(client_admin):
-    # Cook dashboard
-    rc = client_admin.get('/ui/cook', headers=_h('cook'))
+    with client_admin.session_transaction() as session:
+        site_id = session["site_id"]
+    cook_client = client_admin.application.test_client()
+    login_bound_user(cook_client, site_id=site_id, role="cook")
+    rc = cook_client.get('/ui/cook')
     assert rc.status_code == 200
     cook_html = rc.get_data(as_text=True)
     assert '/demo' not in cook_html
@@ -32,7 +36,8 @@ def test_core_views_have_no_demo_links(client_admin):
     assert 'demo.js' not in cook_html
 
     # Admin dashboard
-    ra = client_admin.get('/ui/admin', headers=_h('admin'))
+    login_bound_user(client_admin, site_id=site_id, role="admin")
+    ra = client_admin.get('/ui/admin')
     assert ra.status_code == 200
     admin_html = ra.get_data(as_text=True)
     assert '/demo' not in admin_html
@@ -42,7 +47,7 @@ def test_core_views_have_no_demo_links(client_admin):
     # Reports weekly (uses current y/w)
     year, week = _current_year_week()
     rr = client_admin.get(
-        f'/ui/reports/weekly?year={year}&week={week}', headers=_h('admin'), follow_redirects=True
+        f'/ui/reports/weekly?year={year}&week={week}', follow_redirects=True
     )
     assert rr.status_code == 200
     report_html = rr.get_data(as_text=True)

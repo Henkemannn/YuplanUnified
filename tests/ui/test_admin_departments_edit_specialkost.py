@@ -13,6 +13,7 @@ from core.department_requirement_group_repo import DepartmentRequirementGroupsRe
 from core.department_requirement_group_weekday_overrides_repo import DepartmentRequirementGroupWeekdayOverridesRepo
 from core.department_requirement_group_weekview_projection import build_department_requirement_group_weekview_projection
 from sqlalchemy import text
+from tests._auth_site_helpers import bind_user_to_site, login_bound_user, login_existing_user
 
 
 def _build_weekday_override_payload(*, group_id: str, primary_requirement_id: int, default_quantity: int, overrides: dict[tuple[int, str], int | None]) -> dict[str, str]:
@@ -602,15 +603,33 @@ def test_specialkost_create_path_seeds_atomic_requirement_types_for_department_e
 def test_real_site_create_path_exposes_behovstyp_immediately(client_admin):
     from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
 
-    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
-    site_resp = client_admin.post("/admin/sites", json={"name": f"Live Catalog Site {uuid.uuid4()}"}, headers=headers)
+    with client_admin.session_transaction() as sess:
+        initial_site_id = sess["site_id"]
+    email = f"live-catalog-{uuid.uuid4()}@example.test"
+    password = "TestPassw0rd!2026"
+    user_id = login_bound_user(
+        client_admin,
+        site_id=initial_site_id,
+        email=email,
+        password=password,
+    )
+    site_resp = client_admin.post("/admin/sites", json={"name": f"Live Catalog Site {uuid.uuid4()}"})
     assert site_resp.status_code == 201
     site = site_resp.get_json()
+    bind_user_to_site(client_admin, user_id=user_id, site_id=site["id"])
+    client_admin.get("/auth/logout")
+    login_existing_user(
+        client_admin,
+        user_id=user_id,
+        email=email,
+        password=password,
+        role="admin",
+        site_id=site["id"],
+    )
 
     dept_resp = client_admin.post(
         "/admin/departments",
         json={"site_id": site["id"], "name": "Avd Live", "resident_count_mode": "fixed", "resident_count_fixed": 10},
-        headers=headers,
     )
     assert dept_resp.status_code == 201
     department = dept_resp.get_json()
@@ -618,7 +637,7 @@ def test_real_site_create_path_exposes_behovstyp_immediately(client_admin):
     with client_admin.session_transaction() as sess:
         sess["site_id"] = site["id"]
 
-    edit_resp = client_admin.get(f"/ui/admin/departments/{department['id']}/edit", headers=headers)
+    edit_resp = client_admin.get(f"/ui/admin/departments/{department['id']}/edit")
     assert edit_resp.status_code == 200
     html = edit_resp.get_data(as_text=True)
     assert "Vilket kostbehov gäller?" in html
@@ -637,7 +656,7 @@ def test_real_site_create_path_exposes_behovstyp_immediately(client_admin):
         label="Immediate registered need",
     )
 
-    reread_page = client_admin.get(f"/ui/admin/departments/{department['id']}/edit", headers=headers)
+    reread_page = client_admin.get(f"/ui/admin/departments/{department['id']}/edit")
     assert reread_page.status_code == 200
     reread_html = reread_page.get_data(as_text=True)
     assert "1 person" in reread_html

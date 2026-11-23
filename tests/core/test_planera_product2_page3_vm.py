@@ -35,6 +35,7 @@ from core.planera_v2.meal_orchestration import (
     KommunMealOptionResult,
     KommunMealOrchestrationResult,
 )
+from tests._auth_site_helpers import login_bound_user
 
 
 def _context() -> Product2Page2PlanningContext:
@@ -389,12 +390,10 @@ def test_full_page3_vm_and_route_render_real_service_addons_without_menu_choice(
     }
 
     client = app_session.test_client()
-    with client.session_transaction() as session:
-        session["tenant_id"] = 1
+    login_bound_user(client, site_id=site["id"])
     response = client.get(
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}"
         "&date=2026-11-09&meal=lunch&view=addons",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
     assert response.status_code == 200
     html = response.get_data(as_text=True)

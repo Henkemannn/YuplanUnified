@@ -11,51 +11,13 @@ import pytest
 import uuid
 from datetime import date as _date
 from sqlalchemy import text
+from core.admin_user_repo import _set_user_site_binding
 
 
 def _login_real_admin(client, site_id: str) -> None:
-    from core.db import get_session
-    from core.models import User
+    from tests._auth_site_helpers import login_bound_user
 
-    email = f"unified-ui-{uuid.uuid4().hex}@example.test"
-    with client.application.app_context():
-        db = get_session()
-        try:
-            user = User(
-                tenant_id=1,
-                email=email,
-                username=email,
-                password_hash="test-only",
-                role="admin",
-                is_active=True,
-                auth_version=1,
-            )
-            db.add(user)
-            db.flush()
-            db.execute(
-                text(
-                    "CREATE TABLE IF NOT EXISTS kitchen_user_sites "
-                    "(user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
-                )
-            )
-            db.execute(
-                text(
-                    "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
-                    "VALUES (:user_id, 1, :site_id)"
-                ),
-                {"user_id": int(user.id), "site_id": site_id},
-            )
-            user_id = int(user.id)
-            db.commit()
-        finally:
-            db.close()
-    with client.session_transaction() as session:
-        session["user_id"] = user_id
-        session["role"] = "admin"
-        session["tenant_id"] = 1
-        session["site_id"] = site_id
-        session["site_lock"] = True
-        session["auth_version"] = 1
+    login_bound_user(client, site_id=site_id)
 
 
 def _h(role):

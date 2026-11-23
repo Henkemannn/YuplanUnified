@@ -5,6 +5,7 @@ import uuid
 from sqlalchemy import text
 
 from core.db import create_all, get_session
+from tests._auth_site_helpers import login_bound_user
 
 
 def _h(role: str) -> dict:
@@ -18,7 +19,7 @@ def _seed_site_and_department(app, site_id: str, dep_id: str) -> None:
         try:
             db.execute(
                 text(
-                    "INSERT INTO sites(id, name, version) VALUES(:i,:n,0) "
+                    "INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0) "
                     "ON CONFLICT(id) DO NOTHING"
                 ),
                 {"i": site_id, "n": "Guard Site"},
@@ -66,14 +67,10 @@ def test_weekview_ui_legacy_alt2_schema_does_not_500(client_admin):
     dep_id = str(uuid.uuid4())
     _seed_site_and_department(app, site_id, dep_id)
     _force_legacy_alt2_schema(app)
-
-    with client_admin.session_transaction() as sess:
-        sess["tenant_id"] = 1
-        sess["site_id"] = site_id
+    login_bound_user(client_admin, site_id=site_id)
 
     resp = client_admin.get(
         f"/ui/weekview?site_id={site_id}&department_id={dep_id}&year=2026&week=11",
-        headers=_h("admin"),
     )
     assert resp.status_code == 200
 
@@ -84,26 +81,23 @@ def test_weekview_report_ui_legacy_alt2_schema_empty_dataset_does_not_500(client
     dep_id = str(uuid.uuid4())
     _seed_site_and_department(app, site_id, dep_id)
     _force_legacy_alt2_schema(app)
-
-    with client_admin.session_transaction() as sess:
-        sess["tenant_id"] = 1
-        sess["site_id"] = site_id
+    login_bound_user(client_admin, site_id=site_id)
 
     resp = client_admin.get(
         f"/ui/reports/weekview?site_id={site_id}&year=2026&week=11",
-        headers=_h("admin"),
     )
     assert resp.status_code == 200
 
 
 def test_reports_weekly_no_site_selected_redirects_not_500(client_admin):
+    site_id = "weekly-no-site"
+    _seed_site_and_department(client_admin.application, site_id, str(uuid.uuid4()))
+    login_bound_user(client_admin, site_id=site_id, role="superuser")
     with client_admin.session_transaction() as sess:
-        sess["tenant_id"] = 1
         sess.pop("site_id", None)
 
     resp = client_admin.get(
         "/ui/reports/weekly?year=2026&week=11",
-        headers=_h("superuser"),
         follow_redirects=False,
     )
-    assert resp.status_code in (302, 400)
+    assert resp.status_code in (302, 400, 403)

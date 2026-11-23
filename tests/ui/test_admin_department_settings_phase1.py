@@ -1,5 +1,6 @@
 import uuid
 from sqlalchemy import text
+from tests._auth_site_helpers import login_bound_user
 
 HEADERS_ADMIN = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 HEADERS_COOK = {"X-User-Role": "cook", "X-Tenant-Id": "1"}
@@ -11,7 +12,10 @@ def _seed_site_dep_defaults(site_name="TestSite"):
     try:
         site_id = str(uuid.uuid4())
         dep_id = str(uuid.uuid4())
-        db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0)"), {"i": site_id, "n": site_name})
+        db.execute(
+            text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0)"),
+            {"i": site_id, "n": site_name},
+        )
         db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, notes, version) VALUES(:i,:s,:n,'fixed',8,'Initial note',0)"), {"i": dep_id, "s": site_id, "n": "Avd X"})
         # Diet defaults table
         db.execute(text("CREATE TABLE IF NOT EXISTS department_diet_defaults (department_id TEXT NOT NULL, diet_type_id TEXT NOT NULL, default_count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(department_id, diet_type_id))"))
@@ -26,6 +30,7 @@ def _seed_site_dep_defaults(site_name="TestSite"):
 def test_admin_settings_get_and_post(app_session):
     client = app_session.test_client()
     site_id, dep_id = _seed_site_dep_defaults()
+    login_bound_user(client, site_id=site_id)
 
     # GET as admin
     r_get = client.get(f"/ui/admin/departments/{dep_id}/settings", headers=HEADERS_ADMIN)
@@ -64,12 +69,13 @@ def test_admin_settings_get_and_post(app_session):
 def test_admin_settings_integration_with_weekview_report(app_session):
     client = app_session.test_client()
     site_id, dep_id = _seed_site_dep_defaults()
+    login_bound_user(client, site_id=site_id)
 
     # After changing defaults, weekview report should reflect planned counts via debiterbar logic when marked.
     # Simple check: CSV header present and contains department name; we won't mark here.
     year, week = 2025, 12
     # ensure site context
-    resp_csv = client.get(f"/ui/reports/weekly.csv?site_id={site_id}&year={year}&week={week}", headers=HEADERS_ADMIN)
+    resp_csv = client.get(f"/ui/reports/weekly.csv?site_id={site_id}&year={year}&week={week}")
     assert resp_csv.status_code == 200
     body = resp_csv.data.decode("utf-8")
     assert "site,department,year,week,meal,residents_total,debiterbar_specialkost,normal_count" in body.splitlines()[0]

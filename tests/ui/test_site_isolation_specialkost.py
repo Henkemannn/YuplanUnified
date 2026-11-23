@@ -3,8 +3,18 @@ from sqlalchemy import text
 
 
 def _ensure_admin_session(client, site_id: str | None = None) -> None:
+    if site_id is not None:
+        from tests._auth_site_helpers import login_bound_user
+
+        login_bound_user(
+            client,
+            site_id=site_id,
+            email=f"site-isolation-{site_id}@example.test",
+        )
+        return
     from core.db import get_session
     from core.models import Tenant, User
+    from core.admin_user_repo import _set_user_site_binding
 
     with client.application.app_context():
         db = get_session()
@@ -23,19 +33,12 @@ def _ensure_admin_session(client, site_id: str | None = None) -> None:
             )
             db.add(user)
             db.flush()
-            db.execute(
-                text(
-                    "CREATE TABLE IF NOT EXISTS kitchen_user_sites "
-                    "(user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
-                )
-            )
             if site_id is not None:
-                db.execute(
-                    text(
-                        "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
-                        "VALUES (:user_id, 1, :site_id)"
-                    ),
-                    {"user_id": int(user.id), "site_id": site_id},
+                _set_user_site_binding(
+                    db,
+                    user_id=int(user.id),
+                    tenant_id=1,
+                    site_id=site_id,
                 )
             db.commit()
             user_id = int(user.id)
