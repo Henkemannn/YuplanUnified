@@ -48,14 +48,13 @@ def _seed_user(db, *, email: str, password: str, role: str, tenant_id: int, site
     db.execute(
         text(
             "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
-            "user_id INTEGER NOT NULL, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL, "
-            "PRIMARY KEY (user_id, site_id))"
+            "user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
         )
     )
     db.flush()
     db.execute(
         text(
-            "INSERT OR REPLACE INTO kitchen_user_sites (user_id, tenant_id, site_id) "
+            "INSERT INTO kitchen_user_sites (user_id, tenant_id, site_id) "
             "VALUES (:uid, :tid, :sid)"
         ),
         {"uid": int(user.id), "tid": tenant_id, "sid": site_id},
@@ -522,19 +521,19 @@ def test_unit_portal_canonical_department_portal_blocked_until_password_change(m
         )
         db.commit()
 
-        user = User(
-            tenant_id=tenant.id,
-            email=f"unit.portal.{uuid.uuid4().hex[:8]}@example.com",
-            username=f"unit.portal.{uuid.uuid4().hex[:8]}@example.com",
-            password_hash=generate_password_hash("TempPassw0rd!"),
+        email = f"unit.portal.{uuid.uuid4().hex[:8]}@example.com"
+        user = _seed_user(
+            db,
+            email=email,
+            password="TempPassw0rd!",
             role="unit_portal",
-            department_id=dept_id,
-            full_name="Unit Portal",
-            must_change_password=True,
+            tenant_id=tenant.id,
+            site_id=site.id,
         )
-        db.add(user)
+        user.department_id = dept_id
+        user.full_name = "Unit Portal"
+        user.must_change_password = True
         db.commit()
-        email = user.email
         db.close()
 
         client = app.test_client()
