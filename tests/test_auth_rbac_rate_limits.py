@@ -1,19 +1,37 @@
+import gc
 from datetime import datetime, timezone
+from pathlib import Path
+import shutil
+import tempfile
 
 import pytest
 from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 
 from core.app_factory import create_app
-from core.db import get_session
+from core.db import get_session, init_engine
 from core.models import Site, Task, Tenant, User
 from core.tasks_service import update_task as service_update_task
 from core.app_authz import AuthzError
 
 
-@pytest.fixture(scope="module")
-def app():
-    app = create_app({"TESTING": True, "SECRET_KEY": "test", "JWT_SECRET": "secret"})
+@pytest.fixture()
+def app(request):
+    state = request.config._yuplan_test_db_state
+    isolated_root = Path(tempfile.mkdtemp(prefix="yuplan-auth-rbac-"))
+    isolated_db = isolated_root / "main.db"
+    isolated_builder_db = isolated_root / "builder.db"
+    original_db_url = f"sqlite:///{state['main_db'].as_posix()}"
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "test",
+            "JWT_SECRET": "secret",
+            "database_url": f"sqlite:///{isolated_db.as_posix()}",
+            "BUILDER_DB_PATH": str(isolated_builder_db),
+            "FORCE_DB_REINIT": True,
+        }
+    )
     # Direct metadata create (simpler than running full alembic chain for unit test scope)
     from core.models import Base
 
@@ -59,8 +77,8 @@ def app():
         sess.commit()
         sess.execute(
             text(
-                "CREATE TABLE IF NOT EXISTS kitchen_user_sites "
-                "(user_id INTEGER, tenant_id INTEGER, site_id TEXT)"
+                "CREATE TABLE kitchen_user_sites "
+                "(user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
             )
         )
         for user in users:
@@ -72,9 +90,20 @@ def app():
                 {"uid": user.id, "tid": t1.id, "sid": "test-site"},
             )
         sess.commit()
+        yield app
     finally:
         sess.close()
-    yield app
+        from core import db as db_mod
+
+        if db_mod._SessionFactory is not None:
+            db_mod._SessionFactory.remove()
+        if db_mod._engine is not None:
+            db_mod._engine.dispose(close=True)
+        db_mod._SessionFactory = None
+        db_mod._engine = None
+        init_engine(original_db_url, force=True)
+        gc.collect()
+        shutil.rmtree(isolated_root)
 
 
 @pytest.fixture()
