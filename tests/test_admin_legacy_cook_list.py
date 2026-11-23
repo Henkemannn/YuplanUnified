@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import pytest
 from flask import Flask
+from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 
 from core.app_factory import create_app
 from core.db import get_session
 from core.models import Tenant, User
+from core.admin_user_repo import _set_user_site_binding
 
 
 @pytest.fixture()
@@ -48,6 +50,18 @@ def _ensure_user(email: str, role: str, tenant_id: int) -> None:
             db.add(u)
             db.commit()
             db.refresh(u)
+        site_id = f"legacy-cook-site-{tenant_id}"
+        db.execute(
+            text(
+                "INSERT OR IGNORE INTO sites(id, tenant_id, name, version) "
+                "VALUES (:site_id, :tenant_id, :name, 0)"
+            ),
+            {"site_id": site_id, "tenant_id": int(tenant_id), "name": f"Legacy Cook Site {tenant_id}"},
+        )
+        _set_user_site_binding(
+            db, user_id=int(u.id), tenant_id=int(tenant_id), site_id=site_id
+        )
+        db.commit()
     finally:
         db.close()
 

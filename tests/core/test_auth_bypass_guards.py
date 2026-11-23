@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 
 from core.app_factory import create_app
@@ -19,11 +20,15 @@ _BYPASS_ENV_VARS = (
 
 def _isolated_app(tmp_path, monkeypatch, *, testing: bool, **overrides):
     database_url = f"sqlite:///{(tmp_path / 'auth_bypass.db').as_posix()}"
+    monkeypatch.setenv(
+        "SECRET_KEY",
+        "isolated-auth-key-0123456789abcdef0123456789abcdef",
+    )
     monkeypatch.setenv("DATABASE_URL", database_url)
     monkeypatch.setenv("BUILDER_DB_PATH", str(tmp_path / "builder.db"))
     app_config = {
         "TESTING": testing,
-        "SECRET_KEY": "test-auth-bypass-secret",
+        "SECRET_KEY": "isolated-auth-key-0123456789abcdef0123456789abcdef",
         "JWT_SECRET": "test-jwt-secret-0123456789abcdef0123456789abcdef",
         "database_url": database_url,
         "BUILDER_DB_PATH": str(tmp_path / "builder.db"),
@@ -150,19 +155,34 @@ def test_normal_login_sets_secure_session_cookie_in_deployed_environment(tmp_pat
         tenant = Tenant(name="Cookie Test Tenant")
         db.add(tenant)
         db.flush()
-        db.add(
-            User(
-                tenant_id=tenant.id,
-                email="cookie-test@example.test",
-                username="cookie-test@example.test",
-                password_hash=generate_password_hash("Passw0rd!"),
-                role="superuser",
-            )
+        user = User(
+            tenant_id=tenant.id,
+            email="cookie-test@example.test",
+            username="cookie-test@example.test",
+            password_hash=generate_password_hash("Passw0rd!"),
+            role="superuser",
+        )
+        db.add(user)
+        db.flush()
+        db.execute(
+            text(
+                "INSERT INTO sites(id, tenant_id, name, version) "
+                "VALUES ('cookie-test-site', :tenant_id, 'Cookie Test Site', 0)"
+            ),
+            {"tenant_id": int(tenant.id)},
+        )
+        from core.admin_user_repo import _set_user_site_binding
+
+        _set_user_site_binding(
+            db, user_id=int(user.id), tenant_id=int(tenant.id), site_id="cookie-test-site"
         )
         db.commit()
         db.close()
 
-    response = app.test_client().post(
+    client = app.test_client()
+    with client.session_transaction() as session:
+        session["site_id"] = "cookie-test-site"
+    response = client.post(
         "/auth/login",
         json={"email": "cookie-test@example.test", "password": "Passw0rd!"},
         headers={"Accept": "application/json"},

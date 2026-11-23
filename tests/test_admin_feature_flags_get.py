@@ -1,11 +1,13 @@
 import pytest
 from flask import Flask
+from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 
 from core.app_factory import create_app
 from core import db as db_mod
 from core.db import create_all, get_session
 from core.models import Tenant, TenantFeatureFlag, User
+from core.admin_user_repo import _set_user_site_binding
 
 
 @pytest.fixture()
@@ -76,11 +78,23 @@ def tenants_and_users():
         su = ensure("root2@example.com", "superuser", t1.id)
         admin1 = ensure("admin_t1b@example.com", "admin", t1.id)
         admin2 = ensure("admin_t2b@example.com", "admin", t2.id)
+        for user, tenant_id in ((su, t1.id), (admin1, t1.id), (admin2, t2.id)):
+            site_id = f"feature-flag-get-site-{tenant_id}"
+            db.execute(
+                text(
+                    "INSERT OR IGNORE INTO sites(id, tenant_id, name, version) "
+                    "VALUES (:site_id, :tenant_id, :name, 0)"
+                ),
+                {"site_id": site_id, "tenant_id": int(tenant_id), "name": f"Feature Flag Get Site {tenant_id}"},
+            )
+            _set_user_site_binding(
+                db, user_id=int(user.id), tenant_id=int(tenant_id), site_id=site_id
+            )
         # Seed one flag for tenant2 directly
         flag = db.query(TenantFeatureFlag).filter_by(tenant_id=t2.id, name="inline_ui").first()
         if not flag:
             db.add(TenantFeatureFlag(tenant_id=t2.id, name="inline_ui", enabled=True))
-            db.commit()
+        db.commit()
         return {"t1": t1.id, "t2": t2.id, "su": su, "admin1": admin1, "admin2": admin2}
     finally:
         db.close()

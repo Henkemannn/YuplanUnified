@@ -1,11 +1,13 @@
 import pytest
 from flask import Flask
+from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 
 from core.app_factory import create_app
 from core import db as db_mod
 from core.db import create_all, get_session
 from core.models import Tenant, User
+from core.admin_user_repo import _set_user_site_binding
 
 
 @pytest.fixture()
@@ -77,6 +79,19 @@ def tenants_and_users():
         su = ensure("root@example.com", "superuser", t1.id)
         admin1 = ensure("admin_t1@example.com", "admin", t1.id)
         admin2 = ensure("admin_t2@example.com", "admin", t2.id)
+        for user, tenant_id in ((su, t1.id), (admin1, t1.id), (admin2, t2.id)):
+            site_id = f"feature-flag-site-{tenant_id}"
+            db.execute(
+                text(
+                    "INSERT OR IGNORE INTO sites(id, tenant_id, name, version) "
+                    "VALUES (:site_id, :tenant_id, :name, 0)"
+                ),
+                {"site_id": site_id, "tenant_id": int(tenant_id), "name": f"Feature Flag Site {tenant_id}"},
+            )
+            _set_user_site_binding(
+                db, user_id=int(user.id), tenant_id=int(tenant_id), site_id=site_id
+            )
+        db.commit()
         # Return only ids to avoid detached instances
         return {
             "t1": type("TObj", (object,), {"id": t1.id})(),

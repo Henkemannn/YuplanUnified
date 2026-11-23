@@ -17,6 +17,8 @@ def test_auth_rate_limit_basic(monkeypatch):
 
     from core.db import get_session
     from core.models import Tenant, User
+    from sqlalchemy import text
+    from core.admin_user_repo import _set_user_site_binding
 
     db = get_session()
     import uuid
@@ -33,6 +35,16 @@ def test_auth_rate_limit_basic(monkeypatch):
         unit_id=None,
     )
     db.add(u)
+    db.commit()
+    site_id = f"rate-limit-site-{t.id}"
+    db.execute(
+        text(
+            "INSERT OR IGNORE INTO sites(id, tenant_id, name, version) "
+            "VALUES (:site_id, :tenant_id, :name, 0)"
+        ),
+        {"site_id": site_id, "tenant_id": int(t.id), "name": "Rate Limit Site"},
+    )
+    _set_user_site_binding(db, user_id=int(u.id), tenant_id=int(t.id), site_id=site_id)
     db.commit()
     db.close()
 
@@ -57,7 +69,7 @@ def test_auth_rate_limit_basic(monkeypatch):
     # Now should allow correct login
     # Seed session site binding to satisfy strict site policy
     with client.session_transaction() as sess:
-        sess["site_id"] = "test-site"
+        sess["site_id"] = site_id
     r = client.post("/auth/login", json={"email": user_email, "password": "pw"})
     assert r.status_code == 200
     assert r.is_json and r.get_json().get("ok") is True
