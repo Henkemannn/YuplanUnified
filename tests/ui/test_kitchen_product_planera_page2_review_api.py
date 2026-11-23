@@ -2,12 +2,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
+import gc
+from pathlib import Path
+import shutil
+import tempfile
 import uuid
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash
 
+from core.app_factory import create_app
 from core.admin_repo import DepartmentsRepo, SitesRepo
 from core.builder import BuilderFlow
 from core.builder.library_scope import ObjectScope
@@ -26,11 +32,11 @@ from core.components import (
 from core.department_menu_choice_repo import MenuChoiceRepo
 from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
 from core.department_requirement_group_service_overrides_repo import DepartmentRequirementGroupServiceOverridesRepo
-from core.db import get_session
+from core.db import get_session, init_engine
 from core.menu import InMemoryCompositionAliasRepository, MenuService
 from core.planning_option_review import PlanningOptionReviewService
 from core.csrf import CSRF_SESSION_KEY
-from core.models import Tenant, User
+from core.models import Base, Tenant, User
 from planera_product2_test_support import authenticate_product2_client
 
 
@@ -41,6 +47,53 @@ class _ReviewApiState:
 
 
 _STATE: _ReviewApiState | None = None
+
+
+@pytest.fixture()
+def app_session(request):
+    state = request.config._yuplan_test_db_state
+    isolated_root = Path(tempfile.mkdtemp(prefix="yuplan-review-api-"))
+    isolated_db = isolated_root / "main.db"
+    isolated_builder_db = isolated_root / "builder.db"
+    original_db_url = f"sqlite:///{state['main_db'].as_posix()}"
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "test",
+            "JWT_SECRET": "secret",
+            "database_url": f"sqlite:///{isolated_db.as_posix()}",
+            "BUILDER_DB_PATH": str(isolated_builder_db),
+            "FORCE_DB_REINIT": True,
+        }
+    )
+    db = get_session()
+    try:
+        engine = db.get_bind()
+        Base.metadata.drop_all(engine)
+        Base.metadata.create_all(engine)
+        db.add(Tenant(id=1, name="Review API Test Tenant", active=True))
+        db.flush()
+        db.execute(
+            text(
+                "CREATE TABLE kitchen_user_sites "
+                "(user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
+            )
+        )
+        db.commit()
+        yield app
+    finally:
+        db.close()
+        from core import db as db_mod
+
+        if db_mod._SessionFactory is not None:
+            db_mod._SessionFactory.remove()
+        if db_mod._engine is not None:
+            db_mod._engine.dispose(close=True)
+        db_mod._SessionFactory = None
+        db_mod._engine = None
+        init_engine(original_db_url, force=True)
+        gc.collect()
+        shutil.rmtree(isolated_root)
 
 
 class _ObjectScopeRepository:
@@ -495,14 +548,16 @@ def test_review_write_with_valid_csrf_rejects_other_site_and_historical_binding(
         user_id = session["user_id"]
     db = get_session()
     try:
-        db.execute(
-            text(
-                "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
-                "VALUES (:user_id, 1, :site_id)"
-            ),
-            {"user_id": user_id, "site_id": other_site},
-        )
-        db.commit()
+        with pytest.raises(IntegrityError):
+            db.execute(
+                text(
+                    "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                    "VALUES (:user_id, 1, :site_id)"
+                ),
+                {"user_id": user_id, "site_id": other_site},
+            )
+            db.commit()
+        db.rollback()
     finally:
         db.close()
     token = _review_csrf_token(client_admin, app_session)
@@ -727,14 +782,16 @@ def test_review_write_historical_binding_cannot_switch_site(client_admin, app_se
         active_site_id = sess["site_id"]
     db = get_session()
     try:
-        db.execute(
-            text(
-                "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
-                "VALUES (:user_id, 1, :site_id)"
-            ),
-            {"user_id": user_id, "site_id": other_site["id"]},
-        )
-        db.commit()
+        with pytest.raises(IntegrityError):
+            db.execute(
+                text(
+                    "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                    "VALUES (:user_id, 1, :site_id)"
+                ),
+                {"user_id": user_id, "site_id": other_site["id"]},
+            )
+            db.commit()
+        db.rollback()
     finally:
         db.close()
     denied = client_admin.post(
