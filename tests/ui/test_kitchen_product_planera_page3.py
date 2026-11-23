@@ -1,14 +1,66 @@
 from __future__ import annotations
 
+import gc
 from dataclasses import replace
 from pathlib import Path
 import re
+import shutil
+import tempfile
 import pytest
 
+from core.app_factory import create_app
 from core.admin_repo import DepartmentServiceAddonsRepo, DepartmentsRepo, ServiceAddonsRepo, SitesRepo
-from core.db import get_session
+from core.db import get_session, init_engine
+from core.models import Base, Tenant
 from sqlalchemy import text
 from planera_product2_test_support import authenticate_product2_client
+
+
+@pytest.fixture()
+def app_session(request):
+    state = request.config._yuplan_test_db_state
+    isolated_root = Path(tempfile.mkdtemp(prefix="yuplan-page3-"))
+    isolated_db = isolated_root / "main.db"
+    isolated_builder_db = isolated_root / "builder.db"
+    original_db_url = f"sqlite:///{state['main_db'].as_posix()}"
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "test",
+            "JWT_SECRET": "secret",
+            "database_url": f"sqlite:///{isolated_db.as_posix()}",
+            "BUILDER_DB_PATH": str(isolated_builder_db),
+            "FORCE_DB_REINIT": True,
+        }
+    )
+    db = get_session()
+    try:
+        engine = db.get_bind()
+        Base.metadata.drop_all(engine)
+        Base.metadata.create_all(engine)
+        db.add(Tenant(id=1, name="Page3 Test Tenant", active=True))
+        db.flush()
+        db.execute(
+            text(
+                "CREATE TABLE kitchen_user_sites "
+                "(user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
+            )
+        )
+        db.commit()
+        yield app
+    finally:
+        db.close()
+        from core import db as db_mod
+
+        if db_mod._SessionFactory is not None:
+            db_mod._SessionFactory.remove()
+        if db_mod._engine is not None:
+            db_mod._engine.dispose(close=True)
+        db_mod._SessionFactory = None
+        db_mod._engine = None
+        init_engine(original_db_url, force=True)
+        gc.collect()
+        shutil.rmtree(isolated_root)
 
 
 from core.planera_product2_page3_vm import (
