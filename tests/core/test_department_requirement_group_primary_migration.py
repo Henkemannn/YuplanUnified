@@ -28,6 +28,8 @@ def test_0039_adds_primary_requirement_and_backfills_singletons(tmp_path: Path, 
     engine = create_engine(db_url)
     try:
         with engine.begin() as conn:
+            conn.execute(text("INSERT INTO tenants(id, name, active) VALUES (1, 'Migration tenant', 1)"))
+            conn.execute(text("INSERT INTO sites(id, name, created_at, updated_at, version) VALUES ('site-1', 'Migration site', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)"))
             conn.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES ('dept-1', 'site-1', 'Dept', 'fixed', 1, 0)"))
             conn.execute(text("INSERT INTO dietary_types(id, tenant_id, site_id, name, diet_family, requirement_key, semantics, default_select) VALUES (1, 1, 'site-1', 'A', 'Övrigt', 'req-a', 'atomic', 0)"))
             conn.execute(text("INSERT INTO dietary_types(id, tenant_id, site_id, name, diet_family, requirement_key, semantics, default_select) VALUES (2, 1, 'site-1', 'B', 'Övrigt', 'req-b', 'atomic', 0)"))

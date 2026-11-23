@@ -17,6 +17,70 @@ def _alembic_cfg(db_url: str) -> Config:
 def _seed_historical_0034_support(conn) -> None:
     conn.execute(
         text(
+            "CREATE TABLE IF NOT EXISTS tenants ("
+            "id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, active INTEGER NOT NULL DEFAULT 1)"
+        )
+    )
+    conn.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS sites ("
+            "id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at DATETIME NULL, "
+            "updated_at DATETIME NULL, version INTEGER NOT NULL DEFAULT 0)"
+        )
+    )
+    conn.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS menus ("
+            "id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NULL, "
+            "week INTEGER NOT NULL, year INTEGER NOT NULL, status TEXT NULL, "
+            "updated_at DATETIME NULL, CONSTRAINT uq_menu_tenant_year_week "
+            "UNIQUE(tenant_id, week, year))"
+        )
+    )
+    menu_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(menus)"))}
+    for column, definition in (("site_id", "TEXT NULL"), ("status", "TEXT NULL"), ("updated_at", "DATETIME NULL")):
+        if column not in menu_columns:
+            conn.execute(text(f"ALTER TABLE menus ADD COLUMN {column} {definition}"))
+    conn.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS menu_variants ("
+            "id INTEGER PRIMARY KEY, menu_id INTEGER NOT NULL, day TEXT NOT NULL, "
+            "meal TEXT NOT NULL, variant_type TEXT NOT NULL, dish_id INTEGER NULL)"
+        )
+    )
+    conn.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS dishes ("
+            "id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, name TEXT NOT NULL, "
+            "category TEXT NULL)"
+        )
+    )
+    for table in ("commun_builder_menu_links", "commun_builder_publication_pins"):
+        conn.execute(
+            text(
+                f"CREATE TABLE IF NOT EXISTS {table} ("
+                "id TEXT PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL, "
+                "year INTEGER NOT NULL, week INTEGER NOT NULL, legacy_menu_id INTEGER NULL, "
+                "builder_menu_id TEXT NOT NULL, builder_menu_version INTEGER NOT NULL, "
+                "source TEXT NOT NULL, projection_version INTEGER NOT NULL DEFAULT 1, "
+                "created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)"
+            )
+        )
+    conn.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS notes ("
+            "id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, content TEXT NULL)"
+        )
+    )
+    conn.execute(text("INSERT INTO tenants(id, name, active) VALUES (1, 'Historical tenant', 1)"))
+    conn.execute(
+        text(
+            "INSERT INTO sites(id, name, created_at, updated_at, version) "
+            "VALUES ('site-1', 'Historical site', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)"
+        )
+    )
+    conn.execute(
+        text(
             """
             CREATE TABLE departments (
                 id TEXT PRIMARY KEY,

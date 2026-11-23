@@ -283,10 +283,39 @@ def test_admin_specialkost_delete_cascades_known_dependencies(client_admin: Flas
 
     conn = get_session()
     try:
-        conn.execute(text("CREATE TABLE IF NOT EXISTS normal_exclusions (diet_type_id TEXT)"))
         conn.execute(
-            text("INSERT INTO normal_exclusions(diet_type_id) VALUES(:diet_type_id)"),
-            {"diet_type_id": str(diet_id)},
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS normal_exclusions (
+                  tenant_id TEXT NOT NULL,
+                  site_id TEXT NOT NULL,
+                  year INTEGER NOT NULL,
+                  week INTEGER NOT NULL,
+                  day_index INTEGER NOT NULL,
+                  meal TEXT NOT NULL,
+                  alt TEXT NOT NULL,
+                  diet_type_id TEXT NOT NULL,
+                  UNIQUE (tenant_id, site_id, year, week, day_index, meal, alt, diet_type_id)
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                "INSERT INTO normal_exclusions("
+                "tenant_id, site_id, year, week, day_index, meal, alt, diet_type_id"
+                ") VALUES (:tenant_id, :site_id, :year, :week, :day_index, :meal, :alt, :diet_type_id)"
+            ),
+            {
+                "tenant_id": "1",
+                "site_id": "site-1",
+                "year": 2026,
+                "week": 1,
+                "day_index": 1,
+                "meal": "lunch",
+                "alt": "1",
+                "diet_type_id": str(diet_id),
+            },
         )
         conn.commit()
     finally:

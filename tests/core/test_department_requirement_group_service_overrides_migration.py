@@ -22,6 +22,8 @@ def _column_names(inspector, table_name: str) -> set[str]:
 
 def _seed_0036_schema(engine) -> None:
     with engine.begin() as conn:
+        conn.execute(text("INSERT INTO tenants(id, name, active) VALUES (1, 'Migration tenant', 1)"))
+        conn.execute(text("INSERT INTO sites(id, name, created_at, updated_at, version) VALUES ('site-1', 'Migration site', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)"))
         conn.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES ('dept-1', 'site-1', 'Dept', 'fixed', 1, 0)"))
         conn.execute(text("INSERT INTO dietary_types(id, tenant_id, site_id, name, diet_family, requirement_key, semantics, default_select) VALUES (1, 1, 'site-1', 'Atomic', 'Övrigt', 'req-1', 'atomic', 0)"))
         conn.execute(text("INSERT INTO department_requirement_groups(id, department_id, label, default_quantity, is_active, created_at, updated_at) VALUES ('group-1', 'dept-1', 'G', 2, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"))
