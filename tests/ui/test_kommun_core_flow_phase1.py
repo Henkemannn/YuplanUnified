@@ -46,10 +46,10 @@ def _login_bound_admin(client, site_id: str) -> None:
         db.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
-                "user_id INTEGER NOT NULL, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL, "
-                "UNIQUE(user_id, tenant_id, site_id))"
+                "user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
             )
         )
+        db.execute(text("DELETE FROM kitchen_user_sites WHERE user_id=:user_id"), {"user_id": user.id})
         db.execute(
             text(
                 "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "

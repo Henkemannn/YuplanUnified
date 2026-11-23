@@ -1,8 +1,11 @@
 import uuid
 
+import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from core.db import get_session
+from core.models import User
 
 
 def _headers(role="admin", tenant_id=1):
@@ -53,28 +56,39 @@ def _seed_report_scope(client):
                 ),
                 {"d1": dept_a1, "d2": dept_a2, "d3": dept_b1, "a1": site_a1, "a2": site_a2, "b1": site_b1},
             )
-            db.execute(
-                text(
-                    "INSERT OR IGNORE INTO users "
-                    "(id, tenant_id, username, email, password_hash, role, is_active, auth_version, must_change_password) "
-                    "VALUES (1, :tenant_id, 'isolation-admin', 'isolation-admin@example.test', "
-                    "'test-hash', 'admin', 1, 1, 0)"
-                ),
-                {"tenant_id": tenant_a},
-            )
+            user = db.query(User).filter(User.id == 1).first()
+            if user is None:
+                user = User(
+                    id=1,
+                    tenant_id=tenant_a,
+                    username=f"isolation-admin-{uuid.uuid4().hex}",
+                    email=f"isolation-admin-{uuid.uuid4().hex}@example.test",
+                    password_hash="test-hash",
+                    role="admin",
+                    is_active=True,
+                    auth_version=1,
+                    must_change_password=False,
+                )
+                db.add(user)
+            else:
+                user.tenant_id = tenant_a
+                user.role = "admin"
+                user.is_active = True
+            db.flush()
+            user_id = 1
             db.execute(
                 text(
                     "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
-                    "user_id INTEGER NOT NULL, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL, "
-                    "UNIQUE(user_id, tenant_id, site_id))"
+                    "user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
                 )
             )
+            db.execute(text("DELETE FROM kitchen_user_sites WHERE user_id=:user_id"), {"user_id": user_id})
             db.execute(
                 text(
                     "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
-                    "VALUES (1, :tenant_id, :site_id)"
+                    "VALUES (:user_id, :tenant_id, :site_id)"
                 ),
-                {"tenant_id": tenant_a, "site_id": site_a1},
+                {"tenant_id": tenant_a, "site_id": site_a1, "user_id": user_id},
             )
             db.execute(
                 text(
@@ -100,7 +114,7 @@ def _seed_report_scope(client):
     with client.session_transaction() as session:
         session.update(
             {
-                "user_id": 1,
+                "user_id": user_id,
                 "role": "admin",
                 "tenant_id": tenant_a,
                 "site_id": site_a1,
@@ -111,6 +125,7 @@ def _seed_report_scope(client):
     return {
         "tenant_a": tenant_a,
         "tenant_b": tenant_b,
+        "user_id": user_id,
         "site_a1": site_a1,
         "site_a2": site_a2,
         "site_b1": site_b1,
@@ -170,9 +185,9 @@ def test_weekview_report_fails_closed_for_missing_binding_and_unauthorized_acces
             db.execute(
                 text(
                     "DELETE FROM kitchen_user_sites "
-                    "WHERE user_id=1 AND tenant_id=:tenant_id"
+                    "WHERE user_id=:user_id AND tenant_id=:tenant_id"
                 ),
-                {"tenant_id": ids["tenant_a"]},
+                {"tenant_id": ids["tenant_a"], "user_id": ids["user_id"]},
             )
             db.commit()
         finally:
@@ -195,14 +210,16 @@ def test_weekview_report_rejects_historical_extra_binding_for_non_superuser(clie
     with client_admin.application.app_context():
         db = get_session()
         try:
-            db.execute(
-                text(
-                    "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
-                    "VALUES (1, :tenant_id, :site_id)"
-                ),
-                {"tenant_id": ids["tenant_a"], "site_id": ids["site_a2"]},
-            )
-            db.commit()
+            with pytest.raises(IntegrityError):
+                db.execute(
+                    text(
+                        "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                        "VALUES (:user_id, :tenant_id, :site_id)"
+                    ),
+                    {"tenant_id": ids["tenant_a"], "site_id": ids["site_a2"], "user_id": ids["user_id"]},
+                )
+                db.commit()
+            db.rollback()
         finally:
             db.close()
 
@@ -227,14 +244,7 @@ def test_weekview_report_requires_active_site_and_preserves_superuser_policy(cli
     with client_admin.application.app_context():
         db = get_session()
         try:
-            db.execute(text("UPDATE users SET role='superuser' WHERE id=1"))
-            db.execute(
-                text(
-                    "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
-                    "VALUES (1, :tenant_id, :site_id)"
-                ),
-                {"tenant_id": ids["tenant_a"], "site_id": ids["site_a2"]},
-            )
+            db.execute(text("UPDATE users SET role='superuser' WHERE id=:user_id"), {"user_id": ids["user_id"]})
             db.commit()
         finally:
             db.close()
