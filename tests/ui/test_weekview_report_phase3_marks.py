@@ -5,8 +5,39 @@ from flask.testing import FlaskClient
 import pytest
 
 from core.admin_repo import DepartmentsRepo, DietTypesRepo, SitesRepo
+from core.admin_user_repo import _set_user_site_binding
+from core.db import get_session
+from core.models import User
+from werkzeug.security import generate_password_hash
 
 ADMIN = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
+
+
+def _login_admin(client: FlaskClient, site_id: str) -> None:
+    db = get_session()
+    try:
+        user = db.query(User).filter_by(email="weekview-phase3-admin@example.test").first()
+        if user is None:
+            user = User(
+                tenant_id=1,
+                email="weekview-phase3-admin@example.test",
+                password_hash=generate_password_hash("pw"),
+                role="admin",
+                unit_id=None,
+            )
+            db.add(user)
+            db.flush()
+        _set_user_site_binding(db, user_id=int(user.id), tenant_id=1, site_id=site_id)
+        db.commit()
+    finally:
+        db.close()
+    with client.session_transaction() as sess:
+        sess["site_id"] = site_id
+    response = client.post(
+        "/auth/login",
+        json={"email": "weekview-phase3-admin@example.test", "password": "pw"},
+    )
+    assert response.status_code == 200
 
 
 def _canonical_diet_id(repo, site_id: str, name: str, *, default_select: bool) -> int:
@@ -98,10 +129,12 @@ def test_weekview_report_phase3_debiterbar_marks(app_session):
     week = 49
     _enable_weekview(client.application)
     site_id, dep_id, gluten_id, laktos_id, timbal_id = _seed_setup(client.application, year, week)
+    _login_admin(client, site_id)
     _seed_marks(client, site_id, dep_id, year, week, gluten_id, laktos_id)
+    _login_admin(client, site_id)
 
     # GET HTML report
-    r = client.get(f"/ui/reports/weekview?site_id={site_id}&year={year}&week={week}", headers=ADMIN)
+    r = client.get(f"/ui/reports/weekview?site_id={site_id}&year={year}&week={week}")
     assert r.status_code == 200
     html = r.get_data(as_text=True)
     # Labels present
@@ -127,9 +160,10 @@ def test_weekview_report_phase3_no_marks_defaults_only(app_session):
     week = 50
     _enable_weekview(client.application)
     site_id, dep_id, _, _, _ = _seed_setup(client.application, year, week)
+    _login_admin(client, site_id)
     # No marks seeded
 
-    r = client.get(f"/ui/reports/weekview?site_id={site_id}&year={year}&week={week}", headers=ADMIN)
+    r = client.get(f"/ui/reports/weekview?site_id={site_id}&year={year}&week={week}")
     assert r.status_code == 200
     html = r.get_data(as_text=True)
     # There is timbal always_mark=1 -> should show at least 3 somewhere

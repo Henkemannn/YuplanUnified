@@ -1,12 +1,42 @@
 import pytest
+from werkzeug.security import generate_password_hash
+
+from core.admin_user_repo import _set_user_site_binding
+from core.db import get_session
+from core.models import User
 
 
-def _h(role="admin"):
-    return {"X-User-Role": role, "X-Tenant-Id": "1"}
+def _login_admin(client):
+    with client.session_transaction() as sess:
+        site_id = str(sess["site_id"])
+    db = get_session()
+    try:
+        user = db.query(User).filter_by(email="weekview-parity-admin@example.test").first()
+        if user is None:
+            user = User(
+                tenant_id=1,
+                email="weekview-parity-admin@example.test",
+                password_hash=generate_password_hash("pw"),
+                role="admin",
+                unit_id=None,
+            )
+            db.add(user)
+            db.flush()
+        _set_user_site_binding(db, user_id=int(user.id), tenant_id=1, site_id=site_id)
+        db.commit()
+    finally:
+        db.close()
+    response = client.post(
+        "/auth/login",
+        json={"email": "weekview-parity-admin@example.test", "password": "pw"},
+    )
+    assert response.status_code == 200
+    return site_id
 
 
 def test_weekview_report_ui_readonly_and_headers(client_admin):
-    r = client_admin.get("/ui/reports/weekview?site_id=s1&year=2025&week=47", headers=_h("admin"))
+    site_id = _login_admin(client_admin)
+    r = client_admin.get(f"/ui/reports/weekview?site_id={site_id}&year=2025&week=47")
     assert r.status_code == 200
     html = r.data.decode("utf-8")
     # Assert presence of Swedish headers we standardised

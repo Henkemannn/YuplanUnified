@@ -7,6 +7,8 @@ from werkzeug.security import generate_password_hash
 from core.app_factory import create_app
 from core.db import get_session
 from core.models import PortionGuideline, ServiceMetric, Tenant, User
+from core.admin_repo import SitesRepo
+from core.admin_user_repo import _set_user_site_binding
 
 
 @pytest.fixture()
@@ -48,8 +50,15 @@ def setup_tenant():
         db.add(user)
         db.commit()
         db.refresh(user)
+        tenant_id = int(tenant.id)
+        user_id = int(user.id)
+        site, _ = SitesRepo().create_site("Portion Test Site", tenant_id=tenant_id)
+        _set_user_site_binding(
+            db, user_id=user_id, tenant_id=tenant_id, site_id=str(site["id"])
+        )
+        db.commit()
         guideline = PortionGuideline(
-            tenant_id=tenant.id,
+            tenant_id=tenant_id,
             unit_id=None,
             category="main",
             baseline_g_per_guest=400,
@@ -57,7 +66,7 @@ def setup_tenant():
         )
         db.add(guideline)
         db.commit()
-        return {"tenant_id": tenant.id, "user_id": user.id}
+        return {"tenant_id": tenant_id, "user_id": user_id}
     finally:
         db.close()
 

@@ -1,7 +1,10 @@
 import uuid
 
 from core import create_app
-from core.models import Base
+from core.db import get_session
+from core.models import Base, User
+from core.admin_repo import SitesRepo
+from core.admin_user_repo import _set_user_site_binding
 
 
 def make_app(tmp_path, name="test"):
@@ -39,20 +42,27 @@ def auth_superuser(client, app):
         )
         db.add(u)
         db.commit()
+        user_id = int(u.id)
+        site, _ = SitesRepo().create_site("Metrics Test Site", tenant_id=tid)
+        _set_user_site_binding(
+            db, user_id=user_id, tenant_id=int(tid), site_id=str(site["id"])
+        )
+        db.commit()
+        site_id = str(site["id"])
     finally:
         db.close()
     # Bind session to a test site to satisfy strict site isolation
     with client.session_transaction() as sess:
-        sess["site_id"] = "test-site"
+        sess["site_id"] = site_id
     rv = client.post("/auth/login", json={"email": "root@example.com", "password": "pw"})
     assert rv.status_code == 200
-    return tid
+    return tid, site_id
 
 
 def test_diet_type_crud_and_feature_toggle(tmp_path):
     app = make_app(tmp_path, name="diet")
     with app.test_client() as client:
-        auth_superuser(client, app)
+        _tenant_id, site_id = auth_superuser(client, app)
         # Create tenant via admin API (with modules triggers feature seeding) - reuse existing superuser context
         rv = client.post(
             "/admin/tenants",
@@ -80,6 +90,24 @@ def test_diet_type_crud_and_feature_toggle(tmp_path):
         # Bind session site before admin login
         with client.session_transaction() as sess:
             sess["site_id"] = "test-site"
+        db = get_session()
+        try:
+            admin = db.query(User).filter_by(email="a@b.c").one()
+            admin_id = int(admin.id)
+            admin_site, _ = SitesRepo().create_site(
+                "Created Admin Site", tenant_id=int(new_tid)
+            )
+            _set_user_site_binding(
+                db,
+                user_id=admin_id,
+                tenant_id=int(new_tid),
+                site_id=str(admin_site["id"]),
+            )
+            db.commit()
+        finally:
+            db.close()
+        with client.session_transaction() as sess:
+            sess["site_id"] = str(admin_site["id"])
         rv = client.post("/auth/login", json={"email": "a@b.c", "password": "admin-password-456"})
         assert rv.status_code == 200
         # Create diet type
@@ -111,7 +139,7 @@ def test_diet_type_crud_and_feature_toggle(tmp_path):
 def test_service_metrics_ingest_and_summary(tmp_path):
     app = make_app(tmp_path, name="metrics")
     with app.test_client() as client:
-        tenant_id = auth_superuser(client, app)
+        tenant_id, _site_id = auth_superuser(client, app)
         # Need a unit to attach metrics -> create directly
         from core.db import get_session
         from core.models import Unit

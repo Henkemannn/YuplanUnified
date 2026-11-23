@@ -5,6 +5,8 @@ from core.db import create_all, get_session
 from core.offshore_builder_bridge import _service as builder_bridge_service
 from core.planera_v2.contracts import PlanningComponentReference, PlanningCompositionReference
 from core.models import User
+from core.admin_repo import SitesRepo
+from core.admin_user_repo import _set_user_site_binding
 
 
 def _mk_app():
@@ -104,6 +106,12 @@ def test_builder_ui_deep_links_are_user_facing_and_role_protected() -> None:
                 )
             )
             db.commit()
+            site, _ = SitesRepo().create_site("Builder Bridge Site", tenant_id=1)
+            for user_id in (42, 43):
+                _set_user_site_binding(
+                    db, user_id=user_id, tenant_id=1, site_id=str(site["id"])
+                )
+            db.commit()
         finally:
             db.close()
 
@@ -112,6 +120,7 @@ def test_builder_ui_deep_links_are_user_facing_and_role_protected() -> None:
         sess["role"] = "admin"
         sess["tenant_id"] = 1
         sess["auth_version"] = 1
+        sess["site_id"] = str(site["id"])
 
     rv = client.get("/builder-editor-host?composition_id=boeuf_bourguignon_potatismos")
     assert rv.status_code == 200
@@ -126,6 +135,7 @@ def test_builder_ui_deep_links_are_user_facing_and_role_protected() -> None:
         sess["user_id"] = 43
         sess["role"] = "viewer"
         sess["auth_version"] = 1
+        sess["site_id"] = str(site["id"])
 
     forbidden = client.get("/builder-editor-host?component_id=potatismos")
     assert forbidden.status_code == 403

@@ -5,6 +5,8 @@ from werkzeug.security import generate_password_hash
 from core.app_factory import create_app
 from core.db import get_session
 from core.models import Tenant, Unit, User
+from core.admin_repo import SitesRepo
+from core.admin_user_repo import _set_user_site_binding
 
 
 def _bootstrap_admin(db):
@@ -25,13 +27,23 @@ def _bootstrap_admin(db):
     )
     db.add(user)
     db.commit()
-    return t, user, unit
+    email = str(user.email)
+    unit_id = int(unit.id)
+    tenant_id = int(t.id)
+    user_id = int(user.id)
+    unit_id = int(unit.id)
+    site, _ = SitesRepo().create_site("Turnus Test Site", tenant_id=tenant_id)
+    _set_user_site_binding(
+        db, user_id=user_id, tenant_id=tenant_id, site_id=str(site["id"])
+    )
+    db.commit()
+    return t, email, unit_id, str(site["id"])
 
 
-def _login(client, email):
+def _login(client, email, site_id):
     # Bind session to a test site to satisfy strict site isolation
     with client.session_transaction() as sess:
-        sess["site_id"] = "test-site"
+        sess["site_id"] = site_id
     r = client.post("/auth/login", json={"email": email, "password": "pw"})
     assert r.status_code == 200
 
@@ -40,12 +52,10 @@ def test_turnus_templates_and_import_and_query():
     app = create_app({"TESTING": True, "SECRET_KEY": "x"})
     client = app.test_client()
     db = get_session()
-    t, user, unit = _bootstrap_admin(db)
-    user_email = user.email  # capture before session close
-    unit_id = unit.id
+    t, user_email, unit_id, site_id = _bootstrap_admin(db)
     db.close()
 
-    _login(client, user_email)
+    _login(client, user_email, site_id)
 
     # Create template
     r = client.post("/turnus/templates", json={"name": "Week Base", "pattern_type": "weekly"})

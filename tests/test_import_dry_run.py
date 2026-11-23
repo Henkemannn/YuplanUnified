@@ -6,6 +6,8 @@ from werkzeug.security import generate_password_hash
 from core.app_factory import create_app
 from core.db import get_session
 from core.models import Dish, Menu, MenuVariant, Tenant, User
+from core.admin_repo import SitesRepo
+from core.admin_user_repo import _set_user_site_binding
 
 
 def _bootstrap(db):
@@ -21,13 +23,21 @@ def _bootstrap(db):
     )
     db.add(u)
     db.commit()
-    return t, u
+    email = str(u.email)
+    tenant_id = int(t.id)
+    user_id = int(u.id)
+    site, _ = SitesRepo().create_site("Import Test Site", tenant_id=tenant_id)
+    _set_user_site_binding(
+        db, user_id=user_id, tenant_id=tenant_id, site_id=str(site["id"])
+    )
+    db.commit()
+    return t, email, str(site["id"])
 
 
-def _login(client, email):
+def _login(client, email, site_id):
     # Bind session to a test site to satisfy strict policy
     with client.session_transaction() as sess:
-        sess["site_id"] = "test-site"
+        sess["site_id"] = site_id
     r = client.post("/auth/login", json={"email": email, "password": "pw"})
     assert r.status_code == 200
 
@@ -48,10 +58,9 @@ def test_menu_import_dry_run(monkeypatch, tmp_path):
 
     client = app.test_client()
     db = get_session()
-    t, u = _bootstrap(db)
-    email = u.email
+    t, email, site_id = _bootstrap(db)
     db.close()
-    _login(client, email)
+    _login(client, email, site_id)
 
     class DummyImporter:
         def parse(self, data, filename, mime):

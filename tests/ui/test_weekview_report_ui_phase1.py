@@ -2,15 +2,21 @@ import re
 from uuid import uuid4
 from flask.testing import FlaskClient
 from sqlalchemy import text
+from werkzeug.security import generate_password_hash
 
 from core.app_factory import create_app
+from core.admin_user_repo import _set_user_site_binding
 from core.db import create_all, get_session
+from core.models import User
 
 
 def _seed_site_with_departments(db, site_id: str, dep_pairs: list[tuple[str, str]]):
     if not db.execute(text("SELECT 1 FROM sites WHERE id=:i"), {"i": site_id}).fetchone():
         name = f"Test Site {uuid4().hex[:8]}"
-        db.execute(text("INSERT INTO sites(id,name) VALUES(:i,:n)"), {"i": site_id, "n": name})
+        db.execute(
+            text("INSERT INTO sites(id,name,tenant_id) VALUES(:i,:n,1)"),
+            {"i": site_id, "n": name},
+        )
     for dep_id, dep_name in dep_pairs:
         if not db.execute(text("SELECT 1 FROM departments WHERE id=:i"), {"i": dep_id}).fetchone():
             # Detect schema columns and insert accordingly
@@ -29,6 +35,33 @@ def _seed_site_with_departments(db, site_id: str, dep_pairs: list[tuple[str, str
                     {"i": dep_id, "s": site_id, "n": dep_name},
                 )
     db.commit()
+
+
+def _login_admin(client: FlaskClient, site_id: str) -> None:
+    db = get_session()
+    try:
+        user = db.query(User).filter_by(email="weekview-report-admin@example.test").first()
+        if user is None:
+            user = User(
+                tenant_id=1,
+                email="weekview-report-admin@example.test",
+                password_hash=generate_password_hash("pw"),
+                role="admin",
+                unit_id=None,
+            )
+            db.add(user)
+            db.flush()
+        _set_user_site_binding(db, user_id=int(user.id), tenant_id=1, site_id=site_id)
+        db.commit()
+    finally:
+        db.close()
+    with client.session_transaction() as sess:
+        sess["site_id"] = site_id
+    response = client.post(
+        "/auth/login",
+        json={"email": "weekview-report-admin@example.test", "password": "pw"},
+    )
+    assert response.status_code == 200
 
 
 def test_weekview_report_basic_structure(tmp_path, monkeypatch):
@@ -55,6 +88,7 @@ def test_weekview_report_basic_structure(tmp_path, monkeypatch):
         finally:
             db.close()
     client: FlaskClient = app.test_client()
+    _login_admin(client, site_id)
     # Inject role/tenant for UI access
     resp = client.get(
         f"/ui/reports/weekview?site_id={site_id}&year=2025&week=49",
