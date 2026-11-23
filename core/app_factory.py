@@ -1052,21 +1052,44 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                     return
                 secrets_list = app.config.get("JWT_SECRETS") or []
                 try:
-                    # Loosen validation for UI bearer handling: do not require issuer/audience
                     payload = _jwt_decode(
                         token,
                         secret=primary,
                         secrets_list=secrets_list,
+                        issuer=app.config.get("JWT_ISSUER"),
+                        audience=app.config.get("JWT_AUDIENCE"),
                         leeway=app.config.get("JWT_LEEWAY_SECONDS", 60),
                         max_age=app.config.get("JWT_MAX_AGE_SECONDS"),
                     )
+                    if payload.get("type") != "access":
+                        raise _JWTError("authentication required")
                     auth_version = payload.get("auth_version")
-                    if isinstance(auth_version, int):
-                        _sess["user_id"] = payload.get("sub")
-                        _sess["role"] = payload.get("role")
-                        _sess["tenant_id"] = payload.get("tenant_id")
-                        _sess["auth_version"] = auth_version
-                        g.tenant_id = payload.get("tenant_id")
+                    if not isinstance(auth_version, int):
+                        raise _JWTError("authentication required")
+                    from .auth import _load_active_user_by_id, _user_auth_version
+                    from .db import get_session as _get_db_session
+
+                    db = _get_db_session()
+                    try:
+                        active_user = _load_active_user_by_id(db, payload.get("sub"))
+                        active_auth_version = _user_auth_version(active_user)
+                    finally:
+                        db.close()
+                    try:
+                        token_tenant_id = int(payload.get("tenant_id"))
+                    except (TypeError, ValueError):
+                        raise _JWTError("authentication required")
+                    if (
+                        active_user is None
+                        or active_auth_version != auth_version
+                        or token_tenant_id != int(active_user.tenant_id)
+                    ):
+                        raise _JWTError("authentication required")
+                    _sess["user_id"] = payload.get("sub")
+                    _sess["role"] = active_user.role
+                    _sess["tenant_id"] = active_user.tenant_id
+                    _sess["auth_version"] = auth_version
+                    g.tenant_id = active_user.tenant_id
                 except _JWTError:
                     pass
         except Exception:

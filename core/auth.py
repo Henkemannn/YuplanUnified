@@ -883,7 +883,15 @@ def logout():
     session.clear()
     if token:
         try:
-            payload = jwt_decode(token, secret=primary, secrets_list=secrets_list)
+            payload = jwt_decode(
+                token,
+                secret=primary,
+                secrets_list=secrets_list,
+                issuer=current_app.config.get("JWT_ISSUER"),
+                audience=current_app.config.get("JWT_AUDIENCE"),
+                leeway=current_app.config.get("JWT_LEEWAY_SECONDS", 60),
+                max_age=current_app.config.get("JWT_MAX_AGE_SECONDS"),
+            )
         except JWTError:
             payload = None
         if payload and payload.get("type") == "refresh":
@@ -916,7 +924,15 @@ def refresh():
     if not token:
         return _json_error("missing token", 400)
     try:
-        payload = jwt_decode(token, secret=primary, secrets_list=secrets_list)
+        payload = jwt_decode(
+            token,
+            secret=primary,
+            secrets_list=secrets_list,
+            issuer=current_app.config.get("JWT_ISSUER"),
+            audience=current_app.config.get("JWT_AUDIENCE"),
+            leeway=current_app.config.get("JWT_LEEWAY_SECONDS", 60),
+            max_age=current_app.config.get("JWT_MAX_AGE_SECONDS"),
+        )
     except JWTError:
         return _json_error("invalid token", 401)
     if payload.get("type") != "refresh":
@@ -979,7 +995,15 @@ def me():
     if auth.lower().startswith("bearer "):
         token = auth.split(None, 1)[1].strip()
         try:
-            payload = jwt_decode(token, secret=primary, secrets_list=secrets_list)
+            payload = jwt_decode(
+                token,
+                secret=primary,
+                secrets_list=secrets_list,
+                issuer=current_app.config.get("JWT_ISSUER"),
+                audience=current_app.config.get("JWT_AUDIENCE"),
+                leeway=current_app.config.get("JWT_LEEWAY_SECONDS", 60),
+                max_age=current_app.config.get("JWT_MAX_AGE_SECONDS"),
+            )
             if payload.get("type") != "access":
                 return _json_error("auth required", 401)
             user_id = payload.get("sub")

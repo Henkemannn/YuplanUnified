@@ -5,7 +5,7 @@ from flask import g, request, session as flask_session
 from sqlalchemy import text
 
 from core.db import get_session
-from core.jwt_utils import issue_token_pair
+from core.jwt_utils import encode, issue_token_pair
 from tests.test_admin_user_target_authorization import _create_user, _login, _seed_scope
 
 
@@ -41,6 +41,58 @@ def _access_token(app_session, email):
             return token, int(user.id)
         finally:
             db.close()
+
+
+@pytest.mark.parametrize("token_case", ["wrong_issuer", "wrong_audience", "refresh_type"])
+def test_global_bearer_rejection_does_not_create_web_session(app_session, token_case):
+    data = _seed_scope(app_session)
+    client = app_session.test_client()
+    superuser_id = _user_id(app_session, data["superuser"])
+    now = int(time.time())
+    claims = {
+        "sub": superuser_id,
+        "role": "superuser",
+        "tenant_id": data["tenant_a"],
+        "auth_version": 1,
+        "jti": f"global-rejection-{token_case}",
+        "type": "access",
+        "iss": "yuplan",
+        "aud": "api",
+        "iat": now,
+        "exp": now + 60,
+    }
+    if token_case == "wrong_issuer":
+        claims["iss"] = "attacker"
+    elif token_case == "wrong_audience":
+        claims["aud"] = "not-api"
+    else:
+        claims["type"] = "refresh"
+    token = encode(
+        claims,
+        secret=str(app_session.config["JWT_SECRET"]),
+        ttl=60,
+    )
+    observed = {}
+
+    def observe_global_bearer_state():
+        observed["user_id"] = flask_session.get("user_id")
+        observed["auth_version"] = flask_session.get("auth_version")
+
+    callbacks = app_session.before_request_funcs.setdefault(None, [])
+    callbacks.append(observe_global_bearer_state)
+    try:
+        response = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+    finally:
+        callbacks.remove(observe_global_bearer_state)
+
+    assert response.status_code == 401
+    assert observed == {"user_id": None, "auth_version": None}
+    with client.session_transaction() as session:
+        assert session.get("user_id") is None
+        assert session.get("auth_version") is None
+        assert "impersonate" not in session
+    audit_response = client.get("/admin/audit")
+    assert audit_response.status_code in (401, 403)
 
 
 @pytest.mark.parametrize("route", ["/admin/audit", "/ui/admin/users"])
@@ -247,6 +299,46 @@ def test_bearer_rejects_stale_session_impersonation(app_session, route):
         assert session["tenant_id"] == data["tenant_a"]
         assert session["user_id"] == other_user_id
         assert session["authenticated_user_id"] == other_user_id
+
+
+def test_auth_me_rejects_signed_bearer_with_wrong_issuer_or_audience(app_session):
+    data = _seed_scope(app_session)
+    client = app_session.test_client()
+    _login(client, data["admin_a"])
+    admin_id = _user_id(app_session, data["admin_a"])
+    with client.session_transaction() as session:
+        session["site_id"] = data["site_a"]
+
+    with app_session.app_context():
+        db = get_session()
+        try:
+            row = db.execute(
+                text("SELECT role, tenant_id, auth_version FROM users WHERE id=:user_id"),
+                {"user_id": admin_id},
+            ).one()
+        finally:
+            db.close()
+    now = int(time.time())
+    token = encode(
+        {
+            "sub": admin_id,
+            "role": str(row.role),
+            "tenant_id": int(row.tenant_id),
+            "auth_version": int(row.auth_version),
+            "jti": "wrong-issuer-audience",
+            "type": "access",
+            "iss": "attacker",
+            "aud": "not-api",
+            "iat": now,
+            "exp": now + 60,
+        },
+        secret=str(app_session.config["JWT_SECRET"]),
+        ttl=60,
+    )
+
+    response = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 401
 
 
 @pytest.mark.parametrize("route", ["/admin/audit", "/ui/admin/users"])
