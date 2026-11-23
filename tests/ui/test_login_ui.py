@@ -4,6 +4,7 @@ import pytest
 from core.db import get_session
 from core.models import Tenant, User, Site, Department
 from werkzeug.security import generate_password_hash
+from sqlalchemy import text
 
 
 def _seed_login_user(db, *, role: str, password: str = "UiPassw0rd!") -> str:
@@ -37,6 +38,20 @@ def _seed_login_user(db, *, role: str, password: str = "UiPassw0rd!") -> str:
             role=role,
             department_id=department_id,
         )
+    )
+    db.flush()
+    db.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS kitchen_user_sites "
+            "(user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
+        )
+    )
+    db.execute(
+        text(
+            "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+            "VALUES (:user_id, :tenant_id, :site_id)"
+        ),
+        {"user_id": int(db.query(User).filter_by(email=email.lower()).one().id), "tenant_id": tenant.id, "site_id": site.id},
     )
     db.commit()
     return email.lower()

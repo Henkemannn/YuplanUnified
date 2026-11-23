@@ -1,20 +1,72 @@
+import uuid
+
 from sqlalchemy import text
+from werkzeug.security import generate_password_hash
 
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 
-def _ensure_site_and_diet(site_id: str) -> str:
+def _ensure_site_and_diet(site_id: str) -> tuple[str, str]:
     from core.admin_repo import SitesRepo, DietTypesRepo
-    srepo = SitesRepo(); srepo.create_site("Toggle Site")
+    srepo = SitesRepo()
+    site, _ = srepo.create_site("Toggle Site", tenant_id=1)
+    actual_site_id = str(site["id"])
     trepo = DietTypesRepo()
-    diet_id = trepo.create(site_id=site_id, name="Laktos", default_select=False)
-    return str(diet_id)
+    diet_id = trepo.create(site_id=actual_site_id, name="Laktos", default_select=False)
+    return actual_site_id, str(diet_id)
+
+
+def _login_real_user(app_session, client, *, site_id: str, role: str) -> None:
+    from core.db import get_session
+    email = f"normal-exclusion-{uuid.uuid4().hex}@example.test"
+    password = "NormalExclusionPassw0rd!2026"
+    with app_session.app_context():
+        db = get_session()
+        try:
+            from core.models import User
+
+            user = User(
+                tenant_id=1,
+                email=email,
+                username=email,
+                password_hash=generate_password_hash(password),
+                auth_version=1,
+                role=role,
+                full_name="Normal Exclusion Auth User",
+                is_active=True,
+            )
+            db.add(user)
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS kitchen_user_sites "
+                    "(user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
+                )
+            )
+            db.flush()
+            db.execute(
+                text(
+                    "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                    "VALUES (:user_id, 1, :site_id)"
+                ),
+                {"user_id": int(user.id), "site_id": site_id},
+            )
+            db.commit()
+        finally:
+            db.close()
+    with client.session_transaction() as sess:
+        sess["site_id"] = site_id
+    response = client.post(
+        "/auth/login",
+        json={"email": email, "password": password},
+        headers={"Accept": "application/json"},
+    )
+    assert response.status_code == 200, response.get_json()
 
 
 def test_toggle_normal_exclusion_insert_then_remove(app_session):
     client = app_session.test_client()
-    site_id = "site-normal-exc-1"
-    diet_id = _ensure_site_and_diet(site_id)
+    site_id, diet_id = _ensure_site_and_diet("site-normal-exc-1")
+    _login_real_user(app_session, client, site_id=site_id, role="admin")
     from core.db import get_session
     db = get_session()
     try:
@@ -47,7 +99,7 @@ def test_toggle_normal_exclusion_insert_then_remove(app_session):
         "diet_type_id": diet_id,
     }
     # First toggle -> insert
-    rv = client.post("/api/kitchen/planering/normal_exclusions/toggle", json=payload, headers=HEADERS)
+    rv = client.post("/api/kitchen/planering/normal_exclusions/toggle", json=payload)
     assert rv.status_code == 200
     data = rv.get_json()
     assert data and data.get("excluded") is True
@@ -62,7 +114,7 @@ def test_toggle_normal_exclusion_insert_then_remove(app_session):
         db.close()
 
     # Second toggle -> delete
-    rv2 = client.post("/api/kitchen/planering/normal_exclusions/toggle", json=payload, headers=HEADERS)
+    rv2 = client.post("/api/kitchen/planering/normal_exclusions/toggle", json=payload)
     assert rv2.status_code == 200
     data2 = rv2.get_json()
     assert data2 and data2.get("excluded") is False
@@ -79,8 +131,8 @@ def test_toggle_normal_exclusion_insert_then_remove(app_session):
 
 def test_toggle_normal_exclusion_allows_kitchen_role(app_session):
     client = app_session.test_client()
-    site_id = "site-normal-exc-kitchen"
-    diet_id = _ensure_site_and_diet(site_id)
+    site_id, diet_id = _ensure_site_and_diet("site-normal-exc-kitchen")
+    _login_real_user(app_session, client, site_id=site_id, role="kitchen")
     from core.db import get_session
     db = get_session()
     try:
@@ -116,7 +168,6 @@ def test_toggle_normal_exclusion_allows_kitchen_role(app_session):
     rv = client.post(
         "/api/kitchen/planering/normal_exclusions/toggle",
         json=payload,
-        headers={"X-User-Role": "kitchen", "X-Tenant-Id": "1", "X-User-Id": "8"},
     )
     assert rv.status_code == 200
     data = rv.get_json() or {}

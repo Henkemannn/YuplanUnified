@@ -10,6 +10,7 @@ Tests that all admin CRUD pages use the unified design system:
 """
 
 import pytest
+import uuid
 from flask.testing import FlaskClient
 from sqlalchemy import text
 from werkzeug.security import generate_password_hash
@@ -20,6 +21,52 @@ from core.db import get_session
 def _h(role="admin"):
     """Helper to create auth headers for tests."""
     return {"X-User-Role": role, "X-Tenant-Id": "1"}
+
+
+def _login_real_admin(client: FlaskClient) -> None:
+    from core.models import User
+
+    with client.application.app_context():
+        db = get_session()
+        try:
+            with client.session_transaction() as session:
+                site_id = session.get("site_id")
+            email = f"admin-ui-{uuid.uuid4().hex}@example.test"
+            user = User(
+                tenant_id=1,
+                email=email,
+                username=email,
+                password_hash="test-only",
+                role="admin",
+                is_active=True,
+                auth_version=1,
+            )
+            db.add(user)
+            db.flush()
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS kitchen_user_sites "
+                    "(user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
+                )
+            )
+            db.execute(
+                text(
+                    "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                    "VALUES (:user_id, 1, :site_id)"
+                ),
+                {"user_id": int(user.id), "site_id": site_id},
+            )
+            user_id = int(user.id)
+            db.commit()
+        finally:
+            db.close()
+    with client.session_transaction() as session:
+        session["user_id"] = user_id
+        session["role"] = "admin"
+        session["tenant_id"] = 1
+        session["site_id"] = site_id
+        session["site_lock"] = True
+        session["auth_version"] = 1
 
 
 # =============================================================================
@@ -56,7 +103,8 @@ def test_users_list_uses_yp_table(client_admin: FlaskClient):
 
 def test_reports_weekly_uses_yp_table(client_admin: FlaskClient):
     """Test that weekly report uses .yp-table class and yp-button."""
-    response = client_admin.get('/ui/reports/weekly', headers=_h())
+    _login_real_admin(client_admin)
+    response = client_admin.get('/ui/reports/weekly')
     # Accept redirect or success - reports may redirect if no site/week specified
     assert response.status_code in [200, 302]
     
@@ -220,7 +268,8 @@ def test_user_form_uses_yp_button(client_admin: FlaskClient):
 
 def test_reports_weekly_uses_yp_button(client_admin: FlaskClient):
     """Test that weekly report uses .yp-button classes."""
-    response = client_admin.get('/ui/reports/weekly', headers=_h())
+    _login_real_admin(client_admin)
+    response = client_admin.get('/ui/reports/weekly')
     # Accept redirect or success - reports may redirect if no site/week specified
     assert response.status_code in [200, 302]
     
@@ -267,18 +316,20 @@ def test_users_list_uses_yp_badge_for_roles(client_admin: FlaskClient):
     finally:
         db.close()
 
-    response = client_admin.get('/ui/admin/users', headers=_h())
+    _login_real_admin(client_admin)
+    response = client_admin.get('/ui/admin/users')
     assert response.status_code == 200
     html = response.data.decode('utf-8')
     
     # Should use .yp-badge classes
-    assert 'class="yp-badge yp-badge-secondary"' in html
+    assert 'class="yp-badge user-role-badge"' in html
     assert "Admin" in html
 
 
 def test_users_list_uses_yp_badge_for_status(client_admin: FlaskClient):
     """Test that users list uses .yp-badge for status badges."""
-    response = client_admin.get('/ui/admin/users', headers=_h())
+    _login_real_admin(client_admin)
+    response = client_admin.get('/ui/admin/users')
     assert response.status_code == 200
     html = response.data.decode('utf-8')
     
@@ -288,7 +339,8 @@ def test_users_list_uses_yp_badge_for_status(client_admin: FlaskClient):
 
 def test_reports_weekly_uses_yp_badge_for_coverage(client_admin: FlaskClient):
     """Test that weekly report uses .yp-badge for coverage percentages."""
-    response = client_admin.get('/ui/reports/weekly', headers=_h())
+    _login_real_admin(client_admin)
+    response = client_admin.get('/ui/reports/weekly')
     # May redirect
     if response.status_code == 302:
         response = client_admin.get(response.location, headers=_h())
@@ -325,12 +377,12 @@ def test_all_admin_pages_render_without_errors(client_admin: FlaskClient):
         '/ui/admin/users/new',
         '/ui/reports/weekly',
     ]
-    
+    _login_real_admin(client_admin)
     for page in pages:
-        response = client_admin.get(page, headers=_h())
+        response = client_admin.get(page)
         # Allow redirects (302)
         if response.status_code == 302:
-            response = client_admin.get(response.location, headers=_h())
+            response = client_admin.get(response.location)
         assert response.status_code == 200, f"Page {page} failed with {response.status_code}"
         
         # Should load unified CSS/JS

@@ -10,6 +10,52 @@ Smoke tests to verify:
 import pytest
 import uuid
 from datetime import date as _date
+from sqlalchemy import text
+
+
+def _login_real_admin(client, site_id: str) -> None:
+    from core.db import get_session
+    from core.models import User
+
+    email = f"unified-ui-{uuid.uuid4().hex}@example.test"
+    with client.application.app_context():
+        db = get_session()
+        try:
+            user = User(
+                tenant_id=1,
+                email=email,
+                username=email,
+                password_hash="test-only",
+                role="admin",
+                is_active=True,
+                auth_version=1,
+            )
+            db.add(user)
+            db.flush()
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS kitchen_user_sites "
+                    "(user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
+                )
+            )
+            db.execute(
+                text(
+                    "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                    "VALUES (:user_id, 1, :site_id)"
+                ),
+                {"user_id": int(user.id), "site_id": site_id},
+            )
+            user_id = int(user.id)
+            db.commit()
+        finally:
+            db.close()
+    with client.session_transaction() as session:
+        session["user_id"] = user_id
+        session["role"] = "admin"
+        session["tenant_id"] = 1
+        session["site_id"] = site_id
+        session["site_lock"] = True
+        session["auth_version"] = 1
 
 
 def _h(role):
@@ -79,7 +125,8 @@ def test_unified_ui_js_loaded_on_weekview(client_admin):
 
 def test_unified_ui_css_loaded_on_reports(client_admin, seed_site_and_departments_for_ui):
     """Reports should load unified_ui.css (via admin base template)."""
-    resp = client_admin.get("/ui/reports/weekly", headers=_h("admin"))
+    _login_real_admin(client_admin, seed_site_and_departments_for_ui["site_id"])
+    resp = client_admin.get("/ui/reports/weekly")
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     
@@ -124,7 +171,8 @@ def test_menu_planning_renders_without_errors(client_admin):
 
 def test_reports_page_renders_without_errors(client_admin, seed_site_and_departments_for_ui):
     """Reports page should render successfully with unified UI."""
-    resp = client_admin.get("/ui/reports/weekly", headers=_h("admin"))
+    _login_real_admin(client_admin, seed_site_and_departments_for_ui["site_id"])
+    resp = client_admin.get("/ui/reports/weekly")
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     
@@ -234,8 +282,8 @@ def seed_site_and_departments_for_ui(client_admin):
         # Create site
         site_id = str(uuid.uuid4())
         sess.execute(text("""
-            INSERT INTO sites (id, name, version)
-            VALUES (:id, 'Test Site', 0)
+            INSERT INTO sites (id, tenant_id, name, version)
+            VALUES (:id, 1, 'Test Site', 0)
         """), {"id": site_id})
         
         # Create department
@@ -285,7 +333,8 @@ def test_menu_planning_still_works(client_admin):
 
 def test_reports_still_work(client_admin, seed_site_and_departments_for_ui):
     """Reports should still work with unified UI."""
-    resp = client_admin.get("/ui/reports/weekly", headers=_h("admin"))
+    _login_real_admin(client_admin, seed_site_and_departments_for_ui["site_id"])
+    resp = client_admin.get("/ui/reports/weekly")
     assert resp.status_code == 200
     
     # Reports page should render

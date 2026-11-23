@@ -7,7 +7,7 @@ from core.department_requirement_group_repo import DepartmentRequirementGroupsRe
 from core.models import User
 
 
-def _seed_admin_session(client):
+def _seed_admin_session(client, site_id: str = "site-1"):
     from core.db import get_session
 
     db = get_session()
@@ -30,6 +30,21 @@ def _seed_admin_session(client):
             user.role = "admin"
             user.is_active = True
             user.auth_version = 1
+        db.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS kitchen_user_sites "
+                "(user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
+            )
+        )
+        db.flush()
+        db.execute(
+            text(
+                "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                "VALUES (:user_id, 1, :site_id) "
+                "ON CONFLICT(user_id) DO UPDATE SET tenant_id=excluded.tenant_id, site_id=excluded.site_id"
+            ),
+            {"user_id": int(user.id), "site_id": site_id},
+        )
         db.commit()
     finally:
         db.close()
@@ -37,13 +52,18 @@ def _seed_admin_session(client):
         s["role"] = "admin"
         s["user_id"] = 1
         s["tenant_id"] = 1
-        s["site_id"] = "site-1"
+        s["site_id"] = site_id
+        s["site_lock"] = True
         s["auth_version"] = 1
 
 
 def _seed_site_and_departments(db):
     db.execute(text("""
-        CREATE TABLE IF NOT EXISTS sites (id TEXT PRIMARY KEY, name TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS sites (
+            id TEXT PRIMARY KEY,
+            tenant_id INTEGER NOT NULL DEFAULT 1,
+            name TEXT NOT NULL
+        );
     """))
     db.execute(text("""
         CREATE TABLE IF NOT EXISTS departments (
@@ -55,7 +75,10 @@ def _seed_site_and_departments(db):
         );
     """))
     site_id = "site-1"
-    db.execute(text("INSERT OR IGNORE INTO sites(id,name) VALUES(:i,:n)"), {"i": site_id, "n": "Testplats"})
+    db.execute(
+        text("INSERT OR IGNORE INTO sites(id,tenant_id,name) VALUES(:i,1,:n)"),
+        {"i": site_id, "n": "Testplats"},
+    )
     db.execute(text("INSERT OR IGNORE INTO departments(id,site_id,name,resident_count_mode,resident_count_fixed) VALUES(:i,:s,:n,'manual',:f)"), {"i": "dep-A", "s": site_id, "n": "Avd A", "f": 10})
     db.execute(text("INSERT OR IGNORE INTO departments(id,site_id,name,resident_count_mode,resident_count_fixed) VALUES(:i,:s,:n,'manual',:f)"), {"i": "dep-B", "s": site_id, "n": "Avd B", "f": 8})
     return site_id
@@ -145,7 +168,6 @@ def _seed_weekview(db, year: int, week: int):
 
 def test_seeded_weekly_diets_report(client):
     year, week = 2025, 10
-    _seed_admin_session(client)
     from core.db import get_session
     db = get_session()
     try:
@@ -156,6 +178,7 @@ def test_seeded_weekly_diets_report(client):
         db.commit()
     finally:
         db.close()
+    _seed_admin_session(client)
 
     resp = client.get(f"/ui/admin/report/week?year={year}&week={week}&department_id=ALL&view=day")
     assert resp.status_code == 200
@@ -239,7 +262,7 @@ def test_admin_report_week_uses_cohort_truth_when_groups_exist(client):
     finally:
         db.close()
 
-    _seed_admin_session(client)
+    _seed_admin_session(client, site_id=site["id"])
     with client.session_transaction() as s:
         s["site_id"] = site["id"]
 

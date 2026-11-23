@@ -10,6 +10,7 @@ from core.models import User
 from portal.department.auth import DepartmentPortalScope
 from portal.department.service import build_department_week_payload
 from sqlalchemy import text
+from werkzeug.security import generate_password_hash
 
 WEEK = 47
 CURRENT_YEAR = int(_date.today().isocalendar()[0])
@@ -54,6 +55,51 @@ def _set_auth_session(client, *, tenant_id: int = 1, user_id: int = 1, role: str
         sess["auth_version"] = 1
         if site_id is not None:
             sess["site_id"] = site_id
+
+
+def _login_real_user(client, *, tenant_id: int, site_id: str, role: str = "admin") -> None:
+    suffix = uuid.uuid4().hex
+    email = f"menu-choice-auth-{suffix}@example.test"
+    password = "MenuChoicePassw0rd!2026"
+    with client.application.app_context():
+        db = get_session()
+        try:
+            user = User(
+                tenant_id=tenant_id,
+                email=email,
+                username=email,
+                password_hash=generate_password_hash(password),
+                auth_version=1,
+                role=role,
+                full_name="Menu Choice Auth User",
+                is_active=True,
+            )
+            db.add(user)
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS kitchen_user_sites "
+                    "(user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
+                )
+            )
+            db.flush()
+            db.execute(
+                text(
+                    "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                    "VALUES (:user_id, :tenant_id, :site_id)"
+                ),
+                {"user_id": int(user.id), "tenant_id": tenant_id, "site_id": site_id},
+            )
+            db.commit()
+        finally:
+            db.close()
+    with client.session_transaction() as sess:
+        sess["site_id"] = site_id
+    response = client.post(
+        "/auth/login",
+        json={"email": email, "password": password},
+        headers={"Accept": "application/json"},
+    )
+    assert response.status_code == 200, response.get_json()
 
 
 def _ensure_department(client):
@@ -140,7 +186,7 @@ class TestMenuChoiceAPI:
 
     def test_get_without_tenant_header_uses_authenticated_session(self, client_admin):
         dep_id, site_id = _seed_basic(client_admin)
-        _set_auth_session(client_admin, tenant_id=1, user_id=1, role="admin", site_id=site_id)
+        _login_real_user(client_admin, tenant_id=1, site_id=site_id)
 
         r = client_admin.get(f"/menu-choice?week={WEEK}&year={CURRENT_YEAR}&department={dep_id}")
         assert r.status_code == 200
@@ -148,7 +194,7 @@ class TestMenuChoiceAPI:
 
     def test_conflicting_tenant_header_does_not_override_authenticated_session(self, client_admin):
         dep_id, site_id = _seed_basic(client_admin)
-        _set_auth_session(client_admin, tenant_id=1, user_id=1, role="admin", site_id=site_id)
+        _login_real_user(client_admin, tenant_id=1, site_id=site_id)
 
         app = client_admin.application
         original_before = {k: list(v) for k, v in app.before_request_funcs.items()}
@@ -239,7 +285,7 @@ class TestMenuChoiceAPI:
         finally:
             db.close()
 
-        _set_auth_session(client_admin, tenant_id=1, user_id=1, role="admin", site_id=site_id)
+        _login_real_user(client_admin, tenant_id=1, site_id=site_id)
         r = client_admin.get("/menu-choice?week=47&year=%s&department=other-dept" % CURRENT_YEAR)
         assert r.status_code == 400
         body = r.get_json() or {}
@@ -247,7 +293,7 @@ class TestMenuChoiceAPI:
 
     def test_unknown_department_returns_controlled_4xx(self, client_admin):
         dep_id, site_id = _seed_basic(client_admin)
-        _set_auth_session(client_admin, tenant_id=1, user_id=1, role="admin", site_id=site_id)
+        _login_real_user(client_admin, tenant_id=1, site_id=site_id)
 
         r = client_admin.get("/menu-choice?week=47&year=%s&department=missing-dept" % CURRENT_YEAR)
         assert r.status_code == 400
