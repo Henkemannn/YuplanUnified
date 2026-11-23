@@ -2,6 +2,8 @@ import uuid
 from datetime import date
 
 import pytest
+from core.models import User
+from sqlalchemy import text
 
 from core.admin_repo import DepartmentsRepo, DietTypesRepo, SitesRepo
 from core.department_requirement_group_completion_repo import DepartmentRequirementGroupCompletionRepo
@@ -11,13 +13,12 @@ from core.department_requirement_group_repo import DepartmentRequirementGroupsRe
 ETAG_RE = __import__("re").compile(r'^W/"weekview:dept:.*:year:\d{4}:week:\d{1,2}:v\d+"$')
 
 
-def _h(role):
-    return {"X-User-Role": role, "X-Tenant-Id": "1"}
+def _h():
+    return {}
 
 
-def _bind_test_admin_to_site(client, site_id):
+def _bind_test_admin_to_site(client, site_id, role="admin"):
     from core.db import get_session
-    from sqlalchemy import text
 
     with client.application.app_context():
         db = get_session()
@@ -25,28 +26,43 @@ def _bind_test_admin_to_site(client, site_id):
             db.execute(
                 text(
                     "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
-                    "user_id INTEGER NOT NULL, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL, "
-                    "UNIQUE(user_id, tenant_id, site_id))"
+                    "user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
                 )
             )
             db.execute(
                 text(
-                    "INSERT OR IGNORE INTO users "
-                    "(id, tenant_id, username, email, password_hash, role, is_active, auth_version, must_change_password) "
-                    "VALUES (1, 1, 'report-admin', 'report-admin@example.test', 'test-hash', 'admin', 1, 1, 0)"
+                    "DELETE FROM kitchen_user_sites "
+                    "WHERE user_id NOT IN (SELECT id FROM users)"
                 )
             )
+            user = User(
+                tenant_id=1,
+                username=f"phase2e-{uuid.uuid4().hex}@example.test",
+                email=f"phase2e-{uuid.uuid4().hex}@example.test",
+                password_hash="fixture-only",
+                role=role,
+                is_active=True,
+                auth_version=1,
+                must_change_password=False,
+            )
+            db.add(user)
+            db.flush()
             db.execute(
                 text(
-                    "INSERT OR IGNORE INTO kitchen_user_sites(user_id, tenant_id, site_id) "
-                    "VALUES (1, 1, :site_id)"
+                    "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                    "VALUES (:user_id, 1, :site_id)"
                 ),
-                {"site_id": site_id},
+                {"user_id": user.id, "site_id": site_id},
             )
             db.commit()
+            user_id = user.id
         finally:
             db.close()
     with client.session_transaction() as sess:
+        sess["user_id"] = user_id
+        sess["role"] = role
+        sess["tenant_id"] = 1
+        sess["auth_version"] = 1
         sess["site_id"] = site_id
         sess["tenant_id"] = 1
 
@@ -64,16 +80,26 @@ def _canonical_diet_id(site_id: str, name: str, *, default_select: bool) -> int:
 
 @pytest.fixture
 def enable_weekview(client_admin):
+    with client_admin.session_transaction() as sess:
+        default_site_id = sess["site_id"]
+    _bind_test_admin_to_site(client_admin, default_site_id)
     resp = client_admin.post(
         "/features/set",
         json={"name": "ff.weekview.enabled", "enabled": True},
-        headers=_h("admin"),
+        headers=_h(),
     )
     assert resp.status_code == 200
 
 
+@pytest.fixture
+def client_editor(app_session):
+    client = app_session.test_client()
+    client.environ_base = {}
+    return client
+
+
 @pytest.mark.usefixtures("enable_weekview")
-def test_weekview_report_aggregation_api_and_ui(client_admin):
+def test_weekview_report_aggregation_api_and_ui(client_admin, client_editor):
     app = client_admin.application
     site_id = str(uuid.uuid4())
     dep_a = str(uuid.uuid4())
@@ -104,18 +130,19 @@ def test_weekview_report_aggregation_api_and_ui(client_admin):
         finally:
             db.close()
     _bind_test_admin_to_site(client_admin, site_id)
+    _bind_test_admin_to_site(client_editor, site_id, role="editor")
 
     resp = client_admin.post(
         "/features/set",
         json={"name": "ff.weekview.enabled", "enabled": True},
-        headers=_h("admin"),
+        headers=_h(),
     )
     assert resp.status_code == 200
 
     # Materialize baseline weekviews and set data
     # A: residents lunch Mon=10, Tue=8; dinner Tue=5; mark Gluten Mon lunch and Wed lunch; Laktos Tue dinner
     base_a = f"/api/weekview?year={year}&week={week}&department_id={dep_a}"
-    r0a = client_admin.get(base_a, headers=_h("admin"))
+    r0a = client_admin.get(base_a, headers=_h())
     assert r0a.status_code == 200 and ETAG_RE.match(r0a.headers.get("ETag") or "")
     etag_a = r0a.headers.get("ETag")
 
@@ -123,7 +150,7 @@ def test_weekview_report_aggregation_api_and_ui(client_admin):
         return date.fromisocalendar(y, w, dow).isoformat()
 
     # Set residents & marks for A
-    client_admin.patch("/api/weekview/residents", headers={**_h("admin"), "If-Match": etag_a}, json={
+    client_admin.patch("/api/weekview/residents", headers={"If-Match": etag_a}, json={
         "tenant_id": 1,
         "department_id": dep_a,
         "year": year,
@@ -135,10 +162,10 @@ def test_weekview_report_aggregation_api_and_ui(client_admin):
         ],
     })
     # Refresh ETag after residents update before marking diets
-    r_a_after_res = client_admin.get(base_a, headers=_h("admin"))
+    r_a_after_res = client_admin.get(base_a, headers=_h())
     assert r_a_after_res.status_code == 200 and ETAG_RE.match(r_a_after_res.headers.get("ETag") or "")
     etag_a = r_a_after_res.headers.get("ETag")
-    client_admin.patch("/api/weekview/specialdiets/mark", headers={**_h("editor"), "If-Match": etag_a}, json={
+    editor_mark_a1 = client_editor.patch("/api/weekview/specialdiets/mark", headers={"If-Match": etag_a}, json={
         "site_id": site_id,
         "department_id": dep_a,
         "local_date": _iso(year, week, 1),
@@ -146,10 +173,11 @@ def test_weekview_report_aggregation_api_and_ui(client_admin):
         "diet_type_id": "Gluten",
         "marked": True,
     })
+    assert editor_mark_a1.status_code == 200
     # Fetch new etag and set next mark
-    r1a = client_admin.get(base_a, headers=_h("admin"))
+    r1a = client_admin.get(base_a, headers=_h())
     etag_a2 = r1a.headers.get("ETag") or etag_a
-    client_admin.patch("/api/weekview/specialdiets/mark", headers={**_h("editor"), "If-Match": etag_a2}, json={
+    editor_mark_a2 = client_editor.patch("/api/weekview/specialdiets/mark", headers={"If-Match": etag_a2}, json={
         "site_id": site_id,
         "department_id": dep_a,
         "local_date": _iso(year, week, 3),
@@ -157,9 +185,10 @@ def test_weekview_report_aggregation_api_and_ui(client_admin):
         "diet_type_id": "Gluten",
         "marked": True,
     })
-    r2a = client_admin.get(base_a, headers=_h("admin"))
+    assert editor_mark_a2.status_code == 200
+    r2a = client_admin.get(base_a, headers=_h())
     etag_a3 = r2a.headers.get("ETag") or etag_a2
-    client_admin.patch("/api/weekview/specialdiets/mark", headers={**_h("editor"), "If-Match": etag_a3}, json={
+    editor_mark_a3 = client_editor.patch("/api/weekview/specialdiets/mark", headers={"If-Match": etag_a3}, json={
         "site_id": site_id,
         "department_id": dep_a,
         "local_date": _iso(year, week, 2),
@@ -167,13 +196,14 @@ def test_weekview_report_aggregation_api_and_ui(client_admin):
         "diet_type_id": "Laktos",
         "marked": True,
     })
+    assert editor_mark_a3.status_code == 200
 
     # B: residents dinner Thu=7; mark Timbal Thu dinner
     base_b = f"/api/weekview?year={year}&week={week}&department_id={dep_b}"
-    r0b = client_admin.get(base_b, headers=_h("admin"))
+    r0b = client_admin.get(base_b, headers=_h())
     assert r0b.status_code == 200 and ETAG_RE.match(r0b.headers.get("ETag") or "")
     etag_b = r0b.headers.get("ETag")
-    client_admin.patch("/api/weekview/residents", headers={**_h("admin"), "If-Match": etag_b}, json={
+    client_admin.patch("/api/weekview/residents", headers={"If-Match": etag_b}, json={
         "tenant_id": 1,
         "department_id": dep_b,
         "year": year,
@@ -183,10 +213,10 @@ def test_weekview_report_aggregation_api_and_ui(client_admin):
         ],
     })
     # Refresh ETag after residents update before marking diets for B
-    r_b_after_res = client_admin.get(base_b, headers=_h("admin"))
+    r_b_after_res = client_admin.get(base_b, headers=_h())
     assert r_b_after_res.status_code == 200 and ETAG_RE.match(r_b_after_res.headers.get("ETag") or "")
     etag_b = r_b_after_res.headers.get("ETag")
-    client_admin.patch("/api/weekview/specialdiets/mark", headers={**_h("editor"), "If-Match": etag_b}, json={
+    editor_mark_b = client_editor.patch("/api/weekview/specialdiets/mark", headers={"If-Match": etag_b}, json={
         "site_id": site_id,
         "department_id": dep_b,
         "local_date": _iso(year, week, 4),
@@ -194,9 +224,10 @@ def test_weekview_report_aggregation_api_and_ui(client_admin):
         "diet_type_id": "Timbal",
         "marked": True,
     })
+    assert editor_mark_b.status_code == 200
 
     # API single department (A)
-    r_api_a = client_admin.get(f"/api/reports/weekview?site_id={site_id}&year={year}&week={week}&department_id={dep_a}", headers=_h("admin"))
+    r_api_a = client_admin.get(f"/api/reports/weekview?site_id={site_id}&year={year}&week={week}&department_id={dep_a}", headers=_h())
     assert r_api_a.status_code == 200
     data_a = r_api_a.get_json()
     dept_a = data_a["departments"][0]
@@ -210,7 +241,7 @@ def test_weekview_report_aggregation_api_and_ui(client_admin):
     assert dinner["normal_diet_count"] == 4  # 5 - 1
 
     # API all departments
-    r_api_all = client_admin.get(f"/api/reports/weekview?site_id={site_id}&year={year}&week={week}", headers=_h("admin"))
+    r_api_all = client_admin.get(f"/api/reports/weekview?site_id={site_id}&year={year}&week={week}", headers=_h())
     assert r_api_all.status_code == 200
     data_all = r_api_all.get_json()
     assert {dep_a, dep_b}.issubset({d["department_id"] for d in data_all["departments"]})
@@ -219,7 +250,7 @@ def test_weekview_report_aggregation_api_and_ui(client_admin):
     assert dep_b_meals["dinner"]["debiterbar_specialkost_count"] == 3  # Timbal default 3 marked once
 
     # UI template renders
-    r_ui = client_admin.get(f"/ui/reports/weekview?site_id={site_id}&year={year}&week={week}", headers=_h("admin"))
+    r_ui = client_admin.get(f"/ui/reports/weekview?site_id={site_id}&year={year}&week={week}", headers=_h())
     assert r_ui.status_code == 200
     html = r_ui.get_data(as_text=True)
     assert "Statistik – vecka" in html
@@ -275,14 +306,14 @@ def test_weekview_report_default_select_marked_specialkost_comes_from_weekview_p
     with client_admin.session_transaction() as sess:
         sess["site_id"] = site["id"]
         sess["tenant_id"] = 1
-    r0 = client_admin.get(base, headers=_h("admin"))
+    r0 = client_admin.get(base, headers=_h())
     assert r0.status_code == 200
     etag = r0.headers.get("ETag")
     assert etag
 
     r_res = client_admin.patch(
         "/api/weekview/residents",
-        headers={**_h("admin"), "If-Match": etag},
+        headers={"If-Match": etag},
         json={
             "tenant_id": 1,
             "site_id": site["id"],
@@ -294,7 +325,7 @@ def test_weekview_report_default_select_marked_specialkost_comes_from_weekview_p
     )
     assert r_res.status_code in (200, 201)
 
-    r_api = client_admin.get(f"/api/reports/weekview?site_id={site['id']}&year={year}&week={week}&department_id={dept['id']}", headers=_h("admin"))
+    r_api = client_admin.get(f"/api/reports/weekview?site_id={site['id']}&year={year}&week={week}&department_id={dept['id']}", headers=_h())
     assert r_api.status_code == 200
     data = r_api.get_json()
     dept_vm = data["departments"][0]
@@ -351,7 +382,7 @@ def test_weekview_report_cohort_bridge_uses_group_completions_and_ignores_legacy
         sess["site_id"] = site["id"]
         sess["tenant_id"] = 1
 
-    r_api = client_admin.get(f"/api/reports/weekview?site_id={site['id']}&year={year}&week={week}", headers=_h("admin"))
+    r_api = client_admin.get(f"/api/reports/weekview?site_id={site['id']}&year={year}&week={week}", headers=_h())
     assert r_api.status_code == 200
     data = r_api.get_json()
     deps = {dep["department_name"]: dep for dep in data["departments"]}
