@@ -60,14 +60,14 @@ def test_weekview_ui_renders_header_menu_and_alt2(client_admin):
         create_all()
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), {"i": site_id, "n": "Varberg"})
+            db.execute(text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0) ON CONFLICT(id) DO NOTHING"), {"i": site_id, "n": "Varberg"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',0,0) ON CONFLICT(id) DO NOTHING"), {"i": dep_id, "s": site_id, "n": "Avd 1"})
             db.commit()
             # Dishes
-            d1 = Dish(tenant_id=1, name="Köttbullar", category=None)
-            d2 = Dish(tenant_id=1, name="Fiskgratäng", category=None)
-            d3 = Dish(tenant_id=1, name="Vaniljpudding", category=None)
-            d4 = Dish(tenant_id=1, name="Soppa", category=None)
+            d1 = Dish(tenant_id=1, site_id=site_id, name="Köttbullar", category=None)
+            d2 = Dish(tenant_id=1, site_id=site_id, name="Fiskgratäng", category=None)
+            d3 = Dish(tenant_id=1, site_id=site_id, name="Vaniljpudding", category=None)
+            d4 = Dish(tenant_id=1, site_id=site_id, name="Soppa", category=None)
             db.add_all([d1, d2, d3, d4])
             db.commit()
             db.refresh(d1); db.refresh(d2); db.refresh(d3); db.refresh(d4)
@@ -96,6 +96,11 @@ def test_weekview_ui_renders_header_menu_and_alt2(client_admin):
     # Align session site context directly (selector is superuser-only)
     with client_admin.session_transaction() as sess:
         sess["site_id"] = site_id
+    assert client_admin.post(
+        "/features/set",
+        json={"name": "ff.weekview.enabled", "enabled": True},
+        headers=_h("admin"),
+    ).status_code == 200
     r0 = client_admin.get(base, headers=_h("admin"))
     assert r0.status_code == 200 and ETAG_RE.match(r0.headers.get("ETag") or "")
     etag0 = r0.headers.get("ETag")
@@ -189,11 +194,11 @@ def test_weekview_ui_no_dinner_hides_columns(client_admin):
         create_all()
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), {"i": site_id, "n": "Varberg"})
+            db.execute(text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0) ON CONFLICT(id) DO NOTHING"), {"i": site_id, "n": "Varberg"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',0,0) ON CONFLICT(id) DO NOTHING"), {"i": dep_id, "s": site_id, "n": "Avd 2"})
             db.commit()
             # Only lunch dishes (no dinner set)
-            d1 = Dish(tenant_id=1, name="Pytt i panna", category=None)
+            d1 = Dish(tenant_id=1, site_id=site_id, name="Pytt i panna", category=None)
             db.add(d1)
             db.commit(); db.refresh(d1)
             menu = app.menu_service.create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)
@@ -204,6 +209,11 @@ def test_weekview_ui_no_dinner_hides_columns(client_admin):
     # Ensure weekview materialized (align session site first)
     with client_admin.session_transaction() as sess:
         sess["site_id"] = site_id
+    assert client_admin.post(
+        "/features/set",
+        json={"name": "ff.weekview.enabled", "enabled": True},
+        headers=_h("admin"),
+    ).status_code == 200
     r0 = client_admin.get(f"/api/weekview?year={year}&week={week}&department_id={dep_id}", headers=_h("admin"))
     assert r0.status_code == 200
 

@@ -41,8 +41,8 @@ def test_planering_uses_menu_utils_titles_prefers_main_over_alt1(tmp_path, monke
             site_id = "site-canary"
             _seed_site(db, site_id)
             # Create two dishes: one for main, one for alt1
-            main_dish = Dish(tenant_id=1, name="Main Köttkorv", category=None)
-            alt1_dish = Dish(tenant_id=1, name="Alt1 Falukorv", category=None)
+            main_dish = Dish(tenant_id=1, site_id=site_id, name="Main Köttkorv", category=None)
+            alt1_dish = Dish(tenant_id=1, site_id=site_id, name="Alt1 Falukorv", category=None)
             db.add(main_dish)
             db.add(alt1_dish)
             db.commit()

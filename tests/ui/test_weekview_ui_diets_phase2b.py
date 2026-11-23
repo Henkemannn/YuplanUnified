@@ -36,7 +36,7 @@ def test_weekview_ui_renders_diets_and_mark_state(client_admin):
         db = get_session()
         try:
             db.execute(
-                text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"),
+                text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0) ON CONFLICT(id) DO NOTHING"),
                 {"i": site_id, "n": "Varberg"},
             )
             db.execute(
@@ -49,7 +49,7 @@ def test_weekview_ui_renders_diets_and_mark_state(client_admin):
             db.commit()
 
             # Add a dinner dish somewhere in the week to show dinner columns/rows
-            d_dinner = Dish(tenant_id=1, name="Soppa", category=None)
+            d_dinner = Dish(tenant_id=1, site_id=site_id, name="Soppa", category=None)
             db.add(d_dinner)
             db.commit(); db.refresh(d_dinner)
             menu = app.menu_service.create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)
@@ -76,6 +76,11 @@ def test_weekview_ui_renders_diets_and_mark_state(client_admin):
         data={"site_id": site_id, "next": "/"},
         headers=_h("admin"),
     )
+    assert client_admin.post(
+        "/features/set",
+        json={"name": "ff.weekview.enabled", "enabled": True},
+        headers=_h("admin"),
+    ).status_code == 200
     r0 = client_admin.get(base, headers=_h("admin"))
     assert r0.status_code == 200
     etag = r0.headers.get("ETag")

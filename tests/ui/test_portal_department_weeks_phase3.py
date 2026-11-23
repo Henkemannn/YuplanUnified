@@ -75,7 +75,7 @@ def test_week_page_has_link_to_weeks_overview(app_session):
     # Create a dish and set alt1 for Monday
     db = get_new_session()
     try:
-        d = Dish(tenant_id=1, name="Test Lunch")
+        d = Dish(tenant_id=1, site_id=site_id, name="Test Lunch")
         db.add(d)
         db.commit()
         db.refresh(d)

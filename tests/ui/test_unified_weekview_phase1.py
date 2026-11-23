@@ -57,11 +57,11 @@ def test_weekview_happy_path_with_menu_data(client_admin):
             db.commit()
             
             # Create dishes
-            d1 = Dish(tenant_id=1, name="Köttbullar med potatismos", category=None)
-            d2 = Dish(tenant_id=1, name="Fiskgratäng", category=None)
-            d3 = Dish(tenant_id=1, name="Chokladpudding", category=None)
-            d4 = Dish(tenant_id=1, name="Soppa", category=None)
-            d5 = Dish(tenant_id=1, name="Lasagne", category=None)
+            d1 = Dish(tenant_id=1, site_id=site_id, name="Köttbullar med potatismos", category=None)
+            d2 = Dish(tenant_id=1, site_id=site_id, name="Fiskgratäng", category=None)
+            d3 = Dish(tenant_id=1, site_id=site_id, name="Chokladpudding", category=None)
+            d4 = Dish(tenant_id=1, site_id=site_id, name="Soppa", category=None)
+            d5 = Dish(tenant_id=1, site_id=site_id, name="Lasagne", category=None)
             db.add_all([d1, d2, d3, d4, d5])
             db.commit()
             for d in [d1, d2, d3, d4, d5]:
@@ -243,8 +243,8 @@ def test_weekview_alt2_highlighting_visible(client_admin):
                       {"i": dep_id, "s": site_id, "n": "Alt2 Avd"})
             db.commit()
             
-            d1 = Dish(tenant_id=1, name="Normal rätt", category=None)
-            d2 = Dish(tenant_id=1, name="Alternativ rätt", category=None)
+            d1 = Dish(tenant_id=1, site_id=site_id, name="Normal rätt", category=None)
+            d2 = Dish(tenant_id=1, site_id=site_id, name="Alternativ rätt", category=None)
             db.add_all([d1, d2])
             db.commit()
             db.refresh(d1); db.refresh(d2)
@@ -393,7 +393,7 @@ def test_weekview_dinner_columns_hidden_when_no_dinner(client_admin):
             db.commit()
             
             # Only add lunch dishes (no dinner)
-            d1 = Dish(tenant_id=1, name="Pannkakor", category=None)
+            d1 = Dish(tenant_id=1, site_id=site_id, name="Pannkakor", category=None)
             db.add(d1)
             db.commit(); db.refresh(d1)
             

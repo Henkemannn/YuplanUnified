@@ -34,7 +34,7 @@ def _seed_menu_for_day(app, site_id, year, week, dep_ids):
     from core.db import get_new_session
     db = get_new_session()
     try:
-        d1 = Dish(tenant_id=1, name="Lunch Alt1")
+        d1 = Dish(tenant_id=1, site_id=site_id, name="Lunch Alt1")
         db.add(d1)
         db.commit()
         db.refresh(d1)

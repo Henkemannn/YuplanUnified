@@ -20,7 +20,7 @@ def _seed_menu(app, year, week):
             db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0)"), {"i": sid, "n": "Site"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',10,0)"), {"i": did, "s": sid, "n": "Avd"})
             db.commit()
-            d1 = Dish(tenant_id=1, name="Köttbullar"); d2 = Dish(tenant_id=1, name="Fisk"); d3 = Dish(tenant_id=1, name="Glass")
+            d1 = Dish(tenant_id=1, site_id=sid, name="Köttbullar"); d2 = Dish(tenant_id=1, site_id=sid, name="Fisk"); d3 = Dish(tenant_id=1, site_id=sid, name="Glass")
             db.add_all([d1, d2, d3]); db.commit(); db.refresh(d1); db.refresh(d2); db.refresh(d3)
             menu = app.menu_service.create_or_get_menu(tenant_id=1, site_id=sid, week=week, year=year)
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt1", dish_id=d1.id)
