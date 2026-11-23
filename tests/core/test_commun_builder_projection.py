@@ -113,7 +113,7 @@ def _create_legacy_menu_rows(tenant_id: int, site_id: str, year: int, week: int,
     try:
         dish_ids: dict[str, int] = {}
         for dish_name in sorted({dish_name for _, _, _, dish_name in rows}):
-            dish = Dish(tenant_id=tenant_id, name=dish_name)
+            dish = Dish(tenant_id=tenant_id, site_id=site_id, name=dish_name)
             db.add(dish)
             db.commit()
             db.refresh(dish)
