@@ -3,10 +3,14 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 import re
+import pytest
 
 from core.admin_repo import DepartmentServiceAddonsRepo, DepartmentsRepo, ServiceAddonsRepo, SitesRepo
 from core.db import get_session
 from sqlalchemy import text
+from planera_product2_test_support import authenticate_product2_client
+
+
 from core.planera_product2_page3_vm import (
     Product2Page3CompletionTargetVM,
     Product2Page3DepartmentQuantityVM,
@@ -29,6 +33,11 @@ from core.planera_product2_page3_vm import (
 
 def _tag_has_hidden(html: str, marker: str) -> bool:
     return bool(re.search(rf"{re.escape(marker)}[^>]*hidden", html))
+
+
+def _authenticated_page3_get(client, site_id: str, path: str, *, role: str = "admin"):
+    authenticate_product2_client(client, tenant_id=1, site_id=site_id, role=role)
+    return client.get(path, headers={})
 
 
 def _page3_vm() -> Product2Page3VM:
@@ -418,9 +427,10 @@ def test_page3_route_renders_production_underlag(app_session, monkeypatch):
     site, _ = SitesRepo().create_site(name="Page3 Site", tenant_id=1)
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: _page3_vm())
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200
@@ -470,9 +480,10 @@ def test_page3_route_renders_completion_button_for_ready_targets(app_session, mo
     )
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: vm)
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200
@@ -487,9 +498,10 @@ def test_page3_route_renders_completion_button_for_ready_targets(app_session, mo
     special_panel_start = html.index('data-page3-panel="special"')
     assert "hidden" in html[special_panel_start:html.index(">", special_panel_start)]
 
-    normal_rv = client.get(
+    normal_rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=normal",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
     normal_html = normal_rv.get_data(as_text=True)
     normal_panel_start = normal_html.index('data-page3-panel="special"')
@@ -512,9 +524,10 @@ def test_page3_route_renders_partial_completion_button_for_unassigned_only(app_s
     )
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: vm)
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200
@@ -546,9 +559,10 @@ def test_page3_route_labels_dessert_and_hides_completion_when_ready(app_session,
     )
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: vm)
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&option_id=dessert-row",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200
@@ -566,9 +580,10 @@ def test_page3_route_hides_completion_button_when_no_completion_targets(app_sess
     vm = replace(_page3_vm_hierarchy(), completion_targets=())
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: vm)
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200
@@ -585,9 +600,10 @@ def test_page3_ready_status_is_compact_and_rendered_once(app_session, monkeypatc
     site, _ = SitesRepo().create_site(name="Page3 Ready Status Site", tenant_id=1)
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: _page3_vm_hierarchy())
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200
@@ -617,17 +633,20 @@ def test_page3_route_supports_canonical_view_params(app_session, monkeypatch):
 
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", _stub_page3_vm)
 
-    normal = client.get(
+    normal = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=normal",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
-    special = client.get(
+    special = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=special&special_view=department",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
-    addons = client.get(
+    addons = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=addons",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert normal.status_code == 200
@@ -662,9 +681,10 @@ def test_page3_route_preserves_explicit_option_id(app_session, monkeypatch):
 
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", _stub_page3_vm)
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=dinner&option_id=opt-dinner",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200
@@ -735,9 +755,10 @@ def test_page3_route_renders_primary_bucket_aggregation_in_production_view(app_s
     )
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: vm)
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=special&special_view=production",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200
@@ -757,13 +778,15 @@ def test_page3_route_renders_xor_special_views_for_production_and_department(app
     site, _ = SitesRepo().create_site(name="Page3 Special XOR Site", tenant_id=1)
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **kwargs: _page3_vm_hierarchy(view="special", special_view=str(kwargs.get("special_view") or "production")))
 
-    production = client.get(
+    production = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=special&special_view=production",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
-    department = client.get(
+    department = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=special&special_view=department",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert production.status_code == 200
@@ -834,9 +857,10 @@ def test_page3_special_view_renders_exact_combination_without_redundant_pills(ap
     )
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: custom_vm)
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=special&special_view=production",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200
@@ -868,9 +892,10 @@ def test_page3_print_title_and_preliminary_warning_follow_active_special_view(ap
         ),
     )
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=special&special_view=department",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200
@@ -888,9 +913,10 @@ def test_page3_route_hides_inactive_panels_for_special_department_view(app_sessi
     site, _ = SitesRepo().create_site(name="Page3 All Panels Site", tenant_id=1)
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: _page3_vm_hierarchy(view="special", special_view="department"))
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=special&special_view=department",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200
@@ -921,9 +947,10 @@ def test_page3_route_renders_navigation_and_history_hooks(app_session, monkeypat
     site, _ = SitesRepo().create_site(name="Page3 Sticky Site", tenant_id=1)
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: _page3_vm_hierarchy(view="overview"))
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=overview",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200
@@ -941,9 +968,10 @@ def test_page3_route_renders_compact_normal_headers_and_totals(app_session, monk
     site, _ = SitesRepo().create_site(name="Page3 Normal Matrix Site", tenant_id=1)
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: _page3_vm_hierarchy(view="normal"))
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=normal",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200
@@ -970,9 +998,10 @@ def test_page3_normal_selector_defaults_to_target_option(app_session, monkeypatc
     vm = replace(_page3_vm_hierarchy(view="normal"), target_option_id="option-2")
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: vm)
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=normal&option_id=option-2",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200
@@ -994,9 +1023,10 @@ def test_page3_targeted_non_lunch_does_not_offer_full_meal_link(app_session, mon
     vm = replace(_page3_vm_hierarchy(view="normal"), meal="dinner", target_option_id="option-2")
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: vm)
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=dinner&view=normal&option_id=option-2",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200
@@ -1014,9 +1044,10 @@ def test_page3_targeted_lunch_overview_offers_full_lunch_link(app_session, monke
     vm = replace(_page3_vm_hierarchy(view="overview"), target_option_id="option-2")
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: vm)
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=overview&option_id=option-2",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200
@@ -1056,9 +1087,10 @@ def test_page3_route_renders_incomplete_blocker_details(app_session, monkeypatch
         lambda **_: _page3_vm_hierarchy(ready=False, blocker_messages=("Produktion saknar beslut",)),
     )
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200
@@ -1128,9 +1160,10 @@ def test_page3_packlist_renders_serveringstillägg_for_existing_and_addon_only_d
         ),
     )
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=special&special_view=department",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200
@@ -1158,9 +1191,10 @@ def test_page3_route_hides_empty_special_departments(app_session, monkeypatch):
         lambda **_: _page3_vm_hierarchy(view="special", special_view="department"),
     )
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=special&special_view=department",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200
@@ -1189,9 +1223,10 @@ def test_page3_route_keeps_special_hierarchy_with_multi_dish_cohort(app_session,
         lambda **_: _page3_vm_hierarchy(view="special", special_view="production"),
     )
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=special&special_view=production",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200
@@ -1225,17 +1260,19 @@ def test_page3_route_allows_kitchen_role_and_fails_cross_tenant(app_session, mon
     site_2, _ = SitesRepo().create_site(name="Page3 Security Site B", tenant_id=2)
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: _page3_vm())
 
-    allowed = client.get(
+    allowed = _authenticated_page3_get(
+        client,
+        site_1["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site_1['id']}&date=2026-09-08&meal=lunch",
-        headers={"X-User-Role": "kitchen", "X-Tenant-Id": "1"},
+        role="kitchen",
     )
     blocked = client.get(
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site_2['id']}&date=2026-09-08&meal=lunch",
-        headers={"X-User-Role": "kitchen", "X-Tenant-Id": "1"},
+        headers={},
     )
 
     assert allowed.status_code == 200
-    assert blocked.status_code == 404
+    assert blocked.status_code == 403
 
 
 def test_page3_route_rejects_invalid_parameters_without_leaking_data(app_session, monkeypatch):
@@ -1245,10 +1282,11 @@ def test_page3_route_rejects_invalid_parameters_without_leaking_data(app_session
 
     site, _ = SitesRepo().create_site(name="Page3 Invalid Params Site", tenant_id=1)
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: _page3_vm())
+    authenticate_product2_client(client, tenant_id=1, site_id=site["id"], role="admin")
 
-    bad_site = client.get("/ui/kitchen/planering/day/production?ui=product2&date=2026-09-08&meal=lunch", headers={"X-User-Role": "admin", "X-Tenant-Id": "1"})
-    bad_date = client.get(f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&meal=lunch", headers={"X-User-Role": "admin", "X-Tenant-Id": "1"})
-    bad_meal = client.get(f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=dinner", headers={"X-User-Role": "admin", "X-Tenant-Id": "1"})
+    bad_site = client.get("/ui/kitchen/planering/day/production?ui=product2&date=2026-09-08&meal=lunch", headers={})
+    bad_date = client.get(f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&meal=lunch", headers={})
+    bad_meal = client.get(f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=dinner", headers={})
 
     assert bad_site.status_code == 404
     assert bad_date.status_code == 404
@@ -1275,9 +1313,10 @@ def test_page3_route_hides_service_addons_from_output(app_session, monkeypatch):
     )
     monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: _page3_vm())
 
-    rv = client.get(
+    rv = _authenticated_page3_get(
+        client,
+        site["id"],
         f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch",
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
     )
 
     assert rv.status_code == 200

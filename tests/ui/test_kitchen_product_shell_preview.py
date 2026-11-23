@@ -1,5 +1,6 @@
 import json
 import re
+import uuid
 from datetime import date as _date, timedelta
 from html import unescape
 from pathlib import Path
@@ -7,6 +8,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 from flask import current_app
+from planera_product2_test_support import authenticate_product2_client
 from core.builder import BuilderFlow
 from core.builder.library_scope import ObjectScope
 from core.builder_menu_context_flow import BuilderMenuContextFlow
@@ -23,6 +25,7 @@ from core.admin_repo import SitesRepo
 from core.commun_builder_linkage import CommunBuilderMenuLinkService
 from core.db import create_all, get_session
 from core.menu import InMemoryCompositionAliasRepository, MenuService
+
 from core.menu_service import MenuServiceDB
 from core.ui_blueprint import (
     _apply_builder_reader_weekview_overview,
@@ -320,23 +323,25 @@ def _seed_product2_legacy_only_menu(
     week: int,
 ) -> int:
     with app.app_context():
+        dish_alt1_id = uuid.uuid4().int % 1_000_000_000 + 1
+        dish_alt2_id = uuid.uuid4().int % 1_000_000_000 + 1
         db = get_session()
         try:
             db.execute(
-                text("INSERT OR IGNORE INTO dishes(id, tenant_id, name, category) VALUES(:id, :tid, :name, :category)"),
-                {"id": 99001, "tid": 1, "name": "Legacy alt1", "category": "test"},
+                text("INSERT INTO dishes(id, tenant_id, site_id, name, category) VALUES(:id, :tid, :site_id, :name, :category)"),
+                {"id": dish_alt1_id, "tid": 1, "site_id": site_id, "name": "Legacy alt1", "category": "test"},
             )
             db.execute(
-                text("INSERT OR IGNORE INTO dishes(id, tenant_id, name, category) VALUES(:id, :tid, :name, :category)"),
-                {"id": 99002, "tid": 1, "name": "Legacy alt2", "category": "test"},
+                text("INSERT INTO dishes(id, tenant_id, site_id, name, category) VALUES(:id, :tid, :site_id, :name, :category)"),
+                {"id": dish_alt2_id, "tid": 1, "site_id": site_id, "name": "Legacy alt2", "category": "test"},
             )
             db.commit()
         finally:
             db.close()
         menu = MenuServiceDB().create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)
         legacy_menu_service = MenuServiceDB()
-        legacy_menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="tuesday", meal="lunch", variant_type="alt1", dish_id=99001)
-        legacy_menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="tuesday", meal="lunch", variant_type="alt2", dish_id=99002)
+        legacy_menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="tuesday", meal="lunch", variant_type="alt1", dish_id=dish_alt1_id)
+        legacy_menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="tuesday", meal="lunch", variant_type="alt2", dish_id=dish_alt2_id)
         return menu.id
 
 
@@ -356,9 +361,10 @@ def _seed_published_text_menu(app, *, site_id: str, year: int, week: int, tenant
 
 
 def _product2_html(client_admin, site_id: str, *, headers: dict[str, str] | None = None, query: str = "") -> str:
+    authenticate_product2_client(client_admin, tenant_id=1, site_id=site_id, role="admin")
     rv = client_admin.get(
         f"/ui/kitchen/planering?ui=product2&site_id={site_id}{query}",
-        headers=headers or _headers(),
+        headers={},
     )
     assert rv.status_code == 200
     return unescape(rv.get_data(as_text=True))
@@ -1104,11 +1110,13 @@ def test_kitchen_planering_product2_cross_tenant_site_fails_closed(client_admin)
 
     try:
         fresh_client = app.test_client()
+        own_site_id = _seed_site(app, site_name="Own Tenant Site", tenant_id=1)
+        authenticate_product2_client(fresh_client, tenant_id=1, site_id=own_site_id, role="admin")
         rv = fresh_client.get(
             f"/ui/kitchen/planering?ui=product2&site_id={site_id}",
-            headers=_headers(tenant_id="1"),
+            headers={},
         )
-        assert rv.status_code == 404
+        assert rv.status_code == 403
     finally:
         with app.app_context():
             db = get_session()

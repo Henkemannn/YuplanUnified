@@ -1188,6 +1188,7 @@ def kitchen_planering_product2_day():
     except Exception:
         return abort(404)
 
+    site_id, authorized_site_name = _authorize_product2_site(site_id, tenant_id)
     db = get_session()
     try:
         row = db.execute(text("SELECT tenant_id, name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
@@ -1234,7 +1235,7 @@ def kitchen_planering_product2_day():
 
     vm = _build_product2_page2_vm(
         context=context,
-        site_name=str(row[1] or "").strip(),
+        site_name=authorized_site_name or str(row[1] or "").strip(),
         service_date=service_date,
     )
     return render_template("ui/kitchen_product_planera_page2.html", vm=vm)
@@ -1272,6 +1273,7 @@ def kitchen_planering_product2_day_production():
     except Exception:
         return abort(404)
 
+    site_id, _authorized_site_name = _authorize_product2_site(site_id, tenant_id)
     db = get_session()
     try:
         row = db.execute(text("SELECT tenant_id FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
@@ -1671,6 +1673,30 @@ def _authorize_report_scope(site_id: str | None, department_id: str | None = Non
         return str(site_row[0]), str(site_row[1])
     finally:
         db.close()
+
+
+def _authorize_product2_site(
+    site_id: str | None,
+    tenant_id: int,
+    *,
+    allow_active_default: bool = False,
+) -> tuple[str, str]:
+    """Authorize a Product 2 site before loading page data."""
+    requested_site_id = str(site_id or "").strip()
+    active_site_id = str(session.get("site_id") or "").strip()
+    if not requested_site_id and allow_active_default:
+        requested_site_id = active_site_id
+    if not requested_site_id:
+        abort(403)
+
+    role = str(session.get("role") or "").strip().lower()
+    if role != "superuser" and (not active_site_id or requested_site_id != active_site_id):
+        abort(403)
+
+    authorized_site_id, site_name = _authorize_report_scope(requested_site_id)
+    if str(session.get("tenant_id") or "").strip() != str(tenant_id):
+        abort(403)
+    return authorized_site_id, site_name
 COOK_ALLOWED_ROLES = ("cook", "admin", "superuser", "unit_portal")
 ACCOUNT_ALLOWED_ROLES = ("admin", "superuser", "kitchen", "cook", "unit_portal")
 
@@ -4338,13 +4364,30 @@ def kitchen_planering_v1():
     from .context import get_active_context as _get_ctx
     ctx = _get_ctx()
     site_id = q_site_id or (ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None))
+    is_product2 = (request.args.get("ui") or "").strip().lower() == "product2"
+    if not site_id and is_product2:
+        current_tenant_id = ctx.get("tenant_id") if ctx.get("tenant_id") is not None else session.get("tenant_id")
+        try:
+            current_tenant_id = int(current_tenant_id)
+        except Exception:
+            abort(403)
+        site_id, _authorized_site_name = _authorize_product2_site(
+            None,
+            current_tenant_id,
+            allow_active_default=True,
+        )
     if not site_id:
         return redirect(url_for("ui.select_site", next="/ui/kitchen/planering"))
 
-    if (request.args.get("ui") or "").strip().lower() == "product2":
+    if is_product2:
         current_tenant_id = ctx.get("tenant_id") if ctx.get("tenant_id") is not None else session.get("tenant_id")
         if current_tenant_id is None:
             return abort(404)
+        site_id, _authorized_site_name = _authorize_product2_site(
+            site_id,
+            int(current_tenant_id),
+            allow_active_default=True,
+        )
         db = get_session()
         try:
             row = db.execute(text("SELECT tenant_id, name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()

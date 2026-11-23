@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 
 import pytest
+from planera_product2_test_support import authenticate_product2_client
 from flask import current_app
 from sqlalchemy import text
 
@@ -86,6 +87,7 @@ def _page2_ui_hygiene(app_session):
         try:
             from core.db import get_session
 
+
             db = get_session()
             for site_id in sorted(state.site_ids):
                 db.execute(text("DELETE FROM commun_builder_publication_pins WHERE site_id = :site_id"), {"site_id": site_id})
@@ -123,6 +125,11 @@ def _state() -> _Page2UiState:
 
 def _headers(role: str = "admin") -> dict[str, str]:
     return {"X-User-Role": role, "X-Tenant-Id": "1"}
+
+
+def _authenticated_page2_get(client, site_id: str, service_date, *, role: str = "admin", path: str | None = None):
+    authenticate_product2_client(client, tenant_id=1, site_id=site_id, role=role)
+    return client.get(path or _page2_path(site_id, service_date), headers={})
 
 
 def _build_builder_menu_context_flow() -> tuple[
@@ -538,10 +545,10 @@ def _seed_explicit_target_page2_data(
 
 def test_route_requires_kitchen_roles(client_admin, app_session):
     service_date, site_id, *_rest = _seed_common_page2_data(app_session, site_name="Role Site")
-    rv = client_admin.get(_page2_path(site_id, service_date), headers=_headers("viewer"))
+    rv = _authenticated_page2_get(client_admin, site_id, service_date, role="viewer")
     assert rv.status_code == 403
 
-    rv_ok = client_admin.get(_page2_path(site_id, service_date), headers=_headers("admin"))
+    rv_ok = _authenticated_page2_get(client_admin, site_id, service_date)
     assert rv_ok.status_code == 200
 
 
@@ -560,9 +567,11 @@ def test_cross_tenant_site_fails_closed(app_session):
     client = app_session.test_client()
     with client.session_transaction() as sess:
         sess["tenant_id"] = 1
+    own_site_id = _seed_site(app_session, site_name="Own Tenant")
     site_id = _seed_site(app_session, site_name="Cross Tenant", tenant_id=2)
-    rv = client.get(_page2_path(site_id, date(2026, 9, 8)), headers=_headers())
-    assert rv.status_code == 404
+    authenticate_product2_client(client, tenant_id=1, site_id=own_site_id, role="admin")
+    rv = client.get(_page2_path(site_id, date(2026, 9, 8)), headers={})
+    assert rv.status_code == 403
 
 
 def test_invalid_date_and_unsupported_meal_fail_closed(app_session):
@@ -570,8 +579,9 @@ def test_invalid_date_and_unsupported_meal_fail_closed(app_session):
     with client.session_transaction() as sess:
         sess["tenant_id"] = 1
     service_date, site_id, *_rest = _seed_common_page2_data(app_session, site_name="Validation Site")
-    bad_date = client.get(f"/ui/kitchen/planering/day?ui=product2&site_id={site_id}&date=not-a-date&meal=lunch", headers=_headers())
-    bad_meal = client.get(_page2_path(site_id, service_date, meal="dinner"), headers=_headers())
+    authenticate_product2_client(client, tenant_id=1, site_id=site_id, role="admin")
+    bad_date = client.get(f"/ui/kitchen/planering/day?ui=product2&site_id={site_id}&date=not-a-date&meal=lunch", headers={})
+    bad_meal = client.get(_page2_path(site_id, service_date, meal="dinner"), headers={})
     assert bad_date.status_code == 404
     assert bad_meal.status_code == 404
 
@@ -596,9 +606,11 @@ def test_explicit_target_route_renders_dinner_target(app_session):
         reviewed_by_user_id=1,
     )
 
-    rv = client.get(
-        _page2_path(site_id, service_date, meal="dinner") + f"&option_id={row_ids['main']}",
-        headers=_headers(),
+    rv = _authenticated_page2_get(
+        client,
+        site_id,
+        service_date,
+        path=_page2_path(site_id, service_date, meal="dinner") + f"&option_id={row_ids['main']}",
     )
 
     assert rv.status_code == 200
@@ -617,9 +629,11 @@ def test_explicit_target_route_hides_review_controls_without_groups(app_session)
         include_groups=False,
     )
 
-    rv = client.get(
-        _page2_path(site_id, service_date, meal="lunch") + f"&option_id={row_ids['dessert']}",
-        headers=_headers(),
+    rv = _authenticated_page2_get(
+        client,
+        site_id,
+        service_date,
+        path=_page2_path(site_id, service_date, meal="lunch") + f"&option_id={row_ids['dessert']}",
     )
 
     assert rv.status_code == 200
@@ -659,7 +673,7 @@ def test_two_options_render_titles_and_destination_labels(app_session):
     assert groups[dept_b["id"]].label == "Timbal"
     assert groups[dept_c["id"]].label == "Äggfri"
 
-    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    rv = _authenticated_page2_get(client, site_id, service_date)
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
     assert 'data-testid="app-shell"' in html
@@ -752,7 +766,7 @@ def test_composite_requirement_identity_renders_primary_first(app_session):
     assert len(next(group for group in review_groups if group["display_label"] == "Timbal + Glutenfri")["members"]) == 2
     assert len(next(group for group in review_groups if group["display_label"] == "Grovpaté + Laktosfri")["members"]) == 1
     assert len(next(group for group in review_groups if group["display_label"] == "Vegetarisk + Äggfri")["members"]) == 1
-    rv = client.get(_page2_path(data["site_id"], data["service_date"]), headers=_headers())
+    rv = _authenticated_page2_get(client, data["site_id"], data["service_date"])
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
 
@@ -779,7 +793,7 @@ def test_reversed_member_order_still_renders_primary_first(app_session):
     with client.session_transaction() as sess:
         sess["tenant_id"] = 1
     data = _seed_page2_primary_id_contract_data(app_session, site_name="Primary Order Site")
-    rv = client.get(_page2_path(data["site_id"], data["service_date"]), headers=_headers())
+    rv = _authenticated_page2_get(client, data["site_id"], data["service_date"])
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
 
@@ -861,7 +875,7 @@ def test_three_options_render_collection_shape(app_session):
             ("tuesday", "lunch_alt2", "Kokt torsk", 20),
         ],
     )
-    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    rv = _authenticated_page2_get(client, site_id, service_date)
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
     assert "Baguette" in html
@@ -888,7 +902,7 @@ def test_missing_choice_renders_neutral_label(app_session):
     destinations = {destination.destination_id: destination for destination in context.destinations}
     assert all(destination.selected_option_id is None for destination in destinations.values())
     assert all(destination.choice_source == "none" for destination in destinations.values())
-    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    rv = _authenticated_page2_get(client, site_id, service_date)
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
     assert html.count("data-page2-option-tab") == 2
@@ -913,7 +927,7 @@ def test_no_publication_renders_empty_state_and_not_work_area(app_session):
     with client.session_transaction() as sess:
         sess["tenant_id"] = 1
     service_date, site_id, *_rest = _seed_common_page2_data(app_session, site_name="No Publication Site", with_publication=False)
-    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    rv = _authenticated_page2_get(client, site_id, service_date)
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
     assert "Ingen publicerad lunchmeny" in html
@@ -928,7 +942,7 @@ def test_no_review_or_checkbox_text_exists(app_session):
     with client.session_transaction() as sess:
         sess["tenant_id"] = 1
     service_date, site_id, *_rest, row_ids = _seed_common_page2_data(app_session, site_name="No Review Site", include_third_destination=True)
-    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    rv = _authenticated_page2_get(client, site_id, service_date)
     html = rv.get_data(as_text=True)
     assert "Planerad" not in html
     assert "Ej planerad" not in html
@@ -962,7 +976,7 @@ def test_unreviewed_option_renders_review_controls(app_session):
         sess["role"] = "admin"
     service_date, site_id, dept_a, dept_b, dept_c, group_a, group_b, group_c, row_ids = _seed_common_page2_data(app_session, site_name="Review UI Site", include_third_destination=True)
     _seed_page2_choices(site_id, service_date, dept_a, dept_b)
-    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    rv = _authenticated_page2_get(client, site_id, service_date)
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
     assert "Vilka avvikelser kräver anpassning?" in html
@@ -996,7 +1010,7 @@ def test_reviewed_no_deviations_renders_current_state(app_session):
         decisions=[{"destination_id": dept_a["id"], "requirement_group_id": group_a["id"], "decision": NO_ADAPTATION_REQUIRED}],
         reviewed_by_user_id=1,
     )
-    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    rv = _authenticated_page2_get(client, site_id, service_date)
     html = rv.get_data(as_text=True)
     assert rv.status_code == 200
     assert "Granskad" in html
@@ -1009,9 +1023,11 @@ def test_reviewed_no_deviations_renders_current_state(app_session):
     assert 'data-page2-review-checkbox' in html
     assert 'checked' not in html or html.count('checked') >= 0
 
-    targeted = client.get(
-        _page2_path(site_id, service_date) + f"&option_id={row_ids['alt1']}",
-        headers=_headers(),
+    targeted = _authenticated_page2_get(
+        client,
+        site_id,
+        service_date,
+        path=_page2_path(site_id, service_date) + f"&option_id={row_ids['alt1']}",
     )
     targeted_html = targeted.get_data(as_text=True)
     assert targeted.status_code == 200
@@ -1041,7 +1057,7 @@ def test_reviewed_with_deviations_renders_checked_groups(app_session):
         decisions=[{"destination_id": dept_b["id"], "requirement_group_id": group_b["id"], "decision": ADAPTATION_REQUIRED}],
         reviewed_by_user_id=1,
     )
-    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    rv = _authenticated_page2_get(client, site_id, service_date)
     html = rv.get_data(as_text=True)
     assert rv.status_code == 200
     assert "Granskad" in html
@@ -1076,7 +1092,7 @@ def test_stale_review_shows_rereview_message(app_session):
         reviewed_by_user_id=1,
     )
     DepartmentRequirementGroupServiceOverridesRepo().set_override(group_a["id"], service_date, "lunch", 0)
-    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    rv = _authenticated_page2_get(client, site_id, service_date)
     html = rv.get_data(as_text=True)
     assert rv.status_code == 200
     assert "Underlaget har ändrats – granska igen." in html
@@ -1093,7 +1109,7 @@ def test_zero_requirement_option_still_has_completion_cta(app_session):
     _seed_page2_choices(site_id, service_date, dept_a, dept_b)
     DepartmentRequirementGroupServiceOverridesRepo().set_override(group_a["id"], service_date, "lunch", 0)
     DepartmentRequirementGroupServiceOverridesRepo().set_override(group_b["id"], service_date, "lunch", 0)
-    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    rv = _authenticated_page2_get(client, site_id, service_date)
     html = rv.get_data(as_text=True)
     assert rv.status_code == 200
     assert "Spara och visa produktionsunderlag →" in html
@@ -1111,7 +1127,7 @@ def test_unassigned_destination_remains_outside_review_groups(app_session):
         sess["role"] = "admin"
     service_date, site_id, dept_a, dept_b, dept_c, group_a, group_b, group_c, row_ids = _seed_common_page2_data(app_session, site_name="Unassigned UI Site", include_third_destination=True)
     _seed_page2_choices(site_id, service_date, dept_a, dept_b)
-    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    rv = _authenticated_page2_get(client, site_id, service_date)
     html = rv.get_data(as_text=True)
     assert rv.status_code == 200
     assert dept_c["name"] in html
@@ -1126,7 +1142,7 @@ def test_option_mapping_remains_intact(app_session):
         sess["role"] = "admin"
     service_date, site_id, dept_a, dept_b, dept_c, group_a, group_b, group_c, row_ids = _seed_common_page2_data(app_session, site_name="Mapping UI Site", include_third_destination=True)
     _seed_page2_choices(site_id, service_date, dept_a, dept_b)
-    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    rv = _authenticated_page2_get(client, site_id, service_date)
     html = rv.get_data(as_text=True)
     assert rv.status_code == 200
     assert row_ids["alt1"] or row_ids["alt2"]
@@ -1139,7 +1155,7 @@ def test_page2_uses_meal_scoped_route_identity(app_session):
     with client.session_transaction() as sess:
         sess["tenant_id"] = 1
     service_date, site_id, *_rest, row_ids = _seed_common_page2_data(app_session, site_name="Route Identity Site", include_third_destination=True)
-    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    rv = _authenticated_page2_get(client, site_id, service_date)
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
     assert 'data-testid="app-shell"' in html
@@ -1160,7 +1176,12 @@ def test_page2_accepts_explicit_option_id_without_changing_lunch_behavior(app_se
         include_third_destination=True,
     )
     _seed_page2_choices(site_id, service_date, dept_a, dept_b)
-    rv = client.get(_page2_path(site_id, service_date) + "&option_id=" + row_ids["alt1"], headers=_headers())
+    rv = _authenticated_page2_get(
+        client,
+        site_id,
+        service_date,
+        path=_page2_path(site_id, service_date) + "&option_id=" + row_ids["alt1"],
+    )
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
     assert 'data-testid="app-shell"' in html
