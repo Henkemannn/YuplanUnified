@@ -441,17 +441,39 @@ def test_repo_create_defaults_to_legacy_identity_and_update_preserves_identity(a
         assert updated["semantics"] == "legacy_bucket"
 
 
-def test_explicit_atomic_repo_create_uses_opaque_atomic_identity(app_session) -> None:
+def test_explicit_atomic_repo_create_requires_site(app_session) -> None:
     from core.admin_repo import DietTypesRepo
 
     with app_session.app_context():
         repo = DietTypesRepo()
-        diet_id = repo.create(site_id=None, name="Atomic typ", default_select=False, semantics="atomic")
-        created = repo.get_by_id(diet_id)
+        with pytest.raises(ValueError, match="site_id"):
+            repo.create(site_id=None, name="Atomic typ", default_select=False, semantics="atomic")
 
-        assert created is not None
-        assert created["semantics"] == "atomic"
-        assert str(created["requirement_key"]).startswith("req_")
+
+def test_legacy_repo_create_preserves_explicit_tenant_without_site(app_session) -> None:
+    from core.admin_repo import DietTypesRepo
+    from core.db import get_session
+
+    with app_session.app_context():
+        diet_id = DietTypesRepo().create(
+            site_id=None,
+            tenant_id=2,
+            name=f"Legacy tenant two {uuid.uuid4()}",
+            default_select=False,
+        )
+
+        db = get_session()
+        try:
+            row = db.execute(
+                text("SELECT tenant_id, site_id FROM dietary_types WHERE id=:id"),
+                {"id": diet_id},
+            ).fetchone()
+        finally:
+            db.close()
+
+        assert row is not None
+        assert int(row[0]) == 2
+        assert row[1] is None
 
 
 def test_rename_preserves_requirement_key(app_session) -> None:
@@ -561,6 +583,7 @@ def test_upsert_atomic_repairs_legacy_row_and_is_idempotent(app_session) -> None
 
 def test_upsert_atomic_creates_new_atomic_row(app_session) -> None:
     from core.admin_repo import DietTypesRepo, SitesRepo
+    from core.db import get_session
 
     with app_session.app_context():
         site, _ = SitesRepo().create_site(f"Atomic create site {uuid.uuid4()}")
@@ -574,6 +597,76 @@ def test_upsert_atomic_creates_new_atomic_row(app_session) -> None:
         assert str(created["requirement_key"]).startswith("req_")
         assert created["diet_family"] == "Allergi / Exkludering"
         assert created["default_select"] is False
+
+        db = get_session()
+        try:
+            tenant_id = db.execute(
+                text("SELECT tenant_id FROM dietary_types WHERE id=:id"),
+                {"id": new_id},
+            ).scalar_one()
+        finally:
+            db.close()
+        assert int(tenant_id) == 1
+
+
+def test_atomic_upsert_promotes_null_tenant_and_rejects_conflicting_tenant(app_session) -> None:
+    from core.admin_repo import DietTypesRepo, SitesRepo
+    from core.db import get_session
+
+    with app_session.app_context():
+        site, _ = SitesRepo().create_site(f"Atomic tenant integrity site {uuid.uuid4()}")
+        db = get_session()
+        try:
+            db.execute(
+                text(
+                    "INSERT INTO dietary_types "
+                    "(tenant_id, site_id, name, diet_family, requirement_key, semantics, default_select) "
+                    "VALUES (NULL, :site_id, 'Legacy null tenant', 'Övrigt', 'legacy-null-tenant', 'legacy_bucket', 0)"
+                ),
+                {"site_id": site["id"]},
+            )
+            db.execute(
+                text(
+                    "INSERT INTO dietary_types "
+                    "(tenant_id, site_id, name, diet_family, requirement_key, semantics, default_select) "
+                    "VALUES (2, :site_id, 'Conflicting tenant', 'Övrigt', 'req-conflicting', 'atomic', 0)"
+                ),
+                {"site_id": site["id"]},
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        repo = DietTypesRepo()
+        promoted_id = repo.upsert_atomic(site_id=site["id"], name="Legacy null tenant")
+
+        db = get_session()
+        try:
+            promoted_tenant = db.execute(
+                text("SELECT tenant_id FROM dietary_types WHERE id=:id"),
+                {"id": promoted_id},
+            ).scalar_one()
+        finally:
+            db.close()
+        assert int(promoted_tenant) == 1
+
+        with pytest.raises(ValueError, match="tenant_mismatch"):
+            repo.upsert_atomic(site_id=site["id"], name="Conflicting tenant")
+
+        db = get_session()
+        try:
+            unchanged = db.execute(
+                text(
+                    "SELECT tenant_id, semantics, requirement_key "
+                    "FROM dietary_types WHERE name='Conflicting tenant'"
+                )
+            ).fetchone()
+        finally:
+            db.close()
+        assert unchanged is not None
+        assert int(unchanged[0]) == 2
+        assert unchanged[1] == "atomic"
+        assert unchanged[2] == "req-conflicting"
 
 
 def test_repair_site_atomic_catalog_promotes_all_legacy_rows(app_session) -> None:

@@ -105,6 +105,25 @@ def _resolve_site_tenant_id(db, site_id: str | None, tenant_id: int | None) -> i
     return None
 
 
+def _resolve_atomic_site_tenant_id(db, site_id: str | None, tenant_id: int | None) -> int | None:
+    clean_site_id = str(site_id or "").strip()
+    if not clean_site_id or clean_site_id.casefold() == "none":
+        return None
+    try:
+        row = db.execute(
+            text("SELECT tenant_id FROM sites WHERE id=:id"),
+            {"id": clean_site_id},
+        ).fetchone()
+        if row is None or row[0] is None:
+            return None
+        site_tenant_id = int(row[0])
+        if tenant_id is not None and int(tenant_id) != site_tenant_id:
+            return None
+        return site_tenant_id
+    except Exception:
+        return None
+
+
 def _table_has_column(db, table_name: str, column_name: str) -> bool:
     try:
         cols = db.execute(text(f"PRAGMA table_info('{table_name}')")).fetchall()
@@ -2494,18 +2513,33 @@ class DietTypesRepo:
         tenant_id: int | None = None,
     ) -> int:
         self._ensure_table(db)
-        clean_site_id = str(site_id).strip()
+        clean_site_id = str(site_id or "").strip()
         clean_name = str(name).strip()
-        if not clean_site_id:
+        if not clean_site_id or clean_site_id.casefold() == "none":
             raise ValueError("site_id is required")
         if not clean_name:
             raise ValueError("name is required")
+
+        resolved_tenant_id = _resolve_atomic_site_tenant_id(db, clean_site_id, tenant_id)
+        if resolved_tenant_id is None:
+            raise ValueError("site_id_not_found_or_tenant_mismatch")
 
         row = self._get_by_name(db, site_id=clean_site_id, name=clean_name)
         clean_family = normalize_diet_family(diet_family) if diet_family is not None else None
 
         if row is not None:
             row_id = int(row[0])
+            has_tenant_column = _table_has_column(db, "dietary_types", "tenant_id")
+            promote_tenant = False
+            if has_tenant_column:
+                tenant_row = db.execute(
+                    text("SELECT tenant_id FROM dietary_types WHERE id=:id"),
+                    {"id": row_id},
+                ).fetchone()
+                existing_tenant_id = tenant_row[0] if tenant_row else None
+                if existing_tenant_id is not None and int(existing_tenant_id) != int(resolved_tenant_id):
+                    raise ValueError("site_id_not_found_or_tenant_mismatch")
+                promote_tenant = existing_tenant_id is None
             existing_family = normalize_diet_family(str(row[3] or ""))
             existing_semantics = str(row[5] or "").strip().lower() or "legacy_bucket"
             existing_default_select = bool(row[6])
@@ -2514,21 +2548,23 @@ class DietTypesRepo:
             target_requirement_key = str(row[4] or "").strip()
             if existing_semantics != "atomic" or not target_requirement_key.startswith("req_"):
                 target_requirement_key = _atomic_requirement_key()
+            tenant_clause = ", tenant_id=:t" if promote_tenant else ""
             db.execute(
                 text(
-                    "UPDATE dietary_types SET diet_family=:f, default_select=:d, semantics='atomic', requirement_key=:rk WHERE id=:id"
+                    "UPDATE dietary_types SET diet_family=:f, default_select=:d, semantics='atomic', requirement_key=:rk"
+                    f"{tenant_clause} WHERE id=:id"
                 ),
                 {
                     "f": target_family,
                     "d": 1 if target_default_select else 0,
                     "rk": target_requirement_key,
                     "id": row_id,
+                    "t": int(resolved_tenant_id),
                 },
             )
             return row_id
 
         requirement_key = _atomic_requirement_key()
-        resolved_tenant_id = _resolve_site_tenant_id(db, clean_site_id, tenant_id)
         params: dict[str, object] = {
             "s": clean_site_id,
             "n": clean_name,
@@ -2537,30 +2573,15 @@ class DietTypesRepo:
             "sem": "atomic",
             "d": 1 if bool(default_select) else 0,
         }
-        if tenant_id is not None:
+        if _table_has_column(db, "dietary_types", "tenant_id"):
             db.execute(
                 text(
                     "INSERT INTO dietary_types(tenant_id, site_id, name, diet_family, requirement_key, semantics, default_select) "
                     "VALUES(:t, :s, :n, :f, :rk, :sem, :d)"
                 ),
-                {**params, "t": int(resolved_tenant_id) if resolved_tenant_id is not None else 1},
+                {**params, "t": int(resolved_tenant_id)},
             )
         else:
-            cols = {r[1] for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
-            if "tenant_id" in cols:
-                notnull_map = {str(r[1]): int(r[3] or 0) for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
-                needs_tenant = bool(notnull_map.get("tenant_id", 0))
-                if needs_tenant:
-                    resolved_tenant_id = 1 if resolved_tenant_id is None else resolved_tenant_id
-                    db.execute(
-                        text(
-                            "INSERT INTO dietary_types(tenant_id, site_id, name, diet_family, requirement_key, semantics, default_select) "
-                            "VALUES(:t, :s, :n, :f, :rk, :sem, :d)"
-                        ),
-                        {**params, "t": int(resolved_tenant_id)},
-                    )
-                    row = db.execute(text("SELECT last_insert_rowid()" )).fetchone()
-                    return int(row[0]) if row else 0
             db.execute(
                 text(
                     "INSERT INTO dietary_types(site_id, name, diet_family, requirement_key, semantics, default_select) "
@@ -3002,8 +3023,12 @@ class DietTypesRepo:
                 if "tenant_id" in cols:
                     notnull_map = {str(r[1]): int(r[3] or 0) for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
                     needs_tenant = bool(notnull_map.get("tenant_id", 0))
-                    if needs_tenant:
-                        tenant_value = int(resolved_tenant_id) if resolved_tenant_id is not None else 1
+                    if needs_tenant or tenant_id is not None or resolved_tenant_id is not None:
+                        tenant_value = (
+                            int(tenant_id)
+                            if tenant_id is not None
+                            else (int(resolved_tenant_id) if resolved_tenant_id is not None else 1)
+                        )
                         db.execute(
                             text(
                                 "INSERT INTO dietary_types(tenant_id, site_id, name, diet_family, requirement_key, semantics, default_select) "

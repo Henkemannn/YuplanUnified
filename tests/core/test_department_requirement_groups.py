@@ -32,6 +32,19 @@ def _seed_atomic_requirements(site_id: str, names: list[str]) -> list[int]:
     return ids
 
 
+def _count_dietary_types(name: str) -> int:
+    db = get_session()
+    try:
+        return int(
+            db.execute(
+                text("SELECT COUNT(*) FROM dietary_types WHERE name=:name"),
+                {"name": name},
+            ).scalar_one()
+        )
+    finally:
+        db.close()
+
+
 def test_atomic_requirement_group_preserves_quantity_and_requirement_count(app_session) -> None:
     with app_session.app_context():
         site, department = _seed_department(app_session)
@@ -107,12 +120,29 @@ def test_cross_site_and_null_site_requirements_are_rejected(app_session) -> None
         site_b, _department_b = _seed_department(app_session)
         requirement_a = _seed_atomic_requirements(site_a["id"], ["A"])[0]
         requirement_b = _seed_atomic_requirements(site_b["id"], ["B"])[0]
-        orphan_requirement = DietTypesRepo().create(
-            site_id=None,
-            name=f"Orphan atomic {uuid.uuid4()}",
-            default_select=False,
-            semantics="atomic",
-        )
+        orphan_name = f"Orphan atomic {uuid.uuid4()}"
+        db = get_session()
+        try:
+            db.execute(
+                text(
+                    "INSERT INTO dietary_types "
+                    "(tenant_id, site_id, name, diet_family, requirement_key, semantics, default_select) "
+                    "VALUES (1, NULL, :name, 'Övrigt', :requirement_key, 'atomic', 0)"
+                ),
+                {
+                    "name": orphan_name,
+                    "requirement_key": f"req_{uuid.uuid4().hex}",
+                },
+            )
+            db.commit()
+            orphan_requirement = int(
+                db.execute(
+                    text("SELECT id FROM dietary_types WHERE name=:name"),
+                    {"name": orphan_name},
+                ).scalar_one()
+            )
+        finally:
+            db.close()
         repo = DepartmentRequirementGroupsRepo()
 
         with pytest.raises(ValueError, match="dietary_type_site_mismatch"):
@@ -123,6 +153,56 @@ def test_cross_site_and_null_site_requirements_are_rejected(app_session) -> None
 
         group = repo.create_group(department_a["id"], 1, [requirement_a], label="Site A")
         assert group["requirements"][0]["dietary_type_id"] == requirement_a
+
+
+@pytest.mark.parametrize(
+    "site_id,tenant_id",
+    [
+        (None, None),
+        ("", None),
+        ("   ", None),
+        ("None", None),
+        ("missing-site", None),
+    ],
+)
+def test_atomic_requirement_creation_rejects_invalid_site_without_row(
+    app_session,
+    site_id,
+    tenant_id,
+) -> None:
+    with app_session.app_context():
+        repo = DietTypesRepo()
+        name = f"Rejected atomic {uuid.uuid4()}"
+        before = _count_dietary_types(name)
+
+        with pytest.raises(ValueError):
+            repo.create(
+                site_id=site_id,
+                tenant_id=tenant_id,
+                name=name,
+                default_select=False,
+                semantics="atomic",
+            )
+
+        assert _count_dietary_types(name) == before == 0
+
+
+def test_atomic_requirement_creation_rejects_cross_tenant_site_without_row(app_session) -> None:
+    with app_session.app_context():
+        site, _department = _seed_department(app_session)
+        repo = DietTypesRepo()
+        name = f"Cross tenant atomic {uuid.uuid4()}"
+
+        with pytest.raises(ValueError):
+            repo.create(
+                site_id=site["id"],
+                tenant_id=2,
+                name=name,
+                default_select=False,
+                semantics="atomic",
+            )
+
+        assert _count_dietary_types(name) == 0
 
 
 def test_atomic_requirement_without_requirement_key_is_rejected(app_session) -> None:

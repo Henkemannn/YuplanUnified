@@ -17,8 +17,9 @@ def app_with_diet_types(app_session: Flask):
 
     conn = get_session()
     # Ensure sites exist (id,name only for sqlite tests)
-    conn.execute(text("CREATE TABLE IF NOT EXISTS sites (id TEXT PRIMARY KEY, name TEXT NOT NULL)"))
-    conn.execute(text("INSERT OR IGNORE INTO sites(id,name) VALUES('site-1','Testplats')"))
+    conn.execute(text("CREATE TABLE IF NOT EXISTS sites (id TEXT PRIMARY KEY, name TEXT NOT NULL, tenant_id INTEGER)"))
+    conn.execute(text("INSERT OR IGNORE INTO sites(id,name,tenant_id) VALUES('site-1','Testplats',1)"))
+    conn.execute(text("UPDATE sites SET tenant_id=1 WHERE id='site-1'"))
     # Clear existing data and seed via repo to satisfy legacy NOT NULL tenant_id
     conn.execute(text("DELETE FROM dietary_types"))
     from core.admin_repo import DietTypesRepo
