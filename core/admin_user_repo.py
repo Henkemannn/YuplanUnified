@@ -6,13 +6,17 @@ import re
 import secrets
 from typing import Optional
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash
 from .password_policy import validate_new_password
 
 from .db import get_session
 from .models import User
+
+
+class UserScopeSchemaError(RuntimeError):
+    """Raised when site-binding schema metadata cannot be read safely."""
 
 
 def _normalize_email(email: Optional[str]) -> str:
@@ -64,20 +68,16 @@ def normalize_username(
 
 def _users_table_has_site_id(db) -> bool:
     try:
-        cols = db.execute(text("PRAGMA table_info(users)")).fetchall()
-        return any(str(col[1]) == "site_id" for col in cols)
-    except Exception:
-        return False
+        return any(column["name"] == "site_id" for column in inspect(db.connection()).get_columns("users"))
+    except Exception as exc:
+        raise UserScopeSchemaError("Unable to inspect users site binding schema") from exc
 
 
 def _kitchen_site_binding_table_exists(db) -> bool:
     try:
-        row = db.execute(
-            text("SELECT 1 FROM sqlite_master WHERE type='table' AND name='kitchen_user_sites' LIMIT 1")
-        ).fetchone()
-        return row is not None
-    except Exception:
-        return False
+        return inspect(db.connection()).has_table("kitchen_user_sites")
+    except Exception as exc:
+        raise UserScopeSchemaError("Unable to inspect kitchen site binding schema") from exc
 
 
 def _resolve_user_site_id(db, user_id: int, tenant_id: int | None = None) -> str | None:

@@ -17,6 +17,8 @@ from collections.abc import Callable
 from functools import wraps
 from typing import ParamSpec, TypeVar, cast
 
+from sqlalchemy import text
+
 from .app_sessions import SessionData, get_session
 from flask import current_app, g, request, session
 from .auth import (
@@ -180,6 +182,54 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
                     site_context = _request_site_context()
                 db = get_db_session()
                 try:
+                    from .admin_user_repo import (
+                        _kitchen_site_binding_table_exists,
+                        _resolve_user_scope,
+                        UserScopeSchemaError,
+                    )
+
+                    role_norm = str(active_user.role or "").strip().lower()
+                    password_change_scope = (
+                        request.path.startswith("/ui/account")
+                        and _user_must_change_password(active_user)
+                        and not active_user.department_id
+                        and not site_context
+                    )
+                    if role_norm != "superuser":
+                        try:
+                            resolved_tenant_id, resolved_site_id, scope_valid = _resolve_user_scope(
+                                db,
+                                int(active_user.id),
+                            )
+                        except UserScopeSchemaError:
+                            _clear_authenticated_session()
+                            from .app_sessions import SessionError
+
+                            raise SessionError("authentication required")
+                        if password_change_scope:
+                            password_change_scope = (
+                                resolved_site_id is None
+                                and not (
+                                    _kitchen_site_binding_table_exists(db)
+                                    and db.execute(
+                                        text(
+                                            "SELECT 1 FROM kitchen_user_sites "
+                                            "WHERE user_id=:uid LIMIT 1"
+                                        ),
+                                        {"uid": int(active_user.id)},
+                                    ).fetchone()
+                                )
+                            )
+                        if (
+                            not scope_valid
+                            or resolved_tenant_id != int(active_user.tenant_id)
+                            or not site_context
+                            or resolved_site_id != str(site_context)
+                        ) and not password_change_scope:
+                            _clear_authenticated_session()
+                            from .app_sessions import SessionError
+
+                            raise SessionError("authentication required")
                     site_binding_valid = _user_has_current_site_binding(
                         db,
                         active_user,

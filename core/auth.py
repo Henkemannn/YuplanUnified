@@ -198,6 +198,45 @@ def require_roles(*roles: str):
                     site_context = _request_site_context()
                 db = get_session()
                 try:
+                    from .admin_user_repo import (
+                        _kitchen_site_binding_table_exists,
+                        _resolve_user_scope,
+                        UserScopeSchemaError,
+                    )
+
+                    role_norm = _normalize_role(active_user.role)
+                    try:
+                        resolved_tenant_id, resolved_site_id, scope_valid = _resolve_user_scope(
+                            db,
+                            int(active_user.id),
+                        )
+                    except UserScopeSchemaError:
+                        _clear_authenticated_session()
+                        return _json_error("auth required", 401)
+                    password_change_scope = (
+                        request.path.startswith("/ui/account")
+                        and _user_must_change_password(active_user)
+                        and not active_user.department_id
+                        and resolved_site_id is None
+                        and not (
+                            _kitchen_site_binding_table_exists(db)
+                            and db.execute(
+                                text(
+                                    "SELECT 1 FROM kitchen_user_sites "
+                                    "WHERE user_id=:uid LIMIT 1"
+                                ),
+                                {"uid": int(active_user.id)},
+                            ).fetchone()
+                        )
+                    )
+                    if role_norm != "superuser" and (
+                        not scope_valid
+                        or resolved_tenant_id != int(active_user.tenant_id)
+                        or not site_context
+                        or resolved_site_id != str(site_context)
+                    ) and not password_change_scope:
+                        _clear_authenticated_session()
+                        return _json_error("auth required", 401)
                     site_binding_valid = _user_has_current_site_binding(
                         db,
                         active_user,
@@ -205,7 +244,7 @@ def require_roles(*roles: str):
                     )
                 finally:
                     db.close()
-                if not site_binding_valid:
+                if not site_binding_valid and not password_change_scope:
                     _clear_authenticated_session()
                     return _json_error("auth required", 401)
                 session["user_id"] = active_user.id
@@ -560,36 +599,34 @@ def login():
         # Resolve site binding before issuing any token or persisting auth state.
         role_norm = _normalize_role(user.role)
         bound_site = None
+        password_change_without_binding = False
         if role_norm != "superuser":
             try:
-                from sqlalchemy import text as _t
+                from .admin_user_repo import _resolve_user_scope
 
-                sid_attr = getattr(user, "site_id", None)
-                if sid_attr:
-                    row_site = db.execute(
-                        _t(
-                            "SELECT 1 FROM sites "
-                            "WHERE id=:sid AND tenant_id=:tid LIMIT 1"
-                        ),
-                        {"sid": str(sid_attr), "tid": int(user.tenant_id)},
-                    ).fetchone()
-                    if row_site:
-                        bound_site = str(sid_attr)
-                if (not bound_site) and user.tenant_id is not None:
-                    row_k = db.execute(
-                        _t(
-                            "SELECT kus.site_id FROM kitchen_user_sites kus "
-                            "JOIN sites s ON s.id=kus.site_id "
-                            "WHERE kus.user_id=:uid AND kus.tenant_id=:tid "
-                            "AND s.tenant_id=:tid LIMIT 1"
-                        ),
-                        {"uid": int(user.id), "tid": int(user.tenant_id)},
-                    ).fetchone()
-                    if row_k and row_k[0]:
-                        bound_site = str(row_k[0])
+                resolved_tenant_id, resolved_site_id, scope_valid = _resolve_user_scope(db, int(user.id))
+                if not scope_valid or resolved_tenant_id != int(user.tenant_id):
+                    if (
+                        resolved_site_id is None
+                        and not getattr(user, "department_id", None)
+                        and _user_must_change_password(user)
+                    ):
+                        try:
+                            binding_row = db.execute(
+                                text(
+                                    "SELECT 1 FROM kitchen_user_sites "
+                                    "WHERE user_id=:uid LIMIT 1"
+                                ),
+                                {"uid": int(user.id)},
+                            ).fetchone()
+                        except SQLAlchemyError:
+                            binding_row = None
+                        password_change_without_binding = binding_row is None
+                else:
+                    bound_site = resolved_site_id
             except Exception:
                 bound_site = None
-            if not bound_site and not _user_must_change_password(user):
+            if not bound_site and not password_change_without_binding:
                 if _login_wants_html() and role_norm == "unit_portal":
                     resp = redirect(url_for("portal_dept_ui.portal_department_home_ui"))
                     set_csrf_cookie(resp, csrf_token)
