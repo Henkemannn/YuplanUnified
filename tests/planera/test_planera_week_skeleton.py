@@ -1,6 +1,8 @@
 import uuid
 import pytest
 
+from tests._auth_site_helpers import login_bound_user
+
 
 def _h(role):
     return {"X-User-Role": role, "X-Tenant-Id": "1"}
@@ -19,7 +21,7 @@ def test_planera_week_api_and_ui_skeleton(client_admin):
         create_all()
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0)"), {"i": site_id, "n": "PlaneraSite"})
+            db.execute(text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0)"), {"i": site_id, "n": "PlaneraSite"})
             db.commit()
         finally:
             db.close()
@@ -31,6 +33,8 @@ def test_planera_week_api_and_ui_skeleton(client_admin):
             if not reg.has("ff.planera.enabled"):
                 reg.add("ff.planera.enabled")
             reg.set("ff.planera.enabled", True)
+    login_bound_user(client_admin, site_id=site_id, role="admin")
+
     # API
     r_api = client_admin.get(f"/api/planera/week?site_id={site_id}&year={year}&week={week}", headers=_h("admin"))
     assert r_api.status_code == 200

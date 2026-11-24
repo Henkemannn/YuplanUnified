@@ -1,5 +1,7 @@
 import uuid
 
+from tests._auth_site_helpers import login_bound_user
+
 
 def _h(role):
     return {"X-User-Role": role, "X-Tenant-Id": "1"}
@@ -18,7 +20,7 @@ def test_planera_week_etag_304(client_admin):
         create_all()
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0)"), {"i": site_id, "n": "SiteET"})
+            db.execute(text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0)"), {"i": site_id, "n": "SiteET"})
             db.commit()
         finally:
             db.close()
@@ -28,6 +30,7 @@ def test_planera_week_etag_304(client_admin):
                 reg.add("ff.planera.enabled")
             reg.set("ff.planera.enabled", True)
 
+    login_bound_user(client_admin, site_id=site_id, role="admin")
     r1 = client_admin.get(f"/api/planera/week?site_id={site_id}&year={year}&week={week}", headers=_h("admin"))
     assert r1.status_code == 200
     etag = r1.headers.get("ETag")

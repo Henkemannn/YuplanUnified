@@ -75,12 +75,23 @@ def _conditional(etag: str) -> Any:
     return None
 
 
-def _validate_site_and_department(site_id: str, department_id: str | None) -> tuple[str, list[dict]] | None:
+def _validate_site_and_department(
+    site_id: str,
+    department_id: str | None,
+    tenant_id: int | str,
+) -> tuple[str, list[dict]] | None:
     """Return (site_name, departments) or None if invalid (already produced a response)."""
+    role = str(session.get("role") or "").strip().lower()
+    bound_site_id = str(session.get("site_id") or "").strip()
+    if role != "superuser" and site_id != bound_site_id:
+        return None
     db = get_session()
     try:
         row = db.execute(
-            __import__("sqlalchemy").text("SELECT id, name FROM sites WHERE id = :i"), {"i": site_id}
+            __import__("sqlalchemy").text(
+                "SELECT id, name FROM sites WHERE id = :i AND tenant_id = :t"
+            ),
+            {"i": site_id, "t": tenant_id},
         ).fetchone()
         if not row:
             return None
@@ -258,7 +269,7 @@ def get_planera_week():
             uuid.UUID(department_id)
     except Exception:
         return bad_request("invalid_parameters")
-    ok = _validate_site_and_department(site_id, department_id)
+    ok = _validate_site_and_department(site_id, department_id, tid)
     if not ok:
         return not_found("site_or_department_not_found")
     site_name, deps = ok
@@ -311,7 +322,7 @@ def get_planera_week_csv():  # CSV export for week aggregation
             uuid.UUID(department_id)
     except Exception:
         return bad_request("invalid_parameters")
-    ok = _validate_site_and_department(site_id, department_id)
+    ok = _validate_site_and_department(site_id, department_id, tid)
     if not ok:
         return not_found("site_or_department_not_found")
     site_name, deps = ok

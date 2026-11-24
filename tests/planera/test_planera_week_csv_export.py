@@ -1,5 +1,7 @@
 import uuid
 
+from tests._auth_site_helpers import login_bound_user
+
 
 def _h(role):
     return {"X-User-Role": role, "X-Tenant-Id": "1"}
@@ -20,8 +22,23 @@ def test_planera_week_csv_export_and_304(client_admin):
         db = get_session()
         try:
             # Seed site + department
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0)"), {"i": site_id, "n": "CSVSite"})
+            db.execute(text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0)"), {"i": site_id, "n": "CSVSite"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',0,0)"), {"i": dep_id, "s": site_id, "n": "AvdCSV"})
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS weekview_registrations ("
+                    "tenant_id TEXT, department_id TEXT, year INTEGER, week INTEGER, "
+                    "day_of_week INTEGER, meal TEXT, diet_type TEXT, marked INTEGER, "
+                    "UNIQUE(tenant_id, department_id, year, week, day_of_week, meal, diet_type))"
+                )
+            )
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS weekview_residents_count ("
+                    "tenant_id TEXT, department_id TEXT, year INTEGER, week INTEGER, "
+                    "day_of_week INTEGER, meal TEXT, count INTEGER)"
+                )
+            )
             # Seed diet defaults (will appear as potential diets, though not special unless marked)
             db.execute(text("CREATE TABLE IF NOT EXISTS department_diet_defaults(department_id TEXT, diet_type_id TEXT, default_count INTEGER, PRIMARY KEY(department_id,diet_type_id))"))
             db.execute(text("INSERT INTO department_diet_defaults(department_id,diet_type_id,default_count) VALUES(:d,'Gluten',2)"), {"d": dep_id})
@@ -37,6 +54,8 @@ def test_planera_week_csv_export_and_304(client_admin):
             if not reg.has("ff.planera.enabled"):
                 reg.add("ff.planera.enabled")
             reg.set("ff.planera.enabled", True)
+
+    login_bound_user(client_admin, site_id=site_id, role="admin")
 
     # Initial CSV fetch
     r1 = client_admin.get(f"/api/planera/week/csv?site_id={site_id}&year={year}&week={week}", headers=_h("admin"))
