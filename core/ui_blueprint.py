@@ -6400,11 +6400,13 @@ def admin_report_week():
         except Exception:
             nxt = f"/ui/admin/report/week?year={year}&week={week}&department_id={department_id}&view={view_mode}"
         return redirect(url_for("ui.select_site", next=nxt))
+    site_id, site_name = _authorize_report_scope(
+        site_id,
+        None if department_id in {"", "ALL"} else department_id,
+    )
 
     db = get_session()
     try:
-        row_site = db.execute(text("SELECT name FROM sites WHERE id=:s"), {"s": site_id}).fetchone()
-        site_name = row_site[0] if row_site else None
         deps_rows = db.execute(
             text(
                 "SELECT id, name FROM departments "
