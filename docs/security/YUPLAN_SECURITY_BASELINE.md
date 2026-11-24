@@ -1,5 +1,39 @@
 # Yuplan Unified — Security Baseline
 
+## SEC-01 status overlay — 2026-11-24 (source and tests verified)
+
+**Operational status authority:** [Kommun 1.1 Live Acceptance](../KOMMUN_1_1_LIVE_ACCEPTANCE.md), CURRENT 2026-11-24. This overlay supersedes the Nov 22 status/next-gate statements below; historical security evidence remains unmodified.
+
+**Latest verified product/security HEAD before docs-only updates:** `9c6d98c159d970de1db8dd252dc3f718c687da01` on `feat/planera-app-shell-2026-03-03`; owner confirmed push, remote match, CLEAN worktree. Protected pilot SQLite and separately verified backup each SHA-256 `1add124065aae2aa995619aa9dcc349252a39493e0ea1855bb5ce0b3f21dbd67`. The Nov 22 `eca346d2…` product checkpoint and `acf627…` pilot hash are **historical**, not today's guard. No Fly deployment, original-DB migration or fresh staging acceptance.
+
+### New reviewed/pushed security and recovery evidence
+
+| Work / commit | Fix and focused evidence |
+| --- | --- |
+| **SEC-DELETE-01** `da53d6137957ee5e4d02ca1a3327b4e92ca3800d` | Atomic scoped special-diet deletion across duplicate UI registrations; blocks cross-tenant/null-site deletion. Scoped CLOSED. |
+| **SEC-DELETE-02** `9f9af654ff632a0a35d1d3708f5119d21a485664` | Strict shared tenant/site resolver for real login, current sessions and Bearer/JWT; conflicts, missing/mismatched bindings, deactivation and auth-version invalidation denied. Scoped CLOSED. |
+| **HEALTH-09D** `f54ef73d239923432e3afde3cd299d6bd1fc9c03` | Unifies `_user_has_current_site_binding` with strict resolver to support legacy `users.site_id` and kitchen bindings consistently; targeted original 13/13, historical 81/81, six modules 28/28, auth/real-actor 31/31 PASS. Full suite not repeated. |
+| **SEC-F09-LEGACY** `9c6d98c159d970de1db8dd252dc3f718c687da01` | Real-account login reproduced HTTP 200 leakage from cross-site and cross-tenant Planera week JSON/CSV. `core/planera_api.py` now checks site tenant and authenticated ordinary-user site regardless of absent/false `site_lock`. 109/109 targeted tests PASS; two GET week endpoints scoped CLOSED. |
+
+### Full pytest status
+
+HEALTH-09 executed **2,987 cases = 2,959 passed + 13 failed + 15 skipped**, ~17m46s, at prior HEAD `9f9af654…`. The 13 failures have passed focused recovery (13/13), but **no new whole-suite run occurred on `f54ef73…` or `9c6d98…`**. Existing test fixtures and tests alone do not constitute independent security proof or pilot GO. Final complete pytest awaits remaining SEC-01 changes.
+
+### Finding ledger (no blanket closures)
+
+| Finding | State / next action |
+| --- | --- |
+| **F01–F07** | Previously **scoped CLOSED**, same audited surfaces and limitations as Nov 22; do not reopen absent regression. |
+| **F08** | **OPEN (next: SEC-F08-CLOSE)**. Reconcile actual HTML/CSV/XLSX/PDF/API report/export routes with current security tests, real-user login, bound site, cross-tenant/site/department and 304/ETag denial. Prior tests such as `tests/ui/test_report_site_isolation_security.py` exist, but are not F08 final signoff. |
+| **F09** | **PARTIAL**: `/api/planera/week` and `/api/planera/week/csv` scoped CLOSED, including tampered `site_id` with `site_lock=True/False/missing`. Confirm any remaining original F09 ID-based write routes separately, without repeating protected work. |
+| **F10** | **OPEN P0**: anonymous demo real-data access. |
+| **F11** | **Code/scoped CLOSED**, runtime/fresh-staging secrets and negative validation OPEN. |
+| **F12–F15** | **OPEN P1**: support authorization, upload bounds, temporary-password UI, Weekview runtime-schema mutations. |
+| **JWT RS256/HMAC** | **OPEN**: algorithm-confusion and secrets negative-path verification. |
+
+**Working rules:** Tenant = kund, Site = arbetsplats, ordinary user permanently bound to exactly one verified site (no picker, no `site_lock` bypass); superuser/support under separately explicit policy; fail-closed regardless of session/query tampering. Protected SQLite never used for pytest. No full pytest until remaining SEC scoped remediations are reviewed. One Copilot order → report → review → guarded commit. Docs-only GitHub commits must be fast-forwarded locally before development resumes. **No pilot, deployment, or migration approval.**
+
+---
 ## SEC-01 current remediation overlay — 2026-11-22
 
 **Latest verified source checkpoint:** feature branch feat/planera-app-shell-2026-03-03, product/security HEAD **eca346d2fa6368843d1486b3fb124cfd7297cb11** (owner-verified local/remote matched, worktree clean). This overlay supersedes dated 2026-11-07 next-step claims below. The **one operational task/status authority** is [Kommun 1.1 Live Acceptance](../KOMMUN_1_1_LIVE_ACCEPTANCE.md).
