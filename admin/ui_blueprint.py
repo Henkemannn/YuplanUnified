@@ -656,14 +656,19 @@ def admin_specialkost_edit(kosttyp_id: int) -> str:  # type: ignore[override]
 @require_roles("admin", "superuser")
 def admin_specialkost_delete(kosttyp_id: int) -> str:  # type: ignore[override]
     """Delete a dietary type."""
-    from core.admin_repo import DietTypeDeleteBlockedError
+    from flask import abort
+    from core.admin_repo import DietTypeDeleteBlockedError, DietTypeScopeError
 
     repo = DietTypesRepo()
+    tenant_id = session.get("tenant_id")
+    active_site_id = session.get("site_id")
+    if tenant_id is None or not active_site_id:
+        abort(404)
     try:
-        diet_type = repo.get_by_id(kosttyp_id)
-        name = diet_type["name"] if diet_type else "okänd"
-        repo.delete(kosttyp_id)
-        flash(f"Kosttyp '{name}' borttagen.", "success")
+        repo.delete_scoped(kosttyp_id, tenant_id=tenant_id, site_id=active_site_id)
+        flash("Kosttypen har raderats.", "success")
+    except DietTypeScopeError:
+        abort(404)
     except DietTypeDeleteBlockedError:
         flash("Kosttypen kan inte tas bort eftersom den används i andra inställningar.", "danger")
     except Exception as e:

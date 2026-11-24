@@ -5736,26 +5736,19 @@ def admin_specialkost_update(kosttyp_id: int):
 @require_roles(*ADMIN_ROLES)
 def admin_specialkost_delete(kosttyp_id: int):
     from flask import flash, redirect, url_for
-    from core.admin_repo import DietTypeDeleteBlockedError, DietTypesRepo
+    from core.admin_repo import DietTypeDeleteBlockedError, DietTypeScopeError, DietTypesRepo
 
     repo = DietTypesRepo()
+    tenant_id = session.get("tenant_id")
     active_site_id = session.get("site_id")
-    if not active_site_id:
-        return redirect(url_for("ui.select_site", next=url_for("ui.admin_specialkost_list")))
-
-    item = repo.get_by_id(kosttyp_id)
-    if not item:
-        from flask import abort
-        abort(404)
-    item_site_id = (item.get("site_id") or "")
-    # Backward compatibility: allow delete of legacy rows with NULL site_id.
-    if item_site_id and str(item_site_id) != str(active_site_id):
-        from flask import abort
+    if tenant_id is None or not active_site_id:
         abort(404)
 
     try:
-        repo.delete(kosttyp_id)
+        repo.delete_scoped(kosttyp_id, tenant_id=tenant_id, site_id=active_site_id)
         flash("Kosttypen har raderats.", "success")
+    except DietTypeScopeError:
+        abort(404)
     except DietTypeDeleteBlockedError as exc:
         refs = ", ".join(f"{k}: {v}" for k, v in exc.references.items() if v > 0)
         detail = f" ({refs})" if refs else ""

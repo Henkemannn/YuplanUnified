@@ -2499,6 +2499,10 @@ class DietTypeDeleteBlockedError(Exception):
         super().__init__(", ".join(parts) if parts else "in use")
 
 
+class DietTypeScopeError(Exception):
+    """Raised when a dietary type is outside the authorized tenant/site scope."""
+
+
 class DietTypesRepo:
     """Repository for managing dietary types (specialkost), now scoped per site."""
 
@@ -3173,40 +3177,99 @@ class DietTypesRepo:
         finally:
             db.close()
 
-    def delete(self, diet_type_id: int) -> None:
-        """Delete a dietary type by ID.
+    def _delete_in_db(self, db, diet_type_id: int) -> None:
+        self._ensure_table(db)
+        did_txt = str(int(diet_type_id))
 
-        Performs safe cleanup of known dependent rows before deleting the diet type.
-        Raises `DietTypeDeleteBlockedError` only for unknown FK constraints.
-        """
+        canonical_refs = self._canonical_requirement_group_reference_count(db, diet_type_id)
+        if canonical_refs > 0:
+            raise DietTypeDeleteBlockedError({"department_requirement_group_requirements": canonical_refs})
+
+        dependency_tables = (
+            ("department_diet_defaults", "diet_type_id"),
+            ("normal_exclusions", "diet_type_id"),
+            ("weekview_registrations", "diet_type"),
+        )
+
+        for table_name, column_name in dependency_tables:
+            if not _table_has_column(db, table_name, column_name):
+                continue
+            db.execute(
+                text(
+                    f"DELETE FROM {table_name} "
+                    f"WHERE CAST({column_name} AS TEXT)=:diet_type_id"
+                ),
+                {"diet_type_id": did_txt},
+            )
+
+        db.execute(text("DELETE FROM dietary_types WHERE id=:id"), {"id": int(diet_type_id)})
+
+    def delete(self, diet_type_id: int) -> None:
+        """Delete a dietary type by ID for trusted internal maintenance callers."""
+        db = get_session()
+        try:
+            self._delete_in_db(db, diet_type_id)
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            raise DietTypeDeleteBlockedError({"foreign_key_dependency": 1}) from exc
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    def delete_scoped(self, diet_type_id: int, *, tenant_id: int, site_id: str) -> str:
+        """Delete one dietary type after validating its tenant/site in one transaction."""
+        try:
+            clean_tenant_id = int(tenant_id)
+        except (TypeError, ValueError) as exc:
+            raise DietTypeScopeError("invalid tenant scope") from exc
+        clean_site_id = str(site_id or "").strip()
+        if clean_tenant_id <= 0 or not clean_site_id or clean_site_id.casefold() == "none":
+            raise DietTypeScopeError("invalid site scope")
+
         db = get_session()
         try:
             self._ensure_table(db)
-            did_txt = str(int(diet_type_id))
+            if not _table_has_column(db, "dietary_types", "tenant_id"):
+                raise DietTypeScopeError("tenant scope unavailable")
+            site_row = db.execute(
+                text("SELECT tenant_id FROM sites WHERE id=:site_id"),
+                {"site_id": clean_site_id},
+            ).fetchone()
+            if site_row is None or site_row[0] is None or int(site_row[0]) != clean_tenant_id:
+                raise DietTypeScopeError("site scope unavailable")
 
-            canonical_refs = self._canonical_requirement_group_reference_count(db, diet_type_id)
-            if canonical_refs > 0:
-                raise DietTypeDeleteBlockedError({"department_requirement_group_requirements": canonical_refs})
-
-            dependency_tables = (
-                ("department_diet_defaults", "diet_type_id"),
-                ("normal_exclusions", "diet_type_id"),
-                ("weekview_registrations", "diet_type"),
+            row = db.execute(
+                text("SELECT tenant_id, site_id FROM dietary_types WHERE id=:id"),
+                {"id": int(diet_type_id)},
+            ).fetchone()
+            if (
+                row is None
+                or row[0] is None
+                or int(row[0]) != clean_tenant_id
+                or row[1] is None
+                or str(row[1]) != clean_site_id
+            ):
+                raise DietTypeScopeError("dietary type outside scope")
+            locked = db.execute(
+                text(
+                    "UPDATE dietary_types SET id=id "
+                    "WHERE id=:id AND tenant_id=:tenant_id AND site_id=:site_id"
+                ),
+                {
+                    "id": int(diet_type_id),
+                    "tenant_id": clean_tenant_id,
+                    "site_id": clean_site_id,
+                },
             )
+            if locked.rowcount != 1:
+                raise DietTypeScopeError("dietary type scope changed")
 
-            for table_name, column_name in dependency_tables:
-                if not _table_has_column(db, table_name, column_name):
-                    continue
-                db.execute(
-                    text(
-                        f"DELETE FROM {table_name} "
-                        f"WHERE CAST({column_name} AS TEXT)=:diet_type_id"
-                    ),
-                    {"diet_type_id": did_txt},
-                )
-
-            db.execute(text("DELETE FROM dietary_types WHERE id=:id"), {"id": int(diet_type_id)})
+            self._delete_in_db(db, diet_type_id)
             db.commit()
+            return clean_site_id
         except IntegrityError as exc:
             db.rollback()
             raise DietTypeDeleteBlockedError({"foreign_key_dependency": 1}) from exc

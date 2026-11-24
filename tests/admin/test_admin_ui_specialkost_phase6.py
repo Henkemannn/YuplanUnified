@@ -345,6 +345,127 @@ def test_admin_specialkost_delete_cascades_known_dependencies(client_admin: Flas
         conn.close()
 
 
+def test_admin_specialkost_delete_enforces_tenant_and_site_scope(client_admin: FlaskClient):
+    """Customer admins cannot delete foreign-site or legacy null-site rows."""
+    from core.db import get_session
+    from sqlalchemy import text
+
+    conn = get_session()
+    try:
+        conn.execute(
+            text("INSERT OR REPLACE INTO sites(id, name, tenant_id) VALUES "
+                 "('site-2', 'Other site', 1), ('site-tenant-2', 'Other tenant', 2)")
+        )
+        conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS normal_exclusions ("
+                "tenant_id TEXT NOT NULL, site_id TEXT NOT NULL, year INTEGER NOT NULL, "
+                "week INTEGER NOT NULL, day_index INTEGER NOT NULL, meal TEXT NOT NULL, "
+                "alt TEXT NOT NULL, diet_type_id TEXT NOT NULL)"
+            )
+        )
+        rows = [
+            ("own", 1, "site-1"),
+            ("other-site", 1, "site-2"),
+            ("other-tenant", 2, "site-tenant-2"),
+            ("null-site-tenant-2", 2, None),
+            ("null-site-own-tenant", 1, None),
+        ]
+        ids = {}
+        for name, tenant_id, site_id in rows:
+            result = conn.execute(
+                text(
+                    "INSERT INTO dietary_types "
+                    "(tenant_id, site_id, name, semantics, default_select) "
+                    "VALUES (:tenant_id, :site_id, :name, 'legacy_bucket', 0)"
+                ),
+                {"tenant_id": tenant_id, "site_id": site_id, "name": name},
+            )
+            ids[name] = int(result.lastrowid)
+        conn.execute(
+            text(
+                "INSERT INTO normal_exclusions("
+                "tenant_id, site_id, year, week, day_index, meal, alt, diet_type_id"
+                ") VALUES ('2', 'site-tenant-2', 2026, 1, 1, 'lunch', '1', :diet_type_id)"
+            ),
+            {"diet_type_id": str(ids["other-tenant"])},
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    for name in ("other-site", "other-tenant", "null-site-tenant-2", "null-site-own-tenant"):
+        diet_id = ids[name]
+        before = get_session().execute(
+            text("SELECT tenant_id, site_id, name FROM dietary_types WHERE id=:id"),
+            {"id": diet_id},
+        ).fetchone()
+        response = client_admin.post(
+            f"/ui/admin/specialkost/{diet_id}/delete",
+            headers=ADMIN_HEADERS,
+        )
+        assert response.status_code == 404
+        after = get_session().execute(
+            text("SELECT tenant_id, site_id, name FROM dietary_types WHERE id=:id"),
+            {"id": diet_id},
+        ).fetchone()
+        assert after == before
+
+    dependency = get_session().execute(
+        text("SELECT COUNT(*) FROM normal_exclusions WHERE diet_type_id=:diet_type_id"),
+        {"diet_type_id": str(ids["other-tenant"])},
+    ).scalar_one()
+    assert int(dependency) == 1
+
+    response = client_admin.post(
+        f"/ui/admin/specialkost/{ids['own']}/delete",
+        headers=ADMIN_HEADERS,
+    )
+    assert response.status_code == 302
+    assert get_session().execute(
+        text("SELECT COUNT(*) FROM dietary_types WHERE id=:id"),
+        {"id": ids["own"]},
+    ).scalar_one() == 0
+
+
+def test_admin_specialkost_delete_requires_authenticated_scope(client_admin: FlaskClient):
+    from core.db import get_session
+    from sqlalchemy import text
+
+    conn = get_session()
+    try:
+        result = conn.execute(
+            text(
+                "INSERT INTO dietary_types "
+                "(tenant_id, site_id, name, semantics, default_select) "
+                "VALUES (1, 'site-1', 'Missing scope probe', 'legacy_bucket', 0)"
+            )
+        )
+        diet_id = int(result.lastrowid)
+        conn.commit()
+    finally:
+        conn.close()
+
+    with client_admin.session_transaction() as session_data:
+        session_data.pop("tenant_id", None)
+        session_data.pop("site_id", None)
+
+    response = client_admin.post(
+        f"/ui/admin/specialkost/{diet_id}/delete",
+        headers=ADMIN_HEADERS,
+    )
+    assert response.status_code == 404
+
+    conn = get_session()
+    try:
+        assert conn.execute(
+            text("SELECT COUNT(*) FROM dietary_types WHERE id=:id"),
+            {"id": diet_id},
+        ).scalar_one() == 1
+    finally:
+        conn.close()
+
+
 def test_admin_specialkost_list_empty_when_none(app_session: Flask):
     """List shows appropriate message when no dietary types exist."""
     from core.db import get_session
