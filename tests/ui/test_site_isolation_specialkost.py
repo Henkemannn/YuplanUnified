@@ -6,6 +6,9 @@ def _ensure_admin_session(client, site_id: str | None = None) -> None:
     if site_id is not None:
         from tests._auth_site_helpers import login_bound_user
 
+        with client.session_transaction() as session:
+            session.pop("site_id", None)
+            session.pop("site_lock", None)
         login_bound_user(
             client,
             site_id=site_id,
@@ -104,8 +107,18 @@ def test_admin_specialkost_list_groups_categories_expanded_by_default(client):
 
     db = get_session()
     try:
-        db.execute(text("CREATE TABLE IF NOT EXISTS sites (id TEXT PRIMARY KEY, name TEXT NOT NULL)"))
-        db.execute(text("INSERT OR IGNORE INTO sites(id,name) VALUES('group-site','Group Site')"))
+        existing_site = db.execute(
+            text("SELECT tenant_id FROM sites WHERE id='group-site'")
+        ).fetchone()
+        if existing_site is None:
+            db.execute(
+                text(
+                    "INSERT INTO sites(id, tenant_id, name, version) "
+                    "VALUES('group-site', 1, 'Group Site', 0)"
+                )
+            )
+        elif existing_site[0] != 1:
+            raise AssertionError("group-site is bound to the wrong tenant")
         db.commit()
     finally:
         db.close()

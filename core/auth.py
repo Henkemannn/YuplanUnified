@@ -392,30 +392,17 @@ def _user_has_current_site_binding(db, user: User, site_id: str | None) -> bool:
     if not requested_site_id or user.tenant_id is None:
         return False
     try:
-        site_row = db.execute(
-            text(
-                "SELECT 1 FROM sites "
-                "WHERE id=:sid AND tenant_id=:tid LIMIT 1"
-            ),
-            {"sid": requested_site_id, "tid": int(user.tenant_id)},
-        ).fetchone()
-        if not site_row:
-            return False
-        user_site_id = getattr(user, "site_id", None)
-        if user_site_id and str(user_site_id).strip() == requested_site_id:
-            return True
-        binding_row = db.execute(
-            text(
-                "SELECT 1 FROM kitchen_user_sites "
-                "WHERE user_id=:uid AND tenant_id=:tid AND site_id=:sid LIMIT 1"
-            ),
-            {
-                "uid": int(user.id),
-                "tid": int(user.tenant_id),
-                "sid": requested_site_id,
-            },
-        ).fetchone()
-        return binding_row is not None
+        from .admin_user_repo import _resolve_user_scope
+
+        resolved_tenant_id, resolved_site_id, scope_valid = _resolve_user_scope(
+            db,
+            int(user.id),
+        )
+        return (
+            scope_valid
+            and resolved_tenant_id == int(user.tenant_id)
+            and resolved_site_id == requested_site_id
+        )
     except (SQLAlchemyError, TypeError, ValueError):
         return False
 

@@ -1,4 +1,5 @@
 import re
+import uuid
 import pytest
 
 from core.db import get_session
@@ -8,17 +9,18 @@ from sqlalchemy import text
 
 
 def _seed_login_user(db, *, role: str, password: str = "UiPassw0rd!") -> str:
+    suffix = uuid.uuid4().hex[:8]
     tenant = db.query(Tenant).first()
     if not tenant:
         tenant = Tenant(name="Primary")
         db.add(tenant)
         db.flush()
-    site = Site(id=f"site-{role}-{tenant.id}", name=f"Site {role}", tenant_id=tenant.id)
+    site = Site(id=f"site-{role}-{tenant.id}-{suffix}", name=f"Site {role}", tenant_id=tenant.id)
     db.add(site)
     db.flush()
     department_id = None
     if role == "unit_portal":
-        department_id = f"dept-{role}-{tenant.id}"
+        department_id = f"dept-{role}-{tenant.id}-{suffix}"
         db.add(
             Department(
                 id=department_id,
@@ -28,7 +30,7 @@ def _seed_login_user(db, *, role: str, password: str = "UiPassw0rd!") -> str:
             )
         )
         db.flush()
-    email = f"{role}.{tenant.id}@example.com"
+    email = f"{role}.{tenant.id}.{suffix}@example.com"
     db.add(
         User(
             tenant_id=tenant.id,

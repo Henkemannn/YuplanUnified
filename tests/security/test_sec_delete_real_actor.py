@@ -49,6 +49,28 @@ def delete_scope_data(app_session):
                 tenant_id=1,
                 site_id=site_a,
             )
+            user_columns = {
+                row[1] for row in db.execute(text("PRAGMA table_info(users)")).fetchall()
+            }
+            if "site_id" in user_columns:
+                db.execute(
+                    text("UPDATE users SET site_id=NULL WHERE id=:user_id"),
+                    {"user_id": int(admin.id)},
+                )
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+                    "user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, "
+                    "site_id TEXT NOT NULL)"
+                )
+            )
+            db.execute(
+                text(
+                    "INSERT OR REPLACE INTO kitchen_user_sites(user_id, tenant_id, site_id) "
+                    "VALUES(:user_id, 1, :site_id)"
+                ),
+                {"user_id": int(admin.id), "site_id": site_a},
+            )
             rows = {}
             for key, tenant_id, site_id in (
                 ("own", 1, site_a),

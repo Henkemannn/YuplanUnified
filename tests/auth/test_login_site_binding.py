@@ -212,6 +212,41 @@ def test_login_admin_json_ok_with_kitchen_user_sites_binding(monkeypatch):
             assert (sess.get("site_id") or "").strip() == str(sid_row[0])
 
 
+def test_legacy_user_site_binding_authorizes_session_and_bearer_paths(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "dev")
+    app = _make_isolated_app()
+    with app.app_context():
+        db = get_session()
+        email = _seed_tenant_and_user(db, role="admin")
+        site_id = _seed_single_site(db, tenant_id=1)
+        db.execute(text("ALTER TABLE users ADD COLUMN site_id TEXT"))
+        user = db.query(User).filter(User.email == email).one()
+        db.execute(
+            text("UPDATE users SET site_id=:site_id WHERE id=:user_id"),
+            {"site_id": site_id, "user_id": int(user.id)},
+        )
+        db.commit()
+
+        client = app.test_client()
+        login = client.post(
+            "/auth/login",
+            json={"email": email, "password": "Passw0rd!"},
+            headers={"Accept": "application/json"},
+        )
+        assert login.status_code == 200
+        access_token = login.get_json()["access_token"]
+
+        with client.session_transaction() as sess:
+            assert sess.get("site_id") == site_id
+
+        assert client.get("/ui/admin/specialkost").status_code == 200
+        bearer = client.get(
+            "/export/notes.csv",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert bearer.status_code == 200
+
+
 def test_login_admin_ignores_stale_session_site_from_previous_user(monkeypatch):
     monkeypatch.setenv("APP_ENV", "dev")
     app = _make_isolated_app()

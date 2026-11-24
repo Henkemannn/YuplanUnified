@@ -1,5 +1,6 @@
 """Export API authz tests (P6.3 PR C)."""
 
+import uuid
 from werkzeug.security import generate_password_hash
 
 from core.admin_user_repo import _set_user_site_binding
@@ -12,7 +13,7 @@ def _login_role(client, role: str) -> None:
         site_id = str(sess["site_id"])
     db = get_session()
     try:
-        email = f"export-{role}@example.test"
+        email = f"export-{role}-{uuid.uuid4().hex}@example.test"
         user = db.query(User).filter_by(email=email).first()
         if user is None:
             user = User(

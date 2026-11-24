@@ -1,23 +1,22 @@
 from __future__ import annotations
 
 import pytest
-from flask import Flask
+import uuid
 from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 
-from core.app_factory import create_app
 from core.db import get_session
 from core.models import Tenant, User
 from core.admin_user_repo import _set_user_site_binding
 
 
 @pytest.fixture()
-def app():
-    return create_app({"TESTING": True, "SECRET_KEY": "test"})
+def app(app_session):
+    return app_session
 
 
 @pytest.fixture()
-def client(app: Flask):
+def client(app):
     return app.test_client()
 
 
@@ -85,12 +84,13 @@ def test_list_legacy_cook_requires_admin(client):
     assert r.status_code == 401
 
     # setup tenant + users
-    tid = _ensure_tenant("FlagT1")
-    _ensure_user("viewer1@example.com", "viewer", tid)
-    _ensure_user("admin1@example.com", "admin", tid)
+    suffix = uuid.uuid4().hex[:8]
+    tid = _ensure_tenant(f"FlagT1-{suffix}")
+    _ensure_user(f"viewer1-{suffix}@example.com", "viewer", tid)
+    _ensure_user(f"admin1-{suffix}@example.com", "admin", tid)
 
     # login as viewer -> 403
-    _login(client, "viewer1@example.com")
+    _login(client, f"viewer1-{suffix}@example.com")
     r = client.get("/admin/flags/legacy-cook")
     # Admin endpoints now return RFC7807 ProblemDetails for errors
     assert r.status_code == 403
@@ -104,16 +104,17 @@ def test_list_legacy_cook_requires_admin(client):
 
 def test_list_legacy_cook_happy(client):
     # Setup tenants and enable flag on one
-    tid1 = _ensure_tenant("FlagHT1")
-    tid2 = _ensure_tenant("FlagHT2")
-    _ensure_user("root@example.com", "superuser", tid1)
-    _ensure_user("admin_ht1@example.com", "admin", tid1)
+    suffix = uuid.uuid4().hex[:8]
+    tid1 = _ensure_tenant(f"FlagHT1-{suffix}")
+    tid2 = _ensure_tenant(f"FlagHT2-{suffix}")
+    _ensure_user(f"root-{suffix}@example.com", "superuser", tid1)
+    _ensure_user(f"admin-ht1-{suffix}@example.com", "admin", tid1)
 
-    _login(client, "root@example.com")
+    _login(client, f"root-{suffix}@example.com")
     _enable_flag(client, tid1)
 
     # Login as admin (tenant1) to list
-    _login(client, "admin_ht1@example.com")
+    _login(client, f"admin-ht1-{suffix}@example.com")
     r = client.get("/admin/flags/legacy-cook")
     assert r.status_code == 200
     body = r.get_json()

@@ -68,7 +68,14 @@ def test_successful_import_completes_guard(app_session, monkeypatch):
 
         db = get_new_session()
         try:
-            guard = db.query(MenuImportGuard).one()
+            guards = (
+                db.query(MenuImportGuard)
+                .filter_by(tenant_id=1, site_id=SITE_ID, year=2035, week=20)
+                .order_by(MenuImportGuard.id.desc())
+                .all()
+            )
+            assert guards
+            guard = guards[0]
             assert guard.status == "completed"
             assert guard.active_key is None
             assert guard.operation_id

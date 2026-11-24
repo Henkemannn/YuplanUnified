@@ -182,12 +182,15 @@ def test_real_admin_can_create_and_manage_site_bound_staff(app_session):
     data = _seed_scope(app_session)
     client = app_session.test_client()
     _login(client, data["admin_a"])
+    staff_suffix = uuid.uuid4().hex[:8]
+    staff_email = f"08b-created-staff-{staff_suffix}@example.com"
+    staff_username = f"08b-created-staff-{staff_suffix}"
 
     created = client.post(
         "/ui/admin/users/new",
         data={
-            "email": "08b-created-staff@example.com",
-            "username": "08b-created-staff",
+            "email": staff_email,
+            "username": staff_username,
             "full_name": "Created Staff",
             "password": "StaffPassw0rd!2026",
             "role": "staff",
@@ -200,7 +203,8 @@ def test_real_admin_can_create_and_manage_site_bound_staff(app_session):
         db = get_session()
         try:
             staff_id = db.execute(
-                text("SELECT id FROM users WHERE email='08b-created-staff@example.com'")
+                text("SELECT id FROM users WHERE email=:email"),
+                {"email": staff_email},
             ).scalar_one()
             binding = db.execute(
                 text("SELECT tenant_id, site_id FROM kitchen_user_sites WHERE user_id=:uid"),
@@ -213,8 +217,8 @@ def test_real_admin_can_create_and_manage_site_bound_staff(app_session):
     updated = client.post(
         f"/ui/admin/users/{staff_id}/edit",
         data={
-            "email": "08b-created-staff@example.com",
-            "username": "08b-created-staff",
+            "email": staff_email,
+            "username": staff_username,
             "full_name": "Updated Staff",
             "role": "staff",
         },
