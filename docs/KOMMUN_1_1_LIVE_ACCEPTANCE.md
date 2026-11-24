@@ -1,5 +1,39 @@
 # Kommun 1.1 — Live Acceptance & UX Race
 
+## CURRENT — 2026-11-24, HEALTH-10 full-suite checkpoint
+
+**Authority:** This section supersedes older CURRENT checkpoint/test-status/next-order claims below. Historical accepted A–Ö statuses and prior SEC-01 evidence remain unchanged. **No Pilot GO, staging GO, Yuplan 1.0 release GO or original-pilot-DB migration approval.**
+
+- **Verified local/remote product HEAD before these documentation-only commits:** `3eaad9816bfbadfef0baeb95b82a8ba8ee180bda` on `feat/planera-app-shell-2026-03-03`. Owner ran locked F08 fast-forward from `9c6d98c1…` to documentation checkpoint `08809c4a…`, then reviewed F08 product/test commit/push; Git CLEAN and local/origin/remote SHA matched. Independent GitHub compare verified identical.
+- **SEC-F08-CLOSE code:** `/ui/admin/report/week` now runs `_authorize_report_scope(site_id, department_id)` before reading report site/department data. The original real-login tests demonstrated upstream 401/403 denials; missing defense-in-depth at the route was corrected but an exploitable disclosure under existing auth was **not** reproduced. Focused report/CSV/XLSX/PDF/API and spy-test suite **26/26 PASS**, 0 skips. **Scoped code correction CLOSED; full-suite regression acceptance OPEN.**
+- **SEC-F09-LEGACY:** Two GET routes `/api/planera/week` and `/api/planera/week/csv` scoped CLOSED at `9c6d98c159d970de1db8dd252dc3f718c687da01`; 109/109 targeted tests passed. The overall F09 resource-ID scope still requires final reconciliation; do not reopen already reviewed paths without a new regression.
+- **SEC-DELETE-01/-02 and HEALTH-09D:** Previously reviewed, pushed and targeted-green, as documented in the earlier CURRENT 2026-11-24 overlay below. Do not declare full regression GREEN from these focused tests.
+
+### HEALTH-10 — one complete pytest run at F08 product checkpoint
+
+| Metric | HEALTH-09 (previous full suite) | HEALTH-10 (2026-11-24) |
+| --- | ---: | ---: |
+| PASS | 2,959 | **2,978** |
+| FAIL | 13 | **10** |
+| ERROR | 0 | **0** |
+| SKIP | 15 | **15** |
+| Total | 2,987 | **3,003** |
+
+- Executed exactly once under project `.venv` without test selection or parallelization. **HEALTH-10 exit 1, 2,834.78 seconds (~47m14s), NO-GO for overall GREEN.** Raw artifacts saved under `%TEMP%\yuplan-health-10\pytest-junit.xml` and `pytest-output.txt`; HEALTH-09 JUnit available under `%TEMP%\yuplan-health-09\health-09.junit.xml`.
+- **Exact JUnit identity diff:** 6 previously failed test cases became PASS; 7 previous failures remain; 3 new F08 real-login report tests fail in full-suite order; 16 new test identities, none removed.
+- **Nine failures** report `sqlite3.IntegrityError: UNIQUE constraint failed: kitchen_user_sites.user_id` — 6 parameterizations in `tests/ui/test_login_ui.py::test_ui_login_redirects_by_role` and 3 tests in `tests/reports/test_admin_report_week_real_login_isolation.py`. The targeted F08 suite passed separately; likely shared, session-scoped test-database/seed-state collision, **not yet proven remedied in full suite**.
+- **One failure** in `tests/test_admin_user_target_authorization.py::test_real_admin_can_create_and_manage_site_bound_staff`: `TypeError: 'NoneType' object is not iterable` when asserting that a new staff user's site-binding row exists. Must distinguish test state from a real user-creation regression; do not blindly rewrite production auth.
+- New F08 test failures mean full-suite regression readiness is **OPEN**, even though scoped code/security review was approved. No F09-legacy or SEC-DELETE-related failures reported in HEALTH-10.
+- Both protected originals remained SHA-256 `1add124065aae2aa995619aa9dcc349252a39493e0ea1855bb5ce0b3f21dbd67`: `instance/yuplan_mvp.db` and `C:\Users\Henrik Jonsson\YuplanPilotBackups\yuplan_mvp_20261123_135608.db`. Original remains protected; no migration, test against pilot DB, deployment, code changes or new commit during HEALTH-10.
+
+### Next controlled gate: HEALTH-10R
+
+First perform guarded **docs-only fast-forward** if local Git is still at product HEAD `3eaad981…`, without discarding dirty code. Then diagnose and resolve the **ten identified test failures**, using the saved JUnit/tracebacks and the smallest affected test fixtures; verify with a bounded combined-order pytest replay and real positive/negative site-binding tests. **Do not use `INSERT OR REPLACE` or global data deletion to conceal binding conflicts; never weaken fail-closed rules or test assertions.** A further complete pytest is authorized **only after** the ten-failure targeted evidence is green and reviewed. Preserve pilot hashes. One Copilot order → report → review → guarded code commit. After recovery, resume F09 residual/F10 and the remaining SEC findings.
+
+**Test discipline:** targeted tests for every security change; compare JUnit test IDs at full-suite checkpoints every 2–3 substantial changes, not after weeks of accumulated work. Document actual FAILs, skips, duration and HEAD — never write GREEN from focused tests alone. This 47-minute full run reinforces the need to avoid frequent redundant full runs while maintaining periodic checkpoints.
+
+---
+
 ## CURRENT — 2026-11-24 — SEC/HEALTH-recovery, F09 legacy closed, F08 next
 
 **Authority:** This dated overlay supersedes the 2026-11-22 CURRENT checkpoint and next-task statements below. Keep all older detailed evidence and the 2026-11-18 A–Ö per-ID acceptance matrix intact as historical/owner-approved records. **No Kommun 1.1 PILOT GO, Yuplan 1.0 release GO, fresh staging GO or Fly deployment is claimed.**
