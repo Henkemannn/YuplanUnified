@@ -1,5 +1,51 @@
 # Kommun 1.1 — Live Acceptance & UX Race
 
+## CURRENT — 2026-11-24 — SEC/HEALTH-recovery, F09 legacy closed, F08 next
+
+**Authority:** This dated overlay supersedes the 2026-11-22 CURRENT checkpoint and next-task statements below. Keep all older detailed evidence and the 2026-11-18 A–Ö per-ID acceptance matrix intact as historical/owner-approved records. **No Kommun 1.1 PILOT GO, Yuplan 1.0 release GO, fresh staging GO or Fly deployment is claimed.**
+
+### Verified source, worktree and protected pilot data
+
+- Repository `Henkemannn/YuplanUnified`, branch `feat/planera-app-shell-2026-03-03`. **Latest owner-terminal-verified, pushed and independently GitHub-verified product HEAD before this docs-only update:** `9c6d98c159d970de1db8dd252dc3f718c687da01` — `fix(security): enforce tenant and bound site on legacy Planera week`. Local/remote HEAD matched; worktree CLEAN; no staged/untracked files.
+- **Protected original:** `instance/yuplan_mvp.db`. **Verified backup:** `C:\Users\Henrik Jonsson\YuplanPilotBackups\yuplan_mvp_20261123_135608.db`. Current SHA-256 of **each**: `1add124065aae2aa995619aa9dcc349252a39493e0ea1855bb5ce0b3f21dbd67`; verified unchanged across recent HEALTH/SEC gates. The SHA `acf627...` in the 2026-11-22 overlay is **historical and must not be used as today's preflight guard**.
+- Current code migration head was `0054_add_menu_import_guards`; original protected SQLite was previously documented at Alembic `0050_add_password_reset_storage`. No migration of the protected original, deployment or new staging occurred during the gates below. A copy-only 0050→0054 rehearsal was previously verified; do not treat this as approval to migrate the original.
+- **Documentation-only GitHub commits advance remote HEAD.** Before the next Copilot gate or local edit, guarded `git fetch` + `git merge --ff-only` is required if local HEAD is still `9c6d98c1…`, with a CLEAN local worktree; never force-reset/rebase or run against a stale checkpoint. The product-code checkpoint above is not the post-docs Git tip.
+
+### Completed since the 2026-11-22 overlay — reviewed, committed and pushed
+
+| Work | Verified product commit / evidence | Disposition |
+| --- | --- | --- |
+| **SEC-DELETE-01** — cross-tenant legacy/null-site special-diet deletion | `da53d6137957ee5e4d02ca1a3327b4e92ca3800d`; `DietTypesRepo.delete_scoped()` and both registered deletion implementations, targeted negative/positive tests | **Scoped CLOSED** |
+| **SEC-DELETE-02** — conflicting site bindings and authentication | `9f9af654ff632a0a35d1d3708f5119d21a485664`; shared fail-closed `_resolve_user_scope()` for login, established sessions, Bearer/JWT; active-user/auth-version and password-change restrictions tested | **Scoped CLOSED** |
+| **HEALTH-09D** — duplicate site verification / order-dependent fixtures | `f54ef73d239923432e3afde3cd299d6bd1fc9c03`; `core/auth.py` site-binding adapter plus eight test files; 31 auth/real-actor, original 13/13, historical 81/81 and 28/28 six-module tests PASS in separate targeted runs | **Targeted regression CLOSED; full-suite confirmation OPEN** |
+| **SEC-F09-LEGACY** — `GET /api/planera/week` and `/api/planera/week/csv` | `9c6d98c159d970de1db8dd252dc3f718c687da01`; reproduced real-login data exposure for same-tenant other site and different tenant; fixed tenant ownership and ordinary-account bound-site checks regardless of `site_lock`; 109/109 targeted tests PASS | **These two F09 routes scoped CLOSED** |
+
+### HEALTH full-suite evidence — do not conflate with targeted PASS
+
+- **HEALTH-09** full pytest ran **2,987 tests: 2,959 PASS, 13 FAIL, 15 SKIP, 0 reported ERROR** in approximately **17 min 46 sec** at HEAD `9f9af654…`. The 13 failures comprised 8 fixture/database/order cases and 5 auth/sitebinding cases.
+- **Later HEALTH-09B/C/D** repaired and verified these cases using focused runs: original **13/13 PASS**, historical 81-node replay **81/81 PASS**, six modules together **28/28 PASS**, auth/sitebinding and real-actor **31/31 PASS**. These test groups overlap; counts must not be added together.
+- **A fresh full pytest on the later commits has NOT run.** Run one final full suite only after remaining SEC-01 corrections, then classify any remaining failures. Neither targeted green tests nor a clean Git status implies overall security/release approval.
+
+### SEC-01 disposition as of 2026-11-24
+
+| Finding | Current status | Exact remaining evidence / work |
+| --- | --- | --- |
+| F01–F07 | **Scoped CLOSED** for previously audited paths | Preserve existing remediations; revisit only on proven regression. F03 scope/migration caveats from Nov 22 remain. |
+| **F08** export/report tenant/site data exposure | **OPEN — NEXT gate: SEC-F08-CLOSE** | Existing report-isolation tests and previously scoped fixes must be reused; verify actual registered HTML/CSV/XLSX/PDF/API routes with real-user login and negative tenant/site/department tests. No new report or reviewed diff yet. |
+| **F09** Planera cross-site/ID scope | **PARTIAL — legacy week JSON/CSV CLOSED** | Real-actor denial proven for the two legacy week endpoints; day/production-completion previously tested, task legacy quarantine observed. Final original-finding-to-route reconciliation for any other ID-based writing paths remains, without reopening accepted fixes. |
+| **F10** anonymous demo portal | **OPEN — P0** | Verify anonymous reachability and whether actual customer data can be read; fix only reproducible exposure. |
+| **F11** strong secrets policy | **Code/scoped CLOSED; runtime/staging verification OPEN** | Fresh staging secrets, cookies, negative runtime behavior, hosting E2E; stale Fly is not the current target. |
+| **F12–F15** | **OPEN — P1** | F12 support authorization; F13 upload limits/failure handling; F14 temporary passwords in UI; F15 Weekview schema mutations on request. |
+| **JWT RS256/HMAC algorithm confusion** | **OPEN — focused security verification** | Validate algorithm selection, secret separation and rejection of invalid tokens against current code. |
+
+### Scope, product acceptance and next order
+
+- **SEC-F08-CLOSE** has been issued as the next Copilot order; its report is **not yet reviewed/committed**. One order → one Copilot report → project-lead review → guarded owner commit/push. Do not mark F08 CLOSED from existence of tests alone.
+- After F08: reconcile F09's residual original-finding coverage; complete F10 and the remaining security findings by actual pilot risk; then one full pytest and final security go/no-go. No speculative new SEC families or 18-minute pytest at every small gate.
+- **Kommun 1.1 A–Ö unchanged** from 2026-11-22: 16 CLOSED, 9 OPEN (AÖ-02/04/09/10/11/18/22/23/27), AÖ-19 PARTIAL, AÖ-15 CANCELLED, and separate iPad print/PWA/Alt2 checks. No owner acceptance, design, deployment or new customer pilot was silently added.
+- Production/pilot gate remains: real multi-role customer/site walkthrough, tenant/site negative tests, iPad Safari both orientations, reporting/export parity, Postmark real hosted reset, backup/migration rehearsal on copies then separately authorized production migration, fresh staging and owner signoff.
+
+---
 ## CURRENT — 2026-11-22 — status, A–Ö, SEC-01 and next handover
 
 **Authority:** This dated section supersedes older CURRENT/next-gate claims below; retain the detailed 2026-11-18 A–Ö matrix as the per-ID acceptance ledger. Earlier snapshots, old HEADs and next-order statements are historical. No overall Kommun 1.1 PILOT GO, no Yuplan 1.0 release GO, and no fresh staging GO.
