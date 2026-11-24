@@ -1,5 +1,20 @@
 # Yuplan Unified — Security Baseline
 
+## SEC-01 — HEALTH-10 and F08 review overlay (2026-11-24)
+
+**Primary operational authority:** [Kommun 1.1 Live Acceptance](../KOMMUN_1_1_LIVE_ACCEPTANCE.md), CURRENT HEALTH-10. This overlay supersedes older next-action assertions; historical scoped evidence remains.
+
+**Product HEAD independently verified before documentation-only update:** `3eaad9816bfbadfef0baeb95b82a8ba8ee180bda` on `feat/planera-app-shell-2026-03-03`, owner-verified push and Git CLEAN.
+
+- **F08 (scoped code CLOSED, full regression OPEN):** `/ui/admin/report/week` received shared `_authorize_report_scope()` check before data reads; focused report + CSV/XLSX/PDF/API suite **26/26 PASS**, including a spy test proving the guard is invoked. Upstream authentication already denied attempted cross-site/tenant tampering; route lacked defense-in-depth, but no active-login data leakage was reproduced. Three F08 report tests fail under HEALTH-10 full-suite order due to binding uniqueness fixture collision; **do not claim whole F08 test matrix GREEN**.
+- **F09:** JSON/CSV legacy week GET routes scoped CLOSED, 109/109 focused PASS; other original-F09 resource-ID routes not globally certified.
+- **F01–F07 / SEC-DELETE-01/-02:** previously reviewed scoped CLOSED; avoid speculative reopen. **F10 OPEN P0**, **F11 code closed/runtime open**, **F12–F15 OPEN P1**, **JWT RS256/HMAC check OPEN**.
+- **HEALTH-10 full pytest:** 3,003 cases = **2,978 PASS / 10 FAIL / 0 ERROR / 15 SKIP**, exit 1, **47m14s**. HEALTH-09: 2,959 PASS / 13 FAIL / 15 SKIP (2,987 cases). 6 old failures fixed, 7 old remain, 3 new F08 full-order failures; no deleted test identities. Nine failures `kitchen_user_sites.user_id` uniqueness across six login UI parameterizations and three F08 tests. Remaining failure: admin staff-create site-binding `NoneType` assertion. Treat fixture attribution as hypothesis until proven; preserve auth/site fail-closed. No F09 or SEC-DELETE full-suite failures.
+- **Immediate next gate HEALTH-10R:** targeted analysis→fix→bounded combined-order regression for these 10, then reviewed code commit; only afterwards one full-suite rerun to prove test-order stability. Do not run the ~47-minute full suite at every small gate.
+- **Protected original and backup SHA-256:** `1add124065aae2aa995619aa9dcc349252a39493e0ea1855bb5ce0b3f21dbd67`, verified unchanged before and after HEALTH-10. No deployment, migration or pilot acceptance. Docs-only GitHub updates must be synced via verified CLEAN fast-forward before local edits.
+
+---
+
 ## SEC-01 status overlay — 2026-11-24 (source and tests verified)
 
 **Operational status authority:** [Kommun 1.1 Live Acceptance](../KOMMUN_1_1_LIVE_ACCEPTANCE.md), CURRENT 2026-11-24. This overlay supersedes the Nov 22 status/next-gate statements below; historical security evidence remains unmodified.
