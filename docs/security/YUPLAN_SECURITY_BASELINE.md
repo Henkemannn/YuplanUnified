@@ -1,5 +1,21 @@
 # Yuplan Unified — Security Baseline
 
+## SEC-01 — NEWEST HANDOFF CURRENT 2026-11-25 | F12 audit next
+
+**Newest operational checkpoint on this handoff branch; supersedes older CURRENT status/next-order paragraphs below without deleting history.** Active product branch: **feat/planera-app-shell-2026-03-03**, last verified and GitHub-pushed product HEAD **7df6f8534b529359abee626c914f9c159d2bbdef**; owner terminal confirmed Git CLEAN and protected pilot original/backup unchanged. This documentation overlay exists ONLY on handoff branch **handoff/sec-f12-2026-11-25** and MUST NOT be merged into product branch while SEC-F12-AUDIT-01 runs against the locked HEAD.
+
+- **F01–F10**: scoped CLOSED in audited codepaths, no overall deployment signoff.
+- **F11**: code/scoped CLOSED through commit **d3d6cb8a1e3ba317e5c6ee757832f5dbd9e92251**; 90 targeted PASS; real fresh-staging runtime secrets/startup/cookies checks remain OPEN.
+- **JWT RS256/HMAC + landing Bearer**: code/scoped CLOSED in commit **7df6f8534b529359abee626c914f9c159d2bbdef**. Verified red/green synthetic algorithm-confusion and refresh-on-landing issues; now HS256-only, duplicate landing Bearer session creation removed. 80 targeted PASS. No new full-suite run.
+- **F12**: **IN PROGRESS – first action in next chat is to read SEC-F12-AUDIT-01 Copilot report**, then decide close or narrow remediation; do not reissue order.
+- **F13–F15** OPEN P1: upload bounds, temporary password UI exposure, Weekview runtime schema mutation.
+- **Full regression**: HEALTH-12R pre-F10 checkpoint 3,018 total / 3,003 PASS / 0 FAIL / 0 ERROR / 15 SKIP; no full pytest after F10/F11/JWT. Reserve full run for substantive security checkpoint.
+- **No staging/pilot/deployment/migration GO**. Old Fly is stale. Protected original/backup SHA256 each **1add124065aae2aa995619aa9dcc349252a39493e0ea1855bb5ce0b3f21dbd67**. Never mutate them.
+- **Full handoff**: docs/handoffs/SEC_F12_HANDOFF_2026-11-25.md on this documentation branch. One order → report → project-lead review → guarded commit → next gate.
+
+---
+
+
 ## SEC-01 — CURRENT 2026-11-25 | F10 scoped CLOSED; remaining SEC work OPEN
 
 **This CURRENT section supersedes previous F10 OPEN/next-gate wording below; older sections remain historical evidence.** Latest reviewed and GitHub-verified product/test checkpoint: `1d6c3f269b9afb06bb909ed31bd276f91652bac4` on `feat/planera-app-shell-2026-03-03`. That single new commit adds only `tests/security/test_sec_f10_demo_anonymous.py` (326 lines), no production changes. The earlier **HEALTH-12R** full-suite checkpoint was **3,018 total / 3,003 PASS / 0 FAIL / 0 ERROR / 15 SKIP, exit 0**, at source HEAD `46277ded13cc66d4a8b67add5b94c7786618fafa` (before F10's nine additional test identities); **a new full suite has not been run since F10 tests were added**.
