@@ -12,15 +12,15 @@ from typing import Any, Literal, TypedDict
 """JWT utilities (enhanced)
 
 Adds:
- - RS256 (pinned) capability with 'kid' based key lookup (fallback keeps HS256 for legacy secrets if present)
+ - HS256 signing and verification with rotating shared secrets
  - Claim enforcement: iss, aud, iat, exp, nbf with configurable leeway.
  - Max token age (iat no older than JWT_MAX_AGE_SECONDS) for access tokens.
  - Future iat guard (> leeway) rejected.
  - jti revocation hook: is_revoked(jti) -> bool (default no-op) pluggable via injector.
  - Rotation: multiple public keys/ shared secrets accepted; signing still handled externally.
 
-NOTE: For simplicity we still sign using HMAC (HS256) internally for issued tokens; validation path enforces alg expectations when header declares RS256.
-Future: swap to real RSA keypair management and JWKS fetcher.
+RS256/JWKS is intentionally not supported until a separate RSA key-management
+implementation exists.
 """
 
 
@@ -55,7 +55,6 @@ DEFAULT_REFRESH_TTL = 1209600  # 14 days
 SKEW_SECS = 30
 
 ALG_HS256 = "HS256"
-ALG_RS256 = "RS256"
 
 
 def _b64url(data: bytes) -> str:
@@ -126,31 +125,6 @@ class RefreshTokenPayload(TypedDict):
 DecodedToken = AccessTokenPayload | RefreshTokenPayload
 
 
-JWTPublicKey = dict[str, Any]  # placeholder for future RSA public key structure
-
-# Simple in-memory JWKS cache: kid -> key (HS shared secret or RSA pub placeholder)
-_JWKS_CACHE: dict[str, tuple[JWTPublicKey, float]] = {}
-_JWKS_TTL = 300  # seconds
-
-
-def _get_key_for_kid(kid: str, *, secrets: list[str] | None) -> str | None:
-    # For now we map kid to index into secrets list (kid == str(index) or direct match)
-    if not secrets:
-        return None
-    # Direct match first
-    for s in secrets:
-        if s and hashlib.sha256(s.encode()).hexdigest()[:8] == kid:
-            return s
-    # index-based fallback
-    try:
-        idx = int(kid)
-        if 0 <= idx < len(secrets):
-            return secrets[idx]
-    except Exception:
-        pass
-    return None
-
-
 def decode(
     token: str,
     *,
@@ -179,26 +153,17 @@ def decode(
         _inc_jwt_rejected("bad_header")
         raise JWTError("bad header type")
     alg = header_raw.get("alg")
-    if alg not in (ALG_HS256, ALG_RS256):
+    if alg != ALG_HS256:
         _inc_jwt_rejected("alg")
         raise JWTError("alg")
-    kid = header_raw.get("kid")
-    # Build candidate secrets
+
     secrets_to_try: list[str] = []
-    if alg == ALG_HS256:
-        if secret:
-            secrets_to_try.append(secret)
-        if secrets_list:
-            for s in secrets_list:
-                if s and s not in secrets_to_try:
-                    secrets_to_try.append(s)
-    else:  # RS256 path (placeholder: treat mapped shared secret as stand-in)
-        if not kid:
-            _inc_jwt_rejected("kid")
-            raise JWTError("kid")
-        mapped = _get_key_for_kid(kid, secrets=secrets_list)
-        if mapped:
-            secrets_to_try.append(mapped)
+    if secret:
+        secrets_to_try.append(secret)
+    if secrets_list:
+        for s in secrets_list:
+            if s and s not in secrets_to_try:
+                secrets_to_try.append(s)
     if not secrets_to_try:
         _inc_jwt_rejected("bad_signature")
         raise JWTError("bad signature")

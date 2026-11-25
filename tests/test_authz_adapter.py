@@ -139,6 +139,54 @@ def test_required_role_field_present(client):
         assert "required_role" in j
 
 
+def test_refresh_bearer_on_public_landing_does_not_create_session(client):
+    login_response = client.post(
+        "/auth/login",
+        json={"email": "admin@example.com", "password": "pw"},
+        headers={"X-Tenant-Id": "1"},
+    )
+    assert login_response.status_code == 200
+    refresh_token = login_response.get_json()["refresh_token"]
+    with client.session_transaction() as sess:
+        sess.clear()
+
+    response = client.get(
+        "/",
+        headers={"Authorization": f"Bearer {refresh_token}"},
+        follow_redirects=False,
+    )
+
+    with client.session_transaction() as sess:
+        assert sess.get("user_id") is None
+        assert sess.get("tenant_id") is None
+        assert sess.get("role") is None
+        assert sess.get("auth_version") is None
+    assert response.status_code == 200
+
+
+def test_access_bearer_on_public_landing_uses_verified_session(client):
+    login_response = client.post(
+        "/auth/login",
+        json={"email": "admin@example.com", "password": "pw"},
+        headers={"X-Tenant-Id": "1"},
+    )
+    assert login_response.status_code == 200
+    access_token = login_response.get_json()["access_token"]
+    with client.session_transaction() as sess:
+        sess.clear()
+
+    response = client.get(
+        "/",
+        headers={"Authorization": f"Bearer {access_token}"},
+        follow_redirects=False,
+    )
+
+    with client.session_transaction() as sess:
+        assert sess.get("user_id") == 1
+        assert sess.get("tenant_id") == 1
+    assert response.status_code == 302
+
+
 def test_bearer_auth_does_not_fallback_to_session_secret_in_staging(
     app, client, monkeypatch
 ):

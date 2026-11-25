@@ -1,8 +1,11 @@
 import time
+import hashlib
+import hmac
+import json
 
 import pytest
 
-from core.jwt_utils import JWTError, decode, issue_token_pair
+from core.jwt_utils import JWTError, _b64url, decode, encode, issue_token_pair
 
 
 def _make_hs(secret="s1"):
@@ -86,3 +89,97 @@ def test_jwt_claim_failures(claim, mutate, secrets):
             leeway=60,
             max_age=43200,
         )
+
+
+def _hmac_token_with_algorithm(algorithm: str, secret: str, kid: str | None = "0") -> str:
+    now = int(time.time())
+    header = {"alg": algorithm, "typ": "JWT"}
+    if kid is not None:
+        header["kid"] = kid
+    payload = {
+        "sub": 1,
+        "role": "admin",
+        "tenant_id": 1,
+        "auth_version": 1,
+        "jti": "synthetic-algorithm-jti",
+        "type": "access",
+        "iss": "yuplan",
+        "aud": "api",
+        "iat": now,
+        "exp": now + 600,
+    }
+    header_b = _b64url(json.dumps(header, separators=(",", ":")).encode())
+    payload_b = _b64url(json.dumps(payload, separators=(",", ":")).encode())
+    message = f"{header_b}.{payload_b}".encode()
+    signature = _b64url(hmac.new(secret.encode(), message, hashlib.sha256).digest())
+    return f"{header_b}.{payload_b}.{signature}"
+
+
+def test_hs256_accepts_and_rs256_hmac_is_rejected():
+    secret = "synthetic-hs256-primary"
+    payload = {
+        "sub": 1,
+        "role": "admin",
+        "tenant_id": 1,
+        "auth_version": 1,
+        "jti": "synthetic-hs256-jti",
+        "type": "access",
+    }
+    hs256 = encode(payload, secret=secret, ttl=600)
+    assert decode(hs256, secret=secret)["type"] == "access"
+
+    with pytest.raises(JWTError):
+        decode(_hmac_token_with_algorithm("RS256", secret, kid="0"), secrets_list=[secret])
+    with pytest.raises(JWTError):
+        decode(
+            _hmac_token_with_algorithm(
+                "RS256",
+                secret,
+                kid=hashlib.sha256(secret.encode()).hexdigest()[:8],
+            ),
+            secrets_list=[secret],
+        )
+    with pytest.raises(JWTError):
+        decode(_hmac_token_with_algorithm("RS256", secret, kid=None), secrets_list=[secret])
+
+
+@pytest.mark.parametrize("algorithm", ("none", "HS384", "HS512", "ES256", "synthetic"))
+def test_non_hs256_algorithms_are_rejected(algorithm):
+    with pytest.raises(JWTError):
+        decode(
+            _hmac_token_with_algorithm(algorithm, "synthetic-algorithm-secret"),
+            secrets_list=["synthetic-algorithm-secret"],
+        )
+
+
+def test_hs256_rotation_rejects_removed_key_and_keeps_primary_signing():
+    old_secret = "synthetic-hs256-old"
+    new_secret = "synthetic-hs256-new"
+    old_token = encode(
+        {
+            "sub": 1,
+            "role": "admin",
+            "tenant_id": 1,
+            "auth_version": 1,
+            "jti": "synthetic-old-jti",
+            "type": "access",
+        },
+        secret=old_secret,
+        ttl=600,
+    )
+    with pytest.raises(JWTError):
+        decode(old_token, secret=new_secret, secrets_list=[new_secret])
+    assert decode(old_token, secret=new_secret, secrets_list=[new_secret, old_secret])["sub"] == 1
+    current_token = encode(
+        {
+            "sub": 1,
+            "role": "admin",
+            "tenant_id": 1,
+            "auth_version": 1,
+            "jti": "synthetic-current-jti",
+            "type": "access",
+        },
+        secret=new_secret,
+        ttl=600,
+    )
+    assert decode(current_token, secret=new_secret, secrets_list=[old_secret])["sub"] == 1

@@ -2472,54 +2472,6 @@ def landing_root():
         except Exception:
             pass
         return redirect(_default_dashboard_for_user(None))
-    # In tests or bearer-based auth, honor Authorization header to infer identity
-    try:
-        auth_header = request.headers.get("Authorization", "")
-        if not session.get("user_id") and auth_header.lower().startswith("bearer "):
-            from flask import current_app
-            from .jwt_utils import decode as jwt_decode
-
-            token = auth_header.split(None, 1)[1].strip()
-            primary = current_app.config.get("JWT_SECRET", None)
-            secrets_list = current_app.config.get("JWT_SECRETS") or []
-            payload = jwt_decode(token, secret=primary, secrets_list=secrets_list)
-            auth_version = payload.get("auth_version")
-            if isinstance(auth_version, int):
-                session["user_id"] = payload.get("sub")
-                session["role"] = payload.get("role")
-                session["tenant_id"] = payload.get("tenant_id")
-                session["auth_version"] = auth_version
-                try:
-                    db = get_session()
-                    try:
-                        row = db.execute(
-                            text("SELECT must_change_password FROM users WHERE id=:uid LIMIT 1"),
-                            {"uid": int(session.get("user_id"))},
-                        ).fetchone()
-                        session["must_change_password"] = bool(row[0]) if row else False
-                    finally:
-                        db.close()
-                except Exception:
-                    session["must_change_password"] = False
-                if session.get("must_change_password"):
-                    return redirect(url_for("ui.account_page"))
-            # After inferring identity, re-apply feature flag redirect if enabled
-            try:
-                from flask import g, current_app
-                ff = getattr(g, "tenant_feature_flags", {})
-                enabled = ff.get("ff.dashboard.enabled")
-                if enabled is None:
-                    reg = getattr(current_app, "feature_registry", None)
-                    enabled = reg.enabled("ff.dashboard.enabled") if reg else False
-                if enabled:
-                    return redirect("/dashboard")
-            except Exception:
-                pass
-            return redirect(_default_dashboard_for_user(None))
-    except Exception:
-        # Ignore decoding errors for public landing
-        pass
-
     # Public landing page otherwise
     return render_template("pitch.html")
 # ============================================================================
