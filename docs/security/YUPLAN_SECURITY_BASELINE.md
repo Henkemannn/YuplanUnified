@@ -1,5 +1,19 @@
 # Yuplan Unified — Security Baseline
 
+## SEC-01 — 2026-11-25 HEALTH-11 full-suite GREEN checkpoint
+
+**Current operational status:** See [Kommun 1.1 Live Acceptance](../KOMMUN_1_1_LIVE_ACCEPTANCE.md), CURRENT 2026-11-25. Historical findings and previous HEALTH-10 failure analysis below remain for audit only; they do not represent the latest test status.
+
+- **Verified product checkpoint:** `9ce2952cbeb12d2a8e7adf53c53135b2a1284a2d` on `feat/planera-app-shell-2026-03-03`. HEALTH-10R three-test-file commit pushed and GitHub verified; no production changes.
+- **HEALTH-11 complete pytest:** **3,003 tests; 2,988 PASS / 0 FAIL / 0 ERROR / 15 SKIP**, exit 0, 24m53s, three existing deprecation warnings. Compared with HEALTH-10: all **10 FAIL→PASS**, **0** PASS regressions, **0** identities added/removed, skip set unchanged. Isolated pytest DB, original protected pilot DB SHA-256 unchanged `1add124065aae2aa995619aa9dcc349252a39493e0ea1855bb5ce0b3f21dbd67`. Artifacts at local `%TEMP%\yuplan-health-11\` (JUnit + output). This evidence comes from Copilot's complete local run/report; source checkpoint independently verified on GitHub.
+- **HEALTH-10R root cause/remedy:** shared session test database retained orphaned `kitchen_user_sites.user_id` values and test seeds reused IDs; new IDs now exceed maxima from both `users` and binding table without destructive cleanup. Admin Users site-binding test now checks active source (`users.site_id` or `kitchen_user_sites`) and dual-source consistency. Tested 20/20 core, 24/24 original predecessor order, 53/53 security/auth, and now complete HEALTH-11 GREEN. **Test recovery CLOSED.**
+- **F08 scoped CLOSED and full-suite-green:** shared route-local `_authorize_report_scope` call on `/ui/admin/report/week` before site/department reads; focused report/export 26/26 PASS and full-suite report tests PASS. Previously upstream login rejected the exercised site/tenant manipulation; no exploit under current login was demonstrated. Avoid asserting that every conceivable report/export route was audited.
+- **F09 PARTIAL:** two legacy week JSON/CSV GETs closed with verified site/tenant checks and 109/109 targeted PASS. Remaining ID-based Planera write APIs still require audit/repair. **NEXT: SEC-F09-REMAINING**, then **F10 OPEN P0** anonymous demo real-data access. F11 runtime/staging secrets proof OPEN; JWT RS256/HMAC and F12–F15 OPEN. F01–F07 and SEC-DELETE paths previously scoped CLOSED.
+- **Process:** one scoped Copilot order/report/review/guarded commit; focused negative/positive tenant/site/security tests on each fix; full-suite checkpoints roughly every 2–3 significant security changes, not every small order. No pilot GO, new staging GO, migration or deployment solely from green tests.
+- **Sync caution:** the docs-only commits above product HEAD require user-side clean, verified fast-forward before further local code work.
+
+---
+
 ## SEC-01 — HEALTH-10 and F08 review overlay (2026-11-24)
 
 **Primary operational authority:** [Kommun 1.1 Live Acceptance](../KOMMUN_1_1_LIVE_ACCEPTANCE.md), CURRENT HEALTH-10. This overlay supersedes older next-action assertions; historical scoped evidence remains.
