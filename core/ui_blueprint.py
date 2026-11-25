@@ -13,6 +13,7 @@ from .auth import (
     _user_has_current_site_binding,
     require_roles,
 )
+from .app_authz import resolve_department_scope
 from .config import auth_bypass_allowed
 from .csrf import csrf_protect
 from .db import get_session
@@ -3105,6 +3106,19 @@ def planera_mark_done():
             return jsonify({"error": "forbidden", "message": "Site mismatch"}), 403
         if not dep_ids:
             return jsonify({"error": "bad_request", "message": "No departments selected"}), 400
+        role = str(session.get("role") or "").strip().lower()
+        active_scope_site = None if role == "superuser" else active_site_id
+        for department_id in dep_ids:
+            try:
+                resolved_site_id, _ = resolve_department_scope(
+                    str(department_id),
+                    tenant_id,
+                    active_scope_site,
+                )
+            except (TypeError, ValueError):
+                return jsonify({"error": "forbidden", "message": "Department is not authorized"}), 403
+            if resolved_site_id != site_id:
+                return jsonify({"error": "forbidden", "message": "Department site mismatch"}), 403
         try:
             from datetime import date as _date
             d_obj = _date.fromisoformat(date_str)

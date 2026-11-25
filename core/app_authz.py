@@ -58,6 +58,35 @@ class AuthzError(Exception):
         self.required = required
 
 
+def resolve_department_scope(
+    department_id: str,
+    tenant_id: int | str,
+    active_site_id: str | None,
+) -> tuple[str, int]:
+    """Resolve and enforce the tenant/site scope of a department target."""
+    db = get_db_session()
+    try:
+        row = db.execute(
+            text(
+                "SELECT d.site_id, s.tenant_id "
+                "FROM departments d JOIN sites s ON s.id = d.site_id "
+                "WHERE d.id = :department_id"
+            ),
+            {"department_id": str(department_id)},
+        ).fetchone()
+        if not row:
+            raise ValueError("department_not_found")
+        site_id = str(row[0] or "").strip()
+        resource_tenant_id = int(row[1])
+        if resource_tenant_id != int(tenant_id):
+            raise ValueError("department_tenant_mismatch")
+        if active_site_id is not None and site_id != str(active_site_id).strip():
+            raise ValueError("department_site_mismatch")
+        return site_id, resource_tenant_id
+    finally:
+        db.close()
+
+
 def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]]:
     canonical_allowed = [to_canonical(r) for r in roles]
     password_change_exempt_endpoints = {

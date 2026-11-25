@@ -6,6 +6,7 @@ from typing import Any
 from flask import Blueprint, Response, current_app, jsonify, request, session, g, make_response
 
 from .auth import require_roles
+from .app_authz import resolve_department_scope
 from .http_errors import bad_request, not_found, problem
 from .weekview.service import WeekviewService, EtagMismatchError
 
@@ -39,6 +40,20 @@ def _tenant_id() -> Any:
         # In tests, this should be set via header injector; treat missing as 401
         return None
     return tid
+
+
+def _validated_department_site(department_id: str, tenant_id: Any):
+    role = str(session.get("role") or "").strip().lower()
+    active_site_id = None if role == "superuser" else str(session.get("site_id") or "").strip()
+    try:
+        return resolve_department_scope(department_id, tenant_id, active_site_id), None
+    except (TypeError, ValueError):
+        return None, problem(
+            403,
+            "https://example.com/errors/department_scope",
+            "Forbidden",
+            "department_scope_mismatch",
+        )
 
 
 @bp.get("/weekview")
@@ -104,17 +119,6 @@ def patch_weekview_specialdiets_mark() -> Response:
         return maybe
     data = request.get_json(silent=True) or {}
     etag = request.headers.get("If-Match")
-    if not etag:
-        # Fallback: derive current ETag from repo version when header omitted
-        try:
-            tid_fallback = _tenant_id() or (data.get("tenant_id"))
-            dep_fallback = (data.get("department_id") or "").strip()
-            year_fallback = int(data.get("year", 0))
-            week_fallback = int(data.get("week", 0))
-            current_v = _service.repo.get_version(tid_fallback, year_fallback, week_fallback, dep_fallback)
-            etag = _service.build_etag(tid_fallback, dep_fallback, year_fallback, week_fallback, current_v)
-        except Exception:
-            return bad_request("missing_if_match")
     tid = _tenant_id()
     if tid is None:
         return bad_request("tenant_missing")
@@ -129,6 +133,13 @@ def patch_weekview_specialdiets_mark() -> Response:
         uuid.UUID(department_id)
     except Exception:
         return bad_request("invalid_department_id")
+    resolved_scope, scope_error = _validated_department_site(department_id, tid)
+    if scope_error is not None:
+        return scope_error
+    resolved_site_id, _ = resolved_scope
+    site_body = (data.get("site_id") or "").strip()
+    if site_body and site_body != resolved_site_id:
+        return problem(403, "https://example.com/errors/site_mismatch", "Forbidden", "site_mismatch")
     try:
         from datetime import date as _d
         d = _d.fromisoformat(local_date)
@@ -138,6 +149,13 @@ def patch_weekview_specialdiets_mark() -> Response:
         day_of_week = int(iso[2])
     except Exception:
         return bad_request("invalid_local_date")
+    if not etag:
+        # Fallback is safe only after the target department has been authorized.
+        try:
+            current_v = _service.repo.get_version(tid, year, week, department_id)
+            etag = _service.build_etag(tid, department_id, year, week, current_v)
+        except Exception:
+            return bad_request("missing_if_match")
     # Reuse existing operations shape
     op = {"day_of_week": day_of_week, "meal": meal, "diet_type": diet_type_id, "marked": marked}
     try:
@@ -204,6 +222,12 @@ def patch_weekview() -> Response:
         uuid.UUID(department_id)
     except Exception:
         return bad_request("invalid_department_id")
+    resolved_scope, scope_error = _validated_department_site(department_id, tid)
+    if scope_error is not None:
+        return scope_error
+    resolved_site_id, _ = resolved_scope
+    if site_body and site_body != resolved_site_id:
+        return problem(403, "https://example.com/errors/site_mismatch", "Forbidden", "site_mismatch")
     if year < 1970 or not (1 <= week <= 53):
         return bad_request("invalid_year_or_week")
     ops = data.get("operations") or []
@@ -265,6 +289,12 @@ def patch_weekview_residents() -> Response:
         uuid.UUID(department_id)
     except Exception:
         return bad_request("invalid_department_id")
+    resolved_scope, scope_error = _validated_department_site(department_id, tid)
+    if scope_error is not None:
+        return scope_error
+    resolved_site_id, _ = resolved_scope
+    if site_body and site_body != resolved_site_id:
+        return problem(403, "https://example.com/errors/site_mismatch", "Forbidden", "site_mismatch")
     if year < 1970 or not (1 <= week <= 53):
         return bad_request("invalid_year_or_week")
     items = data.get("items") or []
@@ -285,8 +315,9 @@ def patch_weekview_residents() -> Response:
         if cnt < 0:
             return bad_request("invalid_count")
     try:
-        site_for_write = site_body or site_ctx or None
-        new_etag = _service.update_residents_counts(tid, year, week, department_id, etag, items, site_for_write)
+        new_etag = _service.update_residents_counts(
+            tid, year, week, department_id, etag, items, resolved_site_id
+        )
     except EtagMismatchError:
         return problem(412, "https://example.com/errors/etag_mismatch", "Precondition Failed", "etag_mismatch")
     resp = jsonify({"updated": len(items), "status": "ok"})
@@ -332,6 +363,10 @@ def patch_weekview_alt2() -> Response:
         uuid.UUID(department_id)
     except Exception:
         return bad_request("invalid_department_id")
+    resolved_scope, scope_error = _validated_department_site(department_id, tid)
+    if scope_error is not None:
+        return scope_error
+    resolved_site_id, _ = resolved_scope
     if year < 1970 or not (1 <= week <= 53):
         return bad_request("invalid_year_or_week")
     days = data.get("days") or []
@@ -345,8 +380,7 @@ def patch_weekview_alt2() -> Response:
         if di < 1 or di > 7:
             return bad_request("invalid_day_of_week")
     try:
-        # Prefer explicit body site_id; otherwise use session site_id
-        site_for_write = site_body or site_ctx or None
+        site_for_write = resolved_site_id
         try:
             from flask import current_app as _app
             _app.logger.debug(

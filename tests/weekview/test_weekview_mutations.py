@@ -18,6 +18,26 @@ def _patch(client, role, path, json=None, extra_headers=None):
     return client.patch(path, json=json or {}, headers=headers)
 
 
+def _seed_weekview_target(app_session, site_id, department_id):
+    from core.models import Department, Site
+    from core.db import get_session
+
+    with app_session.app_context():
+        db = get_session()
+        try:
+            db.add(Site(id=site_id, name="Weekview Test Site", tenant_id=1))
+            db.add(
+                Department(
+                    id=department_id,
+                    site_id=site_id,
+                    name="Weekview Test Department",
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+
 @pytest.fixture
 def enable_weekview(client_admin):
     resp = client_admin.post(
@@ -46,6 +66,7 @@ def test_rbac_and_preconditions(client_admin):
 def test_happy_path_and_412(client_admin):
     dep = str(uuid.uuid4())
     site = str(uuid.uuid4())
+    _seed_weekview_target(client_admin.application, site, dep)
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
     # Align session site context
     with client_admin.session_transaction() as sess:
@@ -88,6 +109,7 @@ def test_happy_path_and_412(client_admin):
 def test_validation_errors(client_admin, meal):
     dep = str(uuid.uuid4())
     site = str(uuid.uuid4())
+    _seed_weekview_target(client_admin.application, site, dep)
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
     with client_admin.session_transaction() as sess:
         sess["site_id"] = site
@@ -108,6 +130,7 @@ def test_validation_errors(client_admin, meal):
 def test_batch_semantics_and_idempotence(client_admin):
     dep = str(uuid.uuid4())
     site = str(uuid.uuid4())
+    _seed_weekview_target(client_admin.application, site, dep)
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
     with client_admin.session_transaction() as sess:
         sess["site_id"] = site

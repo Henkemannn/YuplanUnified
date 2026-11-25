@@ -430,6 +430,8 @@ def toggle_normal_exclusion():
     diet_type_id = str(payload.get("diet_type_id") or "").strip()
     if not (site_id and diet_type_id and alt in ("1", "2") and meal in ("lunch", "dinner", "dessert") and 0 <= day_index <= 6):
         return bad_request("invalid_parameters")
+    if not _validate_site_and_department(site_id, None, tid):
+        return not_found("site_or_department_not_found")
 
     # Ensure table in SQLite
     try:
