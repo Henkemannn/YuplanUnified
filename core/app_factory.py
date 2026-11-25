@@ -41,7 +41,13 @@ from .auth import (
     ensure_dev_superuser_henrik,
     ensure_dev_sync_superuser_from_env,
 )
-from .config import LOCAL_AUTH_BYPASS_ENVS, Config, validate_production_secret_key
+from .config import (
+    Config,
+    configured_runtime_environment,
+    is_deployed_runtime_environment,
+    is_local_fallback_allowed,
+    validate_production_secret_key,
+)
 from .config import auth_bypass_allowed
 from .db import get_session, init_engine, sqlite_file_path_from_url, _is_protected_pilot_db_path
 from .diet_api import bp as diet_api_bp
@@ -91,10 +97,11 @@ MODULE_IMPORTS = {
 
 def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     # Load .env early so debug reloads keep DEV_DEPARTMENT_ID & other vars
-    try:  # pragma: no cover
-        load_dotenv()
-    except Exception:
-        pass
+    if config_override is None:
+        try:  # pragma: no cover
+            load_dotenv()
+        except Exception:
+            pass
     # Ensure Flask can find project-level templates/ and static/
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
     app = Flask(
@@ -109,8 +116,9 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     except Exception:
         pass
     # --- Configuration ---
-    runtime_env = (os.getenv("DEPLOY_ENV") or os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").lower()
+    runtime_env = configured_runtime_environment()
     is_pilot_or_prod = runtime_env in ("pilot", "prod", "production")
+    requires_strong_auth_secrets = is_deployed_runtime_environment(runtime_env)
     cfg = Config.from_env()
     direct_config_overrides = {}
     if config_override:
@@ -161,22 +169,19 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     db_url = str(cfg.database_url)
     sqlite_file = sqlite_file_path_from_url(db_url)
     testing_flag = bool(app.config.get("TESTING"))
-    env_flask = os.getenv("FLASK_ENV") or ""
-    env_app = os.getenv("APP_ENV") or ""
-    env_deploy = os.getenv("DEPLOY_ENV") or ""
-    env_lower = (env_flask or env_app or env_deploy or "").lower()
+    env_lower = runtime_env
     emit_startup_log = (env_lower == "development") and (not testing_flag)
 
-    if testing_flag and not (app.config.get("JWT_SECRET") or "").strip():
+    local_fallback_allowed = is_local_fallback_allowed(
+        runtime_env,
+        testing=testing_flag,
+    )
+    if testing_flag and local_fallback_allowed and not (app.config.get("JWT_SECRET") or "").strip():
         app.config["JWT_SECRET"] = "test-jwt-secret-0123456789abcdef0123456789abcdef"
-    configured_envs = {
-        os.getenv(name, "").strip().lower()
-        for name in ("DEPLOY_ENV", "APP_ENV", "FLASK_ENV")
-    }
     if (
         testing_flag
         and not (app.config.get("AUTH_RATE_LIMIT_HMAC_SECRET") or "").strip()
-        and configured_envs & LOCAL_AUTH_BYPASS_ENVS
+        and local_fallback_allowed
         and auth_bypass_allowed(testing=True)
     ):
         app.config["AUTH_RATE_LIMIT_HMAC_SECRET"] = "test-only-rate-limit-secret"
@@ -187,13 +192,13 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     secret_env = os.getenv("SECRET_KEY") or ""
     if secret_env:
         app.config["SECRET_KEY"] = secret_env
-    if is_pilot_or_prod:
+    if requires_strong_auth_secrets:
         validate_production_secret_key(app.config.get("SECRET_KEY"))
         jwt_secret = (app.config.get("JWT_SECRET") or "").strip()
         if len(jwt_secret) < 32:
-            raise RuntimeError("JWT_SECRET missing/weak in pilot/prod")
+            raise RuntimeError("JWT_SECRET missing/weak in deployed environment")
 
-    if env_lower == "development" and len(app.config.get("SECRET_KEY") or "") < 32:
+    if local_fallback_allowed and len(app.config.get("SECRET_KEY") or "") < 32:
         app.config["SECRET_KEY"] = "dev-static-secret-key-0123456789abcdef0123456789abcdef"
         try:
             app.logger.warning("WARN: SECRET_KEY missing/short, using dev fallback")

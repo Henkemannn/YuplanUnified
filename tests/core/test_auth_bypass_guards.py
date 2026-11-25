@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from sqlalchemy import text
 from werkzeug.security import generate_password_hash
@@ -26,6 +28,9 @@ def _isolated_app(tmp_path, monkeypatch, *, testing: bool, **overrides):
     )
     monkeypatch.setenv("DATABASE_URL", database_url)
     monkeypatch.setenv("BUILDER_DB_PATH", str(tmp_path / "builder.db"))
+    if os.getenv("DEPLOY_ENV"):
+        monkeypatch.delenv("APP_ENV", raising=False)
+        monkeypatch.delenv("FLASK_ENV", raising=False)
     app_config = {
         "TESTING": testing,
         "SECRET_KEY": "isolated-auth-key-0123456789abcdef0123456789abcdef",
@@ -70,10 +75,10 @@ def test_auth_bypass_policy_stays_closed_on_fly(monkeypatch):
 @pytest.mark.parametrize(
     "environment",
     (
-        {"DEPLOY_ENV": "staging", "APP_ENV": "dev"},
+        {"DEPLOY_ENV": "staging"},
         {"FLY_APP_NAME": "yuplan-unified-staging", "APP_ENV": "dev"},
-        {"DEPLOY_ENV": "pilot", "APP_ENV": "dev"},
-        {"DEPLOY_ENV": "production", "APP_ENV": "dev"},
+        {"DEPLOY_ENV": "pilot"},
+        {"DEPLOY_ENV": "production"},
     ),
 )
 def test_deployed_environment_overrides_testing_and_blocks_bypass(

@@ -9,6 +9,7 @@ from werkzeug.security import generate_password_hash
 
 from core.app_factory import create_app
 from core.db import get_session, init_engine
+from core.jwt_utils import decode as jwt_decode, encode as jwt_encode
 from core.models import Base, Site, Tenant, User
 
 
@@ -136,3 +137,44 @@ def test_required_role_field_present(client):
     if r.status_code == 403:
         j = r.get_json()
         assert "required_role" in j
+
+
+def test_bearer_auth_does_not_fallback_to_session_secret_in_staging(
+    app, client, monkeypatch
+):
+    valid_token = login(client, "admin@example.com")
+    payload = jwt_decode(
+        valid_token,
+        secret="secret",
+        issuer=app.config["JWT_ISSUER"],
+        audience=app.config["JWT_AUDIENCE"],
+    )
+    payload["aud"] = app.config["JWT_AUDIENCE"]
+    fallback_token = jwt_encode(
+        payload,
+        secret=app.config["SECRET_KEY"],
+        ttl=300,
+    )
+    jwt_decode(
+        fallback_token,
+        secret=app.config["SECRET_KEY"],
+        issuer=app.config["JWT_ISSUER"],
+        audience=app.config["JWT_AUDIENCE"],
+    )
+    app.config["JWT_SECRET"] = ""
+    monkeypatch.delenv("JWT_SECRET", raising=False)
+    monkeypatch.setenv("DEPLOY_ENV", "staging")
+    monkeypatch.delenv("APP_ENV", raising=False)
+    monkeypatch.delenv("FLASK_ENV", raising=False)
+    with client.session_transaction() as sess:
+        sess.clear()
+
+    response = client.get(
+        "/features?site_id=test-site",
+        headers={
+            "Authorization": f"Bearer {fallback_token}",
+            "X-Tenant-Id": "1",
+        },
+    )
+
+    assert response.status_code == 401, response.get_json()

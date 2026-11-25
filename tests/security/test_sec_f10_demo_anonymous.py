@@ -26,6 +26,9 @@ def _isolated_demo_app(tmp_path, monkeypatch, *, testing=True, env=None, **overr
     monkeypatch.delenv("FLY_APP_NAME", raising=False)
     monkeypatch.delenv("STAGING_SIMPLE_AUTH", raising=False)
     if env:
+        if any(name in env for name in ("DEPLOY_ENV", "FLASK_ENV")):
+            monkeypatch.delenv("APP_ENV", raising=False)
+            monkeypatch.delenv("FLASK_ENV", raising=False)
         for name, value in env.items():
             if value is None:
                 monkeypatch.delenv(name, raising=False)

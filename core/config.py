@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 
 LOCAL_AUTH_BYPASS_ENVS = frozenset({"dev", "development", "local", "test", "testing"})
 DEPLOYED_AUTH_BYPASS_ENVS = frozenset({"staging", "pilot", "prod", "production"})
+ENVIRONMENT_VARIABLES = ("DEPLOY_ENV", "APP_ENV", "FLASK_ENV")
+_PRODUCTION_ENV_ALIASES = frozenset({"prod", "production"})
 PRODUCTION_SECRET_KEY_MIN_LENGTH = 32
 KNOWN_WEAK_SECRET_KEYS = frozenset(
     {
@@ -19,6 +21,47 @@ KNOWN_WEAK_SECRET_KEYS = frozenset(
         "dev-static-secret-key-0123456789abcdef0123456789abcdef",
     }
 )
+
+
+def configured_runtime_environment() -> str:
+    configured = [
+        (name, os.getenv(name, "").strip().lower())
+        for name in ENVIRONMENT_VARIABLES
+    ]
+    configured = [(name, value) for name, value in configured if value]
+    distinct_values = {value for _, value in configured}
+    families = {
+        "local" if value in LOCAL_AUTH_BYPASS_ENVS else (
+            "production" if value in _PRODUCTION_ENV_ALIASES else value
+        )
+        for value in distinct_values
+    }
+    compatible_aliases = (
+        len(families) == 1
+        and (families == {"local"} or families == {"production"})
+    )
+    if len(distinct_values) > 1 and not compatible_aliases:
+        names = ", ".join(name for name, _ in configured)
+        raise RuntimeError(f"Conflicting environment variables configured: {names}")
+    return configured[0][1] if configured else ""
+
+
+def is_local_runtime_environment(environment: str) -> bool:
+    return environment in LOCAL_AUTH_BYPASS_ENVS
+
+
+def is_local_fallback_allowed(environment: str, *, testing: bool = False) -> bool:
+    if os.getenv("FLY_APP_NAME", "").strip():
+        return False
+    if is_local_runtime_environment(environment):
+        return True
+    return testing and not environment
+
+
+def is_deployed_runtime_environment(environment: str) -> bool:
+    return environment in DEPLOYED_AUTH_BYPASS_ENVS or bool(
+        os.getenv("FLY_APP_NAME", "").strip()
+    )
 
 
 def validate_production_secret_key(secret_key: str | None) -> None:
@@ -40,22 +83,11 @@ def auth_bypass_allowed(*, testing: bool = False) -> bool:
     """Allow unauthenticated development helpers only in explicit local/test environments."""
     if os.getenv("FLY_APP_NAME"):
         return False
-    configured_envs = {
-        os.getenv(name, "").strip().lower()
-        for name in ("DEPLOY_ENV", "APP_ENV", "FLASK_ENV")
-    }
-    if configured_envs & DEPLOYED_AUTH_BYPASS_ENVS:
+    runtime_env = configured_runtime_environment()
+    if runtime_env in DEPLOYED_AUTH_BYPASS_ENVS:
         return False
-    if testing:
+    if testing and not runtime_env:
         return True
-    runtime_env = next(
-        (
-            os.getenv(name, "").strip().lower()
-            for name in ("DEPLOY_ENV", "APP_ENV", "FLASK_ENV")
-            if os.getenv(name, "").strip()
-        ),
-        "",
-    )
     return runtime_env in LOCAL_AUTH_BYPASS_ENVS
 
 

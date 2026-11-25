@@ -30,6 +30,7 @@ from .auth import (
     _user_must_change_password,
 )
 from .db import get_session as get_db_session
+from .config import configured_runtime_environment, is_local_fallback_allowed
 from .jwt_utils import decode as jwt_decode, JWTError
 from .roles import CanonicalRole, RoleLike, to_canonical
 
@@ -116,13 +117,11 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
                     import os as _os
                     primary = current_app.config.get("JWT_SECRET") or _os.getenv("JWT_SECRET")
                     if not primary:
-                        runtime_env = (
-                            _os.getenv("DEPLOY_ENV")
-                            or _os.getenv("APP_ENV")
-                            or _os.getenv("FLASK_ENV")
-                            or ""
-                        ).lower()
-                        if runtime_env not in ("pilot", "prod", "production"):
+                        runtime_env = configured_runtime_environment()
+                        if is_local_fallback_allowed(
+                            runtime_env,
+                            testing=bool(current_app.config.get("TESTING")),
+                        ):
                             primary = current_app.config.get("SECRET_KEY")
                     if not primary:
                         from .app_sessions import SessionError

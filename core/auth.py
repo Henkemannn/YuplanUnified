@@ -18,7 +18,11 @@ from .auth_rate_limit import (
     configured_hmac_secret,
 )
 from .db import get_new_session, get_session
-from .config import auth_bypass_allowed
+from .config import (
+    auth_bypass_allowed,
+    configured_runtime_environment,
+    is_local_fallback_allowed,
+)
 from .jwt_utils import (
     DEFAULT_ACCESS_TTL,
     DEFAULT_REFRESH_TTL,
@@ -72,13 +76,11 @@ def _jwt_primary_secret() -> str | None:
     secret = (current_app.config.get("JWT_SECRET") or os.getenv("JWT_SECRET") or "").strip()
     if secret:
         return secret
-    runtime_env = (
-        os.getenv("DEPLOY_ENV")
-        or os.getenv("APP_ENV")
-        or os.getenv("FLASK_ENV")
-        or ""
-    ).lower()
-    if runtime_env not in ("pilot", "prod", "production"):
+    runtime_env = configured_runtime_environment()
+    if is_local_fallback_allowed(
+        runtime_env,
+        testing=bool(current_app.config.get("TESTING")),
+    ):
         # Local/dev fallback to avoid hard-failing login when JWT_SECRET is unset.
         fallback = (current_app.config.get("SECRET_KEY") or "").strip()
         if fallback:
