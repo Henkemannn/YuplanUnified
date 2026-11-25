@@ -1,5 +1,21 @@
 # Kommun 1.1 — Live Acceptance & UX Race
 
+## CURRENT HANDOFF — 2026-11-25 | F12 pending, JWT and F11 source fixes committed
+
+**This newest handoff-branch overlay supersedes older CURRENT checkpoints and NEXT-gate text below; prior owner-accepted A–Ö decisions remain historical.** Documentation branch **handoff/sec-f12-2026-11-25** is read-only handoff/reference, NOT the development branch. Active source: **feat/planera-app-shell-2026-03-03**, owner-verified Git CLEAN/product HEAD **7df6f8534b529359abee626c914f9c159d2bbdef**. **Do not advance the active product HEAD via docs-only commits while Copilot's current SEC-F12-AUDIT-01 read-only audit runs.**
+
+**Next chat's first task:** read the *new* Copilot SEC-F12-AUDIT-01 report the owner will provide; evaluate real-account support authorization and privacy, then choose F12 scoped close or minimal fix. Do not repeat the audit. See **docs/handoffs/SEC_F12_HANDOFF_2026-11-25.md** for full input and safeguards.
+
+- SEC-F01–F10: scoped CLOSED, not live acceptance. F11 environment/JWT-secret fallbacks code fixed at **d3d6cb8a** (90 targeted PASS), fresh staging runtime acceptance still OPEN.
+- SEC-JWT-ALG-02 at **7df6f8534b529359abee626c914f9c159d2bbdef**: RS256/HMAC confusion rejected (HS256-only); unsafe landing refresh-to-session path removed; 80 targeted PASS, code/scoped CLOSED.
+- F12 audit **IN PROGRESS**; F13 upload limits, F14 temporary password UI, F15 Weekview on-request schema mutation **OPEN**.
+- Last whole-suite checkpoint pre-F10: **HEALTH-12R 3,003 PASS / 0 FAIL / 15 SKIP out of 3,018**; not rerun after F10/F11/JWT. Avoid repeated ~19–47m full runs; plan checkpoint after meaningful code gates.
+- Protected pilot and backup SHA256 **1add124065aae2aa995619aa9dcc349252a39493e0ea1855bb5ce0b3f21dbd67** unchanged per owner. No original DB writes/migrations. Stale Fly does not count as current staging.
+- **NO Kommun 1.1 PILOT GO / production GO / staging GO / migration GO**. Finish scoped SEC-F12–F15, full regression, real multi-role golden path and fresh current staging; return to A–Ö afterward.
+
+---
+
+
 ## CURRENT — 2026-11-25 | SEC-F10 scoped CLOSED; SECURITY WORK CONTINUES
 
 **Operational authority:** This section supersedes earlier F10 OPEN/next-gate statements; previous A–Ö acceptance and SEC evidence below remain historical. No municipal pilot GO, staging deployment GO, migration, or entire SEC-01 signoff.
