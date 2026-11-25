@@ -1,5 +1,17 @@
 # Kommun 1.1 — Live Acceptance & UX Race
 
+## CURRENT — 2026-11-25 | SEC-F10 scoped CLOSED; SECURITY WORK CONTINUES
+
+**Operational authority:** This section supersedes earlier F10 OPEN/next-gate statements; previous A–Ö acceptance and SEC evidence below remain historical. No municipal pilot GO, staging deployment GO, migration, or entire SEC-01 signoff.
+
+- **New verified product/test checkpoint:** `1d6c3f269b9afb06bb909ed31bd276f91652bac4` on `feat/planera-app-shell-2026-03-03`, owner-confirmed Git CLEAN, origin match, and protected original/backup SQLite unchanged. Exactly one newly added file `tests/security/test_sec_f10_demo_anonymous.py` (326 lines), no production changes. GitHub SHA/diff independently verified.
+- **SEC-F10-01/02 conclusion:** **F10 scoped CLOSED — no anonymous tenant-data exposure reproduced** in isolated synthetic tests. Local public `/demo`, `/demo/ping`, `/ui/demo` contain no customer markers; staging, pilot, production and Fly demo route/auth-bypass blocked in tested scenarios. Nine permanent F10 test identities; all ten actual protected GET/HEAD endpoints asserted registered and supporting both methods, with 20 anonymous requests returning 401 and no customer data. Real site-bound user can access own departments but not foreign same-tenant or cross-tenant department; placeholder demo login cannot access real tenant APIs. Targeted F10 + auth/site suite **51/51 PASS, exit 0**. Legacy `core/demo_views.py` not registered. Local `/_routes` header diagnostic gives route names only; never enable it in staging/pilot/production.
+- **Limits and regression baseline:** F10 closure is restricted to examined routes and configuration, **not proof of security for a future public hosted demo**. No real deployed runtime was inspected. Previous **HEALTH-12R full pytest GREEN** at pre-F10 source: **3,018 total, 3,003 PASS, 0 FAIL, 0 ERROR, 15 SKIP**. F10 adds nine test identities after this checkpoint; **full pytest has not been rerun**, by design (avoid costly full run per minor gate).
+- **Security backlog now:** F01–F10 CLOSED within their audited scopes; F11 code/scoped CLOSED but fresh runtime/staging secret proof OPEN; JWT RS256/HMAC negative algorithm-path review OPEN; F12–F15 P1 OPEN. NEXT: bounded **SEC-F11-RUNTIME-01** read-only inventory, then scoped JWT follow-up; continue SEC before returning to Kommun 1.1 A–Ö.
+- **Process and sync:** One Copilot order/report/review, no broad speculative rewrites. Documentation-only remote commits after product HEAD require owner-side verified CLEAN fast-forward to latest documentation HEAD before further local work. Pilot original and backup each remain user-reported SHA-256 `1add124065aae2aa995619aa9dcc349252a39493e0ea1855bb5ce0b3f21dbd67`.
+
+---
+
 ## CURRENT — 2026-11-25 | HEALTH-12R full-suite GREEN; SEC-F09 scoped CLOSED
 
 **Operational authority:** This section is the current project checkpoint and supersedes older CURRENT/HEALTH-11/HEALTH-12/F09-next-gate language below. Historical A–Ö decisions, acceptance entries, and prior SEC audit evidence remain unchanged. **Full pytest GREEN does NOT approve pilot GO, fresh staging GO, deployment, migration of the original SQLite database, or entire SEC-01 closure.**
