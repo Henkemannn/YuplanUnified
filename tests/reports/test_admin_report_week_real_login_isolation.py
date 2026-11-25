@@ -63,6 +63,22 @@ def _seed_report_users(app):
                     "user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
                 )
             )
+            next_user_id = int(
+                db.execute(
+                    text(
+                        "SELECT MAX(candidate_id) + 1 FROM ("
+                        "SELECT COALESCE(MAX(id), 0) AS candidate_id FROM users "
+                        "UNION ALL "
+                        "SELECT COALESCE(MAX(user_id), 0) AS candidate_id "
+                        "FROM kitchen_user_sites"
+                        ")"
+                    )
+                ).scalar_one()
+            )
+            admin.id = next_user_id
+            db.flush()
+            superuser.id = next_user_id + 1
+            db.flush()
             db.execute(
                 text(
                     "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "

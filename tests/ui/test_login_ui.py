@@ -48,12 +48,27 @@ def _seed_login_user(db, *, role: str, password: str = "UiPassw0rd!") -> str:
             "(user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL)"
         )
     )
+    next_user_id = int(
+        db.execute(
+            text(
+                "SELECT MAX(candidate_id) + 1 FROM ("
+                "SELECT COALESCE(MAX(id), 0) AS candidate_id FROM users "
+                "UNION ALL "
+                "SELECT COALESCE(MAX(user_id), 0) AS candidate_id "
+                "FROM kitchen_user_sites"
+                ")"
+            )
+        ).scalar_one()
+    )
+    user = db.query(User).filter_by(email=email.lower()).one()
+    user.id = next_user_id
+    db.flush()
     db.execute(
         text(
             "INSERT INTO kitchen_user_sites(user_id, tenant_id, site_id) "
             "VALUES (:user_id, :tenant_id, :site_id)"
         ),
-        {"user_id": int(db.query(User).filter_by(email=email.lower()).one().id), "tenant_id": tenant.id, "site_id": site.id},
+        {"user_id": next_user_id, "tenant_id": tenant.id, "site_id": site.id},
     )
     db.commit()
     return email.lower()

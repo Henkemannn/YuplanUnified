@@ -178,6 +178,32 @@ def _snapshot(app_session, user_id):
             db.close()
 
 
+def _read_site_binding(app_session, user_id):
+    with app_session.app_context():
+        db = get_session()
+        try:
+            columns = {
+                str(row[1])
+                for row in db.execute(text("PRAGMA table_info(users)")).fetchall()
+            }
+            legacy = None
+            if "site_id" in columns:
+                legacy = db.execute(
+                    text("SELECT tenant_id, site_id FROM users WHERE id=:uid"),
+                    {"uid": int(user_id)},
+                ).fetchone()
+            kitchen = db.execute(
+                text("SELECT tenant_id, site_id FROM kitchen_user_sites WHERE user_id=:uid"),
+                {"uid": int(user_id)},
+            ).fetchone()
+            if legacy and legacy[1] and kitchen and kitchen[1]:
+                assert tuple(legacy) == tuple(kitchen)
+            binding = legacy if legacy and legacy[1] else kitchen
+            return tuple(binding) if binding else None
+        finally:
+            db.close()
+
+
 def test_real_admin_can_create_and_manage_site_bound_staff(app_session):
     data = _seed_scope(app_session)
     client = app_session.test_client()
@@ -206,13 +232,9 @@ def test_real_admin_can_create_and_manage_site_bound_staff(app_session):
                 text("SELECT id FROM users WHERE email=:email"),
                 {"email": staff_email},
             ).scalar_one()
-            binding = db.execute(
-                text("SELECT tenant_id, site_id FROM kitchen_user_sites WHERE user_id=:uid"),
-                {"uid": int(staff_id)},
-            ).fetchone()
         finally:
             db.close()
-    assert tuple(binding) == (data["tenant_a"], data["site_a"])
+    assert _read_site_binding(app_session, staff_id) == (data["tenant_a"], data["site_a"])
 
     updated = client.post(
         f"/ui/admin/users/{staff_id}/edit",
