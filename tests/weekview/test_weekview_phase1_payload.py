@@ -46,6 +46,14 @@ def test_phase1_days_payload_includes_menu_alt2_and_residents(client_admin):
                 ),
                 {"id": site_id},
             )
+            db.execute(
+                text(
+                    "INSERT INTO departments(id, site_id, name, resident_count_mode, "
+                    "resident_count_fixed, version) "
+                    "VALUES(:id, :site_id, 'Phase 1 Department', 'fixed', 10, 0)"
+                ),
+                {"id": dep_id, "site_id": site_id},
+            )
             db.commit()
         finally:
             db.close()

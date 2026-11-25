@@ -71,6 +71,8 @@ def test_data_rendering_and_badges(client_admin):
     _enable_weekview(client_admin)
     year, week = 2025, 48
     sid, did = _seed_menu(app, year, week)
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = sid
     _enable_weekview(client_admin)
     # Flag alt2 for Monday
     r0 = client_admin.get(f"/api/weekview?year={year}&week={week}&department_id={did}", headers=ADMIN_HEADERS)

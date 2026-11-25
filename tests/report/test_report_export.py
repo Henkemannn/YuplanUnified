@@ -65,13 +65,40 @@ def test_rbac_and_validation(client_admin):
 @pytest.mark.usefixtures("enable_report", "enable_weekview")
 def test_csv_and_xlsx_export_with_etag_and_304(client_admin):
     dep = str(uuid.uuid4())
+    site = str(uuid.uuid4())
     year, week = 2025, 45
     wv_base = f"/api/weekview?year={year}&week={week}&department_id={dep}"
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site
+    with client_admin.application.app_context():
+        from core.db import get_session
+        from sqlalchemy import text
+
+        db = get_session()
+        try:
+            db.execute(
+                text(
+                    "INSERT INTO sites(id, name, tenant_id, version) "
+                    "VALUES(:site_id, 'Export Site', 1, 0)"
+                ),
+                {"site_id": site},
+            )
+            db.execute(
+                text(
+                    "INSERT INTO departments(id, site_id, name, resident_count_mode, "
+                    "resident_count_fixed, version) "
+                    "VALUES(:department_id, :site_id, 'Export Department', 'fixed', 10, 0)"
+                ),
+                {"department_id": dep, "site_id": site},
+            )
+            db.commit()
+        finally:
+            db.close()
 
     # Seed weekview: get ETag, set residents and specials
     etag0 = _get(client_admin, "admin", wv_base).headers.get("ETag")
     # residents
-    _patch(
+    residents_response = _patch(
         client_admin,
         "admin",
         "/api/weekview/residents",
@@ -86,9 +113,10 @@ def test_csv_and_xlsx_export_with_etag_and_304(client_admin):
         },
         extra_headers={"If-Match": etag0},
     )
+    assert residents_response.status_code == 200
     # marks
     etag1 = _get(client_admin, "admin", wv_base).headers.get("ETag")
-    _patch(
+    marks_response = _patch(
         client_admin,
         "editor",
         "/api/weekview",
@@ -102,6 +130,7 @@ def test_csv_and_xlsx_export_with_etag_and_304(client_admin):
         },
         extra_headers={"If-Match": etag1},
     )
+    assert marks_response.status_code == 200
 
     # Get base report ETag
     r0 = _get(client_admin, "admin", f"/api/report?year={year}&week={week}")
@@ -137,7 +166,7 @@ def test_csv_and_xlsx_export_with_etag_and_304(client_admin):
 
     # Mutate weekview -> ETag changes
     etag2 = _get(client_admin, "admin", wv_base).headers.get("ETag")
-    _patch(
+    residents_response = _patch(
         client_admin,
         "admin",
         "/api/weekview/residents",
@@ -151,6 +180,7 @@ def test_csv_and_xlsx_export_with_etag_and_304(client_admin):
         },
         extra_headers={"If-Match": etag2},
     )
+    assert residents_response.status_code == 200
     rcsv3 = _get(client_admin, "admin", f"/api/report/export?year={year}&week={week}&format=csv")
     assert rcsv3.status_code == 200
     assert rcsv3.headers.get("ETag") != etcsv

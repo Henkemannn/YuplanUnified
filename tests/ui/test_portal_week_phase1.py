@@ -77,6 +77,8 @@ def test_portal_alt2_badge_visible(client_admin):
     _enable_weekview(client_admin)
     site_id = str(uuid.uuid4()); dep_id = str(uuid.uuid4()); year, week = 2025, 47
     _seed_base(app, site_id, dep_id, year, week)
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     _enable_weekview(client_admin)
     # Set alt2 flag for Monday
     r0 = client_admin.get(f"/api/weekview?year={year}&week={week}&department_id={dep_id}", headers=_h("admin"))

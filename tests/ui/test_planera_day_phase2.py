@@ -13,7 +13,10 @@ def _seed_site_with_departments(app, dep_count=3):
         db = get_session()
         try:
             site_id = str(uuid.uuid4())
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0)"), {"i": site_id, "n": "PlanSite"})
+            db.execute(
+                text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0)"),
+                {"i": site_id, "n": "PlanSite"},
+            )
             dep_ids = []
             for i in range(dep_count):
                 dep_id = str(uuid.uuid4())

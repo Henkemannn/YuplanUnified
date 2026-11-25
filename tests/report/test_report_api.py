@@ -82,6 +82,30 @@ def test_report_math_and_clamp_with_weekview_data(client_admin):
     # Align session site context for weekview mutations (selector is superuser-only)
     with client_admin.session_transaction() as sess:
         sess["site_id"] = site
+    with client_admin.application.app_context():
+        from core.db import get_session
+        from sqlalchemy import text
+
+        db = get_session()
+        try:
+            db.execute(
+                text(
+                    "INSERT INTO sites(id, name, tenant_id, version) "
+                    "VALUES(:site_id, 'Report Site', 1, 0)"
+                ),
+                {"site_id": site},
+            )
+            db.execute(
+                text(
+                    "INSERT INTO departments(id, site_id, name, resident_count_mode, "
+                    "resident_count_fixed, version) "
+                    "VALUES(:department_id, :site_id, 'Report Department', 'fixed', 10, 0)"
+                ),
+                {"department_id": dep, "site_id": site},
+            )
+            db.commit()
+        finally:
+            db.close()
 
     # Get initial ETag for weekview
     r0 = _get(client_admin, "admin", wv_base)

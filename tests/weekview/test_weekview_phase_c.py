@@ -30,10 +30,40 @@ def enable_weekview(client_admin):
     assert resp.status_code == 200
 
 
+def _seed_weekview_target(client_admin, site_id, department_id):
+    with client_admin.application.app_context():
+        from core.db import get_session
+        from sqlalchemy import text
+
+        db = get_session()
+        try:
+            db.execute(
+                text(
+                    "INSERT INTO sites(id, name, tenant_id, version) "
+                    "VALUES(:site_id, 'Phase C Site', 1, 0)"
+                ),
+                {"site_id": site_id},
+            )
+            db.execute(
+                text(
+                    "INSERT INTO departments(id, site_id, name, resident_count_mode, "
+                    "resident_count_fixed, version) "
+                    "VALUES(:department_id, :site_id, 'Phase C Department', 'fixed', 10, 0)"
+                ),
+                {"department_id": department_id, "site_id": site_id},
+            )
+            db.commit()
+        finally:
+            db.close()
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
+
+
 @pytest.mark.usefixtures("enable_weekview")
 def test_conditional_get_304_and_refresh_after_mutation(client_admin):
     dep = str(uuid.uuid4())
     site = str(uuid.uuid4())
+    _seed_weekview_target(client_admin, site, dep)
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
     with client_admin.session_transaction() as sess:
         sess["site_id"] = site
@@ -71,6 +101,7 @@ def test_conditional_get_304_and_refresh_after_mutation(client_admin):
 def test_residents_counts_write_and_readback(client_admin):
     dep = str(uuid.uuid4())
     site = str(uuid.uuid4())
+    _seed_weekview_target(client_admin, site, dep)
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
     # Align session site context with our test site
     with client_admin.session_transaction() as sess:
@@ -103,6 +134,7 @@ def test_residents_counts_write_and_readback(client_admin):
 def test_alt2_flags_write_and_clear(client_admin):
     dep = str(uuid.uuid4())
     site = str(uuid.uuid4())
+    _seed_weekview_target(client_admin, site, dep)
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
     # Align session site context with our test site
     with client_admin.session_transaction() as sess:
@@ -130,6 +162,8 @@ def test_alt2_flags_write_and_clear(client_admin):
 @pytest.mark.parametrize("meal", ["breakfast", "snack"])  # invalid meals
 def test_validation_errors_new_endpoints(client_admin, meal):
     dep = str(uuid.uuid4())
+    site = str(uuid.uuid4())
+    _seed_weekview_target(client_admin, site, dep)
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
     etag0 = _get(client_admin, "admin", base).headers.get("ETag")
 
