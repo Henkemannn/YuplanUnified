@@ -19,6 +19,10 @@ class UserScopeSchemaError(RuntimeError):
     """Raised when site-binding schema metadata cannot be read safely."""
 
 
+class StalePasswordResetError(ValueError):
+    """Raised when a password reset form no longer matches the user version."""
+
+
 def _normalize_email(email: Optional[str]) -> str:
     return str(email or "").strip().lower()
 
@@ -207,7 +211,7 @@ class AdminUserRepo:
             role_filter = "" if include_superusers else "AND lower(COALESCE(u.role, '')) != 'superuser' "
             rows = db.execute(
                 text(
-                    "SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.department_id, d.name, COALESCE(r.name, ''), s.name, u.must_change_password "
+                    "SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.department_id, d.name, COALESCE(r.name, ''), s.name, u.must_change_password, u.auth_version "
                     "FROM users u "
                     "LEFT JOIN departments d ON d.id = u.department_id "
                     "LEFT JOIN residences r ON r.id = d.residence_id "
@@ -252,6 +256,7 @@ class AdminUserRepo:
                     "site_name": site_name,
                     "site_id": display_site_id,
                     "must_change_password": bool(row[10]) if row[10] is not None else False,
+                    "auth_version": int(row[11] or 1),
                 })
             return users
         finally:
@@ -263,7 +268,7 @@ class AdminUserRepo:
         try:
             row = db.execute(
                 text(
-                    "SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.tenant_id, u.department_id, d.name, COALESCE(r.name, ''), s.name, u.must_change_password "
+                    "SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.tenant_id, u.department_id, d.name, COALESCE(r.name, ''), s.name, u.must_change_password, u.auth_version "
                     "FROM users u "
                     "LEFT JOIN departments d ON d.id = u.department_id "
                     "LEFT JOIN residences r ON r.id = d.residence_id "
@@ -300,6 +305,7 @@ class AdminUserRepo:
                 "site_name": site_name,
                 "site_id": site_id,
                 "must_change_password": bool(row[11]) if len(row) > 11 and row[11] is not None else False,
+                "auth_version": int(row[12] or 1),
             }
         finally:
             db.close()
@@ -473,7 +479,9 @@ class AdminUserRepo:
         finally:
             db.close()
 
-    def reset_password(self, user_id: int) -> str:
+    def reset_password(
+        self, user_id: int, *, expected_auth_version: int | None = None
+    ) -> str:
         """
         Generate a temporary password for a user.
         Returns the plaintext password (for display to admin).
@@ -484,14 +492,25 @@ class AdminUserRepo:
         
         db = get_session()
         try:
-            db.execute(
+            version_clause = ""
+            params = {"ph": password_hash, "uid": user_id}
+            if expected_auth_version is not None:
+                version_clause = (
+                    " AND COALESCE(auth_version, 1) = :expected_auth_version"
+                )
+                params["expected_auth_version"] = int(expected_auth_version)
+            result = db.execute(
                 text(
                     "UPDATE users "
                     "SET password_hash = :ph, auth_version = COALESCE(auth_version, 1) + 1, refresh_token_jti = NULL, must_change_password = 1 "
                     "WHERE id = :uid"
+                    + version_clause
                 ),
-                {"ph": password_hash, "uid": user_id},
+                params,
             )
+            if expected_auth_version is not None and result.rowcount != 1:
+                db.rollback()
+                raise StalePasswordResetError("password reset form is stale")
             db.commit()
             return temp_password
         finally:

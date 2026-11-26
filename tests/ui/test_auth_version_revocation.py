@@ -136,11 +136,11 @@ def test_admin_reset_invalidates_all_prior_credentials():
         csrf = _csrf_from_html(client_admin.get("/ui/admin/users").data.decode("utf-8"))
         reset_resp = client_admin.post(
             f"/ui/admin/users/{user_a_id}/reset-password",
-            data={"new_password": "NewPassw0rd!2026", "csrf_token": csrf},
+            data={"csrf_token": csrf, "auth_version": "1"},
             follow_redirects=True,
         )
         assert reset_resp.status_code == 200
-        match = re.search(r"Tillfälligt lösenord skapat för .*?: ([^<\s]+)", reset_resp.data.decode("utf-8"))
+        match = re.search(r"<code>([^<\s]+)</code>", reset_resp.data.decode("utf-8"))
         assert match is not None, reset_resp.data.decode("utf-8")
         temp_password = match.group(1)
 

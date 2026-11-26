@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from flask import Blueprint, current_app, render_template, session, request, jsonify, redirect, url_for, flash, g, abort
+from flask import Blueprint, current_app, make_response, render_template, session, request, jsonify, redirect, url_for, flash, g, abort
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -10383,7 +10383,7 @@ def admin_users_reset_password(user_id: int):
     Reset user password (generates temporary password).
     """
     from flask import flash, redirect, url_for
-    from core.admin_user_repo import AdminUserRepo
+    from core.admin_user_repo import AdminUserRepo, StalePasswordResetError
     
     tid = session.get("tenant_id")
     
@@ -10399,14 +10399,41 @@ def admin_users_reset_password(user_id: int):
         flash("Användare hittades inte.", "error")
         return redirect(url_for("ui.admin_users_list"))
     
-    # Generate temporary password
+    raw_version = request.form.get("auth_version")
     try:
-        temp_password = repo.reset_password(user_id)
-        flash(f"Tillfälligt lösenord skapat för {user['username']}: {temp_password}", "warning")
-    except Exception as e:
-        flash(f"Kunde inte återställa lösenord: {str(e)}", "error")
-    
-    return redirect(url_for("ui.admin_users_list"))
+        expected_auth_version = int(str(raw_version).strip())
+        if expected_auth_version < 1:
+            raise ValueError
+    except (TypeError, ValueError):
+        flash("Lösenordsformuläret är ogiltigt. Ladda om användarlistan och försök igen.", "error")
+        return redirect(url_for("ui.admin_users_list"))
+
+    try:
+        temp_password = repo.reset_password(
+            user_id, expected_auth_version=expected_auth_version
+        )
+    except StalePasswordResetError:
+        flash(
+            "Lösenordsformuläret är inaktuellt. Ladda om användarlistan och bekräfta återställningen igen.",
+            "error",
+        )
+        return redirect(url_for("ui.admin_users_list"))
+    except Exception:
+        flash("Kunde inte återställa lösenordet. Försök igen.", "error")
+        return redirect(url_for("ui.admin_users_list"))
+
+    response = make_response(
+        render_template(
+            "ui/admin_user_temporary_password.html",
+            vm={"site_id": session.get("site_id")},
+            user=user,
+            temp_password=temp_password,
+        )
+    )
+    response.headers["Cache-Control"] = "no-store, private, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
 
 
 # ============================================================================

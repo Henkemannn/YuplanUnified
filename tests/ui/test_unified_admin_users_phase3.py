@@ -1749,11 +1749,17 @@ def test_users_reset_password_stub(client_admin):
             db.close()
     
     csrf_token = _list_csrf(client_admin)
-    resp = client_admin.post(f"/ui/admin/users/{user_id}/reset-password", data={"csrf_token": csrf_token}, headers=_h("admin"), follow_redirects=True)
+    resp = client_admin.post(
+        f"/ui/admin/users/{user_id}/reset-password",
+        data={"csrf_token": csrf_token, "auth_version": "1"},
+        headers=_h("admin"),
+        follow_redirects=True,
+    )
     html = resp.data.decode("utf-8")
     
     assert resp.status_code == 200
-    assert "Tillfälligt lösenord" in html or "lösenord" in html.lower()
+    assert re.search(r"<code>[^<\s]+</code>", html)
+    assert "Lösenord återställt" in html
 
 
 # ============================================================================
