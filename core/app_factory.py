@@ -643,6 +643,13 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         except Exception:
             pass
 
+    # Apply upload limits before security middleware can read multipart form data.
+    from .upload_limits import apply_request_limits
+
+    @app.before_request
+    def _apply_upload_request_limits() -> None:
+        apply_request_limits()
+
     # --- Security middleware (CORS, CSRF, headers) ---
     init_security(app)
 
@@ -819,6 +826,39 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     @app.errorhandler(404)
     def _h404(_: Any) -> Response:
         return _problem_not_found("not_found")
+
+    from werkzeug.exceptions import RequestEntityTooLarge
+
+    @app.errorhandler(RequestEntityTooLarge)
+    def _h413(_: RequestEntityTooLarge) -> Response:
+        if request.path.startswith("/ui/admin/menu-import/upload"):
+            from markupsafe import escape
+            from flask import url_for
+
+            target = url_for("admin_ui.admin_menu_import")
+            response = Response(
+                (
+                    "<!doctype html><html lang=\"sv\"><body>"
+                    "<h1>Uppladdningen är för stor</h1>"
+                    "<p>Filen eller begäran överskrider tillåten storlek.</p>"
+                    f'<p><a href="{escape(target)}">Tillbaka till menyimporten</a></p>'
+                    "</body></html>"
+                ),
+                status=413,
+                mimetype="text/html",
+            )
+            response.headers["Location"] = target
+            return response
+        response = jsonify(
+            {
+                "ok": False,
+                "error": "request_too_large",
+                "message": "Uppladdningen överskrider tillåten storlek.",
+                "status": 413,
+            }
+        )
+        response.status_code = 413
+        return response
 
     # Map MethodNotAllowed (405) to 404 Problem for consistency with tests expecting 404 on unknown routes
     try:
@@ -1011,6 +1051,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     @app.before_request
     def _before_req() -> Response | None:
         from flask import request
+
         # Dev-only host mismatch banner (avoid cookie confusion between hosts).
         try:
             if emit_startup_log and not app.config.get("TESTING"):
@@ -1162,9 +1203,13 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         if env_on:
             try:
                 from .csrf import before_request as _csrf_before
+                from werkzeug.exceptions import RequestEntityTooLarge
+
                 resp = _csrf_before()
                 if resp is not None:
                     return resp
+            except RequestEntityTooLarge:
+                raise
             except Exception:  # pragma: no cover
                 app.logger.warning("Strict CSRF hook failed", exc_info=True)
         else:

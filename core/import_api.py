@@ -22,6 +22,15 @@ from .importers.csv_importer import parse_csv
 from .importers.validate import ImportValidationError, validate_and_normalize
 from .rate_limit import RateLimitExceeded, allow, rate_limited_response
 from .roles import CanonicalRole
+from .upload_limits import (
+    InvalidUpload,
+    UploadPolicy,
+    UploadTooLarge,
+    bounded_read,
+    get_upload_policy,
+    validate_csv_bytes,
+    validate_zip_payload,
+)
 
 try:  # pragma: no cover - optional dependency
     from .importers.docx_table_importer import parse_docx  # type: ignore[attr-defined]
@@ -39,7 +48,8 @@ ImportRow = dict[str, str]
 
 # Narrow to canonical literals accepted by require_roles (order matters for error message)
 ALLOWED_ROLES: tuple[CanonicalRole, CanonicalRole] = ("editor", "admin")
-MAX_FILE_BYTES = 5 * 1024 * 1024  # 5MB guard
+# Backward-compatible alias for callers that imported the former constant.
+MAX_FILE_BYTES = UploadPolicy().document_bytes
 
 
 def _tenant_id() -> int:
@@ -78,13 +88,13 @@ def _file_from_request() -> FileStorage | None:
     return cast(FileStorage | None, fs)
 
 
-def _file_to_bytes(fs: FileStorage) -> bytes:
-    raw = fs.read()
-    if not raw:
-        # Empty upload considered invalid input
-        raise ImportValidationError([])
-    if len(raw) > MAX_FILE_BYTES:
-        raise ImportValidationError([])
+def _file_to_bytes(fs: FileStorage, *, validate_document: bool = True) -> bytes:
+    filename = str(fs.filename or "").lower()
+    policy = get_upload_policy()
+    limit = policy.csv_bytes if filename.endswith(".csv") else policy.document_bytes
+    raw = bounded_read(fs.stream, limit)
+    if validate_document and filename.endswith((".docx", ".xlsx")):
+        validate_zip_payload(raw, policy=policy)
     return raw
 
 
@@ -155,12 +165,17 @@ def import_csv():  # Flask view
         return _err("unsupported", "Only CSV upload supported", 415)
     try:
         data = _file_to_bytes(storage)
+        validate_csv_bytes(data, policy=get_upload_policy())
         parsed = parse_csv(data.decode("utf-8", errors="replace"))
         rows = _normalize(cast(list[dict[str, str]], parsed.rows))
         from flask import jsonify
 
         return jsonify(_ok(rows, fmt="csv"))
     except ImportValidationError:
+        return _err("invalid", "Import validation failed", 400)
+    except UploadTooLarge:
+        return _err("too_large", "Upload exceeds the allowed size", 413)
+    except InvalidUpload:
         return _err("invalid", "Import validation failed", 400)
 
 
@@ -186,6 +201,12 @@ def import_docx():  # dynamic Response
         return jsonify(_ok(rows, fmt="docx"))
     except ImportValidationError:
         return _err("invalid", "Import validation failed", 400)
+    except UploadTooLarge:
+        return _err("too_large", "Upload exceeds the allowed size", 413)
+    except InvalidUpload:
+        return _err("invalid", "Import validation failed", 400)
+    except (ValueError, OSError):
+        return _err("invalid", "Import validation failed", 400)
 
 
 @bp.post("/xlsx")
@@ -209,6 +230,12 @@ def import_xlsx():  # dynamic Response
 
         return jsonify(_ok(rows, fmt="xlsx"))
     except ImportValidationError:
+        return _err("invalid", "Import validation failed", 400)
+    except UploadTooLarge:
+        return _err("too_large", "Upload exceeds the allowed size", 413)
+    except InvalidUpload:
+        return _err("invalid", "Import validation failed", 400)
+    except (ValueError, OSError):
         return _err("invalid", "Import validation failed", 400)
 
 
@@ -243,15 +270,21 @@ def import_menu():  # dynamic Response
         if fs is None:
             return _err("invalid", "file field required", 400)
         data = _file_to_bytes(fs)
-    except ImportValidationError:
+    except UploadTooLarge:
+        return _err("too_large", "Upload exceeds the allowed size", 413)
+    except (ImportValidationError, InvalidUpload):
         return _err("invalid", "Import validation failed", 400)
     storage = request.files.get("file") if "file" in request.files else None
     filename = getattr(storage, "filename", "menu.bin")
     mime = getattr(storage, "mimetype", "application/octet-stream")
     try:
+        if str(filename).lower().endswith(".csv"):
+            validate_csv_bytes(data, policy=get_upload_policy())
         result = imp.parse(data, filename, mime)  # type: ignore[attr-defined]
-    except Exception as ex:  # pragma: no cover - broad safety
-        return _err("invalid", str(ex), 400)
+    except UploadTooLarge:
+        return _err("too_large", "Upload exceeds the allowed size", 413)
+    except (ValueError, OSError):  # pragma: no cover - parser safety
+        return _err("invalid", "Import validation failed", 400)
     # Build diff list (dry-run semantics only; no persistence implemented)
     diff: list[dict[str, object]] = []
     for wk in getattr(result, "weeks", []):  # type: ignore[iteration-over-annotated]

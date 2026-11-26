@@ -32,6 +32,17 @@ def _login(client):
         sess["role"] = "admin"
 
 
+def _xlsx_payload() -> bytes:
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    workbook.active.append(["title", "description"])
+    stream = io.BytesIO()
+    workbook.save(stream)
+    workbook.close()
+    return stream.getvalue()
+
+
 def test_csv_happy_meta_format(tmp_path):
     app = _app(tmp_path)
     with app.test_client() as client:
@@ -172,7 +183,7 @@ def test_menu_dry_run_meta_and_alias(monkeypatch, tmp_path):
         monkeypatch.setattr(mod, "_importer", DummyImporter())
         resp = client.post(
             "/import/menu?dry_run=1",
-            data={"file": (io.BytesIO(b"x"), "menu.xlsx")},
+            data={"file": (io.BytesIO(_xlsx_payload()), "menu.xlsx")},
             content_type="multipart/form-data",
         )
         body = json.loads(resp.get_data())

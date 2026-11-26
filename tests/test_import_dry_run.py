@@ -42,6 +42,17 @@ def _login(client, email, site_id):
     assert r.status_code == 200
 
 
+def _xlsx_payload() -> bytes:
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    workbook.active.append(["title", "description"])
+    stream = io.BytesIO()
+    workbook.save(stream)
+    workbook.close()
+    return stream.getvalue()
+
+
 def test_menu_import_dry_run(monkeypatch, tmp_path):
     from core import db as core_db  # type: ignore
 
@@ -83,7 +94,7 @@ def test_menu_import_dry_run(monkeypatch, tmp_path):
 
     import_api_mod._importer = DummyImporter()
 
-    data = io.BytesIO(b"placeholder")
+    data = io.BytesIO(_xlsx_payload())
     resp = client.post("/import/menu?dry_run=1", data={"file": (data, "menu.xlsx")})
     assert resp.status_code == 200
     body = resp.get_json()

@@ -10,6 +10,15 @@ from openpyxl import load_workbook
 
 from werkzeug.datastructures import FileStorage
 
+from ..importers.docx_table_importer import validate_docx_payload
+from ..importers.xlsx_importer import WorksheetDimensions, validate_xlsx_payload
+from ..upload_limits import (
+    bounded_read,
+    get_upload_policy,
+    validate_csv_bytes,
+    validate_text_lines,
+)
+
 _SUPPORTED_EXTENSIONS = {".txt", ".csv", ".xlsx", ".docx"}
 _TEXT_HEADER_TOKENS = {
     "text",
@@ -199,15 +208,24 @@ def parse_builder_import_file(
     if not any(lower_name.endswith(ext) for ext in _SUPPORTED_EXTENSIONS):
         raise ValueError("unsupported file type; use .txt, .csv, .xlsx, or .docx")
 
-    raw_bytes = file_storage.read()
-    if not raw_bytes:
-        raise ValueError("file is empty")
+    policy = get_upload_policy()
+    if lower_name.endswith(".txt"):
+        limit = policy.txt_bytes
+    elif lower_name.endswith(".csv"):
+        limit = policy.csv_bytes
+    else:
+        limit = policy.document_bytes
+    raw_bytes = bounded_read(file_storage.stream, limit)
 
     if lower_name.endswith(".txt"):
+        validate_text_lines(raw_bytes, policy=policy)
         return _build_preview(file_type="txt", lines=_parse_txt_lines(raw_bytes))
 
     if lower_name.endswith(".xlsx"):
-        lines, used_column, used_index = _parse_xlsx_lines(raw_bytes, csv_column=csv_column)
+        dimensions = validate_xlsx_payload(raw_bytes, policy=policy)
+        lines, used_column, used_index = _parse_xlsx_lines(
+            raw_bytes, csv_column=csv_column, dimensions=dimensions
+        )
         return _build_preview(
             file_type="xlsx",
             lines=lines,
@@ -216,8 +234,10 @@ def parse_builder_import_file(
         )
 
     if lower_name.endswith(".docx"):
+        validate_docx_payload(raw_bytes, policy=policy)
         return _build_preview(file_type="docx", lines=_parse_docx_lines(raw_bytes))
 
+    validate_csv_bytes(raw_bytes, policy=policy)
     lines, used_column, used_index = _parse_csv_lines(raw_bytes, csv_column=csv_column)
     return _build_preview(
         file_type="csv",
@@ -294,6 +314,7 @@ def _parse_xlsx_lines(
     raw_bytes: bytes,
     *,
     csv_column: str | None,
+    dimensions: tuple[WorksheetDimensions, ...] | None = None,
 ) -> tuple[list[str], str | None, int]:
     workbook = None
     try:
@@ -301,13 +322,28 @@ def _parse_xlsx_lines(
     except Exception as exc:
         raise ValueError("invalid xlsx file") from exc
 
-    if not workbook.worksheets:
-        raise ValueError("file contains no importable rows")
-
     rows: list[list[str]] = []
     try:
+        if not workbook.worksheets:
+            raise ValueError("file contains no importable rows")
         worksheet = workbook.worksheets[0]
-        for row in worksheet.iter_rows(values_only=True):
+        dimension = (
+            dimensions[0]
+            if dimensions
+            else WorksheetDimensions(
+                path="",
+                max_row=worksheet.max_row, max_column=worksheet.max_column
+            )
+        )
+        if dimension.max_row <= 0 or dimension.max_column <= 0:
+            raise ValueError("file contains no importable rows")
+        for row in worksheet.iter_rows(
+            min_row=1,
+            max_row=dimension.max_row,
+            min_col=1,
+            max_col=dimension.max_column,
+            values_only=True,
+        ):
             normalized_row = [str(cell or "").strip() for cell in row]
             if any(cell for cell in normalized_row):
                 rows.append(normalized_row)

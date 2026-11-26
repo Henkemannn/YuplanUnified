@@ -49,6 +49,17 @@ def _set_site(client, site_id: str = "site_1"):
         sess["site_id"] = site_id
 
 
+def _xlsx_payload() -> bytes:
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    workbook.active.append(["title", "description"])
+    stream = io.BytesIO()
+    workbook.save(stream)
+    workbook.close()
+    return stream.getvalue()
+
+
 def _build_flow():
     component_repository = InMemoryComponentRepository()
     composition_repository = InMemoryCompositionRepository()
@@ -105,7 +116,7 @@ def test_menu_dry_run_true_sets_meta_flag(monkeypatch, tmp_path):
     with app.test_client() as client:
         _login(client)
         _set_site(client)
-        data = {"file": (io.BytesIO(b"x"), "menu.xlsx")}
+        data = {"file": (io.BytesIO(_xlsx_payload()), "menu.xlsx")}
         resp = client.post("/import/menu?dry_run=1", data=data, content_type="multipart/form-data")
         assert resp.status_code == 200
         body = json.loads(resp.data)
@@ -122,7 +133,7 @@ def test_menu_unsupported_mime_415(monkeypatch, tmp_path):
     with app.test_client() as client:
         _login(client)
         _set_site(client)
-        data = {"file": (io.BytesIO(b"x"), "menu.xlsx")}
+        data = {"file": (io.BytesIO(_xlsx_payload()), "menu.xlsx")}
         resp = client.post("/import/menu", data=data, content_type="multipart/form-data")
         assert resp.status_code in (415, 400)  # 415 when importer missing
 
@@ -171,7 +182,7 @@ def test_menu_canonical_import_persists_builder_menu_and_reuses_id(monkeypatch, 
 
         resp1 = client_admin.post(
             "/import/menu",
-            data={"file": (io.BytesIO(b"x"), "menu.xlsx")},
+            data={"file": (io.BytesIO(_xlsx_payload()), "menu.xlsx")},
             content_type="multipart/form-data",
         )
         assert resp1.status_code == 200
@@ -184,7 +195,7 @@ def test_menu_canonical_import_persists_builder_menu_and_reuses_id(monkeypatch, 
 
         resp2 = client_admin.post(
             "/import/menu",
-            data={"file": (io.BytesIO(b"x"), "menu.xlsx")},
+            data={"file": (io.BytesIO(_xlsx_payload()), "menu.xlsx")},
             content_type="multipart/form-data",
         )
         assert resp2.status_code == 200
@@ -248,7 +259,7 @@ def test_menu_canonical_import_failure_returns_500_and_restores_state(monkeypatc
 
         resp = client_admin.post(
             "/import/menu",
-            data={"file": (io.BytesIO(b"x"), "menu.xlsx")},
+            data={"file": (io.BytesIO(_xlsx_payload()), "menu.xlsx")},
             content_type="multipart/form-data",
         )
         assert resp.status_code == 500

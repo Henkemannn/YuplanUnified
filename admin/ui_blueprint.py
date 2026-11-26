@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from flask import Blueprint, render_template, request, current_app, redirect, url_for, flash, make_response, jsonify, session
+from flask import Blueprint, g, render_template, request, current_app, redirect, url_for, flash, make_response, jsonify, session
 from core.app_authz import require_roles
 from core.admin_user_repo import _resolve_user_scope
 from core.db import get_session
@@ -998,9 +998,19 @@ def admin_menu_import_new() -> str:  # type: ignore[override]
 @require_roles("admin", "superuser")
 def admin_menu_import_upload() -> str:  # type: ignore[override]
     """Handle menu file upload and import (CSV and DOCX; PDF placeholder)."""
+    import io
+
     from core.menu_csv_parser import parse_menu_csv, csv_rows_to_import_result, MenuCSVParseError
     from core.menu_import_service import MenuImportOperationError, MenuImportService
     from core.menu_service import MenuServiceDB
+    from core.importers.docx_table_importer import validate_docx_payload
+    from core.upload_limits import (
+        InvalidUpload,
+        UploadTooLarge,
+        bounded_read,
+        get_upload_policy,
+        validate_csv_bytes,
+    )
     from flask import session as _sess
     import os as _os
     
@@ -1082,11 +1092,14 @@ def admin_menu_import_upload() -> str:  # type: ignore[override]
             flash("Kunde inte hitta tenant för vald site.", "danger")
             return redirect(url_for("admin_ui.admin_menu_import"))
         if fname_low.endswith('.csv'):
-            rows = parse_menu_csv(uploaded_file.stream)
+            data = bounded_read(uploaded_file.stream, get_upload_policy().csv_bytes)
+            validate_csv_bytes(data, policy=get_upload_policy())
+            rows = parse_menu_csv(io.BytesIO(data))
             import_result = csv_rows_to_import_result(rows)
         elif fname_low.endswith('.docx'):
             from core.importers.docx_importer import DocxMenuImporter
-            data = uploaded_file.stream.read()
+            data = bounded_read(uploaded_file.stream, get_upload_policy().document_bytes)
+            validate_docx_payload(data, policy=get_upload_policy())
             import_result = DocxMenuImporter().parse(data, uploaded_file.filename)
         elif fname_low.endswith('.pdf'):
             flash(f"Menyfil '{uploaded_file.filename}' mottagen (implementeras senare).", "success")
@@ -1112,8 +1125,28 @@ def admin_menu_import_upload() -> str:  # type: ignore[override]
         except Exception:
             flash("Import klar.", "success")
         return redirect(url_for("admin_ui.admin_menu_import"))
-    except MenuCSVParseError as e:
-        flash(f"Ogiltigt menyformat: {e}", "danger")
+    except UploadTooLarge:
+        flash("Filen överskrider tillåten storlek.", "danger")
+        from markupsafe import escape
+
+        target = url_for("admin_ui.admin_menu_import")
+        response = make_response(
+            (
+                "<!doctype html><html lang=\"sv\"><body>"
+                "<h1>Uppladdningen är för stor</h1>"
+                "<p>Filen överskrider tillåten storlek.</p>"
+                f'<p><a href="{escape(target)}">Tillbaka till menyimporten</a></p>'
+                "</body></html>"
+            ),
+            413,
+        )
+        response.headers["Location"] = target
+        return response
+    except InvalidUpload:
+        flash("Filen kunde inte valideras.", "danger")
+        return redirect(url_for("admin_ui.admin_menu_import"))
+    except MenuCSVParseError:
+        flash("Ogiltigt menyformat.", "danger")
         return redirect(url_for("admin_ui.admin_menu_import"))
     except MenuImportOperationError as e:
         flash(
@@ -1122,8 +1155,12 @@ def admin_menu_import_upload() -> str:  # type: ignore[override]
             "danger",
         )
         return redirect(url_for("admin_ui.admin_menu_import"))
-    except Exception as e:
-        flash(f"Importfel: {e}", "danger")
+    except Exception:
+        current_app.logger.warning(
+            "menu import failed request_id=%s",
+            getattr(g, "request_id", None),
+        )
+        flash("Importen kunde inte genomföras.", "danger")
         return redirect(url_for("admin_ui.admin_menu_import"))
 
 

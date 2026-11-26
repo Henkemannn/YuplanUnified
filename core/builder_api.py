@@ -43,6 +43,7 @@ from .components import (
     normalize_component_match_text,
 )
 from .menu import InMemoryCompositionAliasRepository, resolve_composition_reference
+from .upload_limits import UploadTooLarge, get_upload_policy, validate_cell_text
 
 bp = Blueprint("builder_api", __name__, url_prefix="/api/builder")
 
@@ -56,6 +57,19 @@ class _LibraryImportMetrics:
 
 def _bad_request(message: str):
     return jsonify({"ok": False, "error": "bad_request", "message": str(message)}), 400
+
+
+def _too_large():
+    return (
+        jsonify(
+            {
+                "ok": False,
+                "error": "too_large",
+                "message": "Upload exceeds the allowed size",
+            }
+        ),
+        413,
+    )
 
 
 def _not_found(message: str):
@@ -3176,6 +3190,18 @@ def import_library_preview_lines():
         return _bad_request("lines must be a list")
 
     lines = [str(item or "") for item in raw_lines]
+    policy = get_upload_policy()
+    if len(lines) > policy.rows_total:
+        return _too_large()
+    text_total = 0
+    try:
+        for line in lines:
+            text = validate_cell_text(line, policy=policy)
+            text_total += len(text.encode("utf-8"))
+            if text_total > policy.text_bytes:
+                return _too_large()
+    except UploadTooLarge:
+        return _too_large()
     classified = classify_builder_import_lines(lines)
     importable = [item for item in classified if item.classification == "importable_dish"]
     ignored = [item for item in classified if item.classification != "importable_dish"]
@@ -3237,6 +3263,8 @@ def import_library_file_preview():
 
     try:
         preview = parse_builder_import_file(file_storage, csv_column=csv_column)
+    except UploadTooLarge:
+        return _too_large()
     except ValueError as exc:
         return _bad_request(str(exc))
 
