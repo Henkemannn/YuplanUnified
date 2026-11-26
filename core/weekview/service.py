@@ -12,6 +12,7 @@ from sqlalchemy import text
 from ..residents_weekly_repo import ResidentsWeeklyRepo
 from ..residents_schedule_repo import ResidentsScheduleRepo
 from ..db import get_session
+from .schema import WeekviewSchemaError
 from .repo import WeekviewRepo
 
 
@@ -33,6 +34,8 @@ class WeekviewService:
     def get_effective_version(self, tenant_id: int | str, year: int, week: int, department_id: str, site_id: str | None = None) -> int:
         try:
             base_version = int(self.repo.get_version(tenant_id, year, week, department_id))
+        except WeekviewSchemaError:
+            raise
         except Exception:
             base_version = 0
 
@@ -73,8 +76,9 @@ class WeekviewService:
 
     def fetch_weekview(self, tenant_id: int | str, year: int, week: int, department_id: str | None, site_id: str | None = None, source: str | None = None) -> tuple[dict, str]:
         dep = department_id or "__none__"
-        version = 0 if not department_id else self.get_effective_version(tenant_id, year, week, department_id, site_id)
-        payload = self.repo.get_weekview(tenant_id, year, week, department_id, site_id)
+        with self.repo.schema_verified():
+            version = 0 if not department_id else self.get_effective_version(tenant_id, year, week, department_id, site_id)
+            payload = self.repo.get_weekview(tenant_id, year, week, department_id, site_id)
         if site_id and isinstance(payload, dict) and not payload.get("site_id"):
             payload["site_id"] = site_id
         # Enrich with Phase 1 days[] structure for UI (backwards compatible)
@@ -113,10 +117,11 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         v = int(m.group("v"))
         if dep != department_id or yy != year or ww != week:
             raise EtagMismatchError("etag_mismatch")
-        current = self.get_effective_version(tenant_id, year, week, department_id)
-        if current != v:
-            raise EtagMismatchError("etag_mismatch")
-        new_version = self.repo.apply_operations(tenant_id, year, week, department_id, ops)
+        with self.repo.schema_verified():
+            current = self.get_effective_version(tenant_id, year, week, department_id)
+            if current != v:
+                raise EtagMismatchError("etag_mismatch")
+            new_version = self.repo.apply_operations(tenant_id, year, week, department_id, ops)
         return self.build_etag(tenant_id, department_id, year, week, self.get_effective_version(tenant_id, year, week, department_id))
 
     def fetch_weekview_conditional(
@@ -132,11 +137,12 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         Returns (not_modified, payload, etag). If not_modified is True, payload will be None.
         """
         dep = department_id or "__none__"
-        version = 0 if not department_id else self.get_effective_version(tenant_id, year, week, department_id, site_id)
-        etag = self.build_etag(tenant_id, dep, year, week, version)
-        if if_none_match and if_none_match == etag:
-            return True, None, etag
-        payload = self.repo.get_weekview(tenant_id, year, week, department_id, site_id)
+        with self.repo.schema_verified():
+            version = 0 if not department_id else self.get_effective_version(tenant_id, year, week, department_id, site_id)
+            etag = self.build_etag(tenant_id, dep, year, week, version)
+            if if_none_match and if_none_match == etag:
+                return True, None, etag
+            payload = self.repo.get_weekview(tenant_id, year, week, department_id, site_id)
         if site_id and isinstance(payload, dict) and not payload.get("site_id"):
             payload["site_id"] = site_id
         try:
@@ -164,10 +170,11 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         v = int(m.group("v"))
         if dep != department_id or yy != year or ww != week:
             raise EtagMismatchError("etag_mismatch")
-        current = self.get_effective_version(tenant_id, year, week, department_id, site_id)
-        if current != v:
-            raise EtagMismatchError("etag_mismatch")
-        new_v = self.repo.set_residents_counts(tenant_id, year, week, department_id, items)
+        with self.repo.schema_verified():
+            current = self.get_effective_version(tenant_id, year, week, department_id, site_id)
+            if current != v:
+                raise EtagMismatchError("etag_mismatch")
+            new_v = self.repo.set_residents_counts(tenant_id, year, week, department_id, items)
         return self.build_etag(
             tenant_id,
             department_id,
@@ -195,10 +202,11 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         v = int(m.group("v"))
         if dep != department_id or yy != year or ww != week:
             raise EtagMismatchError("etag_mismatch")
-        current = self.get_effective_version(tenant_id, year, week, department_id, site_id)
-        if current != v:
-            raise EtagMismatchError("etag_mismatch")
-        new_v = self.repo.set_alt2_flags(tenant_id, year, week, department_id, days, site_id)
+        with self.repo.schema_verified():
+            current = self.get_effective_version(tenant_id, year, week, department_id, site_id)
+            if current != v:
+                raise EtagMismatchError("etag_mismatch")
+            new_v = self.repo.set_alt2_flags(tenant_id, year, week, department_id, days, site_id)
         return self.build_etag(tenant_id, department_id, year, week, self.get_effective_version(tenant_id, year, week, department_id, site_id))
 
     # --- Residents helpers (v1) ---

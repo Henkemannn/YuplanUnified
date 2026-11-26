@@ -1,17 +1,31 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Optional, Sequence
-import os
-import logging
-try:
-    from flask import current_app as flask_current_app  # only used if available
-except Exception:  # pragma: no cover
-    flask_current_app = None
 
 from sqlalchemy import text
 
-from ..db import allow_destructive_db, get_session
+from ..db import get_session
 from ..department_menu_choice_repo import MenuChoiceRepo
+from .schema import verify_weekview_schema
+
+
+_schema_verified: ContextVar[tuple[object, object] | None] = ContextVar(
+    "weekview_schema_verified", default=None
+)
+
+
+def _schema_scope(db) -> tuple[object, object]:
+    connection = db.connection()
+    return db.get_bind(), connection.connection.driver_connection
+
+
+def _scope_matches(scope: tuple[object, object] | None, db) -> bool:
+    if scope is None:
+        return False
+    bind, driver_connection = _schema_scope(db)
+    return scope[0] is bind and scope[1] is driver_connection
 
 
 class WeekviewRepo:
@@ -19,142 +33,32 @@ class WeekviewRepo:
 
     Notes:
     - In production (Postgres), version bump is handled by triggers from the migration.
-    - In tests (SQLite), we create minimal tables on demand and emulate version bumps.
+    - In tests (SQLite), schema is provisioned explicitly and version bumps are emulated.
     """
 
-    def _ensure_schema(self) -> None:
-        """Create minimal tables if they don't exist (SQLite/testing safety)."""
-        db = get_session()
-        try:
-            self._ensure_schema_in_session(db)
-            db.commit()
-        finally:
-            db.close()
+    @staticmethod
+    def _verify_schema_in_session(db) -> None:
+        if not _scope_matches(_schema_verified.get(), db):
+            verify_weekview_schema(db.connection())
 
-    def _ensure_schema_in_session(self, db) -> None:
-        """Create minimal tables if they don't exist using a caller-supplied session."""
-        dialect = db.bind.dialect.name if db.bind is not None else ""
-        if dialect != "sqlite":
-            return  # assume alembic migration applied in real DB
-        # SQLite DDL
-        db.execute(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS weekview_registrations (
-                  tenant_id TEXT NOT NULL,
-                  department_id TEXT NOT NULL,
-                  year INTEGER NOT NULL,
-                  week INTEGER NOT NULL,
-                  day_of_week INTEGER NOT NULL,
-                  meal TEXT NOT NULL,
-                  diet_type TEXT NOT NULL,
-                  marked INTEGER NOT NULL DEFAULT 0,
-                  UNIQUE (tenant_id, department_id, year, week, day_of_week, meal, diet_type)
-                );
-                """
-            )
-        )
-        db.execute(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS weekview_versions (
-                  tenant_id TEXT NOT NULL,
-                  department_id TEXT NOT NULL,
-                  year INTEGER NOT NULL,
-                  week INTEGER NOT NULL,
-                  version INTEGER NOT NULL DEFAULT 0,
-                  UNIQUE (tenant_id, department_id, year, week)
-                );
-                """
-            )
-        )
-        db.execute(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS weekview_residents_count (
-                    tenant_id TEXT NOT NULL,
-                    department_id TEXT NOT NULL,
-                    year INTEGER NOT NULL,
-                    week INTEGER NOT NULL,
-                    day_of_week INTEGER NOT NULL,
-                    meal TEXT NOT NULL,
-                    count INTEGER NOT NULL DEFAULT 0,
-                    UNIQUE (tenant_id, department_id, year, week, day_of_week, meal)
-                );
-                """
-            )
-        )
-        db.execute(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS weekview_alt2_flags (
-                    site_id TEXT NOT NULL,
-                    department_id TEXT NOT NULL,
-                    year INTEGER NOT NULL,
-                    week INTEGER NOT NULL,
-                    day_of_week INTEGER NOT NULL,
-                    enabled INTEGER NOT NULL DEFAULT 0,
-                    UNIQUE (site_id, department_id, year, week, day_of_week)
-                );
-                """
-            )
-        )
-        # Canonicalization/migration guard: explicit env flag or tests only
+    @contextmanager
+    def schema_verified(self):
+        db = get_session()
+        if _scope_matches(_schema_verified.get(), db):
+            yield
+            return
+        scope = _schema_scope(db)
         try:
-            allow_env = os.getenv("YUPLAN_ALLOW_SCHEMA_REPAIR", "0").lower() in ("1", "true", "yes")
-            allow_cfg = False
-            cfg = None
-            try:
-                if flask_current_app is not None:
-                    cfg = flask_current_app.config  # may raise if no app context
-            except Exception:
-                cfg = None
-            allow_cfg = allow_destructive_db(cfg)
-            if allow_env or allow_cfg:
-                cols_rows = db.execute(text("PRAGMA table_info('weekview_alt2_flags')")).fetchall()
-                cols = {str(r[1]) for r in cols_rows}
-                is_canonical = ("site_id" in cols) and ("enabled" in cols) and ("tenant_id" not in cols) and ("is_alt2" not in cols)
-                if not is_canonical:
-                    logging.warning("weekview_alt2_flags: repairing legacy SQLite schema to canonical (site-scoped)")
-                    # Create canonical temp table
-                    db.execute(
-                        text(
-                            """
-                            CREATE TABLE IF NOT EXISTS weekview_alt2_flags_new (
-                                site_id TEXT NOT NULL,
-                                department_id TEXT NOT NULL,
-                                year INTEGER NOT NULL,
-                                week INTEGER NOT NULL,
-                                day_of_week INTEGER NOT NULL,
-                                enabled INTEGER NOT NULL DEFAULT 0,
-                                UNIQUE (site_id, department_id, year, week, day_of_week)
-                            );
-                            """
-                        )
-                    )
-                    # Attempt to migrate legacy data using departments.site_id
-                    try:
-                        db.execute(
-                            text(
-                                """
-                                INSERT INTO weekview_alt2_flags_new(site_id, department_id, year, week, day_of_week, enabled)
-                                SELECT d.site_id, w.department_id, w.year, w.week, w.day_of_week,
-                                       CASE WHEN COALESCE(w.is_alt2, 0) = 1 THEN 1 ELSE 0 END
-                                FROM weekview_alt2_flags w
-                                LEFT JOIN departments d ON d.id = w.department_id
-                                WHERE COALESCE(w.is_alt2, 0) = 1 AND d.site_id IS NOT NULL
-                                """
-                            )
-                        )
-                    except Exception:
-                        # If migration fails, leave new table empty
-                        pass
-                    # Replace legacy table with canonical
-                    db.execute(text("DROP TABLE IF EXISTS weekview_alt2_flags"))
-                    db.execute(text("ALTER TABLE weekview_alt2_flags_new RENAME TO weekview_alt2_flags"))
+            verify_weekview_schema(db.connection())
         except Exception:
-            # If PRAGMA fails or table not present, continue (canonical CREATE above ensures baseline)
-            pass
+            db.close()
+            raise
+        token = _schema_verified.set(scope)
+        try:
+            yield
+        finally:
+            _schema_verified.reset(token)
+            db.close()
 
     def _ensure_version_row_in_session(self, db, tenant_id: int | str, year: int, week: int, department_id: str) -> None:
         db.execute(
@@ -171,7 +75,6 @@ class WeekviewRepo:
     def get_weekview(
         self, tenant_id: int | str, year: int, week: int, department_id: Optional[str], site_id: str | None = None
     ) -> dict:
-        self._ensure_schema()
         payload = {
             "year": year,
             "week": week,
@@ -179,10 +82,11 @@ class WeekviewRepo:
             "week_end": None,
             "department_summaries": [],
         }
-        if not department_id:
-            return payload
         db = get_session()
         try:
+            self._verify_schema_in_session(db)
+            if not department_id:
+                return payload
             rows = db.execute(
                 text(
                     """
@@ -259,7 +163,7 @@ class WeekviewRepo:
     def get_version(self, tenant_id: int | str, year: int, week: int, department_id: str) -> int:
         db = get_session()
         try:
-            self._ensure_schema_in_session(db)
+            self._verify_schema_in_session(db)
             rec = db.execute(
                 text(
                     """
@@ -286,7 +190,7 @@ class WeekviewRepo:
         department_id: str,
         expected_version: int,
     ) -> int | None:
-        self._ensure_schema_in_session(db)
+        self._verify_schema_in_session(db)
         self._ensure_version_row_in_session(db, tenant_id, year, week, department_id)
         result = db.execute(
             text(
@@ -342,9 +246,9 @@ class WeekviewRepo:
 
         On Postgres, version bump occurs via triggers. On SQLite, emulate bump.
         """
-        self._ensure_schema()
         db = get_session()
         try:
+            self._verify_schema_in_session(db)
             dialect = db.bind.dialect.name if db.bind is not None else ""
             # Ensure version row exists
             db.execute(
@@ -431,9 +335,9 @@ class WeekviewRepo:
         department_id: str,
         items: Sequence[dict],
     ) -> int:
-        self._ensure_schema()
         db = get_session()
         try:
+            self._verify_schema_in_session(db)
             dialect = db.bind.dialect.name if db.bind is not None else ""
             # Ensure version row exists
             db.execute(
@@ -516,9 +420,9 @@ class WeekviewRepo:
         days: Sequence[int],
         site_id: str | None = None,
     ) -> int:
-        self._ensure_schema()
         db = get_session()
         try:
+            self._verify_schema_in_session(db)
             dialect = db.bind.dialect.name if db.bind is not None else ""
             # Ensure version row exists
             db.execute(

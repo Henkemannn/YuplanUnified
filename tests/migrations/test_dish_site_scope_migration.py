@@ -12,7 +12,7 @@ from core.models import Base, Dish
 
 ROOT = Path(__file__).resolve().parents[2]
 REVISION = "0053_add_site_scope_to_dishes"
-HEAD_REVISION = "0054_add_menu_import_guards"
+HEAD_REVISION = "0055_weekview_schema"
 PREVIOUS_REVISION = "0052_add_site_id_to_notes"
 
 

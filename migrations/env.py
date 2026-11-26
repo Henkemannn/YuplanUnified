@@ -38,7 +38,12 @@ target_metadata = Base.metadata
 
 def run_migrations_offline():
     url = config.get_main_option("sqlalchemy.url")
-    context.configure(url=url, target_metadata=target_metadata, literal_binds=True)
+    context.configure(
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        transactional_ddl=True,
+    )
     with context.begin_transaction():
         context.run_migrations()
 
@@ -92,9 +97,29 @@ def run_migrations_online():
             # Never block migrations due to preflight check
             pass
 
-        context.configure(connection=connection, target_metadata=target_metadata)
-        with context.begin_transaction():
-            context.run_migrations()
+        if connection.dialect.name == "sqlite":
+            # SQLite defaults to non-transactional Alembic DDL. Begin the
+            # physical write transaction before revision preflight or DDL.
+            connection.exec_driver_sql("BEGIN IMMEDIATE")
+            context.configure(
+                connection=connection,
+                target_metadata=target_metadata,
+                transactional_ddl=True,
+            )
+            try:
+                context.run_migrations()
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+        else:
+            context.configure(
+                connection=connection,
+                target_metadata=target_metadata,
+                transactional_ddl=True,
+            )
+            with context.begin_transaction():
+                context.run_migrations()
 
 if context.is_offline_mode():
     run_migrations_offline()

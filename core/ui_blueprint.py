@@ -21,6 +21,7 @@ from .models import Note, Task, User
 from .weekview.service import WeekviewService
 from .weekview.cohort_completion_service import CohortWeekviewStaleError, WeekviewCohortCompletionService
 from .weekview.repo import WeekviewRepo
+from .weekview.schema import WeekviewSchemaError
 from .weekview_vm import build_weekview_vm
 # use string roles consistently elsewhere; avoid Role import
 from .meal_registration_repo import MealRegistrationRepo
@@ -1408,7 +1409,6 @@ def api_planering_mark_produced_special():
     if not dep_ids:
         return jsonify({"error": "no_departments_for_site"}), 400
     from .weekview.service import WeekviewService
-    from .weekview.repo import WeekviewRepo
     svc = WeekviewService()
     wrepo = WeekviewRepo()
     day_of_week = int(day_index) + 1
@@ -1468,7 +1468,6 @@ def api_weekview_get_etag():
     tid = getattr(g, "tenant_id", None) or session.get("tenant_id")
     if not tid:
         return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
-    from .weekview.repo import WeekviewRepo
     from .weekview.service import WeekviewService as _WVS
     repo = WeekviewRepo()
     svc = _WVS(repo)
@@ -1584,7 +1583,6 @@ def api_weekview_requirement_groups_mark():
     if not raw_if_match:
         return jsonify({"type": "about:blank", "title": "missing_if_match"}), 428
 
-    from .weekview.repo import WeekviewRepo
     from .weekview.service import WeekviewService as _WVS
 
     repo = WeekviewRepo()
@@ -2787,6 +2785,8 @@ def admin_department_detail_get(department_id: str):
         svc = WeekviewService()
         version = WeekviewRepo().get_version(tid, year, week, department_id)
         _etag = svc.build_etag(tid, department_id, year, week, version)
+    except WeekviewSchemaError:
+        raise
     except Exception:
         _etag = ""
     site_id = dept_site_id
@@ -3407,6 +3407,8 @@ def weekview_ui():
         svc = WeekviewService()
         version = WeekviewRepo().get_version(tid, year, week, department_id)
         _etag = svc.build_etag(tid, department_id, year, week, version)
+    except WeekviewSchemaError:
+        raise
     except Exception:
         _etag = ""
     force_flag = request.path.startswith("/ui/portal/week")
@@ -6951,7 +6953,6 @@ def register_meal_toggle_mark():
         return jsonify({"error": "invalid_parameters"}), 400
 
     # Determine current mark to toggle
-    from .weekview.repo import WeekviewRepo
     repo = WeekviewRepo()
     payload = repo.get_weekview(tid, year, week, department_id)
     summaries = payload.get("department_summaries") or []

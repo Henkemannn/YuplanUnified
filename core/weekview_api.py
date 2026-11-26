@@ -8,6 +8,7 @@ from flask import Blueprint, Response, current_app, jsonify, request, session, g
 from .auth import require_roles
 from .app_authz import resolve_department_scope
 from .http_errors import bad_request, not_found, problem
+from .weekview.schema import WeekviewSchemaError
 from .weekview.service import WeekviewService, EtagMismatchError
 
 bp = Blueprint("weekview_api", __name__, url_prefix="/api")
@@ -154,6 +155,8 @@ def patch_weekview_specialdiets_mark() -> Response:
         try:
             current_v = _service.repo.get_version(tid, year, week, department_id)
             etag = _service.build_etag(tid, department_id, year, week, current_v)
+        except WeekviewSchemaError:
+            raise
         except Exception:
             return bad_request("missing_if_match")
     # Reuse existing operations shape

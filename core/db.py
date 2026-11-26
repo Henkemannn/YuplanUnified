@@ -15,10 +15,21 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import Session, scoped_session, sessionmaker
 
+from .config import configured_runtime_environment, is_local_fallback_allowed
 from .models import Base
 
 _engine: Engine | None = None
 _SessionFactory: scoped_session[Session] | None = None
+
+
+def _weekview_bootstrap_allowed() -> bool:
+    if _engine is None or _engine.dialect.name != "sqlite":
+        return False
+    if os.getenv("YP_ENABLE_SQLITE_BOOTSTRAP", "0").lower() not in ("1", "true", "yes"):
+        return False
+    runtime_environment = configured_runtime_environment()
+    testing = bool(has_app_context() and current_app.config.get("TESTING"))
+    return is_local_fallback_allowed(runtime_environment, testing=testing)
 
 
 def allow_destructive_db(app_config: Mapping[str, object] | None = None) -> bool:
@@ -123,17 +134,6 @@ def _bootstrap_sqlite_alt2_compat_tables(conn) -> None:
             PRIMARY KEY (site_id, department_id, week, weekday)
         )
     """))
-    conn.execute(text("""
-        CREATE TABLE IF NOT EXISTS weekview_alt2_flags (
-            site_id TEXT NOT NULL,
-            department_id TEXT NOT NULL,
-            year INTEGER NOT NULL,
-            week INTEGER NOT NULL,
-            day_of_week INTEGER NOT NULL,
-            enabled INTEGER NOT NULL DEFAULT 0,
-            UNIQUE (site_id, department_id, year, week, day_of_week)
-        )
-    """))
 
 
 def ensure_sqlite_file_ready(database_url: str) -> str | None:
@@ -210,8 +210,11 @@ def create_all() -> (
         log.warning("create_all: TESTING -> drop_all enabled")
         Base.metadata.drop_all(_engine)
         Base.metadata.create_all(_engine)
-        if _engine.dialect.name == "sqlite" and os.getenv("YP_ENABLE_SQLITE_BOOTSTRAP", "0") in ("1", "true", "yes"):
+        if _weekview_bootstrap_allowed():
             with _engine.connect() as conn:
+                from .weekview.schema import ensure_weekview_schema
+
+                ensure_weekview_schema(conn)
                 _bootstrap_sqlite_alt2_compat_tables(conn)
                 conn.commit()
         return
@@ -274,76 +277,19 @@ def create_all() -> (
                         conn.execute(text("UPDATE users SET is_active = COALESCE(is_active, 1) WHERE is_active IS NULL"))
                 except Exception:
                     pass
-
-                # WEEKVIEW ALT2 FLAGS: canonicalize to site-scoped schema
-                try:
-                    # Detect existing table
-                    names = {r[0] for r in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
-                    if "weekview_alt2_flags" in names:
-                        wcols = _cols("weekview_alt2_flags")
-                        is_canonical = ("site_id" in wcols) and ("enabled" in wcols) and ("tenant_id" not in wcols) and ("is_alt2" not in wcols)
-                        if not is_canonical:
-                            allow_repair = bool(has_app_context() and current_app.config.get("TESTING"))
-                            if not allow_repair:
-                                log.warning("create_all: skip weekview_alt2_flags repair; ALLOW_DESTRUCTIVE_DB not set")
-                                raise RuntimeError("Destructive schema repair not allowed")
-                            # Create canonical table with proper UNIQUE constraint
-                            conn.execute(text(
-                                """
-                                CREATE TABLE IF NOT EXISTS weekview_alt2_flags_new (
-                                    site_id TEXT NOT NULL,
-                                    department_id TEXT NOT NULL,
-                                    year INTEGER NOT NULL,
-                                    week INTEGER NOT NULL,
-                                    day_of_week INTEGER NOT NULL,
-                                    enabled INTEGER NOT NULL DEFAULT 0,
-                                    UNIQUE (site_id, department_id, year, week, day_of_week)
-                                );
-                                """
-                            ))
-                            # Try to migrate legacy data if present
-                            # Legacy columns: tenant_id, department_id, year, week, day_of_week, is_alt2
-                            try:
-                                if "department_id" in wcols and "year" in wcols and "week" in wcols and "day_of_week" in wcols:
-                                    # Use departments.site_id to backfill site_id
-                                    conn.execute(text(
-                                        """
-                                        INSERT INTO weekview_alt2_flags_new(site_id, department_id, year, week, day_of_week, enabled)
-                                        SELECT d.site_id, w.department_id, w.year, w.week, w.day_of_week,
-                                               CASE WHEN COALESCE(w.is_alt2, 0) = 1 THEN 1 ELSE 0 END
-                                        FROM weekview_alt2_flags w
-                                        LEFT JOIN departments d ON d.id = w.department_id
-                                        WHERE COALESCE(w.is_alt2, 0) = 1 AND d.site_id IS NOT NULL
-                                        """
-                                    ))
-                            except Exception:
-                                # If migration fails, continue with empty canonical table
-                                pass
-                            # Replace legacy table with canonical
-                            conn.execute(text("DROP TABLE IF EXISTS weekview_alt2_flags"))
-                            conn.execute(text("ALTER TABLE weekview_alt2_flags_new RENAME TO weekview_alt2_flags"))
-                    else:
-                        # No table yet; create canonical one
-                        conn.execute(text(
-                            """
-                            CREATE TABLE IF NOT EXISTS weekview_alt2_flags (
-                                site_id TEXT NOT NULL,
-                                department_id TEXT NOT NULL,
-                                year INTEGER NOT NULL,
-                                week INTEGER NOT NULL,
-                                day_of_week INTEGER NOT NULL,
-                                enabled INTEGER NOT NULL DEFAULT 0,
-                                UNIQUE (site_id, department_id, year, week, day_of_week)
-                            );
-                            """
-                        ))
-                except Exception:
-                    pass
-
                 conn.commit()
+
+    except RuntimeError:
+        raise
     except Exception:
         # Silent: tests that rely on these columns will reveal issues if misaligned
         pass
+    if _weekview_bootstrap_allowed():
+        from .weekview.schema import ensure_weekview_schema
+
+        with _engine.connect() as conn:
+            ensure_weekview_schema(conn)
+            conn.commit()
     # Test/dev fallback: create raw admin tables when using sqlite and migrations aren't applied.
     try:
         if _engine.dialect.name == "sqlite":  # lightweight fallback for tests
@@ -441,6 +387,8 @@ def create_all() -> (
                     )
                 """))
                 conn.commit()
+    except RuntimeError:
+        raise
     except Exception:
         # Silent fallback – tests will surface issues if schema still missing.
         pass

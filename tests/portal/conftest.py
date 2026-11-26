@@ -91,11 +91,11 @@ def seed_portal_department_data(app_session):
                     "CREATE TABLE IF NOT EXISTS weekview_alt2_flags(site_id TEXT, department_id TEXT, year INTEGER, week INTEGER, day_of_week INTEGER, enabled INTEGER, UNIQUE(site_id,department_id,year,week,day_of_week))"
                 )
             )
-            db.execute(text("INSERT OR REPLACE INTO weekview_residents_count VALUES(:t,:d,:y,:w,1,'lunch',10)"), {"t": 1, "d": dept_id, "y": year, "w": week})
-            db.execute(text("INSERT OR REPLACE INTO weekview_residents_count VALUES(:t,:d,:y,:w,1,'dinner',8)"), {"t": 1, "d": dept_id, "y": year, "w": week})
-            db.execute(text("INSERT OR REPLACE INTO weekview_registrations VALUES(:t,:d,:y,:w,1,'lunch','Gluten',1)"), {"t": 1, "d": dept_id, "y": year, "w": week})
-            db.execute(text("INSERT OR REPLACE INTO weekview_registrations VALUES(:t,:d,:y,:w,1,'lunch','Laktos',1)"), {"t": 1, "d": dept_id, "y": year, "w": week})
-            db.execute(text("INSERT OR REPLACE INTO weekview_alt2_flags VALUES(:s,:d,:y,:w,1,:enabled)"), {"s": site_id, "d": dept_id, "y": year, "w": week, "enabled": alt2_enabled_monday})
+            db.execute(text("INSERT OR REPLACE INTO weekview_residents_count(tenant_id,department_id,year,week,day_of_week,meal,count) VALUES(:t,:d,:y,:w,1,'lunch',10)"), {"t": 1, "d": dept_id, "y": year, "w": week})
+            db.execute(text("INSERT OR REPLACE INTO weekview_residents_count(tenant_id,department_id,year,week,day_of_week,meal,count) VALUES(:t,:d,:y,:w,1,'dinner',8)"), {"t": 1, "d": dept_id, "y": year, "w": week})
+            db.execute(text("INSERT OR REPLACE INTO weekview_registrations(tenant_id,department_id,year,week,day_of_week,meal,diet_type,marked) VALUES(:t,:d,:y,:w,1,'lunch','Gluten',1)"), {"t": 1, "d": dept_id, "y": year, "w": week})
+            db.execute(text("INSERT OR REPLACE INTO weekview_registrations(tenant_id,department_id,year,week,day_of_week,meal,diet_type,marked) VALUES(:t,:d,:y,:w,1,'lunch','Laktos',1)"), {"t": 1, "d": dept_id, "y": year, "w": week})
+            db.execute(text("INSERT OR REPLACE INTO weekview_alt2_flags(site_id,department_id,year,week,day_of_week,enabled) VALUES(:s,:d,:y,:w,1,:enabled)"), {"s": site_id, "d": dept_id, "y": year, "w": week, "enabled": alt2_enabled_monday})
             db.execute(text("INSERT OR REPLACE INTO alt2_flags(site_id,department_id,week,weekday,enabled,version) VALUES(:s,:d,:w,1,:enabled,1)"), {"s": site_id, "d": dept_id, "w": week, "enabled": alt2_enabled_monday})
             db.execute(
                 text(
