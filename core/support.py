@@ -74,11 +74,11 @@ def support_ui():  # pragma: no cover - simple HTML shell
     return (
         """<!doctype html><meta charset='utf-8'>
 <title>Yuplan Support</title>
-<style>body{font-family:system-ui,sans-serif;padding:16px;max-width:1100px;margin:auto}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:6px;font-size:12px}th{background:#f1f5f9;text-align:left}h1{margin-top:0}code{background:#f1f5f9;padding:2px 4px;border-radius:4px}#meta{white-space:pre;background:#0f172a;color:#f1f5f9;padding:8px;border-radius:6px;font-size:12px;overflow:auto}button{cursor:pointer}</style>
+<link rel="stylesheet" href="/static/css/support.css">
 <h1>Yuplan Support</h1>
-<div style='margin:8px 0'>
+<div class='support-actions'>
     <button id='export'>Ladda ner JSON</button>
-    <input id='req' placeholder='Request-ID' style='margin-left:8px'>
+    <input id='req' placeholder='Request-ID'>
     <button id='lookup'>Sök</button>
 </div>
 <div id='meta'></div>
@@ -86,20 +86,7 @@ def support_ui():  # pragma: no cover - simple HTML shell
 <table id='events'><thead><tr><th>Event</th><th>Antal</th></tr></thead><tbody></tbody></table>
 <h2>Senaste varningar (50)</h2>
 <table id='logs'><thead><tr><th>Tid</th><th>Nivå</th><th>Path</th><th>Request-ID</th><th>Meddelande</th></tr></thead><tbody></tbody></table>
-<script>
-async function load(){
-    const r = await fetch('../'); const j = await r.json();
-    document.getElementById('meta').textContent = JSON.stringify({service_version:j.service_version,deploy_env:j.deploy_env,now:j.now}, null, 2);
-    const et=document.querySelector('#events tbody'); et.innerHTML='';
-    (j.events||[]).forEach(([k,v])=>{const tr=document.createElement('tr'); tr.innerHTML=`<td>${k}</td><td>${v}</td>`; et.appendChild(tr);});
-    const lt=document.querySelector('#logs tbody'); lt.innerHTML='';
-    (j.recent_warnings||[]).forEach(r=>{const ts=new Date((r.ts||0)*1000).toISOString(); const tr=document.createElement('tr'); tr.innerHTML=`<td>${ts}</td><td>${r.level}</td><td>${r.path}</td><td>${r.request_id||''}</td><td>${r.msg}</td>`; lt.appendChild(tr);});
-}
-document.getElementById('export').onclick=async()=>{const r=await fetch('../'); const j=await r.json(); const blob=new Blob([JSON.stringify(j,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='support.json'; a.click();};
-document.getElementById('lookup').onclick=async()=>{const rid=document.getElementById('req').value.trim(); if(!rid) return; const r=await fetch('./lookup?request_id='+encodeURIComponent(rid)); const j=await r.json(); alert((j.hits||[]).length + ' träff(ar) för ' + rid);};
-load();
-setInterval(()=>{try{load();}catch(e){}},15000);
-</script>
+<script src="/static/js/support.js" defer></script>
 """,
         200,
         {"Content-Type": "text/html; charset=utf-8"},
