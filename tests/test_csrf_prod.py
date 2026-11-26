@@ -4,7 +4,7 @@ from core import create_app
 from core.db import create_all
 
 
-def _make_app(tmp_path, monkeypatch):
+def _make_app(tmp_path, monkeypatch, *, testing=False, strict_csrf=False):
     # Force production-like CSRF (TESTING False) but keep other defaults.
     # We explicitly disable TESTING to exercise production policy.
     database_url = f"sqlite:///{(tmp_path / 'csrf_main.db').as_posix()}"
@@ -13,9 +13,11 @@ def _make_app(tmp_path, monkeypatch):
     monkeypatch.setenv("BUILDER_DB_PATH", str(builder_db_path))
     app = create_app(
         {
-            "TESTING": False,
+            "TESTING": testing,
+            "STRICT_CSRF_IN_TESTS": strict_csrf,
             "SECRET_KEY": "csrf-secret",
             "ENABLE_CSRF": True,
+            "AUTH_RATE_LIMIT_HMAC_SECRET": "csrf-rate-limit-test-secret",
             "database_url": database_url,
             "BUILDER_DB_PATH": str(builder_db_path),
         }
@@ -39,25 +41,51 @@ def test_post_without_token_forbidden(tmp_path, monkeypatch):
     assert body.get("detail") in {"csrf_missing", "origin_mismatch"}
 
 
-def test_double_submit_token_allows(tmp_path, monkeypatch):
-    app = _make_app(tmp_path, monkeypatch)
+def test_double_submit_token_allows_protected_post(tmp_path, monkeypatch):
+    app = _make_app(tmp_path, monkeypatch, strict_csrf=True)
     client = app.test_client()
     token = secrets.token_hex(8)
     cookie_name = app.config.get("CSRF_COOKIE_NAME", "csrf_token")
     header_name = app.config.get("CSRF_HEADER_NAME", "X-CSRF-Token")
-    # provide both cookie and header
-    # Use /auth/login (prod exempt) to isolate double-submit success path; even if creds invalid,
-    # CSRF layer should not block when tokens match.
+    client.set_cookie(cookie_name, token)
+
     r = client.post(
-        "/auth/login",
-        json={"email": "a@b", "password": "pw"},
+        "/auth/reset",
+        json={"token": "invalid", "password": "NotARealPassword123!"},
         headers={header_name: token},
-        environ_overrides={"HTTP_COOKIE": f"{cookie_name}={token}"},
     )
-    # Auth may still fail (RBAC) but CSRF layer should pass through; expect 400/401/403/200 range not csrf_* detail
-    assert r.status_code in {200, 400, 401}  # should not be CSRF 403
-    if r.status_code == 401:
-        assert "csrf_" not in r.get_data(as_text=True)
+    assert r.status_code == 400
+    body = r.get_data(as_text=True)
+    assert "invalid_csrf" not in body
+    assert "csrf_missing" not in body
+
+
+def test_invalid_double_submit_token_is_forbidden(tmp_path, monkeypatch):
+    app = _make_app(tmp_path, monkeypatch, strict_csrf=True)
+    client = app.test_client()
+    client.set_cookie("csrf_token", secrets.token_hex(8))
+
+    response = client.post(
+        "/auth/reset",
+        json={"token": "invalid", "password": "NotARealPassword123!"},
+        headers={"X-CSRF-Token": secrets.token_hex(8)},
+    )
+
+    assert response.status_code == 403
+    assert response.get_json()["detail"] == "invalid_csrf"
+
+
+def test_missing_double_submit_token_is_forbidden(tmp_path, monkeypatch):
+    app = _make_app(tmp_path, monkeypatch, strict_csrf=True)
+    client = app.test_client()
+
+    response = client.post(
+        "/auth/reset",
+        json={"token": "invalid", "password": "NotARealPassword123!"},
+    )
+
+    assert response.status_code == 403
+    assert response.get_json()["detail"] == "invalid_csrf"
 
 
 def test_origin_mismatch_blocked(tmp_path, monkeypatch):
@@ -84,15 +112,13 @@ def test_safe_methods_ok_without_token(tmp_path, monkeypatch):
 def test_prod_exempt_paths_require_token_for_write(tmp_path, monkeypatch):
     app = _make_app(tmp_path, monkeypatch)
     client = app.test_client()
-    # /auth/ login (POST) is exempt in production, but should allow without CSRF; test expectation clarified.
-    # For metrics POST (simulate ingest) -> we expect exemption too.
-    # So here we assert that a non-exempt path still blocks while exempt path passes.
+    # A non-exempt path must be blocked without a token.
     r_block = client.post("/features/set", json={"name": "csrf_write", "enabled": True})
-    if r_block.status_code not in (401, 403):
-        # Without auth or CSRF must be blocked somehow
-        assert False, r_block.get_data(as_text=True)
+    assert r_block.status_code in (401, 403)
+    if r_block.status_code == 403:
+        assert r_block.get_json()["detail"] == "invalid_csrf"
+
+    # /auth/login is CSRF-exempt in production, but rate limiting remains active.
     r_auth = client.post("/auth/login", json={"email": "a@b", "password": "pw"})
-    # Status might be 400 (bad creds) or 401, but must not be CSRF 403.
-    if r_auth.status_code == 403:
-        # If we ever see a 403 ensure not CSRF (should not happen ideally)
-        assert "csrf_" not in r_auth.get_data(as_text=True)
+    assert r_auth.status_code == 401
+    assert "csrf_" not in r_auth.get_data(as_text=True)

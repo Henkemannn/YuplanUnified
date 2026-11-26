@@ -74,7 +74,29 @@ def test_session_cookie_round_trips_between_instances_with_stable_secret(monkeyp
     assert second_client.get("/test-session").get_json() == {"marker": "stable"}
 
 
-def test_explicit_test_mode_keeps_deterministic_test_secret(monkeypatch):
+def test_explicit_test_mode_preserves_strong_deterministic_test_secret(monkeypatch):
+    monkeypatch.delenv("DEPLOY_ENV", raising=False)
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("FLASK_ENV", "test")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("SECRET_KEY", "")
+    explicit_test_secret = "test-only-session-key-" + "c" * 32
+
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": explicit_test_secret,
+            "database_url": "sqlite:///:memory:",
+        }
+    )
+
+    assert app.config["SECRET_KEY"] == explicit_test_secret
+
+
+@pytest.mark.parametrize("configured_secret", ("", "short-test-secret"))
+def test_local_test_mode_uses_dev_fallback_for_missing_or_short_secret(
+    monkeypatch, configured_secret
+):
     monkeypatch.delenv("DEPLOY_ENV", raising=False)
     monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("FLASK_ENV", "test")
@@ -84,9 +106,11 @@ def test_explicit_test_mode_keeps_deterministic_test_secret(monkeypatch):
     app = create_app(
         {
             "TESTING": True,
-            "SECRET_KEY": "test",
+            "SECRET_KEY": configured_secret,
             "database_url": "sqlite:///:memory:",
         }
     )
 
-    assert app.config["SECRET_KEY"] == "test"
+    assert app.config["SECRET_KEY"] == (
+        "dev-static-secret-key-0123456789abcdef0123456789abcdef"
+    )
