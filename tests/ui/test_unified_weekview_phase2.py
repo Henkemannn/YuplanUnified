@@ -44,7 +44,7 @@ def test_weekview_registration_happy_path(client_admin):
     with app.app_context():
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Test Site"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',20,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "Test Dept"})
@@ -52,6 +52,9 @@ def test_weekview_registration_happy_path(client_admin):
         finally:
             db.close()
     
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
+
     # Current week
     today = date.today()
     iso_cal = today.isocalendar()
@@ -121,14 +124,17 @@ def test_weekview_registration_unregister(client_admin):
     with app.app_context():
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Test Site 2"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',20,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "Test Dept 2"})
             db.commit()
         finally:
             db.close()
-    
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
+
     today = date.today()
     iso_cal = today.isocalendar()
     year, week = iso_cal[0], iso_cal[1]
@@ -190,14 +196,17 @@ def test_weekview_registration_permissions_staff_allowed(client_admin):
     with app.app_context():
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Test Site 3"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',20,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "Test Dept 3"})
             db.commit()
         finally:
             db.close()
-    
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
+
     today = date.today()
     iso_cal = today.isocalendar()
     year, week = iso_cal[0], iso_cal[1]
@@ -238,14 +247,17 @@ def test_weekview_registration_validation_invalid_meal_type(client_admin):
     with app.app_context():
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Test Site 4"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',20,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "Test Dept 4"})
             db.commit()
         finally:
             db.close()
-    
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
+
     today = date.today()
     iso_cal = today.isocalendar()
     year, week = iso_cal[0], iso_cal[1]

@@ -65,11 +65,7 @@ def get_weekview() -> Response:
         return maybe
     tid = _tenant_id()
     if tid is None:
-        # Fallback to tenant_id from body when session is not populated (test headers may vary)
-        body_tid = data.get("tenant_id")
-        if body_tid is None:
-            return bad_request("tenant_missing")
-        tid = body_tid
+        return bad_request("tenant_missing")
     try:
         year = int(request.args.get("year", ""))
         week = int(request.args.get("week", ""))
@@ -84,15 +80,21 @@ def get_weekview() -> Response:
             uuid.UUID(department_id)
         except Exception:
             return bad_request("invalid_department_id")
-    inm = request.headers.get("If-None-Match")
-    role = (session.get("role") or "").strip()
+    role = (session.get("role") or "").strip().lower()
     site_ctx = (session.get("site_id") or "").strip() if "site_id" in session else ""
     site_query = (request.args.get("site_id") or "").strip()
-    # Policy: only superuser may control site via query; others ignore query and use session
-    if role == "superuser" and site_query:
-        site_for_read = site_query
+    if role != "superuser" and not site_ctx:
+        return problem(403, "https://example.com/errors/department_scope", "Forbidden", "department_scope_mismatch")
+    if department_id:
+        resolved_scope, scope_error = _validated_department_site(department_id, tid)
+        if scope_error is not None:
+            return scope_error
+        site_for_read, _ = resolved_scope
+        if role == "superuser" and site_query and site_query != site_for_read:
+            return problem(403, "https://example.com/errors/site_mismatch", "Forbidden", "site_mismatch")
     else:
-        site_for_read = site_ctx or None
+        site_for_read = site_query if role == "superuser" and site_query else site_ctx or None
+    inm = request.headers.get("If-None-Match")
     not_mod, payload, etag = _service.fetch_weekview_conditional(tid, year, week, department_id, inm, site_for_read)
     if not_mod:
         resp = make_response("")
@@ -186,7 +188,16 @@ def resolve_weekview() -> Response:
         uuid.UUID(dep)
     except Exception:
         return bad_request("invalid_department_id")
-    data = _service.resolve(site, dep, date)
+    tid = _tenant_id()
+    if tid is None:
+        return bad_request("tenant_missing")
+    resolved_scope, scope_error = _validated_department_site(dep, tid)
+    if scope_error is not None:
+        return scope_error
+    resolved_site, _ = resolved_scope
+    if site != resolved_site:
+        return problem(403, "https://example.com/errors/site_mismatch", "Forbidden", "site_mismatch")
+    data = _service.resolve(resolved_site, dep, date)
     return jsonify({"ok": True, **data})
 
 

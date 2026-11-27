@@ -10,6 +10,7 @@ import core.db as db_module
 import core.weekview.repo as repo_module
 from core.app_factory import create_app
 from core.db import get_session
+from core.models import Base
 from core.weekview.repo import WeekviewRepo
 from core.weekview.schema import WeekviewSchemaError, ensure_weekview_schema
 
@@ -63,6 +64,8 @@ def isolated_weekview_app(tmp_path, monkeypatch, request):
         db = get_session()
         try:
             ensure_weekview_schema(db.connection())
+            for name in ("department_residents_schedule", "department_residents_weekly", "department_diet_defaults"):
+                Base.metadata.tables[name].create(db.connection(), checkfirst=True)
             db.execute(
                 text(
                     """
@@ -78,7 +81,8 @@ def isolated_weekview_app(tmp_path, monkeypatch, request):
                     """
                     CREATE TABLE departments (
                         id TEXT PRIMARY KEY,
-                        site_id TEXT NOT NULL
+                        site_id TEXT NOT NULL,
+                        resident_count_fixed INTEGER NOT NULL DEFAULT 0
                     )
                     """
                 )
@@ -160,6 +164,27 @@ def _capture_sql(engine):
     return statements, connection_ids, capture
 
 
+@pytest.mark.parametrize("name,predicate", [
+    ("ux_residents_schedule_forever", "week IS NULL OR 1=1"),
+    ("ux_residents_schedule_week", "week IS NOT NULL AND weekday = 1"),
+])
+def test_resident_readiness_rejects_different_partial_index_predicate(isolated_weekview_app, name, predicate):
+    from core.weekview.service import WeekviewService
+
+    with isolated_weekview_app.app_context():
+        db = get_session()
+        try:
+            db.execute(text(f"DROP INDEX {name}"))
+            keys = ("department_id, weekday, meal" if name.endswith("forever")
+                    else "department_id, week, weekday, meal")
+            db.execute(text(f"CREATE UNIQUE INDEX {name} ON department_residents_schedule ({keys}) WHERE {predicate}"))
+            db.commit()
+        finally:
+            db.close()
+        with pytest.raises(WeekviewSchemaError, match="Residents schema incompatible"):
+            WeekviewService()._verify_residents_schema()
+
+
 def test_readiness_uses_session_connection_and_preserves_transaction(
     isolated_weekview_app,
 ):
@@ -220,25 +245,20 @@ def test_schema_scope_cannot_be_reused_for_another_engine(isolated_weekview_app,
             engine_b.dispose()
 
 
-def test_service_operation_verifies_schema_once_per_operation(isolated_weekview_app):
+def test_service_operation_verifies_schema_once_per_operation(isolated_weekview_app, monkeypatch):
     from core.weekview.service import WeekviewService
 
-    with isolated_weekview_app.app_context():
-        db = get_session()
-        try:
-            engine = db.bind
-            statements, _connection_ids, listener = _capture_sql(engine)
-            try:
-                WeekviewService().fetch_weekview_conditional(
-                    1, 2026, 6, "dep-1", None, "site-1"
-                )
-            finally:
-                event.remove(engine, "before_cursor_execute", listener)
-        finally:
-            db.close()
+    calls = []
+    verify = repo_module.verify_weekview_schema
 
-    table_info_count = sum("PRAGMA TABLE_INFO" in statement.upper() for statement in statements)
-    assert table_info_count == 4
+    def count_verification(connection):
+        calls.append(connection)
+        return verify(connection)
+
+    monkeypatch.setattr(repo_module, "verify_weekview_schema", count_verification)
+    with isolated_weekview_app.app_context():
+        WeekviewService().fetch_weekview_conditional(1, 2026, 6, "dep-1", None, "site-1")
+    assert len(calls) == 1
 
 
 def test_canonical_weekview_read_executes_no_runtime_ddl(isolated_weekview_app):
@@ -401,7 +421,10 @@ def test_schema_error_is_sanitized_in_actual_flask_request(isolated_weekview_app
         finally:
             db.close()
 
-    response = isolated_weekview_app.test_client().get(
+    client = isolated_weekview_app.test_client()
+    with client.session_transaction() as session:
+        session["site_id"] = "site-1"
+    response = client.get(
         "/api/weekview?year=2026&week=6",
         headers={"X-User-Role": "viewer", "X-Tenant-Id": "1"},
     )
@@ -423,6 +446,10 @@ def test_authenticated_get_with_department_and_conditional_schema_error(
         db = get_session()
         try:
             db.execute(
+                text("INSERT INTO departments(id, site_id) VALUES (:id, 'site-1')"),
+                {"id": department_id},
+            )
+            db.execute(
                 text(
                     """
                     INSERT INTO weekview_registrations(
@@ -438,6 +465,8 @@ def test_authenticated_get_with_department_and_conditional_schema_error(
             db.close()
 
     client = isolated_weekview_app.test_client()
+    with client.session_transaction() as session:
+        session["site_id"] = "site-1"
     headers = {"X-User-Role": "viewer", "X-Tenant-Id": "1"}
     response = client.get(
         f"/api/weekview?year=2026&week=6&department_id={department_id}",

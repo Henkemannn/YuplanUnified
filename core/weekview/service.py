@@ -8,7 +8,8 @@ from typing import Sequence, Any
 from flask import current_app
 from ..admin_repo import DietDefaultsRepo, DepartmentDietOverridesRepo, DietTypesRepo
 from ..department_menu_choice_repo import MenuChoiceRepo
-from sqlalchemy import text
+from sqlalchemy import Integer, String, inspect, text
+from sqlalchemy.exc import SQLAlchemyError
 from ..residents_weekly_repo import ResidentsWeeklyRepo
 from ..residents_schedule_repo import ResidentsScheduleRepo
 from ..db import get_session
@@ -30,6 +31,61 @@ class WeekviewService:
     def build_etag(self, tenant_id: int | str, department_id: str, year: int, week: int, version: int) -> str:
         # Weak ETag format per spec
         return f'W/"weekview:dept:{department_id}:year:{year}:week:{week}:v{version}"'
+
+    def _verify_residents_schema(self) -> None:
+        db = get_session()
+        try:
+            inspector = inspect(db.connection())
+            expected = {
+                "department_residents_schedule": {
+                    "department_id": String, "week": Integer, "weekday": Integer,
+                    "meal": String, "count": Integer,
+                },
+                "department_residents_weekly": {
+                    "department_id": String, "year": Integer, "week": Integer,
+                    "residents_lunch": Integer, "residents_dinner": Integer,
+                },
+            }
+            for table, types in expected.items():
+                columns = {column["name"]: column for column in inspector.get_columns(table)}
+                if any(name not in columns or not isinstance(columns[name]["type"], kind)
+                       for name, kind in types.items()):
+                    raise WeekviewSchemaError("Residents schema incompatible")
+                if table == "department_residents_schedule" and not columns["week"]["nullable"]:
+                    raise WeekviewSchemaError("Residents schema incompatible")
+                required = (("department_id", "weekday", "meal", "count")
+                            if table == "department_residents_schedule"
+                            else ("department_id", "year", "week"))
+                if any(columns[name]["nullable"] for name in required):
+                    raise WeekviewSchemaError("Residents schema incompatible")
+            indexes = {index["name"]: index for index in inspector.get_indexes("department_residents_schedule")}
+            for name, keys, predicate in (
+                ("ux_residents_schedule_week", ["department_id", "week", "weekday", "meal"], "week is not null"),
+                ("ux_residents_schedule_forever", ["department_id", "weekday", "meal"], "week is null"),
+            ):
+                index = indexes.get(name)
+                options = index.get("dialect_options", {}) if index else {}
+                where = options.get(f"{db.bind.dialect.name}_where")
+                expression = re.fullmatch(
+                    r'\s*\(*\s*(?:"week"|week)\s+is\s+(not\s+)?null\s*\)*\s*',
+                    str(where), flags=re.IGNORECASE,
+                )
+                if (not index or not index.get("unique") or index.get("column_names") != keys
+                        or not expression or bool(expression.group(1)) != ("not" in predicate)):
+                    raise WeekviewSchemaError("Residents schema incompatible")
+            weekly_indexes = inspector.get_indexes("department_residents_weekly")
+            weekly_constraints = inspector.get_unique_constraints("department_residents_weekly")
+            weekly_key = ["department_id", "year", "week"]
+            if not any(item.get("unique") and item.get("column_names") == weekly_key
+                       and item.get("dialect_options", {}).get(f"{db.bind.dialect.name}_where") is None
+                       for item in weekly_indexes) and not any(
+                           item.get("column_names") == weekly_key for item in weekly_constraints
+                       ):
+                raise WeekviewSchemaError("Residents schema incompatible")
+        except SQLAlchemyError as exc:
+            raise WeekviewSchemaError("Residents schema incompatible") from exc
+        finally:
+            db.close()
 
     def get_effective_version(self, tenant_id: int | str, year: int, week: int, department_id: str, site_id: str | None = None) -> int:
         try:
@@ -77,6 +133,8 @@ class WeekviewService:
     def fetch_weekview(self, tenant_id: int | str, year: int, week: int, department_id: str | None, site_id: str | None = None, source: str | None = None) -> tuple[dict, str]:
         dep = department_id or "__none__"
         with self.repo.schema_verified():
+            if department_id:
+                self._verify_residents_schema()
             version = 0 if not department_id else self.get_effective_version(tenant_id, year, week, department_id, site_id)
             payload = self.repo.get_weekview(tenant_id, year, week, department_id, site_id)
         if site_id and isinstance(payload, dict) and not payload.get("site_id"):
@@ -84,6 +142,8 @@ class WeekviewService:
         # Enrich with Phase 1 days[] structure for UI (backwards compatible)
         try:
             self._enrich_days(payload, tenant_id, year, week, source)
+        except (SQLAlchemyError, WeekviewSchemaError):
+            raise
         except Exception:
             # Non-fatal: keep existing payload if enrichment fails
             pass
@@ -138,6 +198,8 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         """
         dep = department_id or "__none__"
         with self.repo.schema_verified():
+            if department_id:
+                self._verify_residents_schema()
             version = 0 if not department_id else self.get_effective_version(tenant_id, year, week, department_id, site_id)
             etag = self.build_etag(tenant_id, dep, year, week, version)
             if if_none_match and if_none_match == etag:
@@ -147,6 +209,8 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
             payload["site_id"] = site_id
         try:
             self._enrich_days(payload, tenant_id, year, week)
+        except (SQLAlchemyError, WeekviewSchemaError):
+            raise
         except Exception:
             pass
         return False, payload, etag
@@ -227,21 +291,22 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         finally:
             db.close()
         # Weekly override
-        ov = {}
-        try:
-            ov = ResidentsWeeklyRepo().get_for_week(department_id, year, week) or {}
-        except Exception:
-            ov = {}
-        lunch = int((ov.get("residents_lunch") if ov else None) or fixed)
-        dinner = int((ov.get("residents_dinner") if ov else None) or fixed)
+        ov = ResidentsWeeklyRepo().get_for_week(department_id, year, week) or {}
+        lunch_value = ov.get("residents_lunch")
+        dinner_value = ov.get("residents_dinner")
+        lunch = int(fixed if lunch_value is None else lunch_value)
+        dinner = int(fixed if dinner_value is None else dinner_value)
         return {
             "lunch": lunch,
             "dinner": dinner,
-            "has_override": bool(ov.get("residents_lunch") or ov.get("residents_dinner")),
+            "has_override": lunch_value is not None or dinner_value is not None,
         }
 
     def get_effective_residents_for_day(self, department_id: str, year: int, week: int, weekday: int) -> dict:
-        return resolve_effective_resident_counts_for_day(department_id, year, week, weekday)
+        try:
+            return resolve_effective_resident_counts_for_day(department_id, year, week, weekday)
+        except (SQLAlchemyError, TypeError, ValueError) as exc:
+            raise WeekviewSchemaError("Residents schema or data incompatible") from exc
 
 
 def resolve_effective_resident_counts_for_day(department_id: str, year: int, week: int, weekday: int) -> dict[str, Any]:
@@ -253,12 +318,9 @@ def resolve_effective_resident_counts_for_day(department_id: str, year: int, wee
     3) Weekly override (legacy same-for-week)
     4) Fixed
     """
-    try:
-        repo = ResidentsScheduleRepo()
-        week_items = {(int(it["weekday"]), str(it["meal"])): int(it["count"]) for it in repo.get_week(department_id, week)}
-        forever_items = {(int(it["weekday"]), str(it["meal"])): int(it["count"]) for it in repo.get_forever(department_id)}
-    except Exception:
-        week_items, forever_items = {}, {}
+    repo = ResidentsScheduleRepo()
+    week_items = {(int(it["weekday"]), str(it["meal"])): int(it["count"]) for it in repo.get_week(department_id, week)}
+    forever_items = {(int(it["weekday"]), str(it["meal"])): int(it["count"]) for it in repo.get_forever(department_id)}
     if (weekday, "lunch") in week_items or (weekday, "dinner") in week_items:
         return {
             "lunch": int(week_items.get((weekday, "lunch"), 0)),
@@ -281,14 +343,12 @@ def resolve_effective_resident_counts_for_day(department_id: str, year: int, wee
     finally:
         db.close()
     # Weekly override
-    ov = {}
-    try:
-        ov = ResidentsWeeklyRepo().get_for_week(department_id, year, week) or {}
-    except Exception:
-        ov = {}
-    lunch = int((ov.get("residents_lunch") if ov else None) or fixed)
-    dinner = int((ov.get("residents_dinner") if ov else None) or fixed)
-    src = "weekly_override" if ov.get("residents_lunch") or ov.get("residents_dinner") else "fixed"
+    ov = ResidentsWeeklyRepo().get_for_week(department_id, year, week) or {}
+    lunch_value = ov.get("residents_lunch")
+    dinner_value = ov.get("residents_dinner")
+    lunch = int(fixed if lunch_value is None else lunch_value)
+    dinner = int(fixed if dinner_value is None else dinner_value)
+    src = "weekly_override" if lunch_value is not None or dinner_value is not None else "fixed"
     return {"lunch": lunch, "dinner": dinner, "source": src}
 
 

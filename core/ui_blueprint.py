@@ -3299,11 +3299,6 @@ def weekview_ui():
 
     # Fetch meal registrations for this week (Phase 2)
     reg_repo = MealRegistrationRepo()
-    try:
-        reg_repo.ensure_table_exists()  # Ensure table exists (dev/test)
-    except Exception:
-        pass  # Silent fallback - table may already exist
-    
     registrations = reg_repo.get_registrations_for_week(tid, site_id, department_id, year, week)
     # Index by (date, meal_type) for quick lookup
     reg_map = {(r["date"], r["meal_type"]): r["registered"] for r in registrations}
@@ -3506,6 +3501,25 @@ def portal_week():
         if bound_department:
             department_id = bound_department
 
+    tenant_id = session.get("tenant_id")
+    active_site = str(session.get("site_id") or "").strip()
+    if tenant_id is None or (role != "superuser" and not active_site):
+        abort(403)
+    if role != "superuser":
+        if site_id and site_id != active_site:
+            abort(403)
+        site_id = active_site
+    if department_id:
+        try:
+            resolved_site, _ = resolve_department_scope(
+                department_id, tenant_id, None if role == "superuser" else active_site
+            )
+        except (TypeError, ValueError):
+            abort(403)
+        if site_id and site_id != resolved_site:
+            abort(403)
+        site_id = resolved_site
+
     # If all query params present → redirect to canonical path route
     try:
         q_year = request.args.get("year")
@@ -3574,11 +3588,7 @@ def portal_week():
 
     # Meal registrations (read-only flags)
     reg_repo = MealRegistrationRepo()
-    try:
-        reg_repo.ensure_table_exists()
-        regs = reg_repo.get_registrations_for_week(tid, site_id, department_id, year, week)
-    except Exception:
-        regs = []
+    regs = reg_repo.get_registrations_for_week(tid, site_id, department_id, year, week)
     reg_map = {(r["date"], r["meal_type"]): bool(r.get("registered")) for r in regs}
     has_any_registration = any(bool(r.get("registered")) for r in regs)
     has_any_registration = any(bool(r.get("registered")) for r in regs)
@@ -5099,6 +5109,11 @@ def kitchen_veckovy_week():
         site_id = q_site_id or (ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None))
         if not site_id:
             return redirect(url_for("ui.select_site", next="/ui/kitchen/week"))
+        active_site = str(session.get("site_id") or "").strip()
+        if str(session.get("role") or "").strip().lower() != "superuser" and (
+            not active_site or str(site_id) != active_site
+        ):
+            abort(403)
         try:
             tenant_id = int(ctx.get("tenant_id") or session.get("tenant_id"))
         except (TypeError, ValueError):
@@ -5280,25 +5295,32 @@ def kitchen_veckovy_week():
     # Legacy path rendering remains unchanged below
     site_id = q_site_id
     department_id = q_department_id
+    tenant_id = session.get("tenant_id")
+    role = str(session.get("role") or "").strip().lower()
+    active_site = str(session.get("site_id") or "").strip()
+    if tenant_id is None or (role != "superuser" and not active_site):
+        abort(403)
+    try:
+        resolved_site, _ = resolve_department_scope(
+            department_id, tenant_id, None if role == "superuser" else active_site
+        )
+    except (TypeError, ValueError):
+        abort(403)
+    if site_id != resolved_site:
+        abort(403)
     year = int(request.args.get("year") or _date.today().year)
     week = int(request.args.get("week") or _date.today().isocalendar()[1])
     # Fetch names
-    tenant_id = getattr(g, "tenant_id", None) or session.get("tenant_id")
     db = get_session()
     try:
         row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
         row_d = db.execute(text("SELECT name FROM departments WHERE id=:i"), {"i": department_id}).fetchone()
-        if tenant_id is None:
-            row_t = db.execute(text("SELECT tenant_id FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
-            tenant_id = row_t[0] if row_t else None
         site_name = row_s[0] if row_s else "Site"
         dep_name = row_d[0] if row_d else "Avdelning"
     finally:
         db.close()
     # Build minimal grid structure from existing week payload via WeekviewService
     svc = WeekviewService()
-    if tenant_id is None:
-        tenant_id = 1
     payload, _ = svc.fetch_weekview(tenant_id=tenant_id, year=year, week=week, department_id=department_id, site_id=site_id, source="kitchen_week_legacy")
     summaries = payload.get("department_summaries") or []
     dep = summaries[0] if summaries else {}
@@ -5316,11 +5338,7 @@ def kitchen_veckovy_week():
     has_any_registration = False
     # Meal registrations map for markerad cells
     reg_repo = MealRegistrationRepo()
-    try:
-        reg_repo.ensure_table_exists()
-        regs = reg_repo.get_registrations_for_week(tenant_id, site_id, department_id, year, week)
-    except Exception:
-        regs = []
+    regs = reg_repo.get_registrations_for_week(tenant_id, site_id, department_id, year, week)
     reg_map = {(r["date"], r["meal_type"]): bool(r.get("registered")) for r in regs}
     # Basic day_vms for unified template (keep simple; grid is primary here)
     day_vms = []
@@ -5953,7 +5971,25 @@ def weekview_registration_save():
     if not all([site_id, department_id, year_str, week_str, date_str, meal_type]):
         flash("Ogiltig förfrågan - saknade parametrar", "error")
         return redirect("/workspace")
-    
+
+    role = str(session.get("role") or "").strip().lower()
+    active_site = str(session.get("site_id") or "").strip()
+    if role != "superuser" and not active_site:
+        abort(403)
+    if role == "unit_portal":
+        from portal.department.auth import resolve_department_portal_scope
+
+        if resolve_department_portal_scope(explicit_department_id=department_id).department_id != department_id:
+            abort(403)
+    try:
+        resolved_site, _ = resolve_department_scope(
+            department_id, tid, None if role == "superuser" else active_site
+        )
+    except (TypeError, ValueError):
+        abort(403)
+    if site_id != resolved_site:
+        abort(403)
+
     try:
         year = int(year_str)
         week = int(week_str)
@@ -5969,7 +6005,6 @@ def weekview_registration_save():
     # Save registration
     try:
         reg_repo = MealRegistrationRepo()
-        reg_repo.ensure_table_exists()
         reg_repo.upsert_registration(
             tenant_id=tid,
             site_id=site_id,
@@ -7082,10 +7117,6 @@ def cook_dashboard():
     
     # Fetch meal registrations for today
     reg_repo = MealRegistrationRepo()
-    try:
-        reg_repo.ensure_table_exists()
-    except Exception:
-        pass
     
     # Get registrations for all departments for today
     department_statuses = []
@@ -7093,11 +7124,8 @@ def cook_dashboard():
         dept_id = dept["id"]
         
         # Get registrations for this department today (site_id not needed for now)
-        try:
-            registrations = reg_repo.get_registrations_for_week(tid or 1, None, dept_id, current_year, current_week)
-            reg_map = {(r["date"], r["meal_type"]): r["registered"] for r in registrations}
-        except Exception:
-            reg_map = {}
+        registrations = reg_repo.get_registrations_for_week(tid, site_id, dept_id, current_year, current_week)
+        reg_map = {(r["date"], r["meal_type"]): r["registered"] for r in registrations}
         
         lunch_registered = reg_map.get((today.isoformat(), "lunch"), False)
         dinner_registered = reg_map.get((today.isoformat(), "dinner"), False) if today_dinner["exists"] else None

@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import text
 
 from .db import get_session
-from .models import DepartmentRequirementGroup, DepartmentRequirementGroupCompletion
+from .models import DepartmentRequirementGroup
 
 
 def _normalize_service_date(value: Any) -> _date:
@@ -47,12 +47,6 @@ def _serialize_row(row: tuple[Any, ...]) -> dict[str, Any]:
 
 
 class DepartmentRequirementGroupCompletionRepo:
-    def _ensure_table_in_session(self, db) -> None:
-        DepartmentRequirementGroupCompletion.__table__.create(bind=db.bind, checkfirst=True)
-
-    def _ensure_table(self, db) -> None:
-        self._ensure_table_in_session(db)
-
     def _load_group(self, db, group_id: str) -> DepartmentRequirementGroup:
         group = db.get(DepartmentRequirementGroup, str(group_id))
         if group is None:
@@ -68,7 +62,6 @@ class DepartmentRequirementGroupCompletionRepo:
     def get(self, group_id: str, service_date: Any, meal_key: Any) -> dict[str, Any] | None:
         db = get_session()
         try:
-            self._ensure_table_in_session(db)
             self._load_group(db, group_id)
             normalized_date = _normalize_service_date(service_date)
             normalized_meal_key = _normalize_meal_key(meal_key)
@@ -91,7 +84,6 @@ class DepartmentRequirementGroupCompletionRepo:
             db.close()
 
     def set_marked_in_session(self, db, department_id: str, group_id: str, service_date: Any, meal_key: Any, marked: bool) -> dict[str, Any]:
-        self._ensure_table_in_session(db)
         self._load_owned_group(db, department_id, group_id)
         normalized_date = _normalize_service_date(service_date)
         normalized_meal_key = _normalize_meal_key(meal_key)
@@ -109,7 +101,7 @@ class DepartmentRequirementGroupCompletionRepo:
                 "group_id": str(group_id),
                 "service_date": normalized_date,
                 "meal_key": normalized_meal_key,
-                "marked": 1 if normalized_marked else 0,
+                "marked": normalized_marked,
             },
         )
         row = db.execute(
@@ -153,7 +145,6 @@ class DepartmentRequirementGroupCompletionRepo:
     ) -> list[dict[str, Any]]:
         db = get_session()
         try:
-            self._ensure_table_in_session(db)
             where = ["g.department_id=:department_id"]
             params: dict[str, Any] = {"department_id": str(department_id)}
             if start_date is not None:

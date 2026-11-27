@@ -7,6 +7,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     CheckConstraint,
+    Column,
     Date,
     DateTime,
     Float,
@@ -15,6 +16,7 @@ from sqlalchemy import (
     Integer,
     Text,
     String,
+    Table,
     UniqueConstraint,
     text,
     true,
@@ -25,6 +27,100 @@ from typing import Optional
 
 class Base(DeclarativeBase):
     pass
+
+
+Table(
+    "department_residents_schedule",
+    Base.metadata,
+    Column("department_id", Text, nullable=False),
+    Column("week", Integer, nullable=True),
+    Column("weekday", Integer, nullable=False),
+    Column("meal", Text, nullable=False),
+    Column("count", Integer, nullable=False),
+    Index(
+        "ux_residents_schedule_week",
+        "department_id", "week", "weekday", "meal",
+        unique=True,
+        sqlite_where=text("week IS NOT NULL"),
+        postgresql_where=text("week IS NOT NULL"),
+    ),
+    Index(
+        "ux_residents_schedule_forever",
+        "department_id", "weekday", "meal",
+        unique=True,
+        sqlite_where=text("week IS NULL"),
+        postgresql_where=text("week IS NULL"),
+    ),
+)
+
+Table(
+    "department_residents_weekly",
+    Base.metadata,
+    Column("id", Text, primary_key=True),
+    Column("department_id", Text, nullable=False),
+    Column("year", Integer, nullable=False),
+    Column("week", Integer, nullable=False),
+    Column("residents_lunch", Integer),
+    Column("residents_dinner", Integer),
+    Column("updated_at", Text),
+    Index("ux_dept_res_week", "department_id", "year", "week", unique=True),
+)
+
+Table(
+    "meal_registrations",
+    Base.metadata,
+    Column("id", Integer, primary_key=True),
+    Column("tenant_id", Integer, nullable=False),
+    Column("site_id", Text, nullable=False),
+    Column("department_id", Text, nullable=False),
+    Column("date", Text, nullable=False),
+    Column("meal_type", Text, nullable=False),
+    Column("registered", Integer, nullable=False, server_default=text("0")),
+    Column("updated_at", Text),
+    UniqueConstraint("tenant_id", "site_id", "department_id", "date", "meal_type"),
+)
+
+Table(
+    "department_diet_defaults",
+    Base.metadata,
+    Column("department_id", Text, primary_key=True),
+    Column("diet_type_id", Text, primary_key=True),
+    Column("default_count", Integer, nullable=False, server_default=text("0")),
+    Column("always_mark", Integer, nullable=False, server_default=text("0")),
+)
+
+Table(
+    "department_diet_overrides",
+    Base.metadata,
+    Column("department_id", Text, primary_key=True),
+    Column("diet_type_id", Text, primary_key=True),
+    Column("day", Integer, primary_key=True),
+    Column("meal", Text, primary_key=True),
+    Column("count", Integer, nullable=False, server_default=text("0")),
+    Column("updated_at", DateTime),
+)
+
+Table(
+    "alt2_flags",
+    Base.metadata,
+    Column("site_id", Text, primary_key=True),
+    Column("department_id", Text, primary_key=True),
+    Column("week", Integer, primary_key=True),
+    Column("weekday", Integer, primary_key=True),
+    Column("enabled", Boolean, nullable=False, server_default=text("0")),
+    Column("version", Integer, nullable=False, server_default=text("0")),
+    Column("updated_at", DateTime, server_default=text("CURRENT_TIMESTAMP")),
+)
+
+Table(
+    "pilot_activity_events",
+    Base.metadata,
+    Column("user_id", Integer),
+    Column("site_id", String(64)),
+    Column("event_type", String(64), nullable=False),
+    Column("created_at", DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    Index("idx_pilot_activity_site_created", "site_id", "created_at"),
+)
 
 
 # --- Tenancy & Users ---

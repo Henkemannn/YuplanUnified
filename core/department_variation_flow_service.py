@@ -9,6 +9,7 @@ from sqlalchemy import text
 from .db import get_session
 from .department_requirement_group_quantity_resolver import resolve_effective_quantity
 from .department_requirement_group_service_overrides_repo import resolve_effective_quantity_in_session
+from .residents_schedule_repo import upsert_schedule_items_in_session
 
 
 _WEEKDAY_LABELS = {
@@ -31,74 +32,6 @@ class DepartmentVariationSaveResult:
 
 def _selected_week_dates(year: int, week: int) -> list[_date]:
     return [_date.fromisocalendar(int(year), int(week), weekday) for weekday in range(1, 8)]
-
-
-def _ensure_tables(db) -> None:
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS department_residents_schedule (
-                department_id TEXT NOT NULL,
-                week INTEGER,
-                weekday INTEGER NOT NULL,
-                meal TEXT NOT NULL,
-                count INTEGER NOT NULL,
-                PRIMARY KEY(department_id, week, weekday, meal)
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS department_residents_weekly (
-                id TEXT PRIMARY KEY,
-                department_id TEXT NOT NULL,
-                year INTEGER NOT NULL,
-                week INTEGER NOT NULL,
-                residents_lunch INTEGER NULL,
-                residents_dinner INTEGER NULL,
-                updated_at TEXT
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            """
-            CREATE UNIQUE INDEX IF NOT EXISTS ux_dept_res_week
-            ON department_residents_weekly(department_id, year, week)
-            """
-        )
-    )
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS department_requirement_group_weekday_overrides (
-                group_id TEXT NOT NULL,
-                weekday INTEGER NOT NULL,
-                meal_key TEXT NOT NULL,
-                quantity INTEGER NOT NULL,
-                PRIMARY KEY(group_id, weekday, meal_key)
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS department_requirement_group_service_overrides (
-                group_id TEXT NOT NULL,
-                service_date DATE NOT NULL,
-                meal_key TEXT NOT NULL,
-                quantity INTEGER NOT NULL,
-                created_at TEXT,
-                updated_at TEXT,
-                PRIMARY KEY(group_id, service_date, meal_key)
-            )
-            """
-        )
-    )
 
 
 def _normalize_scope(value: object) -> str:
@@ -262,24 +195,7 @@ def _apply_resident_changes(db, *, department_id: str, scope: str, year: int, we
         )
         target_week = int(week)
 
-    for item in resident_items:
-        db.execute(
-            text(
-                """
-                INSERT INTO department_residents_schedule(department_id, week, weekday, meal, count)
-                VALUES(:department_id, :week, :weekday, :meal, :count)
-                ON CONFLICT(department_id, week, weekday, meal)
-                DO UPDATE SET count=excluded.count
-                """
-            ),
-            {
-                "department_id": department_id,
-                "week": target_week,
-                "weekday": int(item["weekday"]),
-                "meal": str(item["meal"]),
-                "count": int(item["count"]),
-            },
-        )
+    upsert_schedule_items_in_session(db, department_id, target_week, resident_items)
 
 
 def _apply_need_changes(db, *, department_id: str, scope: str, year: int, week: int, need_cells: dict[str, dict[tuple[int, str], str]]) -> bool:
@@ -426,7 +342,6 @@ def save_department_variation_submission(
     db = get_session()
     try:
         with db.begin():
-            _ensure_tables(db)
             department_row = db.execute(
                 text("SELECT id FROM departments WHERE id=:department_id AND site_id=:site_id"),
                 {"department_id": department_id, "site_id": site_id},

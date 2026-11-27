@@ -14,13 +14,48 @@ from __future__ import annotations
 from datetime import date as _date, datetime
 from typing import Sequence
 
-from sqlalchemy import text
+from sqlalchemy import Integer, String, inspect, text
 
 from .db import get_session
 
 
 class MealRegistrationRepo:
     """Repository for meal registration operations."""
+
+    @staticmethod
+    def _verify_schema(db) -> None:
+        inspector = inspect(db.connection())
+        columns = {column["name"]: column for column in inspector.get_columns("meal_registrations")}
+        expected = {
+            "id": Integer, "tenant_id": Integer, "site_id": String,
+            "department_id": String, "date": String, "meal_type": String,
+            "registered": Integer, "updated_at": String,
+        }
+        keys = ["tenant_id", "site_id", "department_id", "date", "meal_type"]
+        if any(name not in columns or not isinstance(columns[name]["type"], kind)
+               or (name in (*keys, "registered") and columns[name]["nullable"])
+               for name, kind in expected.items()):
+            raise RuntimeError("Incompatible meal registrations schema")
+        if inspector.get_pk_constraint("meal_registrations").get("constrained_columns") != ["id"]:
+            raise RuntimeError("Incompatible meal registrations primary key")
+        if db.bind.dialect.name == "sqlite":
+            table_info = db.connection().exec_driver_sql("PRAGMA table_info('meal_registrations')").all()
+            indexes = db.connection().exec_driver_sql("PRAGMA index_list('meal_registrations')").all()
+            id_type = next(row[2] for row in table_info if row[1] == "id")
+            if id_type.strip().upper() != "INTEGER" or any(row[3] == "pk" for row in indexes):
+                raise RuntimeError("Meal registrations id must be an SQLite rowid alias")
+        if db.bind.dialect.name == "postgresql" and not (
+            columns["id"].get("identity") or columns["id"].get("default")
+        ):
+            raise RuntimeError("Meal registrations id must be generated")
+        constraints = inspector.get_unique_constraints("meal_registrations")
+        indexes = inspector.get_indexes("meal_registrations")
+        if not any(item.get("column_names") == keys for item in constraints) and not any(
+            item.get("unique") and item.get("column_names") == keys
+            and item.get("dialect_options", {}).get(f"{db.bind.dialect.name}_where") is None
+            for item in indexes
+        ):
+            raise RuntimeError("Incompatible meal registrations unique key")
 
     def get_registrations_for_week(
         self, tenant_id: int | str, site_id: str, department_id: str, year: int, week: int
@@ -32,6 +67,7 @@ class MealRegistrationRepo:
         """
         db = get_session()
         try:
+            self._verify_schema(db)
             # Compute week start/end dates from ISO week
             from datetime import date as _date, timedelta
             
@@ -98,6 +134,7 @@ class MealRegistrationRepo:
         """
         db = get_session()
         try:
+            self._verify_schema(db)
             now = datetime.utcnow().isoformat()
             
             # SQLite upsert (ON CONFLICT)
@@ -118,7 +155,7 @@ class MealRegistrationRepo:
                     "department_id": department_id,
                     "date": date_str,
                     "meal_type": meal_type,
-                    "registered": registered,
+                    "registered": int(registered),
                     "updated_at": now,
                 },
             )
@@ -127,27 +164,9 @@ class MealRegistrationRepo:
             db.close()
 
     def ensure_table_exists(self) -> None:
-        """
-        Ensure the meal_registrations table exists (for test/dev environments).
-        Production should use Alembic migrations.
-        """
+        """Verify the migration-provisioned table without changing it."""
         db = get_session()
         try:
-            db.execute(
-                text("""
-                    CREATE TABLE IF NOT EXISTS meal_registrations (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        tenant_id INTEGER NOT NULL,
-                        site_id TEXT NOT NULL,
-                        department_id TEXT NOT NULL,
-                        date TEXT NOT NULL,
-                        meal_type TEXT NOT NULL,
-                        registered INTEGER NOT NULL DEFAULT 0,
-                        updated_at TEXT,
-                        UNIQUE(tenant_id, site_id, department_id, date, meal_type)
-                    )
-                """)
-            )
-            db.commit()
+            self._verify_schema(db)
         finally:
             db.close()

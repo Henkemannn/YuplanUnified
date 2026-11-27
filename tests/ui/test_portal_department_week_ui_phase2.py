@@ -45,6 +45,8 @@ def test_rbac_and_load(client_admin):
     _enable_weekview(client_admin)
     year, week = 2025, 46
     sid, did = _seed_menu(app, year, week)
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = sid
     for role in ["admin", "cook", "unit_portal", "superuser"]:
         r = client_admin.get(f"/portal/week?site_id={sid}&department_id={did}&year={year}&week={week}", headers=_h(role))
         assert r.status_code == 200
@@ -57,6 +59,8 @@ def test_structure_and_header(client_admin):
     _enable_weekview(client_admin)
     year, week = 2025, 47
     sid, did = _seed_menu(app, year, week)
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = sid
     r = client_admin.get(f"/portal/week?site_id={sid}&department_id={did}&year={year}&week={week}", headers=ADMIN_HEADERS)
     html = r.get_data(as_text=True)
     assert "Avdelningsvy" in html
@@ -97,6 +101,8 @@ def test_dinner_logic(client_admin):
     _enable_weekview(client_admin)
     year, week = 2025, 49
     sid, did = _seed_menu(app, year, week)
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = sid
     r = client_admin.get(f"/portal/week?site_id={sid}&department_id={did}&year={year}&week={week}", headers=ADMIN_HEADERS)
     html = r.get_data(as_text=True)
     # With only lunch seeded, dinner block should not render
@@ -110,6 +116,8 @@ def test_accessibility_attrs_present(client_admin):
     _enable_weekview(client_admin)
     year, week = 2025, 50
     sid, did = _seed_menu(app, year, week)
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = sid
     r = client_admin.get(f"/portal/week?site_id={sid}&department_id={did}&year={year}&week={week}", headers=ADMIN_HEADERS)
     html = r.get_data(as_text=True)
     assert "role=\"button\"" in html

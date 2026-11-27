@@ -4,7 +4,7 @@ import os
 import uuid
 from typing import Iterable
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 from flask import current_app, has_app_context
 
@@ -837,35 +837,8 @@ class SitesRepo:
         """
         db = get_session()
         try:
-            # Ensure table exists on sqlite
-            if _is_sqlite(db):
-                db.execute(
-                    text(
-                        """
-                        CREATE TABLE IF NOT EXISTS sites (
-                            id TEXT PRIMARY KEY,
-                            name TEXT NOT NULL,
-                            tenant_id INTEGER,
-                            version INTEGER NOT NULL DEFAULT 0,
-                            notes TEXT NULL,
-                            updated_at TEXT
-                        )
-                        """
-                    )
-                )
-            # Detect presence of tenant_id column
-            has_col = False
-            try:
-                cols = db.execute(text("PRAGMA table_info('sites')")).fetchall()
-                has_col = any(str(c[1]) == "tenant_id" for c in cols)
-            except Exception:
-                # Postgres path
-                try:
-                    chk = db.execute(text("SELECT 1 FROM information_schema.columns WHERE table_name='sites' AND column_name='tenant_id'"))
-                    has_col = chk.fetchone() is not None
-                except Exception:
-                    has_col = False
-            if not has_col:
+            columns = {column["name"] for column in inspect(db.connection()).get_columns("sites")}
+            if "tenant_id" not in columns:
                 return []
             rows = db.execute(
                 text("SELECT id, name, COALESCE(version,0) FROM sites WHERE tenant_id=:t ORDER BY name"),
@@ -1520,23 +1493,7 @@ class DietDefaultsRepo:
     def list_for_department(self, dept_id: str) -> list[dict]:
         db = get_session()
         try:
-            if _is_sqlite(db):
-                db.execute(
-                    text(
-                        """
-                        CREATE TABLE IF NOT EXISTS department_diet_defaults (
-                            department_id TEXT NOT NULL,
-                            diet_type_id TEXT NOT NULL,
-                            default_count INTEGER NOT NULL DEFAULT 0,
-                            -- Optional Phase 3 flag: count as done (debiterbar) always
-                            always_mark INTEGER NOT NULL DEFAULT 0,
-                            PRIMARY KEY (department_id, diet_type_id)
-                        )
-                        """
-                    )
-                )
-            # Detect optional column presence
-            cols = {c[1] for c in db.execute(text("PRAGMA table_info('department_diet_defaults')")).fetchall()}
+            cols = {c["name"] for c in inspect(db.connection()).get_columns("department_diet_defaults")}
             if "always_mark" in cols:
                 rows = db.execute(
                     text(
@@ -1578,7 +1535,6 @@ class DepartmentDietOverridesRepo:
     def list_for_department(self, dept_id: str) -> list[dict]:
         db = get_session()
         try:
-            _ensure_department_diet_overrides_table(db)
             rows = db.execute(
                 text(
                     """
@@ -2888,39 +2844,30 @@ class DietTypesRepo:
         """
         db = get_session()
         try:
-            self._ensure_table(db)
-            # If site_id column exists, filter by it; else return empty list to encourage DB reset
-            try:
-                cols = {r[1] for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
-                if "site_id" not in cols:
-                    # Schema missing site_id: return empty to force isolation (devs should reset DB)
-                    rows = []
-                else:
-                    if site_id:
-                        rows = db.execute(
-                            text(
-                                "SELECT id, site_id, name, "
-                                "COALESCE(NULLIF(trim(CAST(diet_family AS TEXT)), ''), :fallback) AS diet_family, "
-                                "requirement_key, semantics, default_select "
-                                "FROM dietary_types WHERE site_id=:s ORDER BY name"
-                            ),
-                            {"s": site_id, "fallback": DIET_FAMILY_OTHER},
-                        ).fetchall()
-                    elif tenant_id is not None:
-                        # Legacy admin-ui compatibility path: tenant was historically used.
-                        rows = db.execute(
-                            text(
-                                "SELECT id, site_id, name, "
-                                "COALESCE(NULLIF(trim(CAST(diet_family AS TEXT)), ''), :fallback) AS diet_family, "
-                                "requirement_key, semantics, default_select "
-                                "FROM dietary_types ORDER BY name"
-                            ),
-                            {"fallback": DIET_FAMILY_OTHER},
-                        ).fetchall()
-                    else:
-                        # Strict isolation for modern callers with no explicit scope
-                        rows = []
-            except Exception:
+            columns = {column["name"] for column in inspect(db.connection()).get_columns("dietary_types")}
+            if not {"id", "site_id", "name", "diet_family", "requirement_key", "semantics", "default_select"} <= columns:
+                raise RuntimeError("Incompatible dietary types schema")
+            if site_id:
+                rows = db.execute(
+                    text(
+                        "SELECT id, site_id, name, "
+                        "COALESCE(NULLIF(trim(CAST(diet_family AS TEXT)), ''), :fallback) AS diet_family, "
+                        "requirement_key, semantics, default_select "
+                        "FROM dietary_types WHERE site_id=:s ORDER BY name"
+                    ),
+                    {"s": site_id, "fallback": DIET_FAMILY_OTHER},
+                ).fetchall()
+            elif tenant_id is not None and _is_sqlite(db):
+                rows = db.execute(
+                    text(
+                        "SELECT id, site_id, name, "
+                        "COALESCE(NULLIF(trim(CAST(diet_family AS TEXT)), ''), :fallback) AS diet_family, "
+                        "requirement_key, semantics, default_select "
+                        "FROM dietary_types ORDER BY name"
+                    ),
+                    {"fallback": DIET_FAMILY_OTHER},
+                ).fetchall()
+            else:
                 rows = []
             return [
                 {
@@ -3349,23 +3296,6 @@ class Alt2Repo:
                     "enabled": bool(it["enabled"]),
                 }
                 if dialect == "sqlite":
-                    # Ensure table exists
-                    db.execute(
-                        text(
-                            """
-                            CREATE TABLE IF NOT EXISTS alt2_flags (
-                                site_id TEXT NOT NULL,
-                                department_id TEXT NOT NULL,
-                                week INTEGER NOT NULL,
-                                weekday INTEGER NOT NULL,
-                                enabled BOOLEAN NOT NULL DEFAULT 0,
-                                version INTEGER NOT NULL DEFAULT 0,
-                                updated_at TEXT,
-                                PRIMARY KEY (site_id, department_id, week, weekday)
-                            )
-                            """
-                        )
-                    )
                     # Do not update if no change (preserve version)
                     db.execute(
                         text(
@@ -3420,23 +3350,6 @@ class Alt2Repo:
     def collection_version(self, week: int, site_id: str) -> int:
         db = get_session()
         try:
-            if _is_sqlite(db):
-                db.execute(
-                    text(
-                        """
-                        CREATE TABLE IF NOT EXISTS alt2_flags (
-                            site_id TEXT NOT NULL,
-                            department_id TEXT NOT NULL,
-                            week INTEGER NOT NULL,
-                            weekday INTEGER NOT NULL,
-                            enabled BOOLEAN NOT NULL DEFAULT 0,
-                            version INTEGER NOT NULL DEFAULT 0,
-                            updated_at TEXT,
-                            PRIMARY KEY (site_id, department_id, week, weekday)
-                        )
-                        """
-                    )
-                )
             row = db.execute(
                 text(
                     "SELECT COALESCE(MAX(version),0) FROM alt2_flags WHERE site_id=:s AND week=:w"
@@ -3455,23 +3368,6 @@ class Alt2Repo:
         """List alt2 flags for a given week and site (strictly site-scoped)."""
         db = get_session()
         try:
-            if _is_sqlite(db):
-                db.execute(
-                    text(
-                        """
-                        CREATE TABLE IF NOT EXISTS alt2_flags (
-                            site_id TEXT NOT NULL,
-                            department_id TEXT NOT NULL,
-                            week INTEGER NOT NULL,
-                            weekday INTEGER NOT NULL,
-                            enabled BOOLEAN NOT NULL DEFAULT 0,
-                            version INTEGER NOT NULL DEFAULT 0,
-                            updated_at TEXT,
-                            PRIMARY KEY (site_id, department_id, week, weekday)
-                        )
-                        """
-                    )
-                )
             rows = db.execute(
                 text(
                     "SELECT site_id, department_id, week, weekday, enabled, COALESCE(version,0) FROM alt2_flags WHERE site_id=:s AND week=:w ORDER BY department_id, weekday"
@@ -3495,23 +3391,6 @@ class Alt2Repo:
         """Return max version for a department's week flags (0 if none)."""
         db = get_session()
         try:
-            if _is_sqlite(db):
-                db.execute(
-                    text(
-                        """
-                        CREATE TABLE IF NOT EXISTS alt2_flags (
-                            site_id TEXT NOT NULL,
-                            department_id TEXT NOT NULL,
-                            week INTEGER NOT NULL,
-                            weekday INTEGER NOT NULL,
-                            enabled BOOLEAN NOT NULL DEFAULT 0,
-                            version INTEGER NOT NULL DEFAULT 0,
-                            updated_at TEXT,
-                            PRIMARY KEY (site_id, department_id, week, weekday)
-                        )
-                        """
-                    )
-                )
             row = db.execute(
                 text(
                     "SELECT COALESCE(MAX(version),0) FROM alt2_flags WHERE department_id=:d AND week=:w"
@@ -3526,23 +3405,6 @@ class Alt2Repo:
         """List alt2 flags for a specific department and week."""
         db = get_session()
         try:
-            if _is_sqlite(db):
-                db.execute(
-                    text(
-                        """
-                        CREATE TABLE IF NOT EXISTS alt2_flags (
-                            site_id TEXT NOT NULL,
-                            department_id TEXT NOT NULL,
-                            week INTEGER NOT NULL,
-                            weekday INTEGER NOT NULL,
-                            enabled BOOLEAN NOT NULL DEFAULT 0,
-                            version INTEGER NOT NULL DEFAULT 0,
-                            updated_at TEXT,
-                            PRIMARY KEY (site_id, department_id, week, weekday)
-                        )
-                        """
-                    )
-                )
             rows = db.execute(
                 text(
                     "SELECT site_id, department_id, week, weekday, enabled, COALESCE(version,0) FROM alt2_flags WHERE department_id=:d AND week=:w ORDER BY weekday"

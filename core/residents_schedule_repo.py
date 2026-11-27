@@ -5,6 +5,24 @@ from sqlalchemy import text
 from .db import get_session
 
 
+def upsert_schedule_items_in_session(db, department_id: str, week: Optional[int], items: Sequence[dict]) -> None:
+    conflict = (
+        "(department_id, weekday, meal) WHERE week IS NULL"
+        if week is None
+        else "(department_id, week, weekday, meal) WHERE week IS NOT NULL"
+    )
+    statement = text(
+        "INSERT INTO department_residents_schedule(department_id, week, weekday, meal, count) "
+        "VALUES(:d, :w, :wd, :m, :c) "
+        f"ON CONFLICT {conflict} DO UPDATE SET count=excluded.count"
+    )
+    for item in items:
+        db.execute(statement, {
+            "d": department_id, "w": week, "wd": int(item["weekday"]),
+            "m": str(item["meal"]), "c": int(item["count"]),
+        })
+
+
 class ResidentsScheduleRepo:
     """CRUD for per-day residents variation.
 
@@ -14,32 +32,10 @@ class ResidentsScheduleRepo:
       weekday INTEGER NOT NULL  -- 1..7 ISO
       meal TEXT NOT NULL  -- 'lunch' | 'dinner'
       count INTEGER NOT NULL
-      PRIMARY KEY(department_id, week, weekday, meal)
+      Separate unique keys for weekly and forever rows.
     """
 
-    def _ensure_table(self) -> None:
-        db = get_session()
-        try:
-            db.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS department_residents_schedule (
-                        department_id TEXT NOT NULL,
-                        week INTEGER,
-                        weekday INTEGER NOT NULL,
-                        meal TEXT NOT NULL,
-                        count INTEGER NOT NULL,
-                        PRIMARY KEY(department_id, week, weekday, meal)
-                    )
-                    """
-                )
-            )
-            db.commit()
-        finally:
-            db.close()
-
     def get_week(self, department_id: str, week: int) -> list[dict]:
-        self._ensure_table()
         db = get_session()
         try:
             rows = db.execute(
@@ -53,7 +49,6 @@ class ResidentsScheduleRepo:
             db.close()
 
     def get_forever(self, department_id: str) -> list[dict]:
-        self._ensure_table()
         db = get_session()
         try:
             rows = db.execute(
@@ -67,27 +62,17 @@ class ResidentsScheduleRepo:
             db.close()
 
     def upsert_items(self, department_id: str, week: Optional[int], items: Sequence[dict]) -> None:
-        self._ensure_table()
         db = get_session()
         try:
-            for it in items:
-                db.execute(
-                    text(
-                        """
-                        INSERT INTO department_residents_schedule(department_id, week, weekday, meal, count)
-                        VALUES(:d, :w, :wd, :m, :c)
-                        ON CONFLICT(department_id, week, weekday, meal)
-                        DO UPDATE SET count=excluded.count
-                        """
-                    ),
-                    {"d": department_id, "w": week, "wd": int(it["weekday"]), "m": str(it["meal"]), "c": int(it["count"])},
-                )
+            upsert_schedule_items_in_session(db, department_id, week, items)
             db.commit()
+        except Exception:
+            db.rollback()
+            raise
         finally:
             db.close()
 
     def delete_week(self, department_id: str, week: int) -> None:
-        self._ensure_table()
         db = get_session()
         try:
             db.execute(text("DELETE FROM department_residents_schedule WHERE department_id=:d AND week=:w"), {"d": department_id, "w": int(week)})
@@ -96,7 +81,6 @@ class ResidentsScheduleRepo:
             db.close()
 
     def delete_forever(self, department_id: str) -> None:
-        self._ensure_table()
         db = get_session()
         try:
             db.execute(text("DELETE FROM department_residents_schedule WHERE department_id=:d AND week IS NULL"), {"d": department_id})

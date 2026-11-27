@@ -20,7 +20,7 @@ def test_portal_week_shows_residents_symbol_and_value(client_admin):
         create_all()
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), {"i": site_id, "n": "PortalSite"})
+            db.execute(text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0) ON CONFLICT(id) DO NOTHING"), {"i": site_id, "n": "PortalSite"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',12,0) ON CONFLICT(id) DO NOTHING"), {"i": dep_id, "s": site_id, "n": "Avd P"})
             db.commit()
         finally:
@@ -28,6 +28,9 @@ def test_portal_week_shows_residents_symbol_and_value(client_admin):
         # Seed variation: Monday lunch = 7 for selected week
         from core.residents_schedule_repo import ResidentsScheduleRepo
         ResidentsScheduleRepo().upsert_items(dep_id, week, [{"weekday": 1, "meal": "lunch", "count": 7}])
+
+    with client_admin.session_transaction() as session:
+        session["site_id"] = site_id
 
     # GET unified portal week view
     r = client_admin.get(f"/ui/portal/week?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=_h("cook"))

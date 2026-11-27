@@ -1,8 +1,28 @@
 import re
 import uuid
 
+from sqlalchemy import text
+from core.db import get_session
+
 
 ETAG_RE = re.compile(r'^W/"weekview:dept:.*:year:\d{4}:week:\d{1,2}:v\d+"$')
+
+
+def _seed_scope(client, department_id):
+    site = f"weekview-test-{uuid.uuid4()}"
+    db = get_session()
+    try:
+        db.execute(text("INSERT INTO sites(id, name, tenant_id) VALUES (:site, :site, 1)"), {"site": site})
+        db.execute(
+            text("INSERT INTO departments(id, site_id, name, resident_count_mode) VALUES (:dep, :site, 'Test', 'fixed')"),
+            {"dep": department_id, "site": site},
+        )
+        db.commit()
+    finally:
+        db.close()
+    with client.session_transaction() as session:
+        session["site_id"] = site
+    return site
 
 
 def _enable_flag(app, name: str, enabled: bool):
@@ -46,6 +66,7 @@ def test_weekview_get_and_resolve_etag_and_rbac(client_admin):
     )
 
     dep_id = str(uuid.uuid4())
+    site = _seed_scope(client_admin, dep_id)
     base_headers = {"X-Tenant-Id": "1"}
 
     for role in ("admin", "editor", "viewer"):
@@ -61,7 +82,7 @@ def test_weekview_get_and_resolve_etag_and_rbac(client_admin):
         assert isinstance(data.get("department_summaries"), list)
 
         r2 = client_admin.get(
-            f"/api/weekview/resolve?site=main&department_id={dep_id}&date=2025-11-06",
+            f"/api/weekview/resolve?site={site}&department_id={dep_id}&date=2025-11-06",
             headers=h,
         )
         assert r2.status_code == 200, role
@@ -141,6 +162,7 @@ def test_feature_flag_off_all_404(client_admin):
 
 @pytest.mark.usefixtures("enable_weekview")
 def test_weekview_rbac_and_etag(client_admin):
+    site = _seed_scope(client_admin, "00000000-0000-0000-0000-000000000000")
     base = "/api/weekview?year=2025&week=45&department_id=00000000-0000-0000-0000-000000000000"
 
     # GET allowed for admin/editor/viewer
@@ -154,7 +176,7 @@ def test_weekview_rbac_and_etag(client_admin):
     r = _get(
         client_admin,
         "viewer",
-        "/api/weekview/resolve?site=s1&department_id=00000000-0000-0000-0000-000000000000&date=2025-11-03",
+        f"/api/weekview/resolve?site={site}&department_id=00000000-0000-0000-0000-000000000000&date=2025-11-03",
     )
     assert r.status_code == 200
 

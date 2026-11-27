@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import logging
 
 from sqlalchemy import text
 
@@ -8,30 +9,6 @@ from .db import get_new_session
 
 
 ALLOWED_EVENTS = {"login", "open_planera", "open_weekview", "open_admin"}
-
-
-def _ensure_activity_table(db) -> None:
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS pilot_activity_events (
-                user_id INTEGER NULL,
-                site_id VARCHAR(64) NULL,
-                event_type VARCHAR(64) NOT NULL,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-    )
-    try:
-        db.execute(
-            text(
-                "CREATE INDEX IF NOT EXISTS idx_pilot_activity_site_created "
-                "ON pilot_activity_events(site_id, created_at)"
-            )
-        )
-    except Exception:
-        pass
 
 
 def track_activity(event_type: str, user_id: int | str | None, site_id: str | None) -> None:
@@ -48,7 +25,6 @@ def track_activity(event_type: str, user_id: int | str | None, site_id: str | No
 
     db = get_new_session()
     try:
-        _ensure_activity_table(db)
         db.execute(
             text(
                 """
@@ -60,6 +36,7 @@ def track_activity(event_type: str, user_id: int | str | None, site_id: str | No
         )
         db.commit()
     except Exception:
+        logging.getLogger(__name__).exception("Failed to record pilot activity")
         try:
             db.rollback()
         except Exception:
@@ -82,7 +59,6 @@ def _format_ts(value) -> str:
 def get_latest_site_activity(limit: int = 300) -> list[dict[str, str]]:
     db = get_new_session()
     try:
-        _ensure_activity_table(db)
         rows = db.execute(
             text(
                 """

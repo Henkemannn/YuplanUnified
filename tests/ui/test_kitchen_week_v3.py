@@ -267,7 +267,7 @@ def test_kitchen_week_v3_does_not_read_another_tenant_site(app_session):
         headers={"X-User-Role": "cook", "X-Tenant-Id": "1"},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 403
     html = response.get_data(as_text=True)
     assert "Foreign addon" not in html
     assert "Foreign note" not in html
