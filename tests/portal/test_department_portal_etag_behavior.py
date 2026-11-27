@@ -75,17 +75,17 @@ def _seed_base(db, alt2_enabled_monday: int = 1, dish_name_alt1: str = "Pannbiff
     # Weekview core tables
     db.execute(text("CREATE TABLE IF NOT EXISTS weekview_registrations(tenant_id TEXT, department_id TEXT, year INTEGER, week INTEGER, day_of_week INTEGER, meal TEXT, diet_type TEXT, marked INTEGER, UNIQUE(tenant_id,department_id,year,week,day_of_week,meal,diet_type))"))
     db.execute(text("CREATE TABLE IF NOT EXISTS weekview_residents_count(tenant_id TEXT, department_id TEXT, year INTEGER, week INTEGER, day_of_week INTEGER, meal TEXT, count INTEGER, UNIQUE(tenant_id,department_id,year,week,day_of_week,meal))"))
-    db.execute(text("CREATE TABLE IF NOT EXISTS weekview_alt2_flags(tenant_id TEXT, department_id TEXT, year INTEGER, week INTEGER, day_of_week INTEGER, is_alt2 INTEGER, UNIQUE(tenant_id,department_id,year,week,day_of_week))"))
+    db.execute(text("CREATE TABLE IF NOT EXISTS weekview_alt2_flags(site_id TEXT, department_id TEXT, year INTEGER, week INTEGER, day_of_week INTEGER, enabled INTEGER, UNIQUE(site_id,department_id,year,week,day_of_week))"))
     db.execute(text("CREATE TABLE IF NOT EXISTS department_menu_choices(id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL, department_id TEXT NOT NULL, year INTEGER NOT NULL, week INTEGER NOT NULL, weekday INTEGER NOT NULL, meal TEXT NOT NULL DEFAULT 'lunch', selected_variant TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, created_at TEXT, updated_at TEXT, UNIQUE(tenant_id,site_id,department_id,year,week,weekday,meal))"))
     # Cleanup existing rows for idempotent seeding across tests
     db.execute(text("DELETE FROM weekview_registrations WHERE tenant_id='1' AND department_id=:d AND year=:y AND week=:w"), {"d": DEPT_ID, "y": YEAR, "w": WEEK})
     db.execute(text("DELETE FROM weekview_residents_count WHERE tenant_id='1' AND department_id=:d AND year=:y AND week=:w"), {"d": DEPT_ID, "y": YEAR, "w": WEEK})
-    db.execute(text("DELETE FROM weekview_alt2_flags WHERE tenant_id='1' AND department_id=:d AND year=:y AND week=:w"), {"d": DEPT_ID, "y": YEAR, "w": WEEK})
+    db.execute(text("DELETE FROM weekview_alt2_flags WHERE site_id=:s AND department_id=:d AND year=:y AND week=:w"), {"s": SITE_ID, "d": DEPT_ID, "y": YEAR, "w": WEEK})
     # Monday residents + diets
     db.execute(text("INSERT OR REPLACE INTO weekview_residents_count(tenant_id, department_id, year, week, day_of_week, meal, count) VALUES(1,:d,:y,:w,1,'lunch',10)"), {"d": DEPT_ID, "y": YEAR, "w": WEEK})
     db.execute(text("INSERT OR REPLACE INTO weekview_registrations(tenant_id, department_id, year, week, day_of_week, meal, diet_type, marked) VALUES(1,:d,:y,:w,1,'lunch','Gluten',1)"), {"d": DEPT_ID, "y": YEAR, "w": WEEK})
     # Alt2 drift flag Monday (controls flags.alt2_lunch)
-    db.execute(text("INSERT OR REPLACE INTO weekview_alt2_flags(site_id, department_id, year, week, day_of_week, enabled) VALUES(1,:d,:y,:w,1,:is_alt2)"), {"d": DEPT_ID, "y": YEAR, "w": WEEK, "is_alt2": alt2_enabled_monday})
+    db.execute(text("INSERT OR REPLACE INTO weekview_alt2_flags(site_id, department_id, year, week, day_of_week, enabled) VALUES(:s,:d,:y,:w,1,:is_alt2)"), {"s": SITE_ID, "d": DEPT_ID, "y": YEAR, "w": WEEK, "is_alt2": alt2_enabled_monday})
     # Menu choice flags table (used for selected_alt for now)
     db.execute(text("CREATE TABLE IF NOT EXISTS alt2_flags(site_id TEXT, department_id TEXT, week INTEGER, weekday INTEGER, enabled INTEGER, version INTEGER, UNIQUE(site_id,department_id,week,weekday))"))
     db.execute(text("DELETE FROM alt2_flags WHERE department_id=:d AND week=:w"), {"d": DEPT_ID, "w": WEEK})

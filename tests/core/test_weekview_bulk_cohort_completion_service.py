@@ -146,7 +146,21 @@ def test_bulk_write_success_single_department_single_target(app_session) -> None
         assert _completion(group_id)["marked"] is True
         db = get_session()
         try:
-            assert int(db.execute(text("SELECT COUNT(*) FROM weekview_registrations")).scalar_one()) == 0
+            assert int(
+                db.execute(
+                    text(
+                        "SELECT COUNT(*) FROM weekview_registrations "
+                        "WHERE tenant_id=:tenant_id AND department_id=:department_id "
+                        "AND year=:year AND week=:week"
+                    ),
+                    {
+                        "tenant_id": tenant_id,
+                        "department_id": department_id,
+                        "year": year,
+                        "week": week,
+                    },
+                ).scalar_one()
+            ) == 0
         finally:
             db.close()
 
