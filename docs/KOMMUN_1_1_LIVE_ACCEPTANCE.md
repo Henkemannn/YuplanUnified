@@ -1,5 +1,22 @@
 # Kommun 1.1 — Live Acceptance & UX Race
 
+## CURRENT HANDOVER — 2026-11-27 | SEC-FINAL-04R in progress
+
+**Authority for this handover snapshot:** [SEC-FINAL-04R handover](handoffs/SEC_FINAL_04R_HANDOFF_2026-11-27.md). This overlay supersedes earlier current/next-gate claims, preserves all historical acceptance evidence and is not pilot or release GO. This is a separate documentation-only branch; **do not merge or checkout it into the dirty feature worktree**.
+
+- Active feature branch `feat/planera-app-shell-2026-03-03`, pushed HEAD `091ddedb458a61ee52ceb492d6ee9c484a92a983`, independently compared identical on GitHub. Last Copilot STOP: 65 modified + 4 untracked, staged 0; current candidate 0058 uncommitted/unreviewed. Protected original and backup both reported unchanged at SHA256 `1add124065aae2aa995619aa9dcc349252a39493e0ea1855bb5ce0b3f21dbd67`.
+- Original F01–F15/JWT remediations implemented in committed history, scoped historic closures only. F15/dependency runtime acceptance and new dietary reference-integrity findings remain open. F11/JWT hosted runtime proof remains open.
+- HEALTH-16D green at historical checkpoint (3138 PASS, 15 skips). FINAL-01 3112 PASS/75 FAIL; FINAL-03 3198 PASS/13 FAIL/28 skips inclusive (3237 collected + 2 collection skips). All original 75 passed in FINAL-03; subsequent 13 offshore cases and stale PostgreSQL head assertion passed focused tests in FINAL-04. No final green full run at current local bytes.
+- Builder explicit provisioning/readiness, 88 nullability checks, no runtime DDL in tested paths and private creation 401 corrections reviewed in earlier gates. Prior isolated pilot-copy migration/restore to 0057 is valid historical evidence only. Dual database synthetic restore preserves linked published menu and kitchen read; full diet/count production output before/after remains open.
+- FINAL-04 actual PostgreSQL diet-default FK mismatch (legacy diet_types vs canonical dietary_types, HTTP500/23503) prompted 0058. Candidate corrects stale writes and runtime DDL, and has intermediate authenticated PG save/read/412/Weekview/Planera evidence. Latest STOP: unauthorized same-tenant cross-site diet marking persisted via HTTP200. Current order **SEC-FINAL-04R – CONTINUE: Dietary Write Scope** already sent; await report. Scope includes directly related dietary write paths, not general audit. Review actual complete or partial ZIP. Do not duplicate order.
+- Owner approved explicit historical mapping, per-row classification of affected registrations/exclusions, and separate already-canonical provenance classification. Reject ambiguous/missing/stale/scope-conflicting mappings or key collisions transactionally. Only synthetic data authorized. No real pilot-data inspection/mapping or migration in current gate.
+- Remaining before A–Ö: complete 04R + independent review; separately approved 0058 pilot-copy rehearsal with proven mapping; remaining PG HTTP/conditional-diet and coordinated restore production evidence; one frozen full pytest; guarded commit/push and active docs reconciliation. No full pytest during 04R.
+- A–Ö unchanged: 16 CLOSED (01,03,05,06,07,08,12,13,14,16,17,20,21,24,25,26), 9 OPEN (02,04,09,10,11,18,22,23,27), 19 PARTIAL, 15 CANCELLED; three ancillary open (IPAD-PRINT-01, PWA-01, KITCHEN-ALT2-01). First planned return AÖ-09 read-only census; AÖ-11 and AÖ-10 decision follow. No UX changes during SEC. Owner's separate local list not independently inspected.
+- Actual pilot remains blocked on fresh staging, secure runtime, hosted reset, credential rotation, authoritative DB identity and real backup strategy, manual business/role acceptance and explicit GO. Old Fly untouched. See handover for exact package/evidence hashes and workflow.
+
+---
+
+
 ## CURRENT — 2026-11-27 | SEC-CLOSURE-01 security reconciliation
 
 **Operational authority:** This section supersedes every earlier `CURRENT` section and
