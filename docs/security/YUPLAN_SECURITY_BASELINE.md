@@ -1,5 +1,117 @@
 # Yuplan Unified — Security Baseline
 
+## SEC-01 — CURRENT 2026-11-27 | SEC-CLOSURE-01 reconciliation
+
+**Status authority:** This section supersedes all earlier `CURRENT` sections
+below. Earlier entries remain a historical audit trail and are not deleted or
+rewritten. This document records scoped security closure, not pilot GO,
+release GO, deployment approval or migration approval.
+
+### Checkpoint and regression evidence
+
+- Branch: `feat/planera-app-shell-2026-03-03`
+- Local/tracking/remote HEAD:
+  `a2b6f5b55bf64b701d1e1828840559778f303132`
+- Working tree clean; staged/untracked: `0/0`
+- Command:
+  `.\.venv\Scripts\python.exe -m pytest --no-cov -ra --tb=short`
+- HEALTH-16D result: **3138 passed, 0 failed, 0 errors, 15 skipped, 3
+  warnings, exit code 0, 945.40 seconds**
+- Full log:
+  `%TEMP%\SEC-HEALTH-16D-full-pytest.log`
+- Log SHA-256:
+  `8e4d94ec4752d1e810780e291117048c19664d46acc92548fd5dd80f7203e589`
+- Alembic head: `0055_weekview_schema`
+- Both protected databases retain SHA-256
+  `1add124065aae2aa995619aa9dcc349252a39493e0ea1855bb5ce0b3f21dbd67`.
+- Tests used isolated temporary databases; neither protected SQLite nor an
+  external production database was used.
+
+### Finding reconciliation
+
+The original Astra SEC-01 set contained F01–F11 HIGH and F12–F15 MEDIUM,
+plus a separately tracked JWT RS256/HMAC algorithm concern. All fifteen have
+implemented remediations in the verified Git history. The status below is
+scoped to the audited surface and its regression contract; it must not be
+read as a blanket audit of every route or as live-runtime evidence.
+
+| ID | Original risk | Implementation commit(s) | Test/verification evidence | Current status |
+|---|---|---|---|---|
+| F01 | Admin/Notes/Audit authorization, HIGH | Admin target/support boundaries in `f542051d`, `87346fd6`, `67b9932e`; Notes site scope and Audit API changes in `eca346d2` | Focused admin/auth/site tests; HEALTH-16D | Scoped CLOSED |
+| F02 | Menu API authorization, HIGH | `eca346d2` | Focused menu/API/site tests; HEALTH-16D | Scoped CLOSED |
+| F03 | Dish/Menu tenant-site integrity, import, Builder and references, HIGH | `eca346d2`, which added the audited migrations `0051_add_site_scoped_menu_uniqueness`, `0053_add_site_scope_to_dishes` and `0054_add_menu_import_guards` | Dish/Municipal, Builder/import, migration and combined evidence; HEALTH-16D | Scoped CLOSED for audited paths |
+| F04 | Builder import auth/session, HIGH | `eca346d2` | Builder/import/session regressions; HEALTH-16D | Scoped CLOSED |
+| F05 | Denied login stale session/token, HIGH | `eca346d2`, `b14cf629` | HTML/JSON login, password, account and token regressions; HEALTH-16D | Scoped CLOSED |
+| F06 | Refresh token accepted as Bearer, HIGH | `b14cf629`, `7df6f853` | JWT type/algorithm negative paths; HEALTH-16D | Scoped CLOSED |
+| F07 | Revoked/deactivated user binding, HIGH | `5b301e8d`, `129d2b8d`, `9f9af654` | Revocation, deactivation and real-actor site tests; HEALTH-16D | Scoped CLOSED |
+| F08 | Export data leakage, HIGH | `6688a0a0`, `9eb3d810`, `3eaad981` | Focused report/export suite; HEALTH-16D | Scoped CLOSED for audited exports |
+| F09 | Planera cross-site/resource-ID access, HIGH | `9c6d98c1`, `2ce85af7` | 109/109 legacy and 62/62 mutation tests; HEALTH-16D | Scoped CLOSED for audited routes |
+| F10 | Anonymous demo access to tenant data, HIGH | `1d6c3f26`, `6d27154b` | 51/51 anonymous/auth-site tests; HEALTH-16D | Scoped CLOSED for examined configuration |
+| F11 | Weak SECRET_KEY/runtime fallback, HIGH | `d3d6cb8a` | Configuration and negative-path tests; HEALTH-16D | Code/test CLOSED; runtime proof OPEN |
+| F12 | Support authorization scope, MEDIUM | Support UI security and authorization boundaries in `8a44b8f1` | Focused support UI/authorization tests; HEALTH-16D | Scoped CLOSED |
+| F13 | Upload/parser resource limits, MEDIUM | `1cad0370` | Upload/parser regressions; HEALTH-16D | Scoped CLOSED |
+| F14 | Temporary password presentation, MEDIUM | `705b28b2` | Temporary-password/reset regressions; HEALTH-16D | Scoped CLOSED |
+| F15 | Runtime Weekview schema repair, MEDIUM | Runtime mutation removal and canonical migration in `ac618601`; cohort/portal stabilization `5002e52e`; schema-isolated legacy regressions `a2b6f5b5` | Runtime/schema, migration, isolation and HEALTH-16D | Scoped CLOSED for audited paths |
+| JWT | RS256/HMAC algorithm confusion, separate concern | `7df6f853`, `d3d6cb8a` | HMAC algorithm/fallback negative paths; HEALTH-16D | Scoped CLOSED for configured HMAC paths; live proof OPEN |
+
+SEC-DELETE-01 (cross-tenant/null-site dietary deletion) and SEC-DELETE-02
+(conflicting site bindings and authentication) were previously reviewed and
+remain **scoped CLOSED**. Their targeted negative/positive regression evidence
+is historical and preserved; they are not new SEC-01 findings.
+
+### Closure boundaries and remaining verification
+
+**Implemented:** the code changes named above are present in the checkpoint
+history. **Test-verified:** focused gate evidence plus HEALTH-16D's complete
+isolated test run pass. **Not verified in real operation:** PostgreSQL,
+fresh staging, deployed secrets, HTTPS/cookie behavior, a real hosted reset,
+provider credential rotation, backup/restore, or live multi-role golden paths.
+
+**Before returning to A–Ö:**
+
+1. PostgreSQL runtime and Alembic verification against an isolated temporary
+   database, including `0055_weekview_schema`.
+2. Copy-only rehearsal of `0050 → 0055` from the pilot database, with schema,
+   data-integrity, constraint/index, count and rollback/recovery checks.
+3. Independent backup, restore and data-integrity verification.
+4. Final SEC reconciliation.
+
+**Before actual pilot start:**
+
+1. Fresh current-code staging/runtime configuration.
+2. Runtime secrets, HTTPS, secure cookies, CSRF, rate limiting, JWT rejection
+   and fail-closed environment checks.
+3. Real Yuplan password reset over HTTPS using configured Postmark delivery.
+4. Role/site/tenant golden-path and cross-scope denial flows using approved
+   synthetic or staging identities.
+5. Manual operational handling for `menu_import_guards` rows in
+   `needs_review`; this guard does not provide automatic distributed rollback.
+6. All remaining release blockers and explicit owner acceptance.
+
+The historically exposed Postmark Server API Token must be rotated or revoked
+by the owner and confirmed. The separate SMTP Access Key and SMTP Secret Key
+are different credentials and must be handled independently. No credential
+values belong in source, logs or this document. Historical Fly installations,
+volumes, databases and secrets remain untouched.
+
+These are not implied by green pytest. No pilot GO or release GO is issued.
+
+### HEALTH-16D skipped tests
+
+The 15 skips are preserved as explicit limitations. Their actual conditions
+are: superseded portion tests (historical test debt); the Redis token-bucket
+module skipped because `redis-py` is absent; the site-binding upload test
+explicitly skipped because dev/prod enforce 403 while TESTING bypasses that
+check; DOCX and XLSX “missing library” cases intentionally skipped because
+`python-docx` and `openpyxl` are installed; placeholder problem-mode cases;
+missing CSRF bootstrap data; unavailable Admin/diet-table fixtures; and one
+larger Weekview/menu-planning fixture. The DOCX/XLSX entries are test-contract
+cases, not missing-dependency evidence. Release-relevant optional paths must
+be run in fresh staging or explicitly accepted. The skip set does not verify
+PostgreSQL, migration copy safety, backup/restore, hosted password reset,
+Postmark rotation or live golden paths.
+
+
 ## SEC-01 — CURRENT 2026-11-25 | F10 scoped CLOSED; remaining SEC work OPEN
 
 **This CURRENT section supersedes previous F10 OPEN/next-gate wording below; older sections remain historical evidence.** Latest reviewed and GitHub-verified product/test checkpoint: `1d6c3f269b9afb06bb909ed31bd276f91652bac4` on `feat/planera-app-shell-2026-03-03`. That single new commit adds only `tests/security/test_sec_f10_demo_anonymous.py` (326 lines), no production changes. The earlier **HEALTH-12R** full-suite checkpoint was **3,018 total / 3,003 PASS / 0 FAIL / 0 ERROR / 15 SKIP, exit 0**, at source HEAD `46277ded13cc66d4a8b67add5b94c7786618fafa` (before F10's nine additional test identities); **a new full suite has not been run since F10 tests were added**.

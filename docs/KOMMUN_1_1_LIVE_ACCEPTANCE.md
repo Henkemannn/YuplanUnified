@@ -1,5 +1,135 @@
 # Kommun 1.1 — Live Acceptance & UX Race
 
+## CURRENT — 2026-11-27 | SEC-CLOSURE-01 security reconciliation
+
+**Operational authority:** This section supersedes every earlier `CURRENT` section and
+next-gate statement below. Earlier A–Ö decisions, acceptance entries, security
+evidence and limitations remain historical and are preserved unchanged. This
+reconciliation does not grant pilot GO, release GO, staging GO, migration approval
+or deployment approval.
+
+### Verified checkpoint and full regression
+
+- Branch: `feat/planera-app-shell-2026-03-03`
+- Local, tracking and remote HEAD: `a2b6f5b55bf64b701d1e1828840559778f303132`
+- Working tree: clean; staged/untracked: `0/0`
+- Full command: `.\.venv\Scripts\python.exe -m pytest --no-cov -ra --tb=short`
+- HEALTH-16D: **3138 passed, 0 failed, 0 errors, 15 skipped, 3 warnings,
+  exit 0, 945.40 seconds**
+- Full log:
+  `%TEMP%\SEC-HEALTH-16D-full-pytest.log`
+- Log SHA-256:
+  `8e4d94ec4752d1e810780e291117048c19664d46acc92548fd5dd80f7203e589`
+- Alembic head: `0055_weekview_schema`
+- Protected `instance/yuplan_mvp.db` and the protected backup both remain
+  SHA-256 `1add124065aae2aa995619aa9dcc349252a39493e0ea1855bb5ce0b3f21dbd67`.
+- The full run used isolated temporary test databases. It did not use the
+  protected pilot database or an external production database.
+
+### SEC-01 reconciliation — implementation is complete; closure remains scoped
+
+The fifteen original Astra SEC-01 findings have implemented remediations in the
+verified Git history. Targeted regression evidence and the HEALTH-16D full suite
+are green at the checkpoint above. “Scoped CLOSED” means that the audited
+surface and its regression contract are addressed; it is not a blanket
+certification of every route, tenant-data path or deployed runtime.
+
+| Finding | Original risk / severity | Implemented remediation and verified commits | Regression evidence | Closure |
+|---|---|---|---|---|
+| F01 | Admin, Notes and Audit authorization / HIGH | Admin target scope and support/impersonation boundaries; `f542051d`, `87346fd6`, `67b9932e`; Notes site scope and Audit API changes in `eca346d2` | Focused admin/auth/site regressions; HEALTH-16D full suite | Scoped CLOSED |
+| F02 | Menu API authorization / HIGH | Role and tenant/site resource checks consolidated in the security hardening history, including `eca346d2` | Focused menu/API/site regressions; HEALTH-16D full suite | Scoped CLOSED |
+| F03 | Dish/Menu relationships, Municipal, import, Builder and references / HIGH | Site/tenant integrity, atomic legacy writes, and import guards; `eca346d2` added the audited migrations `0051_add_site_scoped_menu_uniqueness`, `0053_add_site_scope_to_dishes` and `0054_add_menu_import_guards` | Dish/Municipal, Builder/import, migration and combined suites; HEALTH-16D full suite | Scoped CLOSED for audited paths |
+| F04 | Builder import auth/session scope / HIGH | Import authentication/session isolation and guard handling; `eca346d2` | Builder/import and session regressions; HEALTH-16D full suite | Scoped CLOSED |
+| F05 | Denied login retaining session or token / HIGH | Denied HTML/JSON login paths fail closed without establishing usable auth; auth/session hardening in `eca346d2` and `b14cf629` | Auth login, disabled-account, password and token regressions; HEALTH-16D full suite | Scoped CLOSED |
+| F06 | Refresh token accepted as access Bearer / HIGH | Bearer type and JWT validation hardened; `b14cf629`, `7df6f853` | JWT/auth negative-path regressions; HEALTH-16D full suite | Scoped CLOSED |
+| F07 | Revoked/deactivated binding still usable / HIGH | Active-user, auth-version and strict site-binding checks; `5b301e8d`, `129d2b8d`, `9f9af654` | Revocation, deactivation and real-actor site tests; HEALTH-16D full suite | Scoped CLOSED |
+| F08 | Export data leakage / HIGH | Report route authorization before reads and site-scoped report/export paths; `6688a0a0`, `9eb3d810`, `3eaad981` | Focused report/export suite and full regression | Scoped CLOSED for audited exports |
+| F09 | Planera cross-site/resource-ID access / HIGH | Tenant and bound-site checks on legacy GETs and audited mutation routes; `9c6d98c1`, `2ce85af7` | 109/109 legacy route tests, 62/62 mutation tests, full regression | Scoped CLOSED for audited routes |
+| F10 | Anonymous demo reaching real tenant data / HIGH | Deployed/demo guards and permanent synthetic anonymous isolation tests; `1d6c3f26`, `6d27154b` | 51/51 targeted anonymous/auth-site tests; HEALTH-16D full suite | Scoped CLOSED for examined configuration/routes |
+| F11 | Weak or unsafe SECRET_KEY fallback / HIGH | Fail-closed runtime environment and JWT fallback policy; `d3d6cb8a` | Configuration and negative-path tests; HEALTH-16D full suite | Code/test scoped CLOSED; runtime release proof OPEN |
+| F12 | Support authorization scope / MEDIUM | Support UI security and support authorization boundaries; `8a44b8f1` | Focused support UI/authorization tests; HEALTH-16D full suite | Scoped CLOSED |
+| F13 | Unbounded upload/parser resources / MEDIUM | Upload size, parser and resource limits; `1cad0370` | Upload/parser limit regressions; HEALTH-16D full suite | Scoped CLOSED |
+| F14 | Temporary password exposed in UI / MEDIUM | Safe temporary-password presentation and reset replay protection; `705b28b2` | Temporary-password/reset regressions; HEALTH-16D full suite | Scoped CLOSED |
+| F15 | Destructive Weekview runtime schema repair / MEDIUM | Explicit canonical schema, atomic `0055_weekview_schema` and removal of runtime mutation; `ac618601`; cohort/portal test stabilization `5002e52e`; schema-isolated legacy regressions `a2b6f5b5` | Runtime/schema, migration, Weekview and HEALTH-16D full suite | Scoped CLOSED for audited runtime/migration paths |
+| JWT | Separate RS256/HMAC algorithm confusion concern | Reject unsafe algorithm/fallback combinations and landing Bearer misuse; `7df6f853`, `d3d6cb8a` | JWT negative-path regressions; HEALTH-16D full suite | Scoped CLOSED for configured HMAC paths; live secret/runtime proof OPEN |
+
+SEC-DELETE-01 (cross-tenant/null-site dietary deletion) and SEC-DELETE-02
+(conflicting site bindings and authentication) were previously reviewed and are
+also **scoped CLOSED**, with their targeted negative/positive regressions
+preserved in the historical security record.
+
+### What is and is not verified
+
+**Implemented and test-verified:** the source remediations listed above, their
+focused negative/positive regressions recorded in the historical gate reports,
+and the complete HEALTH-16D run at the current checkpoint.
+
+**Not verified by this closure:** PostgreSQL runtime behavior, a real fresh
+staging deployment, a production-like HTTPS/cookie environment, a real
+application password-reset delivery, provider credential rotation, backup
+restore, or a live multi-role customer walkthrough. No actual pilot GO or
+release GO is issued.
+
+The following remain required before release/pilot acceptance:
+
+**Before returning to the A–Ö work:**
+
+1. Run PostgreSQL runtime and migration verification against an isolated
+   temporary database.
+2. Rehearse migration `0050 → 0055` on an isolated copy of the pilot database;
+   verify row counts, constraints, indexes, schema head and application
+   behavior. Do not migrate the protected original in this gate.
+3. Perform backup, restore and data-integrity verification, including a
+   documented recovery result.
+4. Complete the final SEC reconciliation.
+
+**Before actual pilot start:**
+
+1. Build a fresh current-code staging/runtime configuration.
+2. Verify runtime secrets, HTTPS, secure cookies, CSRF, rate limiting and
+   fail-closed behavior.
+3. Execute the real Yuplan password-reset flow over HTTPS with the configured
+   mail provider.
+4. Run role/site/tenant golden-path and denial walkthroughs with authorized
+   synthetic or approved staging accounts.
+5. Define and manually execute handling for
+   `menu_import_guards.status = needs_review`; the guard is not an automatic
+   distributed rollback or Saga.
+6. Close all remaining release blockers and obtain explicit owner acceptance.
+
+The historically exposed Postmark Server API Token must be rotated or revoked
+by the owner and that action must be confirmed without recording the token.
+The separate SMTP Access Key and SMTP Secret Key are different credentials and
+must be handled and rotated independently; no secret values belong in this
+document. Historical Fly installations, data, volumes and secrets remain
+untouched.
+
+### HEALTH-16D skipped-test classification
+
+The 15 skips remain visible and are not treated as failures. Their actual
+conditions are:
+
+- Legacy portion-recommendation tests are superseded by service tests
+  (historical test debt).
+- The Redis token-bucket module is skipped because `redis-py` is absent.
+  Redis-backed runtime behavior remains a release verification item if that
+  backend is selected.
+- The site-binding upload test is explicitly skipped because site-binding 403
+  is enforced in dev/prod while the test runs with the TESTING bypass. This is
+  a TESTING-environment limitation and requires a non-TESTING staging check.
+- The DOCX and XLSX “missing library” cases intentionally skip when
+  `python-docx` and `openpyxl` are installed; the dependencies are installed,
+  so these are test-contract cases, not missing-dependency evidence.
+- Placeholder problem-mode cases cover an absent placeholder endpoint.
+- A CSRF functional case has no user bootstrap.
+- Admin UI/diet-table cases are unavailable in the test environment.
+- One Weekview/menu-planning case requires a larger department/site fixture.
+
+None invalidates the 3138-pass result. The skips do not provide evidence for
+PostgreSQL, backup/restore, hosted reset, credential rotation or live
+golden-path acceptance.
+
+
 ## CURRENT — 2026-11-25 | SEC-F10 scoped CLOSED; SECURITY WORK CONTINUES
 
 **Operational authority:** This section supersedes earlier F10 OPEN/next-gate statements; previous A–Ö acceptance and SEC evidence below remain historical. No municipal pilot GO, staging deployment GO, migration, or entire SEC-01 signoff.
