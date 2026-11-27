@@ -1,5 +1,20 @@
 # Yuplan Unified — Security Baseline
 
+## CURRENT HANDOVER OVERLAY — 2026-11-27 | SEC-FINAL-04R OPEN
+
+This documentation-only snapshot records scoped security evidence, not a release certification. The operational tracker is [Kommun 1.1 Live Acceptance](../KOMMUN_1_1_LIVE_ACCEPTANCE.md); detailed continuation is [SEC-FINAL-04R handover](../handoffs/SEC_FINAL_04R_HANDOFF_2026-11-27.md). Do not checkout/merge this handover branch into the dirty active feature worktree.
+
+- Pushed feature checkpoint `091ddedb458a61ee52ceb492d6ee9c484a92a983` independently verified on GitHub; local candidate 0058 is uncommitted, 69 dirty paths at last STOP (65 M + 4 untracked, 0 staged, owner/Copilot reported). F01–F14 scoped historic CLOSED, JWT HS256 scoped CLOSED; F11/JWT live runtime proof open. F15 and new direct dietary dependency findings remain open for final local acceptance. Historic evidence below is retained, not a blanket closure.
+- Prior PostgreSQL chain fixes and migrations 0056/0057 committed. Restricted real authenticated runtime, scope/ETag and schema regressions verified within tested scope. FINAL-01 copy upgrade 0050→0057, logical data integrity and main DB restore previously verified. 0058 has not been tested on a pilot copy. Original and backup protected.
+- Builder runtime DDL 52→0 in measured paths, explicit provisioning/readiness, 88 NOT NULL regressions and rollback; reviewed 02R; FINAL-03 missing actor corrected to 401 with no mutation. Reported dual capture 869 PG and 2195 Builder SQL statements, zero DDL, not proof of every runtime route. Coordinated PG/Builder restore preserves menu linkage; full diet/quantity production flow after restore open.
+- FINAL-03 full pytest 3198 PASS/13 FAIL/28 skips inclusive; previous 75 now PASS. FINAL-04 targeted 13/13 PASS and PG chain assertion recovery 1 PASS. No green final regression at present.
+- New direct dietary integrity blockers: 0008 legacy FK to diet_types text ID vs current dietary_types integer ID causes PG HTTP500/23503; SQLite FK disabled historically can contain already-canonical references. 0058 candidate implements explicit mapping, but not reviewed. Stale SQLite default writes and UI retry corrected, direct runtime DDL removed. Intermediate real PG admin create/save, stale 412, correct count in Weekview/Planera reported. Latest reproduced failure persists cross-site diet mark HTTP200 with authenticated admin. Log SHA256 c2032cec47f7da3268c19587ff7a2799a81b8bdd1bcdb54b175a4d66549fb7edf. No real customer exposure established. Await current 04R continuation.
+- Canonical scope contract: actor→tenant→site→department→diet identity before mutation/version. Same-site legal writes/clear; unknown/cross-site/cross-tenant denied, mixed bulk atomic rollback. Preserve explicitly valid normal-cost keys; no arbitrary free-text bypass. Migration-only explicit source-bound classification and evidence, related affected rows individually classified; already-canonical rows explicitly proven and preserved. Fail closed ambiguity/collision/stale mapping; no silent row drops, merge or inferred identity. Only synthetic data authorized; separate approval for pilot-copy rehearsal and mapping.
+- Open local acceptance: actual candidate code review, 0058 pilot-copy proof, missing authenticated PG HTTP/conditional cost validity and full coordinated restore output, frozen full regression, guarded Git reconciliation. No production migration/deploy. Pre-pilot operations remain as in tracker, including Postmark token rotation and historical credential/session exposure assessment. No secrets in docs/logs.
+
+---
+
+
 ## SEC-01 — CURRENT 2026-11-27 | SEC-CLOSURE-01 reconciliation
 
 **Status authority:** This section supersedes all earlier `CURRENT` sections
