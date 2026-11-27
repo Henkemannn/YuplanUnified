@@ -44,15 +44,15 @@ def upgrade() -> None:
             ),
             sa.CheckConstraint(
                 "quantity >= 0",
-                name="ck_department_requirement_group_weekday_overrides_quantity_non_negative",
+                name=sa.schema.conv("ck_department_requirement_group_weekday_overrides_quantity_non_negative"),
             ),
             sa.CheckConstraint(
                 "length(trim(meal_key)) > 0",
-                name="ck_department_requirement_group_weekday_overrides_meal_key_not_empty",
+                name=sa.schema.conv("ck_department_requirement_group_weekday_overrides_meal_key_not_empty"),
             ),
             sa.CheckConstraint(
                 "meal_key = lower(trim(meal_key))",
-                name="ck_department_requirement_group_weekday_overrides_meal_key_normalized",
+                name=sa.schema.conv("ck_department_requirement_group_weekday_overrides_meal_key_normalized"),
             ),
         )
 

@@ -57,11 +57,11 @@ def upgrade() -> None:
             ),
             sa.CheckConstraint(
                 "builder_menu_version > 0",
-                name="ck_department_portal_week_submissions_builder_menu_version_positive",
+                name=sa.schema.conv("ck_department_portal_week_submissions_builder_menu_version_positive"),
             ),
             sa.CheckConstraint(
                 "length(trim(choice_signature)) > 0",
-                name="ck_department_portal_week_submissions_choice_signature_not_empty",
+                name=sa.schema.conv("ck_department_portal_week_submissions_choice_signature_not_empty"),
             ),
         )
 

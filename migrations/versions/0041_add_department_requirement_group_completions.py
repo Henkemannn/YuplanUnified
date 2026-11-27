@@ -30,7 +30,7 @@ def upgrade() -> None:
             sa.Column("group_id", sa.String(length=64), nullable=False),
             sa.Column("service_date", sa.Date(), nullable=False),
             sa.Column("meal_key", sa.String(length=64), nullable=False),
-            sa.Column("marked", sa.Boolean(), nullable=False, server_default=sa.text("0")),
+            sa.Column("marked", sa.Boolean(), nullable=False, server_default=sa.false()),
             sa.ForeignKeyConstraint(
                 ["group_id"],
                 ["department_requirement_groups.id"],

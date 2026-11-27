@@ -68,7 +68,7 @@ def upgrade() -> None:
     if "primary_requirement_id" not in columns:
         with op.batch_alter_table(
             "department_requirement_groups",
-            recreate="always",
+            recreate="auto",
             reflect_kwargs={"resolve_fks": False},
         ) as batch_op:
             batch_op.add_column(sa.Column("primary_requirement_id", sa.Integer(), nullable=True))
@@ -91,7 +91,7 @@ def downgrade() -> None:
     if "primary_requirement_id" in columns:
         with op.batch_alter_table(
             "department_requirement_groups",
-            recreate="always",
+            recreate="auto",
             reflect_kwargs={"resolve_fks": False},
         ) as batch_op:
             batch_op.drop_constraint(

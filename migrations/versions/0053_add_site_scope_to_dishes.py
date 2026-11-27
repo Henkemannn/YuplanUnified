@@ -77,7 +77,7 @@ def _assert_menu_site_integrity(connection) -> None:
 
 
 def _add_site_column(connection) -> None:
-    with op.batch_alter_table("dishes", recreate="always") as batch:
+    with op.batch_alter_table("dishes", recreate="auto") as batch:
         batch.add_column(sa.Column("site_id", sa.String(length=64), nullable=True))
         batch.create_foreign_key(
             "fk_dishes_site_id",
@@ -202,6 +202,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_dishes_tenant_site", table_name="dishes")
-    with op.batch_alter_table("dishes", recreate="always") as batch:
+    with op.batch_alter_table("dishes", recreate="auto") as batch:
         batch.drop_constraint("fk_dishes_site_id", type_="foreignkey")
         batch.drop_column("site_id")

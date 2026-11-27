@@ -18,7 +18,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    with op.batch_alter_table("users", recreate="always") as batch_op:
+    recreate = "always" if op.get_bind().dialect.name == "sqlite" else "auto"
+    with op.batch_alter_table("users", recreate=recreate) as batch_op:
         batch_op.add_column(
             sa.Column(
                 "auth_version",
@@ -30,5 +31,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("users", recreate="always") as batch_op:
+    recreate = "always" if op.get_bind().dialect.name == "sqlite" else "auto"
+    with op.batch_alter_table("users", recreate=recreate) as batch_op:
         batch_op.drop_column("auth_version")

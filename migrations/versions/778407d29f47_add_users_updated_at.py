@@ -17,18 +17,22 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Use batch mode to be safe on SQLite and generally across dialects when constraints exist.
-    with op.batch_alter_table("users", recreate="always") as batch_op:
-        batch_op.add_column(
-            sa.Column(
-                "updated_at",
-                sa.DateTime(timezone=False),
-                nullable=True,
-                server_default=sa.text("CURRENT_TIMESTAMP"),
-            )
-        )
+    column = sa.Column(
+        "updated_at",
+        sa.DateTime(timezone=False),
+        nullable=True,
+        server_default=sa.text("CURRENT_TIMESTAMP"),
+    )
+    if op.get_bind().dialect.name == "sqlite":
+        with op.batch_alter_table("users", recreate="always") as batch_op:
+            batch_op.add_column(column)
+    else:
+        op.add_column("users", column)
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("users", recreate="always") as batch_op:
-        batch_op.drop_column("updated_at")
+    if op.get_bind().dialect.name == "sqlite":
+        with op.batch_alter_table("users", recreate="always") as batch_op:
+            batch_op.drop_column("updated_at")
+    else:
+        op.drop_column("users", "updated_at")

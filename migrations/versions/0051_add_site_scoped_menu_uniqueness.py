@@ -39,7 +39,7 @@ def _unique_definitions(connection) -> list[tuple[str, tuple[str, ...]]]:
             )
         )
     for index in inspector.get_indexes("menus"):
-        if index.get("unique"):
+        if index.get("unique") and not index.get("duplicates_constraint"):
             definitions.append(
                 (
                     f"index:{index.get('name') or '<unnamed>'}",
@@ -202,7 +202,8 @@ def _rebuild_menu_constraint(connection, *, downgrade: bool) -> None:
     if connection.dialect.name == "sqlite":
         connection.exec_driver_sql("PRAGMA defer_foreign_keys=ON")
 
-    with op.batch_alter_table("menus", recreate="always") as batch:
+    recreate = "always" if connection.dialect.name == "sqlite" else "auto"
+    with op.batch_alter_table("menus", recreate=recreate) as batch:
         if downgrade:
             batch.drop_constraint("uq_menu_tenant_site_year_week", type_="unique")
             batch.create_unique_constraint(

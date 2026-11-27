@@ -22,13 +22,30 @@ def upgrade() -> None:
     inspector = inspect(conn)
     table_names = set(inspector.get_table_names())
 
+    has_menus = conn.execute(sa.text("SELECT EXISTS (SELECT 1 FROM menus)")).scalar_one()
+    if has_menus:
+        if "sites" not in table_names or "tenant_id" not in {
+            column["name"] for column in inspector.get_columns("sites")
+        }:
+            raise RuntimeError("Cannot safely map existing menus without tenant-scoped sites")
+        ambiguous = conn.execute(
+            sa.text(
+                """
+                SELECT COUNT(*) FROM menus m
+                WHERE (SELECT COUNT(*) FROM sites s WHERE s.tenant_id = m.tenant_id) <> 1
+                """
+            )
+        ).scalar_one()
+        if ambiguous:
+            raise RuntimeError("Cannot safely map existing menus to a unique tenant site")
+
     op.add_column("menus", sa.Column("site_id", sa.Text(), nullable=True))
     op.create_index(
         "ix_menus_tenant_site_week",
         "menus",
         ["tenant_id", "site_id", "year", "week"],
     )
-    if "sites" in table_names:
+    if has_menus:
         op.execute(
             """
             UPDATE menus

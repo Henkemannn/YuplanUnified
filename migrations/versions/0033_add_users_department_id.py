@@ -29,7 +29,7 @@ def upgrade() -> None:
     if "department_id" in cols:
         return
 
-    with op.batch_alter_table("users", recreate="always") as batch_op:
+    with op.batch_alter_table("users", recreate="auto") as batch_op:
         batch_op.add_column(sa.Column("department_id", sa.String(length=64), nullable=True))
         batch_op.create_foreign_key("fk_users_department_id", "departments", ["department_id"], ["id"])
 
@@ -46,6 +46,6 @@ def downgrade() -> None:
     if "department_id" not in cols:
         return
 
-    with op.batch_alter_table("users", recreate="always") as batch_op:
+    with op.batch_alter_table("users", recreate="auto") as batch_op:
         batch_op.drop_constraint("fk_users_department_id", type_="foreignkey")
         batch_op.drop_column("department_id")

@@ -51,8 +51,8 @@ def upgrade() -> None:
             ),
             sa.CheckConstraint("year > 0", name="ck_commun_builder_publication_revisions_year_positive"),
             sa.CheckConstraint("week BETWEEN 1 AND 53", name="ck_commun_builder_publication_revisions_week_range"),
-            sa.CheckConstraint("length(trim(builder_menu_id)) > 0", name="ck_commun_builder_publication_revisions_builder_menu_id_not_empty"),
-            sa.CheckConstraint("builder_menu_version > 0", name="ck_commun_builder_publication_revisions_builder_menu_version_positive"),
+            sa.CheckConstraint("length(trim(builder_menu_id)) > 0", name=sa.schema.conv("ck_commun_builder_publication_revisions_builder_menu_id_not_empty")),
+            sa.CheckConstraint("builder_menu_version > 0", name=sa.schema.conv("ck_commun_builder_publication_revisions_builder_menu_version_positive")),
             sa.CheckConstraint("lower(source) IN ('manual', 'import', 'migration', 'pilot')", name="ck_commun_builder_publication_revisions_source_allowed"),
         )
         op.create_index(

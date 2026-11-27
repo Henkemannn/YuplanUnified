@@ -5,7 +5,16 @@ import sys
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import (
+    Column,
+    MetaData,
+    PrimaryKeyConstraint,
+    String,
+    Table,
+    engine_from_config,
+    inspect,
+    pool,
+)
 
 # Include core models
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -60,43 +69,6 @@ def run_migrations_online():
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
-        # Preflight: widen alembic_version.version_num for Postgres if too short
-        try:
-            dialect = connection.dialect.name
-            if dialect == "postgresql":
-                # Use an explicit transaction for DDL safety
-                trans = connection.begin()
-                try:
-                    res = connection.exec_driver_sql(
-                        """
-                        SELECT character_maximum_length
-                        FROM information_schema.columns
-                        WHERE table_name = 'alembic_version'
-                          AND column_name = 'version_num'
-                          AND table_schema = current_schema()
-                        """
-                    ).fetchone()
-                    current_len = res[0] if res else None
-                    if current_len is not None and current_len < 64:
-                        connection.exec_driver_sql(
-                            "ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(128)"
-                        )
-                    elif current_len is None:
-                        # Table might not exist yet; best-effort unconditional widen guarded by try/except
-                        try:
-                            connection.exec_driver_sql(
-                                "ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(128)"
-                            )
-                        except Exception:
-                            pass
-                    # else: already wide enough
-                    trans.commit()
-                except Exception:
-                    trans.rollback()
-        except Exception:
-            # Never block migrations due to preflight check
-            pass
-
         if connection.dialect.name == "sqlite":
             # SQLite defaults to non-transactional Alembic DDL. Begin the
             # physical write transaction before revision preflight or DDL.
@@ -119,6 +91,25 @@ def run_migrations_online():
                 transactional_ddl=True,
             )
             with context.begin_transaction():
+                if connection.dialect.name == "postgresql":
+                    Table(
+                        "alembic_version",
+                        MetaData(),
+                        Column("version_num", String(128), nullable=False),
+                        PrimaryKeyConstraint("version_num", name="alembic_version_pkc"),
+                    ).create(connection, checkfirst=True)
+                    columns = {
+                        column["name"]: column
+                        for column in inspect(connection).get_columns("alembic_version")
+                    }
+                    version_type = columns["version_num"]["type"]
+                    if not isinstance(version_type, String):
+                        raise RuntimeError("alembic_version.version_num must be a string")
+                    if version_type.length is not None and version_type.length < 128:
+                        connection.exec_driver_sql(
+                            "ALTER TABLE alembic_version "
+                            "ALTER COLUMN version_num TYPE VARCHAR(128)"
+                        )
                 context.run_migrations()
 
 if context.is_offline_mode():

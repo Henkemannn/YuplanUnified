@@ -362,7 +362,7 @@ def upgrade() -> None:
         sa.text(
             """
             SELECT id, name, COALESCE(addon_family, 'ovrigt') AS addon_family,
-                   COALESCE(is_active, 1) AS is_active,
+                   COALESCE(is_active, TRUE) AS is_active,
                    created_at, site_id
             FROM service_addons
             """
