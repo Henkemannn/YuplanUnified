@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from hashlib import sha256
 from typing import Iterable
 
 from .repo import ReportRepo
@@ -10,33 +11,47 @@ class ReportService:
     def __init__(self, repo: ReportRepo | None = None) -> None:
         self.repo = repo or ReportRepo()
 
-    def _build_etag_dept(self, department_id: str, year: int, week: int, version: int) -> str:
-        return f'W/"report:dept:{department_id}:year:{year}:week:{week}:v{version}"'
+    def _site_etag_key(self, site_id: str) -> str:
+        return sha256(site_id.encode("utf-8")).hexdigest()
 
-    def _build_etag_site(self, year: int, week: int, vmax: int, n: int) -> str:
-        return f'W/"report:site:year:{year}:week:{week}:v{vmax}:n{n}"'
+    def _build_etag_dept(
+        self, site_id: str, department_id: str, year: int, week: int, version: int
+    ) -> str:
+        return (
+            f'W/"report:dept:{self._site_etag_key(site_id)}:{department_id}:'
+            f'year:{year}:week:{week}:v{version}"'
+        )
+
+    def _build_etag_site(self, site_id: str, year: int, week: int, vmax: int, n: int) -> str:
+        return (
+            f'W/"report:site:{self._site_etag_key(site_id)}:year:{year}:'
+            f'week:{week}:v{vmax}:n{n}"'
+        )
 
     def compute(
         self,
         tenant_id: int | str,
+        site_id: str,
         year: int,
         week: int,
         department_id: str | None,
         if_none_match: str | None = None,
     ) -> tuple[bool, dict, str]:
         """Return (not_modified, payload, etag)."""
-        versions_map, vmax, n = self.repo.get_versions(tenant_id, year, week, department_id)
+        versions_map, vmax, n = self.repo.get_versions(
+            tenant_id, site_id, year, week, department_id
+        )
         # Build ETag
         if department_id:
             v = versions_map.get(department_id, 0)
-            etag = self._build_etag_dept(department_id, year, week, v)
+            etag = self._build_etag_dept(site_id, department_id, year, week, v)
         else:
-            etag = self._build_etag_site(year, week, vmax, n)
+            etag = self._build_etag_site(site_id, year, week, vmax, n)
+        marks = self.repo.get_marks(tenant_id, site_id, year, week, department_id)
         if if_none_match and if_none_match == etag:
             return True, {}, etag
         # When department_id is specified but no data, treat as 404 at API layer; here we still aggregate empty
-        residents = self.repo.get_residents(tenant_id, year, week, department_id)
-        marks = self.repo.get_marks(tenant_id, year, week, department_id)
+        residents = self.repo.get_residents(tenant_id, site_id, year, week, department_id)
         # Aggregate per dept -> meal
         depts: dict[str, dict[str, dict[str, int]]] = defaultdict(
             lambda: {"lunch": defaultdict(int), "dinner": defaultdict(int)}
@@ -46,10 +61,9 @@ class ReportService:
             key = (r["department_id"], r["meal"])
             residents_totals[key] += int(r["count"]) if r["count"] is not None else 0
         for m in marks:
-            diet = m["diet_type"]
-            if str(diet).lower() == "normal":
-                # "specials" should exclude normal diet entries
+            if m["reserved_normal"]:
                 continue
+            diet = m["diet_type"]
             dep = m["department_id"]
             meal = m["meal"]
             depts[dep][meal][diet] += 1

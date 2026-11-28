@@ -5,9 +5,10 @@ from sqlalchemy import text
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 
-def _seed_normals(site_id: str):
+def _seed_normals():
     from core.admin_repo import SitesRepo, DepartmentsRepo, DietTypesRepo
-    srepo = SitesRepo(); srepo.create_site("Plan Site")
+    site, _ = SitesRepo().create_site("Plan Site", tenant_id=1)
+    site_id = site["id"]
     drepo = DepartmentsRepo()
     depA, _ = drepo.create_department(site_id, "Avd A", "fixed", 12)
     depB, _ = drepo.create_department(site_id, "Avd B", "fixed", 10)
@@ -21,7 +22,7 @@ def _seed_normals(site_id: str):
     drepo.upsert_department_diet_defaults(depA["id"], vA, [{"diet_type_id": str(dt_laktos), "default_count": 3}])
     drepo.upsert_department_diet_defaults(depB["id"], vB, [{"diet_type_id": str(dt_laktos), "default_count": 2}])
     drepo.upsert_department_diet_defaults(depC["id"], vC, [{"diet_type_id": str(dt_laktos), "default_count": 4}])
-    return {"deps": (depA, depB, depC), "diet_id": dt_laktos}
+    return {"site_id": site_id, "deps": (depA, depB, depC), "diet_id": dt_laktos}
 
 
 def _seed_alt2_flag(site_id: str, department_id: str, year: int, week: int, dow: int):
@@ -50,8 +51,8 @@ def _seed_alt2_flag(site_id: str, department_id: str, year: int, week: int, dow:
 
 def test_normalkost_view_table_and_totals(app_session):
     client = app_session.test_client()
-    site_id = f"site-plan-{uuid.uuid4().hex[:8]}"
-    seeded = _seed_normals(site_id)
+    seeded = _seed_normals()
+    site_id = seeded["site_id"]
     dt_id = seeded["diet_id"]
     (depA, depB, depC) = seeded["deps"]
     # Set Alt2 for Avd B on Monday (dow=1)

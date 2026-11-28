@@ -1,4 +1,6 @@
+from tests._auth_site_helpers import login_bound_user
 from datetime import date as _date
+from uuid import uuid4
 
 from sqlalchemy import text
 
@@ -7,15 +9,17 @@ HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 def _seed_site_and_department():
     from core.db import get_session
+    site_id, department_id = str(uuid4()), str(uuid4())
     conn = get_session()
     try:
-        site = conn.execute(text("SELECT id FROM sites WHERE id='00000000-0000-0000-0000-000000000000'"))
-        if not site.fetchone():
-            conn.execute(text("INSERT INTO sites (id, name) VALUES ('00000000-0000-0000-0000-000000000000', 'Test Site')"))
-        dep = conn.execute(text("SELECT id FROM departments WHERE id='00000000-0000-0000-0000-000000000001'"))
-        if not dep.fetchone():
-            conn.execute(text("INSERT INTO departments (id, site_id, name, resident_count_mode, resident_count_fixed) VALUES ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000000', 'Avd Alpha', 'fixed', 5)"))
+        conn.execute(text("INSERT INTO sites (id, tenant_id, name) VALUES (:site, 1, 'Test Site')"), {"site": site_id})
+        conn.execute(
+            text("INSERT INTO departments (id, site_id, name, resident_count_mode, resident_count_fixed) "
+                 "VALUES (:department, :site, 'Avd Alpha', 'fixed', 5)"),
+            {"department": department_id, "site": site_id},
+        )
         conn.commit()
+        return site_id, department_id
     finally:
         conn.close()
 
@@ -47,9 +51,8 @@ def _ensure_menu_for_week(tenant_id: int, site_id: str, year: int, week: int, di
 
 def test_portal_department_week_choice_happy_path(app_session):
     client = app_session.test_client()
-    _seed_site_and_department()
-    site_id = "00000000-0000-0000-0000-000000000000"
-    department_id = "00000000-0000-0000-0000-000000000001"
+    site_id, department_id = _seed_site_and_department()
+    login_bound_user(client, site_id=site_id)
     year = 2025
     week = 48
     tid = 1
@@ -97,9 +100,8 @@ def test_portal_department_week_choice_happy_path(app_session):
 
 def test_portal_department_week_choice_persists(app_session):
     client = app_session.test_client()
-    _seed_site_and_department()
-    site_id = "00000000-0000-0000-0000-000000000000"
-    department_id = "00000000-0000-0000-0000-000000000001"
+    site_id, department_id = _seed_site_and_department()
+    login_bound_user(client, site_id=site_id)
     year = 2025
     week = 48
     tid = 1

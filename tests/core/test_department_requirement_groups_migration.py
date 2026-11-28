@@ -37,7 +37,7 @@ def test_0036_upgrade_downgrade_and_reupgrade(tmp_path: Path, monkeypatch) -> No
         assert "dietary_types" in inspector.get_table_names()
         assert "departments" in inspector.get_table_names()
 
-        command.upgrade(_alembic_cfg(db_url), "head")
+        command.upgrade(_alembic_cfg(db_url), "0036_add_department_requirement_groups")
 
         inspector = inspect(engine)
         assert "department_requirement_groups" in inspector.get_table_names()
@@ -97,7 +97,7 @@ def test_0036_upgrade_downgrade_and_reupgrade(tmp_path: Path, monkeypatch) -> No
         assert "dietary_types" in inspector.get_table_names()
         assert "departments" in inspector.get_table_names()
 
-        command.upgrade(_alembic_cfg(db_url), "head")
+        command.upgrade(_alembic_cfg(db_url), "0036_add_department_requirement_groups")
         inspector = inspect(engine)
         assert "department_requirement_groups" in inspector.get_table_names()
         assert "department_requirement_group_requirements" in inspector.get_table_names()

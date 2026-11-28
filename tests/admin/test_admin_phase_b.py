@@ -82,12 +82,19 @@ class TestAdminPhaseB:
         )
         dept = d.get_json()
         etag = d.headers["ETag"]
+        from core.admin_repo import DietTypesRepo
+
+        diet_id = next(
+            row["id"]
+            for row in DietTypesRepo().list_all(site_id=s["id"])
+            if row["name"] == "Vegetarisk"
+        )
 
         # Negative count → 400
         r = c.put(
             f"/admin/departments/{dept['id']}/diet-defaults",
             headers={**headers, "If-Match": etag},
-            json={"items": [{"diet_type_id": "veg", "default_count": -1}]},
+            json={"items": [{"diet_type_id": str(diet_id), "default_count": -1}]},
         )
         assert r.status_code == 400
 
@@ -95,7 +102,7 @@ class TestAdminPhaseB:
         r = c.put(
             f"/admin/departments/{dept['id']}/diet-defaults",
             headers={**headers, "If-Match": etag},
-            json={"items": [{"diet_type_id": "veg", "default_count": 3}]},
+            json={"items": [{"diet_type_id": str(diet_id), "default_count": 3}]},
         )
         assert r.status_code == 200
         etag2 = r.headers["ETag"]
@@ -103,7 +110,7 @@ class TestAdminPhaseB:
         r = c.put(
             f"/admin/departments/{dept['id']}/diet-defaults",
             headers={**headers, "If-Match": etag2},
-            json={"items": [{"diet_type_id": "veg", "default_count": 3}]},
+            json={"items": [{"diet_type_id": str(diet_id), "default_count": 3}]},
         )
         assert r.status_code == 200
 
@@ -112,14 +119,14 @@ class TestAdminPhaseB:
         r2 = c.put(
             f"/admin/departments/{dept['id']}/diet-defaults",
             headers={**headers, "If-Match": stale},
-            json={"items": [{"diet_type_id": "veg", "default_count": 4}]},
+            json={"items": [{"diet_type_id": str(diet_id), "default_count": 4}]},
         )
         assert r2.status_code == 200
         # Now try using old stale again → 412
         r3 = c.put(
             f"/admin/departments/{dept['id']}/diet-defaults",
             headers={**headers, "If-Match": stale},
-            json={"items": [{"diet_type_id": "veg", "default_count": 5}]},
+            json={"items": [{"diet_type_id": str(diet_id), "default_count": 5}]},
         )
         assert r3.status_code == 412
 
@@ -195,7 +202,7 @@ class TestAdminPhaseB:
         r = c.post("/admin/sites", headers={"X-User-Role": "viewer", "X-Tenant-Id": "1"}, json={"name": "N"})
         assert r.status_code == 403
         # feature flag off → 404
-        reg = getattr(app, "feature_registry")
+        reg = app.feature_registry
         reg.set("ff.admin.enabled", False)
         r = c.get("/admin/stats", headers={"X-User-Role": "editor", "X-Tenant-Id": "1"})
         assert r.status_code == 404

@@ -1,3 +1,4 @@
+from tests._auth_site_helpers import login_bound_user
 import uuid
 from datetime import date as _date
 from sqlalchemy import text
@@ -17,7 +18,7 @@ def _seed_menu(app, year, week):
         db = get_session()
         try:
             sid = str(uuid.uuid4()); did = str(uuid.uuid4())
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0)"), {"i": sid, "n": "Site"})
+            db.execute(text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0)"), {"i": sid, "n": "Site"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',10,0)"), {"i": did, "s": sid, "n": "Avd"})
             db.commit()
             d1 = Dish(tenant_id=1, site_id=sid, name="Köttbullar"); d2 = Dish(tenant_id=1, site_id=sid, name="Fisk"); d3 = Dish(tenant_id=1, site_id=sid, name="Glass")
@@ -41,6 +42,7 @@ def test_navigation_data_attrs_present(client_admin):
     _enable_weekview(client_admin)
     year, week = 2025, 52
     sid, did = _seed_menu(app, year, week)
+    login_bound_user(client_admin, site_id=sid)
     r = client_admin.get(f"/portal/week?site_id={sid}&department_id={did}&year={year}&week={week}", headers=ADMIN_HEADERS)
     assert r.status_code == 200
     html = r.get_data(as_text=True)

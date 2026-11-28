@@ -29,7 +29,7 @@ def test_weekview_ui_renders_diets_and_mark_state(client_admin):
     from core.db import create_all, get_session
     from sqlalchemy import text
     from core.models import Dish
-    from core.admin_repo import DepartmentsRepo
+    from core.admin_repo import DepartmentsRepo, DietTypesRepo
 
     with app.app_context():
         create_all()
@@ -56,12 +56,14 @@ def test_weekview_ui_renders_diets_and_mark_state(client_admin):
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="wed", meal="dinner", variant_type="alt1", dish_id=d_dinner.id)
 
             # Diet defaults: Gluten(2), Laktos(1)
+            gluten_id = str(DietTypesRepo().create(site_id=site_id, name="Gluten"))
+            laktos_id = str(DietTypesRepo().create(site_id=site_id, name="Laktos"))
             new_v = DepartmentsRepo().upsert_department_diet_defaults(
                 dep_id,
                 expected_version=0,
                 items=[
-                    {"diet_type_id": "Gluten", "default_count": 2},
-                    {"diet_type_id": "Laktos", "default_count": 1},
+                    {"diet_type_id": gluten_id, "default_count": 2},
+                    {"diet_type_id": laktos_id, "default_count": 1},
                 ],
             )
             assert isinstance(new_v, int)
@@ -96,7 +98,7 @@ def test_weekview_ui_renders_diets_and_mark_state(client_admin):
             "department_id": dep_id,
             "local_date": mon,
             "meal": "lunch",
-            "diet_type_id": "Gluten",
+            "diet_type_id": gluten_id,
             "marked": True,
         },
     )
@@ -116,7 +118,7 @@ def test_weekview_ui_renders_diets_and_mark_state(client_admin):
 
     # Gluten (Monday lunch) should have diet-marked and data-marked="true"
     assert "class=\"diet-pill diet-marked\"" in html or "diet-pill diet-marked" in html
-    assert "data-diet-type-id=\"Gluten\"" in html
+    assert f'data-diet-type-id="{gluten_id}"' in html
     assert "data-meal=\"lunch\"" in html
     assert "data-marked=\"true\"" in html
 

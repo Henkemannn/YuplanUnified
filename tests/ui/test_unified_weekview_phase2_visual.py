@@ -32,6 +32,7 @@ def enable_weekview(client_admin):
 @pytest.fixture
 def seed_weekview_data(client_admin):
     """Seed test data for weekview visual tests."""
+    from tests._auth_site_helpers import login_bound_user
     app = client_admin.application
     site_id = str(uuid.uuid4())
     dept_id = str(uuid.uuid4())
@@ -50,7 +51,7 @@ def seed_weekview_data(client_admin):
         try:
             # Create site
             db.execute(
-                text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"),
+                text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                 {"i": site_id, "n": "Test Site"}
             )
             
@@ -68,6 +69,7 @@ def seed_weekview_data(client_admin):
         finally:
             db.close()
     
+    login_bound_user(client_admin, site_id=site_id)
     return {"site_id": site_id, "dept_id": dept_id, "year": year, "week": week}
 
 

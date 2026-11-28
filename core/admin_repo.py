@@ -4,13 +4,15 @@ import os
 import uuid
 from typing import Iterable
 
-from sqlalchemy import inspect, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import Boolean, Integer, String, inspect, text
+from sqlalchemy.exc import IntegrityError, NoSuchTableError
 from flask import current_app, has_app_context
 
 from .db import get_session
+from .diet_scope import canonical_diet_id_for_department
 from .diet_family import DIET_FAMILY_OTHER, infer_diet_family, normalize_diet_family
 from .etag import ConcurrencyError
+from .notes_version_trigger import has_expected_notes_version_trigger
 from .service_addon_contract import (
     canonicalize_service_addon_assignment,
     resolve_service_addon_quantity,
@@ -75,6 +77,42 @@ def _is_sqlite(db) -> bool:
         return True
 
 
+def _require_diet_reference_schema(db, table_name: str) -> None:
+    inspector = inspect(db.connection())
+    try:
+        columns = {column["name"]: column for column in inspector.get_columns(table_name)}
+    except NoSuchTableError as exc:
+        raise RuntimeError(f"Missing dietary reference schema: {table_name}") from exc
+    column = columns.get("diet_type_id")
+    if not column or not isinstance(column["type"], Integer) or column["nullable"]:
+        raise RuntimeError(f"Incompatible dietary reference schema: {table_name}")
+    if not any(
+        fk["constrained_columns"] == ["diet_type_id"]
+        and fk["referred_table"] == "dietary_types"
+        and fk["referred_columns"] == ["id"]
+        for fk in inspector.get_foreign_keys(table_name)
+    ):
+        raise RuntimeError(f"Incompatible dietary reference schema: {table_name}")
+
+
+def _canonical_diet_for_department(db, dept_id: str, diet_type_id: object) -> int:
+    row = db.execute(
+        text(
+            "SELECT s.tenant_id FROM departments d "
+            "JOIN sites s ON s.id=d.site_id WHERE d.id=:department"
+        ),
+        {"department": str(dept_id)},
+    ).first()
+    if row is None:
+        raise ValueError("department_scope_mismatch")
+    return canonical_diet_id_for_department(
+        db,
+        tenant_id=row[0],
+        department_id=str(dept_id),
+        diet_type_id=diet_type_id,
+    )
+
+
 def _sites_has_tenant_col(db) -> bool:
     try:
         cols = db.execute(text("PRAGMA table_info('sites')")).fetchall()
@@ -125,21 +163,10 @@ def _resolve_atomic_site_tenant_id(db, site_id: str | None, tenant_id: int | Non
 
 
 def _table_has_column(db, table_name: str, column_name: str) -> bool:
-    try:
-        cols = db.execute(text(f"PRAGMA table_info('{table_name}')")).fetchall()
-        return any(str(c[1]) == column_name for c in cols)
-    except Exception:
-        try:
-            chk = db.execute(
-                text(
-                    "SELECT 1 FROM information_schema.columns "
-                    "WHERE table_name=:table_name AND column_name=:column_name"
-                ),
-                {"table_name": table_name, "column_name": column_name},
-            )
-            return chk.fetchone() is not None
-        except Exception:
-            return False
+    inspector = inspect(db.connection())
+    return inspector.has_table(table_name) and any(
+        column["name"] == column_name for column in inspector.get_columns(table_name)
+    )
 
 
 def _table_exists(db, table_name: str) -> bool:
@@ -187,25 +214,6 @@ def _ensure_departments_display_order_column(db) -> None:
     except Exception:
         if not _table_has_column(db, "departments", "display_order"):
             raise
-
-
-def _ensure_department_diet_overrides_table(db) -> None:
-    if _is_sqlite(db):
-        db.execute(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS department_diet_overrides (
-                    department_id TEXT NOT NULL,
-                    diet_type_id TEXT NOT NULL,
-                    day INTEGER NOT NULL,
-                    meal TEXT NOT NULL,
-                    count INTEGER NOT NULL DEFAULT 0,
-                    updated_at TEXT,
-                    PRIMARY KEY (department_id, diet_type_id, day, meal)
-                )
-                """
-            )
-        )
 
 
 def _ensure_service_addons_tables(db, *, site_id: str | None = None) -> None:
@@ -1273,24 +1281,42 @@ class DepartmentsRepo:
         try:
             if expected_version is None:
                 raise ConcurrencyError("missing version")
-            # ensure department exists & optimistic concurrency check by bumping version at the end
-            # SQLite test/dev fallback: ensure table exists (mirrors create_all bootstrap semantics)
+            _require_diet_reference_schema(db, "department_diet_defaults")
+            validated_items = []
+            seen_diet_ids = set()
+            for item in items:
+                diet_type_id = _canonical_diet_for_department(db, dept_id, item["diet_type_id"])
+                default_count = int(item["default_count"])
+                if default_count < 0:
+                    raise ValueError("default_count_negative")
+                if diet_type_id in seen_diet_ids:
+                    raise ValueError("duplicate_diet_type_id")
+                seen_diet_ids.add(diet_type_id)
+                validated_items.append((diet_type_id, default_count))
             if _is_sqlite(db):
-                db.execute(
+                result = db.execute(
                     text(
-                        """
-                        CREATE TABLE IF NOT EXISTS department_diet_defaults (
-                            department_id TEXT NOT NULL,
-                            diet_type_id TEXT NOT NULL,
-                            default_count INTEGER NOT NULL DEFAULT 0,
-                            PRIMARY KEY (department_id, diet_type_id)
-                        )
-                        """
-                    )
+                        "UPDATE departments SET version=version+1, updated_at=CURRENT_TIMESTAMP "
+                        "WHERE id=:id AND version=:v"
+                    ),
+                    {"id": dept_id, "v": int(expected_version)},
                 )
-            for it in items:
-                diet_type_id = str(it["diet_type_id"]).strip()
-                default_count = int(it["default_count"])
+                if result.rowcount != 1:
+                    raise ConcurrencyError("stale version")
+                version = db.execute(
+                    text("SELECT version FROM departments WHERE id=:id"), {"id": dept_id}
+                ).scalar_one()
+            else:
+                version = db.execute(
+                    text(
+                        "UPDATE departments SET version=version+1, updated_at=now() "
+                        "WHERE id=:id AND version=:v RETURNING version"
+                    ),
+                    {"id": dept_id, "v": int(expected_version)},
+                ).scalar_one_or_none()
+                if version is None:
+                    raise ConcurrencyError("stale version")
+            for diet_type_id, default_count in validated_items:
                 if _is_sqlite(db):
                     db.execute(
                         text(
@@ -1315,53 +1341,8 @@ class DepartmentsRepo:
                         ),
                         {"d": dept_id, "t": diet_type_id, "c": default_count},
                     )
-            # bump owning department using optimistic concurrency
-            if _is_sqlite(db):
-                res = db.execute(
-                    text(
-                        """
-                        UPDATE departments SET version=version+1, updated_at=CURRENT_TIMESTAMP
-                        WHERE id=:id AND version=:v
-                        """
-                    ),
-                    {"id": dept_id, "v": int(expected_version)},
-                )
-                if res.rowcount == 0:
-                    sqlite_db = None
-                    try:
-                        sqlite_db = db.bind.url.database  # type: ignore[union-attr]
-                    except Exception:
-                        sqlite_db = None
-                    if not sqlite_db or sqlite_db == ":memory:":
-                        db.rollback()
-                        raise ConcurrencyError("stale version")
-                    row = db.execute(text("SELECT version FROM departments WHERE id=:id"), {"id": dept_id}).fetchone()
-                    if not row:
-                        db.rollback()
-                        raise ConcurrencyError("stale version")
-                    db.execute(
-                        text("UPDATE departments SET version=version+1, updated_at=CURRENT_TIMESTAMP WHERE id=:id"),
-                        {"id": dept_id},
-                    )
-                row = db.execute(text("SELECT version FROM departments WHERE id=:id"), {"id": dept_id}).fetchone()
-                db.commit()
-                return int(row[0]) if row else 0
-            else:
-                row = db.execute(
-                    text(
-                        """
-                        UPDATE departments SET version=version+1, updated_at=now()
-                        WHERE id=:id AND version=:v
-                        RETURNING version
-                        """
-                    ),
-                    {"id": dept_id, "v": int(expected_version)},
-                ).fetchone()
-                if not row:
-                    db.rollback()
-                    raise ConcurrencyError("stale version")
-                db.commit()
-                return int(row[0])
+            db.commit()
+            return int(version)
         except Exception:
             db.rollback()
             raise
@@ -1449,37 +1430,53 @@ class ResidencesRepo:
         finally:
             db.close()
 
-def _is_missing_department_diet_overrides_error(exc: Exception) -> bool:
-    msg = str(exc or "").lower()
-    if "department_diet_overrides" not in msg:
-        return False
-    markers = (
-        "no such table",
-        "does not exist",
-        "undefined table",
-        "unknown table",
-        "invalid object name",
-    )
-    return any(m in msg for m in markers)
-
 class NotesRepo:
     """Generic notes version bump helper (if needed in future)."""
 
     def touch(self, note_id: int, expected_version: int | None = None) -> None:
         db = get_session()
         try:
-            if expected_version is None:
-                db.execute(text("UPDATE notes SET updated_at=CURRENT_TIMESTAMP" if _is_sqlite(db) else "UPDATE notes SET updated_at=now()"))
+            if _is_sqlite(db):
+                has_trigger = has_expected_notes_version_trigger(
+                    db.connection()
+                )
+                if expected_version is None:
+                    db.execute(
+                        text(
+                            "UPDATE notes SET updated_at=CURRENT_TIMESTAMP "
+                            "WHERE id=:id"
+                        ),
+                        {"id": note_id},
+                    )
+                else:
+                    version_update = "" if has_trigger else "version=version+1, "
+                    res = db.execute(
+                        text(
+                            "UPDATE notes SET "
+                            f"{version_update}updated_at=CURRENT_TIMESTAMP "
+                            "WHERE id=:id AND version=:v"
+                        ),
+                        {"id": note_id, "v": int(expected_version)},
+                    )
+                    if not res.rowcount:
+                        raise ConcurrencyError("stale version")
+            elif expected_version is None:
+                db.execute(
+                    text(
+                        "UPDATE notes SET version=version+1, updated_at=now() "
+                        "WHERE id=:id"
+                    ),
+                    {"id": note_id},
+                )
             else:
                 res = db.execute(
                     text(
-                        "UPDATE notes SET version=version+1, updated_at=CURRENT_TIMESTAMP WHERE id=:id AND version=:v"
-                        if _is_sqlite(db)
-                        else "UPDATE notes SET updated_at=now() WHERE id=:id AND version=:v RETURNING id"
+                        "UPDATE notes SET version=version+1, updated_at=now() "
+                        "WHERE id=:id AND version=:v RETURNING id"
                     ),
                     {"id": note_id, "v": int(expected_version)},
                 )
-                if not _is_sqlite(db) and not res.fetchone():
+                if not res.fetchone():
                     raise ConcurrencyError("stale version")
             db.commit()
         except Exception:
@@ -1493,24 +1490,33 @@ class DietDefaultsRepo:
     def list_for_department(self, dept_id: str) -> list[dict]:
         db = get_session()
         try:
+            _require_diet_reference_schema(db, "department_diet_defaults")
             cols = {c["name"] for c in inspect(db.connection()).get_columns("department_diet_defaults")}
             if "always_mark" in cols:
                 rows = db.execute(
                     text(
                         """
-                        SELECT diet_type_id, default_count, always_mark
-                        FROM department_diet_defaults
-                        WHERE department_id=:d
-                        ORDER BY diet_type_id
+                        SELECT ddf.diet_type_id, ddf.default_count, ddf.always_mark,
+                               COALESCE(dt.name, CAST(ddf.diet_type_id AS TEXT))
+                        FROM department_diet_defaults AS ddf
+                        LEFT JOIN departments AS dep ON dep.id=ddf.department_id
+                        LEFT JOIN sites AS s ON s.id=dep.site_id
+                        LEFT JOIN dietary_types AS dt
+                          ON dt.id=ddf.diet_type_id
+                         AND dt.site_id=s.id
+                         AND dt.tenant_id=s.tenant_id
+                        WHERE ddf.department_id=:d
+                        ORDER BY ddf.diet_type_id
                         """
                     ),
                     {"d": dept_id},
                 ).fetchall()
                 return [
                     {
-                        "diet_type_id": r[0],
+                        "diet_type_id": str(r[0]),
                         "default_count": int(r[1]),
                         "always_mark": bool(r[2] or 0),
+                        "diet_type_name": str(r[3]),
                     }
                     for r in rows
                 ]
@@ -1518,15 +1524,30 @@ class DietDefaultsRepo:
                 rows = db.execute(
                     text(
                         """
-                        SELECT diet_type_id, default_count
-                        FROM department_diet_defaults
-                        WHERE department_id=:d
-                        ORDER BY diet_type_id
+                        SELECT ddf.diet_type_id, ddf.default_count,
+                               COALESCE(dt.name, CAST(ddf.diet_type_id AS TEXT))
+                        FROM department_diet_defaults AS ddf
+                        LEFT JOIN departments AS dep ON dep.id=ddf.department_id
+                        LEFT JOIN sites AS s ON s.id=dep.site_id
+                        LEFT JOIN dietary_types AS dt
+                          ON dt.id=ddf.diet_type_id
+                         AND dt.site_id=s.id
+                         AND dt.tenant_id=s.tenant_id
+                        WHERE ddf.department_id=:d
+                        ORDER BY ddf.diet_type_id
                         """
                     ),
                     {"d": dept_id},
                 ).fetchall()
-                return [{"diet_type_id": r[0], "default_count": int(r[1]), "always_mark": False} for r in rows]
+                return [
+                    {
+                        "diet_type_id": str(r[0]),
+                        "default_count": int(r[1]),
+                        "always_mark": False,
+                        "diet_type_name": str(r[2]),
+                    }
+                    for r in rows
+                ]
         finally:
             db.close()
 
@@ -1535,6 +1556,7 @@ class DepartmentDietOverridesRepo:
     def list_for_department(self, dept_id: str) -> list[dict]:
         db = get_session()
         try:
+            _require_diet_reference_schema(db, "department_diet_overrides")
             rows = db.execute(
                 text(
                     """
@@ -1561,23 +1583,19 @@ class DepartmentDietOverridesRepo:
     def list_for_department_diet(self, dept_id: str, diet_type_id: str | int) -> list[dict]:
         db = get_session()
         try:
-            _ensure_department_diet_overrides_table(db)
-            try:
-                rows = db.execute(
-                    text(
-                        """
-                        SELECT day, meal, count
-                        FROM department_diet_overrides
-                        WHERE department_id=:d AND diet_type_id=:t
-                        ORDER BY day, meal
-                        """
-                    ),
-                    {"d": str(dept_id), "t": str(diet_type_id)},
-                ).fetchall()
-            except Exception as exc:
-                if _is_missing_department_diet_overrides_error(exc):
-                    return []
-                raise
+            _require_diet_reference_schema(db, "department_diet_overrides")
+            ident = _canonical_diet_for_department(db, dept_id, diet_type_id)
+            rows = db.execute(
+                text(
+                    """
+                    SELECT day, meal, count
+                    FROM department_diet_overrides
+                    WHERE department_id=:d AND diet_type_id=:t
+                    ORDER BY day, meal
+                    """
+                ),
+                {"d": str(dept_id), "t": ident},
+            ).fetchall()
             return [
                 {
                     "day": int(r[0]),
@@ -1598,49 +1616,46 @@ class DepartmentDietOverridesRepo:
     def replace_for_department_diet(self, dept_id: str, diet_type_id: str | int, items: Iterable[dict]) -> None:
         db = get_session()
         try:
-            _ensure_department_diet_overrides_table(db)
-            try:
+            _require_diet_reference_schema(db, "department_diet_overrides")
+            ident = _canonical_diet_for_department(db, dept_id, diet_type_id)
+            validated_items = []
+            seen_keys = set()
+            for item in items:
+                day = int(item.get("day") or 0)
+                meal = str(item.get("meal") or "").strip().lower()
+                count = int(item.get("count") or 0)
+                if day < 1 or day > 7 or meal not in ("lunch", "dinner") or count < 0:
+                    raise ValueError("invalid_diet_override")
+                key = (day, meal)
+                if key in seen_keys:
+                    raise ValueError("duplicate_diet_override")
+                seen_keys.add(key)
+                validated_items.append((day, meal, count))
+            db.execute(
+                text(
+                    """
+                    DELETE FROM department_diet_overrides
+                    WHERE department_id=:d AND diet_type_id=:t
+                    """
+                ),
+                {"d": str(dept_id), "t": ident},
+            )
+            for day, meal, count in validated_items:
                 db.execute(
                     text(
                         """
-                        DELETE FROM department_diet_overrides
-                        WHERE department_id=:d AND diet_type_id=:t
+                        INSERT INTO department_diet_overrides(department_id, diet_type_id, day, meal, count, updated_at)
+                        VALUES(:d, :t, :day, :meal, :count, CURRENT_TIMESTAMP)
                         """
                     ),
-                    {"d": str(dept_id), "t": str(diet_type_id)},
+                    {
+                        "d": str(dept_id),
+                        "t": ident,
+                        "day": day,
+                        "meal": meal,
+                        "count": count,
+                    },
                 )
-            except Exception as exc:
-                if _is_missing_department_diet_overrides_error(exc):
-                    db.rollback()
-                    return
-                raise
-            for it in items:
-                day = int(it.get("day") or 0)
-                meal = str(it.get("meal") or "").strip().lower()
-                count = int(it.get("count") or 0)
-                if day < 1 or day > 7 or meal not in ("lunch", "dinner"):
-                    continue
-                try:
-                    db.execute(
-                        text(
-                            """
-                            INSERT INTO department_diet_overrides(department_id, diet_type_id, day, meal, count, updated_at)
-                            VALUES(:d, :t, :day, :meal, :count, CURRENT_TIMESTAMP)
-                            """
-                        ),
-                        {
-                            "d": str(dept_id),
-                            "t": str(diet_type_id),
-                            "day": day,
-                            "meal": meal,
-                            "count": count,
-                        },
-                    )
-                except Exception as exc:
-                    if _is_missing_department_diet_overrides_error(exc):
-                        db.rollback()
-                        return
-                    raise
             db.commit()
         except Exception:
             db.rollback()
@@ -2516,7 +2531,7 @@ class DietTypesRepo:
                 ),
                 {
                     "f": target_family,
-                    "d": 1 if target_default_select else 0,
+                    "d": target_default_select,
                     "rk": target_requirement_key,
                     "id": row_id,
                     "t": int(resolved_tenant_id),
@@ -2531,26 +2546,28 @@ class DietTypesRepo:
             "f": clean_family or infer_diet_family(clean_name),
             "rk": requirement_key,
             "sem": "atomic",
-            "d": 1 if bool(default_select) else 0,
+            "d": bool(default_select),
         }
+        returning = "" if _is_sqlite(db) else " RETURNING id"
         if _table_has_column(db, "dietary_types", "tenant_id"):
-            db.execute(
+            result = db.execute(
                 text(
                     "INSERT INTO dietary_types(tenant_id, site_id, name, diet_family, requirement_key, semantics, default_select) "
-                    "VALUES(:t, :s, :n, :f, :rk, :sem, :d)"
+                    f"VALUES(:t, :s, :n, :f, :rk, :sem, :d){returning}"
                 ),
                 {**params, "t": int(resolved_tenant_id)},
             )
         else:
-            db.execute(
+            result = db.execute(
                 text(
                     "INSERT INTO dietary_types(site_id, name, diet_family, requirement_key, semantics, default_select) "
-                    "VALUES(:s, :n, :f, :rk, :sem, :d)"
+                    f"VALUES(:s, :n, :f, :rk, :sem, :d){returning}"
                 ),
                 params,
             )
-        row = db.execute(text("SELECT last_insert_rowid()" )).fetchone()
-        return int(row[0]) if row else 0
+        if _is_sqlite(db):
+            return int(db.execute(text("SELECT last_insert_rowid()")).scalar_one())
+        return int(result.scalar_one())
 
     def provision_canonical_atomic_catalog(self, db, *, site_id: str, tenant_id: int | None = None) -> list[int]:
         """Provision the canonical Kommun atomic requirement catalog for one site."""
@@ -2779,61 +2796,18 @@ class DietTypesRepo:
         return row is not None
 
     def _ensure_table(self, db) -> None:
-        if _is_sqlite(db):
-            db.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS dietary_types (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        -- tenant_id kept for backward-compat in some environments
-                        tenant_id INTEGER NULL,
-                        site_id TEXT NULL,
-                        name TEXT NOT NULL,
-                        diet_family TEXT NOT NULL DEFAULT 'Övrigt',
-                        requirement_key TEXT NULL,
-                        semantics TEXT NULL,
-                        default_select INTEGER NOT NULL DEFAULT 0
-                    )
-                    """
-                )
-            )
-            # Add missing site_id column for older dev DBs; keep it NULL-able to avoid breaking existing rows
-            try:
-                cols = {r[1] for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
-                if "site_id" not in cols:
-                    db.execute(text("ALTER TABLE dietary_types ADD COLUMN site_id TEXT"))
-                if "diet_family" not in cols:
-                    db.execute(text("ALTER TABLE dietary_types ADD COLUMN diet_family TEXT"))
-                if "requirement_key" not in cols:
-                    db.execute(text("ALTER TABLE dietary_types ADD COLUMN requirement_key TEXT"))
-                if "semantics" not in cols:
-                    db.execute(text("ALTER TABLE dietary_types ADD COLUMN semantics TEXT"))
-            except Exception:
-                pass
-            try:
-                self._backfill_missing_families(db)
-                self._requirement_identity_backfill(db)
-                db.execute(
-                    text(
-                        "UPDATE dietary_types SET diet_family=:fallback "
-                        "WHERE diet_family IS NULL OR trim(CAST(diet_family AS TEXT))=''"
-                    ),
-                    {"fallback": DIET_FAMILY_OTHER},
-                )
-            except RuntimeError:
-                db.rollback()
-                raise
-            except Exception:
-                pass
-            # Helpful index for lookups
-            try:
-                db.execute(text("CREATE INDEX IF NOT EXISTS idx_dietary_types_site_name ON dietary_types(site_id, name)"))
-            except Exception:
-                pass
-            try:
-                self._ensure_requirement_key_index(db)
-            except Exception:
-                pass
+        columns = {column["name"]: column["type"] for column in inspect(db.connection()).get_columns("dietary_types")}
+        required = {
+            "id": Integer,
+            "site_id": String,
+            "name": String,
+            "diet_family": String,
+            "requirement_key": String,
+            "semantics": String,
+            "default_select": (Boolean, Integer),
+        }
+        if any(name not in columns or not isinstance(columns[name], kind) for name, kind in required.items()):
+            raise RuntimeError("Incompatible dietary types schema")
 
     def list_all(self, site_id: str | None = None, tenant_id: int | None = None) -> list[dict]:
         """List dietary types.
@@ -2844,9 +2818,7 @@ class DietTypesRepo:
         """
         db = get_session()
         try:
-            columns = {column["name"] for column in inspect(db.connection()).get_columns("dietary_types")}
-            if not {"id", "site_id", "name", "diet_family", "requirement_key", "semantics", "default_select"} <= columns:
-                raise RuntimeError("Incompatible dietary types schema")
+            self._ensure_table(db)
             if site_id:
                 rows = db.execute(
                     text(
@@ -2869,6 +2841,10 @@ class DietTypesRepo:
                 ).fetchall()
             else:
                 rows = []
+            for row in rows:
+                semantics = str(row[5] or "").strip().lower()
+                if semantics and semantics not in ALLOWED_REQUIREMENT_SEMANTICS:
+                    raise RuntimeError(f"invalid preexisting semantics on dietary_types.id={int(row[0])}")
             return [
                 {
                     "id": int(r[0]),
@@ -2900,6 +2876,9 @@ class DietTypesRepo:
             ).fetchone()
             if not row:
                 return None
+            semantics = str(row[5] or "").strip().lower()
+            if semantics and semantics not in ALLOWED_REQUIREMENT_SEMANTICS:
+                raise RuntimeError(f"invalid preexisting semantics on dietary_types.id={int(row[0])}")
             return {
                 "id": int(row[0]),
                 "site_id": (str(row[1]) if row[1] is not None else None),
@@ -3109,7 +3088,7 @@ class DietTypesRepo:
                 params["name"] = clean_name
             if default_select is not None:
                 sets.append("default_select=:ds")
-                params["ds"] = 1 if default_select else 0
+                params["ds"] = bool(default_select)
             if diet_family is not None:
                 sets.append("diet_family=:diet_family")
                 params["diet_family"] = normalize_diet_family(diet_family)
@@ -3134,6 +3113,7 @@ class DietTypesRepo:
 
         dependency_tables = (
             ("department_diet_defaults", "diet_type_id"),
+            ("department_diet_overrides", "diet_type_id"),
             ("normal_exclusions", "diet_type_id"),
             ("weekview_registrations", "diet_type"),
         )
@@ -3255,16 +3235,15 @@ class DietTypesRepo:
             has_exclusions = _exists('normal_exclusions')
             has_reg = _exists('weekview_registrations')
             for did in invalid_ids:
-                sid = str(did)
                 canonical_refs = self._canonical_requirement_group_reference_count(db, did)
                 if canonical_refs > 0:
                     continue
                 if has_defaults:
-                    db.execute(text("DELETE FROM department_diet_defaults WHERE diet_type_id=:id"), {"id": sid})
+                    db.execute(text("DELETE FROM department_diet_defaults WHERE diet_type_id=:id"), {"id": did})
                 if has_exclusions:
-                    db.execute(text("DELETE FROM normal_exclusions WHERE diet_type_id=:id"), {"id": sid})
+                    db.execute(text("DELETE FROM normal_exclusions WHERE diet_type_id=:id"), {"id": did})
                 if has_reg:
-                    db.execute(text("DELETE FROM weekview_registrations WHERE diet_type=:id"), {"id": sid})
+                    db.execute(text("DELETE FROM weekview_registrations WHERE diet_type=:id"), {"id": str(did)})
                 db.execute(text("DELETE FROM dietary_types WHERE id=:id"), {"id": did})
                 deleted.append(did)
             db.commit()

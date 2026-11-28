@@ -8,6 +8,17 @@ HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 def _ensure_site_and_diet(site_id: str) -> tuple[str, str]:
     from core.admin_repo import SitesRepo, DietTypesRepo
+    from core.db import get_session
+    from core.models import Tenant
+
+    db = get_session()
+    try:
+        if db.get(Tenant, 1) is None:
+            db.add(Tenant(id=1, name="Normal Exclusions Test Tenant", active=True))
+            db.commit()
+    finally:
+        db.close()
+
     srepo = SitesRepo()
     site, _ = srepo.create_site("Toggle Site", tenant_id=1)
     actual_site_id = str(site["id"])

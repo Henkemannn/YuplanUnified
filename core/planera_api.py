@@ -9,8 +9,9 @@ from sqlalchemy import text
 
 from .auth import require_roles
 from .csrf import csrf_protect
-from .http_errors import bad_request, not_found
+from .http_errors import bad_request, not_found, problem
 from .db import get_session
+from .diet_scope import DietaryReferenceError, canonical_diet_id_for_site
 from .kommun_planera_day_application import run_kommun_day_application
 from .planera_product2_page3_vm import Product2Page3VmError, build_product2_page3_vm
 from .planera_v2.day_context_resolver import KommunDayContextResolverError
@@ -110,6 +111,33 @@ def _validate_site_and_department(
         db.close()
 
 
+def _diet_scope_error_response(exc: DietaryReferenceError):
+    if exc.status_code == 403:
+        return problem(403, "https://example.com/errors/diet_type_outside_scope", "Forbidden", exc.code)
+    return bad_request(exc.code)
+
+
+def _validate_diet_ids_for_site(
+    tenant_id: int | str,
+    site_id: str,
+    diet_ids: set[str],
+):
+    db = get_session()
+    try:
+        for diet_id in diet_ids:
+            canonical_diet_id_for_site(
+                db,
+                tenant_id=tenant_id,
+                site_id=site_id,
+                diet_type_id=diet_id,
+            )
+    except DietaryReferenceError as exc:
+        return _diet_scope_error_response(exc)
+    finally:
+        db.close()
+    return None
+
+
 def _meal_labels(site_id: str) -> dict[str, str]:
     # Reuse existing helper if available; fallback defaults.
     try:
@@ -122,41 +150,6 @@ def _meal_labels(site_id: str) -> dict[str, str]:
 def _empty_meal() -> dict[str, Any]:
     return {"residents_total": 0, "special_diets": [], "normal_diet_count": 0}
 
-
-def _ensure_normal_exclusions_schema() -> None:
-    """Create normal_exclusions table in SQLite/testing environments.
-
-    In production (Postgres), Alembic should manage migrations; here we guard
-    with a dialect check and only create in SQLite to keep tests passing.
-    """
-    db = get_session()
-    try:
-        dialect = db.bind.dialect.name if db.bind is not None else ""
-        if dialect != "sqlite":
-            return
-        db.execute(
-            __import__("sqlalchemy").text(
-                """
-                CREATE TABLE IF NOT EXISTS normal_exclusions (
-                  tenant_id TEXT NOT NULL,
-                  site_id TEXT NOT NULL,
-                  year INTEGER NOT NULL,
-                  week INTEGER NOT NULL,
-                  day_index INTEGER NOT NULL,
-                  meal TEXT NOT NULL,
-                  alt TEXT NOT NULL,
-                  diet_type_id TEXT NOT NULL,
-                  UNIQUE (tenant_id, site_id, year, week, day_index, meal, alt, diet_type_id)
-                );
-                """
-            )
-        )
-        db.commit()
-    finally:
-        try:
-            db.close()
-        except Exception:
-            pass
 
 
 def _norm_etag_value(value: object) -> str:
@@ -220,6 +213,8 @@ def get_planera_day():
         _d = _date.fromisoformat(date_str)
     except Exception:
         return bad_request("invalid_parameters")
+    if not _validate_site_and_department(site_id, department_id, tid):
+        return not_found("site_or_department_not_found")
     meal_labels = _meal_labels(site_id)
     mode = "shadow" if _feature_enabled("ff.planera2.shadow") else "legacy"
     try:
@@ -432,16 +427,19 @@ def toggle_normal_exclusion():
         return bad_request("invalid_parameters")
     if not _validate_site_and_department(site_id, None, tid):
         return not_found("site_or_department_not_found")
-
-    # Ensure table in SQLite
-    try:
-        _ensure_normal_exclusions_schema()
-    except Exception:
-        pass
+    diet_scope_error = _validate_diet_ids_for_site(tid, site_id, {diet_type_id})
+    if diet_scope_error is not None:
+        return diet_scope_error
 
     db = get_session()
     try:
         # Check if row exists
+        canonical_diet_id = canonical_diet_id_for_site(
+            db,
+            tenant_id=tid,
+            site_id=site_id,
+            diet_type_id=diet_type_id,
+        )
         row = db.execute(
             __import__("sqlalchemy").text(
                 """
@@ -451,7 +449,7 @@ def toggle_normal_exclusion():
                 LIMIT 1
                 """
             ),
-            {"tid": str(tid), "s": site_id, "y": year, "w": week, "d": day_index, "m": meal, "a": alt, "dt": diet_type_id},
+            {"tid": int(tid), "s": site_id, "y": year, "w": week, "d": day_index, "m": meal, "a": alt, "dt": canonical_diet_id},
         ).fetchone()
         if row:
             # Remove existing exclusion
@@ -463,7 +461,7 @@ def toggle_normal_exclusion():
                       AND day_index=:d AND meal=:m AND alt=:a AND diet_type_id=:dt
                     """
                 ),
-                {"tid": str(tid), "s": site_id, "y": year, "w": week, "d": day_index, "m": meal, "a": alt, "dt": diet_type_id},
+                {"tid": int(tid), "s": site_id, "y": year, "w": week, "d": day_index, "m": meal, "a": alt, "dt": canonical_diet_id},
             )
             db.commit()
             return jsonify({"excluded": False})
@@ -476,15 +474,22 @@ def toggle_normal_exclusion():
                     VALUES (:tid, :s, :y, :w, :d, :m, :a, :dt)
                     """
                 ),
-                {"tid": str(tid), "s": site_id, "y": year, "w": week, "d": day_index, "m": meal, "a": alt, "dt": diet_type_id},
+                {"tid": int(tid), "s": site_id, "y": year, "w": week, "d": day_index, "m": meal, "a": alt, "dt": canonical_diet_id},
             )
             db.commit()
             return jsonify({"excluded": True})
+    except DietaryReferenceError as exc:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return _diet_scope_error_response(exc)
     except Exception:
         try:
             db.rollback()
         except Exception:
             pass
+        current_app.logger.exception("normal exclusion toggle failed")
         return bad_request("toggle_failed")
     finally:
         try:
@@ -524,13 +529,15 @@ def mark_produced_special():
     if not (site_id and 0 <= day_index <= 6 and meal in ("lunch", "dinner", "dessert")):
         return bad_request("invalid_parameters")
 
-    ok = _validate_site_and_department(site_id, None)
+    ok = _validate_site_and_department(site_id, None, tid)
     if not ok:
         return not_found("site_or_department_not_found")
     _site_name, deps = ok
+    diet_scope_error = _validate_diet_ids_for_site(tid, site_id, diet_filter)
+    if diet_scope_error is not None:
+        return diet_scope_error
 
     from .weekview.service import WeekviewService
-    from .weekview.repo import WeekviewRepo
     svc = WeekviewService()
     repo = WeekviewRepo()
     dow = int(day_index) + 1
@@ -605,13 +612,15 @@ def clear_produced_special():
     if not (site_id and 0 <= day_index <= 6 and meal in ("lunch", "dinner", "dessert")):
         return bad_request("invalid_parameters")
 
-    ok = _validate_site_and_department(site_id, None)
+    ok = _validate_site_and_department(site_id, None, tid)
     if not ok:
         return not_found("site_or_department_not_found")
     _site_name, deps = ok
+    diet_scope_error = _validate_diet_ids_for_site(tid, site_id, diet_filter)
+    if diet_scope_error is not None:
+        return diet_scope_error
 
     from .weekview.service import WeekviewService
-    from .weekview.repo import WeekviewRepo
     svc = WeekviewService()
     repo = WeekviewRepo()
     dow = int(day_index) + 1

@@ -119,13 +119,38 @@ def test_weekview_report_aggregation_api_and_ui(client_admin, client_editor):
             db.execute(text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0)"), {"i": site_id, "n": "ReportSite"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',0,0)"), {"i": dep_a, "s": site_id, "n": "Avd A"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',0,0)"), {"i": dep_b, "s": site_id, "n": "Avd B"})
-            # Diet defaults
             db.execute(text("CREATE TABLE IF NOT EXISTS department_diet_defaults (department_id TEXT NOT NULL, diet_type_id TEXT NOT NULL, default_count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(department_id, diet_type_id))"))
-            # Avd A: Gluten(2), Laktos(1)
-            db.execute(text("INSERT INTO department_diet_defaults(department_id, diet_type_id, default_count) VALUES(:d,:t,:c) ON CONFLICT(department_id, diet_type_id) DO UPDATE SET default_count=excluded.default_count"), {"d": dep_a, "t": "Gluten", "c": 2})
-            db.execute(text("INSERT INTO department_diet_defaults(department_id, diet_type_id, default_count) VALUES(:d,:t,:c) ON CONFLICT(department_id, diet_type_id) DO UPDATE SET default_count=excluded.default_count"), {"d": dep_a, "t": "Laktos", "c": 1})
-            # Avd B: Timbal(3)
-            db.execute(text("INSERT INTO department_diet_defaults(department_id, diet_type_id, default_count) VALUES(:d,:t,:c) ON CONFLICT(department_id, diet_type_id) DO UPDATE SET default_count=excluded.default_count"), {"d": dep_b, "t": "Timbal", "c": 3})
+            db.commit()
+        finally:
+            db.close()
+        diet_repo = DietTypesRepo()
+        diet_ids = {
+            name: diet_repo.create(
+                site_id=site_id,
+                tenant_id=1,
+                name=name,
+                semantics="atomic",
+            )
+            for name in ("Gluten", "Laktos", "Timbal")
+        }
+        db = get_session()
+        try:
+            for department_id, name, count in (
+                (dep_a, "Gluten", 2),
+                (dep_a, "Laktos", 1),
+                (dep_b, "Timbal", 3),
+            ):
+                db.execute(
+                    text(
+                        "INSERT INTO department_diet_defaults"
+                        "(department_id, diet_type_id, default_count) VALUES(:d,:t,:c)"
+                    ),
+                    {
+                        "d": department_id,
+                        "t": str(diet_ids[name]),
+                        "c": count,
+                    },
+                )
             db.commit()
         finally:
             db.close()
@@ -170,7 +195,7 @@ def test_weekview_report_aggregation_api_and_ui(client_admin, client_editor):
         "department_id": dep_a,
         "local_date": _iso(year, week, 1),
         "meal": "lunch",
-        "diet_type_id": "Gluten",
+        "diet_type_id": str(diet_ids["Gluten"]),
         "marked": True,
     })
     assert editor_mark_a1.status_code == 200
@@ -182,7 +207,7 @@ def test_weekview_report_aggregation_api_and_ui(client_admin, client_editor):
         "department_id": dep_a,
         "local_date": _iso(year, week, 3),
         "meal": "lunch",
-        "diet_type_id": "Gluten",
+        "diet_type_id": str(diet_ids["Gluten"]),
         "marked": True,
     })
     assert editor_mark_a2.status_code == 200
@@ -193,7 +218,7 @@ def test_weekview_report_aggregation_api_and_ui(client_admin, client_editor):
         "department_id": dep_a,
         "local_date": _iso(year, week, 2),
         "meal": "dinner",
-        "diet_type_id": "Laktos",
+        "diet_type_id": str(diet_ids["Laktos"]),
         "marked": True,
     })
     assert editor_mark_a3.status_code == 200
@@ -221,7 +246,7 @@ def test_weekview_report_aggregation_api_and_ui(client_admin, client_editor):
         "department_id": dep_b,
         "local_date": _iso(year, week, 4),
         "meal": "dinner",
-        "diet_type_id": "Timbal",
+        "diet_type_id": str(diet_ids["Timbal"]),
         "marked": True,
     })
     assert editor_mark_b.status_code == 200

@@ -12,7 +12,7 @@ from core.models import Base, Dish
 
 ROOT = Path(__file__).resolve().parents[2]
 REVISION = "0053_add_site_scope_to_dishes"
-HEAD_REVISION = "0055_weekview_schema"
+HEAD_REVISION = "0059_normal_exclusions_scope"
 PREVIOUS_REVISION = "0052_add_site_id_to_notes"
 
 
@@ -250,7 +250,7 @@ def test_downgrade_does_not_merge_site_copies(tmp_path, monkeypatch):
     finally:
         engine.dispose()
 
-    command.upgrade(config, "head")
+    command.upgrade(config, REVISION)
     command.downgrade(config, PREVIOUS_REVISION)
     engine = create_engine(f"sqlite:///{target}")
     try:

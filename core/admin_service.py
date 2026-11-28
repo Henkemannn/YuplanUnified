@@ -229,6 +229,7 @@ class AdminService:
             dept["diet_defaults"] = [
                 {
                     "diet_type_id": it["diet_type_id"],
+                    "diet_type_name": it["diet_type_name"],
                     "planned_count": int(it.get("default_count") or 0),
                     "always_mark": bool(it.get("always_mark") or False),
                 }

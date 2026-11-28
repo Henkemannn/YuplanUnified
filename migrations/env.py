@@ -21,6 +21,11 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from core.config import Config
 from core.db import ensure_sqlite_file_ready
 from core.models import Base
+from core.notes_version_trigger import (
+    NOTES_VERSION_BUMP_TRIGGER_SQL,
+    UnexpectedNotesVersionTrigger,
+    has_expected_notes_version_trigger,
+)
 
 # this is the Alembic Config object
 config = context.config
@@ -45,6 +50,70 @@ if config.config_file_name:
 
 target_metadata = Base.metadata
 
+
+_NOTES_SITE_SCOPE_REVISION = "0052_add_site_id_to_notes"
+
+
+def _notes_trigger_state(connection) -> str:
+    try:
+        return (
+            "present"
+            if has_expected_notes_version_trigger(connection)
+            else "absent"
+        )
+    except UnexpectedNotesVersionTrigger:
+        return "unexpected"
+
+
+def _preserve_notes_trigger(connection, state: str) -> None:
+    if state == "unexpected":
+        raise RuntimeError(
+            "Refusing SQLite 0052 migration with an unexpected notes trigger"
+        )
+
+    after_state = _notes_trigger_state(connection)
+    if after_state == "unexpected":
+        raise RuntimeError(
+            "SQLite 0052 migration produced an unexpected notes trigger"
+        )
+    if state == "present" and after_state == "absent":
+        connection.exec_driver_sql(NOTES_VERSION_BUMP_TRIGGER_SQL)
+        after_state = _notes_trigger_state(connection)
+    if after_state != state:
+        raise RuntimeError(
+            "SQLite 0052 migration did not preserve the notes trigger state"
+        )
+
+
+def _notes_trigger_version_apply(connection):
+    trigger_state = (
+        _notes_trigger_state(connection)
+        if connection is not None and connection.dialect.name == "sqlite"
+        else None
+    )
+
+    def preserve_at_revision(ctx, step, **_kwargs):
+        nonlocal trigger_state
+        if ctx.dialect.name != "sqlite" or step.is_stamp:
+            return
+        if step.up_revision_id == _NOTES_SITE_SCOPE_REVISION:
+            if ctx.as_sql:
+                raise RuntimeError(
+                    "SQLite migration 0052 requires an online connection "
+                    "to preserve notes trigger state"
+                )
+            if connection is None:
+                raise RuntimeError(
+                    "SQLite migration 0052 has no connection for trigger preservation"
+                )
+            _preserve_notes_trigger(connection, trigger_state)
+            return
+        if not ctx.as_sql:
+            trigger_state = _notes_trigger_state(connection)
+
+    return preserve_at_revision
+
+
 def run_migrations_offline():
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
@@ -52,6 +121,7 @@ def run_migrations_offline():
         target_metadata=target_metadata,
         literal_binds=True,
         transactional_ddl=True,
+        on_version_apply=(_notes_trigger_version_apply(None),),
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -77,6 +147,7 @@ def run_migrations_online():
                 connection=connection,
                 target_metadata=target_metadata,
                 transactional_ddl=True,
+                on_version_apply=(_notes_trigger_version_apply(connection),),
             )
             try:
                 context.run_migrations()

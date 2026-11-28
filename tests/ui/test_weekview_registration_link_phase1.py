@@ -1,3 +1,4 @@
+from tests._auth_site_helpers import login_bound_user
 from datetime import date as _date
 from sqlalchemy import text
 
@@ -9,12 +10,12 @@ def _seed_site_and_department():
     from core.db import get_session
     conn = get_session()
     try:
-        site = conn.execute(text("SELECT id FROM sites WHERE id='00000000-0000-0000-0000-000000000000'")) .fetchone()
+        site = conn.execute(text("SELECT id FROM sites WHERE id='c428c9ef-058c-5be6-8d28-6366475ef02b'")) .fetchone()
         if not site:
-            conn.execute(text("INSERT INTO sites (id, name) VALUES ('00000000-0000-0000-0000-000000000000', 'Test Site')"))
-        dep = conn.execute(text("SELECT id FROM departments WHERE id='00000000-0000-0000-0000-000000000001'")) .fetchone()
+            conn.execute(text("INSERT INTO sites (id, tenant_id, name) VALUES ('c428c9ef-058c-5be6-8d28-6366475ef02b', 1, 'Test Site')"))
+        dep = conn.execute(text("SELECT id FROM departments WHERE id='a73a7b0e-2ef7-5b63-82cc-544ff40d953f'")) .fetchone()
         if not dep:
-            conn.execute(text("INSERT INTO departments (id, site_id, name, resident_count_mode, resident_count_fixed) VALUES ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000000', 'Avd Alpha', 'fixed', 5)"))
+            conn.execute(text("INSERT INTO departments (id, site_id, name, resident_count_mode, resident_count_fixed) VALUES ('a73a7b0e-2ef7-5b63-82cc-544ff40d953f', 'c428c9ef-058c-5be6-8d28-6366475ef02b', 'Avd Alpha', 'fixed', 5)"))
         conn.commit()
     finally:
         conn.close()
@@ -24,8 +25,9 @@ def test_weekview_shows_registration_link_get_only(app_session):
     client = app_session.test_client()
     _seed_site_and_department()
 
-    site_id = "00000000-0000-0000-0000-000000000000"
-    dep_id = "00000000-0000-0000-0000-000000000001"
+    site_id = "c428c9ef-058c-5be6-8d28-6366475ef02b"
+    login_bound_user(client, site_id=site_id)
+    dep_id = "a73a7b0e-2ef7-5b63-82cc-544ff40d953f"
     year = 2025
     week = 45
 

@@ -15,8 +15,7 @@ def test_planering_specialkost_renders_family_groups_only(app_session):
 
     db = get_session()
     try:
-        db.execute(text("CREATE TABLE IF NOT EXISTS sites(id TEXT PRIMARY KEY, name TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 0)"))
-        db.execute(text("INSERT OR IGNORE INTO sites(id, name, version) VALUES(:i, 'Family Site', 0)"), {"i": site_id})
+        db.execute(text("INSERT OR IGNORE INTO sites(id, tenant_id, name, version) VALUES(:i, 1, 'Family Site', 0)"), {"i": site_id})
         db.execute(
             text(
                 """

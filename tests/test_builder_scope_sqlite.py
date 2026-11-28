@@ -24,13 +24,20 @@ def _create_legacy_builder_db(path: Path) -> None:
             """
             CREATE TABLE builder_components (
                 component_id TEXT PRIMARY KEY,
-                canonical_name TEXT NOT NULL
+                canonical_name TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                default_uom TEXT NULL,
+                tags_json TEXT NOT NULL DEFAULT '[]',
+                categories_json TEXT NOT NULL DEFAULT '[]',
+                primary_recipe_id TEXT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
 
             CREATE TABLE builder_compositions (
                 composition_id TEXT PRIMARY KEY,
                 composition_name TEXT NOT NULL,
-                library_group TEXT NULL
+                library_group TEXT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
 
             INSERT INTO builder_components (component_id, canonical_name)

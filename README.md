@@ -584,6 +584,20 @@ $env:DATABASE_URL = "postgresql+psycopg://user:pass@host:5432/yuplan"
 python tools/init_db.py
 ```
 
+Builder uses a separate SQLite database. Before starting normal Builder
+operations, explicitly provision the file configured by `BUILDER_DB_PATH`:
+
+```powershell
+python -m scripts.provision_builder_sqlite --database "C:\path\to\builder.db" --confirm-schema-upgrade
+```
+
+For an existing database, stop Builder access and take and verify a restorable backup
+before running the command. Provisioning can upgrade legacy schema and data
+in a single transaction; it is not performed by normal requests. A missing or
+incompatible Builder schema causes requests to fail rather than repairing the
+database or returning an empty library. Investigate the error and restore a
+verified backup if needed.
+
 Dev-only seed example for weekview data:
 
 ```powershell

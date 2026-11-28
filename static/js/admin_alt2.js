@@ -9,6 +9,10 @@
       return m ? decodeURIComponent(m[2]) : null;
     } catch(_) { return null; }
   }
+  function getCsrfToken(){
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? (meta.getAttribute('content') || '') : getCookie('csrf_token');
+  }
 
   document.addEventListener('DOMContentLoaded', function(){
     const dlg = document.getElementById('alt2Modal');
@@ -118,7 +122,7 @@
       const y = parseInt(yearEl && yearEl.value || (new Date()).getFullYear(), 10);
       const w = parseInt(weekEl && weekEl.value || 1, 10);
       try{
-        const csrf = getCookie('csrf_token');
+        const csrf = getCsrfToken();
         const nextChoices = {};
         order.forEach(function(day){
           nextChoices[day] = normalizeChoice(choicesByDay[day]);

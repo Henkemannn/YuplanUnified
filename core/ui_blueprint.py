@@ -16,6 +16,7 @@ from .auth import (
 from .app_authz import resolve_department_scope
 from .config import auth_bypass_allowed
 from .csrf import csrf_protect
+from .diet_scope import DietaryReferenceError, canonical_diet_id_for_department
 from .db import get_session
 from .models import Note, Task, User
 from .weekview.service import WeekviewService
@@ -1378,6 +1379,7 @@ def kitchen_planering_product2_day_review():
 # Planering bulk mark: set produced for all departments' special diets with count>0
 @ui_bp.post("/api/planering/mark_produced_special")
 @require_roles("superuser", "admin")
+@csrf_protect
 def api_planering_mark_produced_special():
     data = request.get_json(force=True) or {}
     try:
@@ -1399,11 +1401,35 @@ def api_planering_mark_produced_special():
     tid = getattr(g, "tenant_id", None) or session.get("tenant_id")
     if not tid:
         return jsonify({"error": "missing_tenant"}), 400
-    # Resolve all departments for site
+    body_tid = data.get("tenant_id")
+    if body_tid is not None and str(body_tid) != str(tid):
+        return jsonify({"error": "tenant_mismatch"}), 400
+    role = str(session.get("role") or "").strip().lower()
+    active_site_id = None if role == "superuser" else str(session.get("site_id") or "").strip()
+    if not site_id or (active_site_id is not None and site_id != active_site_id):
+        return jsonify({"error": "site_mismatch"}), 403
     db = get_session()
     try:
+        from .diet_scope import DietaryReferenceError, canonical_diet_id_for_site
+
+        site = db.execute(
+            text("SELECT tenant_id FROM sites WHERE id=:site"),
+            {"site": site_id},
+        ).first()
+        if site is None or str(site[0]) != str(tid):
+            return jsonify({"error": "site_scope_mismatch"}), 403
+        for diet_id in diet_filter:
+            canonical_diet_id_for_site(
+                db,
+                tenant_id=tid,
+                site_id=site_id,
+                diet_type_id=diet_id,
+            )
         deps = db.execute(text("SELECT id FROM departments WHERE site_id=:s"), {"s": site_id}).fetchall()
         dep_ids = [str(r[0]) for r in deps]
+    except DietaryReferenceError as exc:
+        status = exc.status_code
+        return jsonify({"error": exc.code}), status
     finally:
         db.close()
     if not dep_ids:
@@ -2668,33 +2694,53 @@ def admin_diets_page():
 # ============================================================================
 
 @ui_bp.get("/ui/admin/departments/<department_id>/settings")
-@require_roles(*SAFE_UI_ROLES)
+@require_roles(*ADMIN_ROLES)
 def admin_department_settings_get(department_id: str):
     from .admin_service import AdminService
+
+    tenant_id = session.get("tenant_id")
+    site_id = str(session.get("site_id") or "").strip()
+    if tenant_id is None or not site_id:
+        abort(403)
+    try:
+        authorized_site_id, _ = resolve_department_scope(
+            department_id,
+            tenant_id,
+            site_id,
+        )
+    except ValueError as exc:
+        abort(404 if str(exc) == "department_not_found" else 403)
+
     svc = AdminService()
     try:
         vm = svc.get_department_settings(department_id)
     except ValueError:
         return jsonify({"error": "not_found", "message": "Department not found"}), 404
-    # Ensure diet types are site-scoped in the VM for the edit form
-    try:
-        from core.admin_repo import DietTypesRepo
-        db = get_session()
-        try:
-            row = db.execute(text("SELECT site_id FROM departments WHERE id=:id"), {"id": department_id}).fetchone()
-            dep_site_id = str(row[0]) if row and row[0] is not None else None
-        finally:
-            db.close()
-        vm["diet_types"] = DietTypesRepo().list_all(site_id=dep_site_id) if dep_site_id else DietTypesRepo().list_all(site_id="")
-    except Exception:
-        pass
+    from core.admin_repo import DietTypesRepo
+
+    vm["diet_types"] = DietTypesRepo().list_all(site_id=authorized_site_id)
     return render_template("ui/admin_department_settings.html", vm=vm)
 
 
 @ui_bp.post("/ui/admin/departments/<department_id>/settings")
-@require_roles(*SAFE_UI_ROLES)
+@require_roles(*ADMIN_ROLES)
+@csrf_protect
 def admin_department_settings_post(department_id: str):
     from .admin_service import AdminService
+
+    tenant_id = session.get("tenant_id")
+    site_id = str(session.get("site_id") or "").strip()
+    if tenant_id is None or not site_id:
+        abort(403)
+    try:
+        resolve_department_scope(
+            department_id,
+            tenant_id,
+            site_id,
+        )
+    except ValueError as exc:
+        abort(404 if str(exc) == "department_not_found" else 403)
+
     svc = AdminService()
     residents_base_count = request.form.get("residents_base_count")
     notes = request.form.get("notes")
@@ -3105,12 +3151,42 @@ def weekview_ui():
     # Validate query params - default to current week if not provided
     req_site_id = (request.args.get("site_id") or "").strip() or None
     department_id = (request.args.get("department_id") or "").strip() or None
-    # Enforce site-lock for bound admins: ignore querystring site_id
     session_site_id = (session.get("site_id") or "").strip()
-    site_lock = bool(session.get("site_lock"))
-    role = (session.get("role") or "").strip()
-    # Effective site is the bound site when locked; otherwise use query arg
-    site_id = session_site_id if (site_lock and session_site_id) else req_site_id
+    role = str(session.get("role") or "").strip().lower()
+    tenant_id = session.get("tenant_id")
+    if tenant_id is None or (role != "superuser" and not session_site_id):
+        abort(403)
+    site_lock = role != "superuser" or bool(session.get("site_lock"))
+    site_id = session_site_id if role != "superuser" else (
+        session_site_id if site_lock and session_site_id else req_site_id
+    )
+    if role == "unit_portal":
+        from portal.department.auth import resolve_department_portal_scope
+
+        scope = resolve_department_portal_scope(explicit_department_id=department_id)
+        if department_id and department_id != scope.department_id:
+            abort(403)
+        department_id = scope.department_id
+    if department_id:
+        try:
+            resolved_site, _ = resolve_department_scope(
+                department_id, tenant_id, None if role == "superuser" else session_site_id
+            )
+        except (TypeError, ValueError):
+            abort(403)
+        if role == "superuser" and site_id and site_id != resolved_site:
+            abort(403)
+        site_id = resolved_site
+    elif role == "superuser" and site_id:
+        db = get_session()
+        try:
+            row = db.execute(
+                text("SELECT tenant_id FROM sites WHERE id = :id"), {"id": site_id}
+            ).fetchone()
+        finally:
+            db.close()
+        if not row or str(row[0]) != str(tenant_id):
+            abort(403)
     # Get current ISO week as default
     today = _date.today()
     iso_cal = today.isocalendar()
@@ -3250,7 +3326,11 @@ def weekview_ui():
     tid = session.get("tenant_id") or getattr(g, "tenant_id", None)
     if not tid:
         return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
-    vm_all = build_weekview_vm(site_id=site_id, year=year, week=week, tenant_id=tid)
+    if not site_id:
+        abort(403)
+    vm_all = build_weekview_vm(
+        site_id=site_id, year=year, week=week, tenant_id=tid, department_id=department_id
+    )
     dep_vm = None
     try:
         dep_vm = next((d for d in (vm_all.get("departments") or []) if d.get("id") == department_id), None)
@@ -4962,48 +5042,30 @@ def kitchen_planering_v1():
         except Exception:
             pass
 
-        # Load persistent normal-mode exclusions for active day/meal (SQLite-safe schema ensure)
+        dbx = get_session()
         try:
-            dbx = get_session()
-            try:
-                dialect = dbx.bind.dialect.name if dbx.bind is not None else ""
-                if dialect == "sqlite":
-                    dbx.execute(text(
-                        """
-                        CREATE TABLE IF NOT EXISTS normal_exclusions (
-                          tenant_id TEXT NOT NULL,
-                          site_id TEXT NOT NULL,
-                          year INTEGER NOT NULL,
-                          week INTEGER NOT NULL,
-                          day_index INTEGER NOT NULL,
-                          meal TEXT NOT NULL,
-                          alt TEXT NOT NULL,
-                          diet_type_id TEXT NOT NULL,
-                          UNIQUE (tenant_id, site_id, year, week, day_index, meal, alt, diet_type_id)
-                        );
-                        """
-                    ))
-                    dbx.commit()
-                rows_ex = dbx.execute(text(
-                    """
-                    SELECT alt, diet_type_id FROM normal_exclusions
-                    WHERE tenant_id=:tid AND site_id=:s AND year=:y AND week=:w AND day_index=:d AND meal=:m
-                    ORDER BY alt, diet_type_id
-                    """
-                ), {"tid": str(session.get("tenant_id") or 1), "s": site_id, "y": year, "w": week, "d": int(selected_day), "m": str(selected_meal)}).fetchall()
-                ex_by_alt: dict[str, list[str]] = {"1": [], "2": []}
-                for r in rows_ex:
-                    a = str(r[0]); dt = str(r[1])
-                    if a in ex_by_alt:
-                        ex_by_alt[a].append(dt)
-                normal_exclusions = ex_by_alt
-            finally:
-                try:
-                    dbx.close()
-                except Exception:
-                    pass
-        except Exception:
-            normal_exclusions = {"1": [], "2": []}
+            rows_ex = dbx.execute(text(
+                """
+                SELECT alt, diet_type_id FROM normal_exclusions
+                WHERE tenant_id=:tid AND site_id=:s AND year=:y AND week=:w AND day_index=:d AND meal=:m
+                ORDER BY alt, diet_type_id
+                """
+            ), {
+                "tid": int(session.get("tenant_id") or 1),
+                "s": site_id,
+                "y": year,
+                "w": week,
+                "d": int(selected_day),
+                "m": str(selected_meal),
+            }).fetchall()
+            ex_by_alt: dict[str, list[str]] = {"1": [], "2": []}
+            for row in rows_ex:
+                alt = str(row[0])
+                if alt in ex_by_alt:
+                    ex_by_alt[alt].append(str(row[1]))
+            normal_exclusions = ex_by_alt
+        finally:
+            dbx.close()
 
         # Serveringstillägg per valt mål (återkommande per avdelning).
         # Dessert ska aldrig visa serveringstillbehör från lunch.
@@ -6959,6 +7021,7 @@ def _set_prev_next(vm: dict) -> None:
 
 @ui_bp.post("/ui/register/meal/toggle-mark")
 @require_roles(*SAFE_UI_ROLES)
+@csrf_protect
 def register_meal_toggle_mark():
     """Toggle a special diet mark for a given (department, date, meal, diet_type_id).
 
@@ -6986,6 +7049,27 @@ def register_meal_toggle_mark():
         year, week, dow = int(iso[0]), int(iso[1]), int(iso[2])
     except Exception:
         return jsonify({"error": "invalid_parameters"}), 400
+    try:
+        active_site_id = None if str(session.get("role") or "").lower() == "superuser" else str(session.get("site_id") or "")
+        resolved_site_id, _tenant = resolve_department_scope(department_id, tid, active_site_id)
+        if site_id and site_id != resolved_site_id:
+            return jsonify({"error": "site_mismatch"}), 403
+        db = get_session()
+        try:
+            diet_type_id = str(
+                canonical_diet_id_for_department(
+                    db,
+                    tenant_id=tid,
+                    department_id=department_id,
+                    diet_type_id=diet_type_id,
+                )
+            )
+        finally:
+            db.close()
+    except DietaryReferenceError as exc:
+        return jsonify({"error": exc.code}), exc.status_code
+    except ValueError:
+        return jsonify({"error": "department_scope_mismatch"}), 403
 
     # Determine current mark to toggle
     repo = WeekviewRepo()
@@ -8705,6 +8789,7 @@ def admin_departments_edit_save_diets(dept_id: str):
     """Persist Specialkost defaults from the edit page without touching department core fields."""
     from flask import flash, redirect, url_for
     from core.admin_repo import DepartmentsRepo, DietTypesRepo
+    from core.etag import ConcurrencyError
     # Version handling
     db = get_session()
     try:
@@ -8737,18 +8822,14 @@ def admin_departments_edit_save_diets(dept_id: str):
             items.append({"diet_type_id": dtid, "default_count": cnt})
     except Exception:
         items = []
-    # Persist with fallback once on version mismatch
     repo = DepartmentsRepo()
     try:
         repo.upsert_department_diet_defaults(dept_id=dept_id, expected_version=expected_version, items=items)
         flash("Specialkost sparad.", "success")
-    except Exception:
-        # Retry with current version
-        try:
-            repo.upsert_department_diet_defaults(dept_id=dept_id, expected_version=current_version, items=items)
-            flash("Specialkost sparad.", "success")
-        except Exception as e:
-            flash(f"Kunde inte spara specialkost: {str(e)}", "error")
+    except ConcurrencyError:
+        flash("Avdelningen har ändrats av någon annan. Försök igen.", "error")
+    except Exception as e:
+        flash(f"Kunde inte spara specialkost: {str(e)}", "error")
     return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
 
 

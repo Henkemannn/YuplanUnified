@@ -1,5 +1,3 @@
-from contextlib import suppress
-
 import pytest
 from flask import Flask
 from sqlalchemy import text
@@ -12,8 +10,23 @@ from core.models import Note, Tenant, User
 
 
 @pytest.fixture()
-def app():
-    app = create_app({"TESTING": True, "SECRET_KEY": "test"})
+def notes_api_database(tmp_path, monkeypatch):
+    database_url = f"sqlite:///{(tmp_path / 'notes-api.db').as_posix()}"
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    return database_url
+
+
+@pytest.fixture()
+def app(notes_api_database):
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "test",
+            "database_url": notes_api_database,
+        }
+    )
+    with app.app_context():
+        create_all()
     return app
 
 
@@ -23,110 +36,125 @@ def client(app: Flask):
 
 
 @pytest.fixture()
-def seeded_users():
-    db = get_session()
-    try:
-        # Ensure schema exists (in case migrations not executed in test context)
-        with suppress(Exception):
-            create_all()
-        tenant = db.query(Tenant).first()
-        if not tenant:
-            tenant = Tenant(name="T1")
-            db.add(tenant)
-            db.commit()
-            db.refresh(tenant)
-        # Clean prior test runs for idempotency when reusing same SQLite DB
-        db.query(User).filter(
-            User.email.in_(["u1@example.com", "u2@example.com", "u3@example.com"])
-        ).delete(
-            synchronize_session=False
-        )
-        db.commit()
-        # creator user
-        u1 = User(
-            tenant_id=tenant.id,
-            email="u1@example.com",
-            password_hash=generate_password_hash("pw"),
-            role="admin",
-            unit_id=None,
-        )
-        u2 = User(
-            tenant_id=tenant.id,
-            email="u2@example.com",
-            password_hash=generate_password_hash("pw"),
-            role="cook",
-            unit_id=None,
-        )
-        tenant_b = db.query(Tenant).filter(Tenant.name == "T2").first()
-        if not tenant_b:
-            tenant_b = Tenant(name="T2")
-            db.add(tenant_b)
-            db.flush()
-        u3 = User(
-            tenant_id=tenant_b.id,
-            email="u3@example.com",
-            password_hash=generate_password_hash("pw"),
-            role="admin",
-            unit_id=None,
-        )
-        db.add_all([u1, u2, u3])
-        db.commit()
-        tenant_b_id = int(tenant_b.id)
-        db.refresh(u1)
-        db.refresh(u2)
-        db.refresh(u3)
-        tenant_id = int(tenant.id)
-        site_rows = SitesRepo().list_sites_for_tenant(tenant_id)
-        if site_rows:
-            site_id = str(site_rows[0].get("id"))
-        else:
-            site, _ = SitesRepo().create_site("Notes Test Site", tenant_id=tenant_id)
-            site_id = str(site.get("id"))
-        site_b, _ = SitesRepo().create_site("Notes Other Site", tenant_id=tenant_id)
-        site_c, _ = SitesRepo().create_site("Notes Tenant B Site", tenant_id=tenant_b_id)
-        db.execute(
-            text(
-                "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
-                "user_id INTEGER NOT NULL, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL, "
-                "PRIMARY KEY (user_id, site_id))"
-            )
-        )
-        for email in ("u1@example.com", "u2@example.com"):
+def seeded_users(app):
+    with app.app_context():
+        db = get_session()
+        try:
             db.execute(
                 text(
-                    "INSERT OR REPLACE INTO kitchen_user_sites "
-                    "(user_id, tenant_id, site_id) "
-                    "SELECT id, :tenant_id, :site_id FROM users WHERE email=:email"
-                ),
-                {"tenant_id": tenant_id, "site_id": site_id, "email": email},
+                    "CREATE TABLE kitchen_user_sites ("
+                    "user_id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, "
+                    "site_id TEXT NOT NULL)"
+                )
             )
-        db.execute(
-            text(
-                "INSERT OR REPLACE INTO kitchen_user_sites "
-                "(user_id, tenant_id, site_id) "
-                "SELECT id, :tenant_id, :site_id FROM users WHERE email=:email"
-            ),
-            {
-                "tenant_id": tenant_b_id,
-                "site_id": str(site_c.get("id")),
-                "email": "u3@example.com",
-            },
-        )
-        db.commit()
-        return {
-            "tenant_id": tenant_id,
-            "u1_email": "u1@example.com",
-            "u2_email": "u2@example.com",
-            "site_id": site_id,
-            "site_b_id": str(site_b.get("id")),
-            "site_c_id": str(site_c.get("id")),
-            "u3_email": "u3@example.com",
-            "u1_id": int(u1.id),
-            "u3_id": int(u3.id),
-            "tenant_b_id": tenant_b_id,
-        }
-    finally:
-        db.close()
+            db.execute(text("DELETE FROM kitchen_user_sites"))
+            tenant = db.query(Tenant).first()
+            if not tenant:
+                tenant = Tenant(name="T1")
+                db.add(tenant)
+                db.commit()
+                db.refresh(tenant)
+            db.query(User).filter(
+                User.email.in_(
+                    ["u1@example.com", "u2@example.com", "u3@example.com"]
+                )
+            ).delete(synchronize_session=False)
+            db.commit()
+            u1 = User(
+                tenant_id=tenant.id,
+                email="u1@example.com",
+                password_hash=generate_password_hash("pw"),
+                role="admin",
+                unit_id=None,
+            )
+            u2 = User(
+                tenant_id=tenant.id,
+                email="u2@example.com",
+                password_hash=generate_password_hash("pw"),
+                role="cook",
+                unit_id=None,
+            )
+            tenant_b = db.query(Tenant).filter(Tenant.name == "T2").first()
+            if not tenant_b:
+                tenant_b = Tenant(name="T2")
+                db.add(tenant_b)
+                db.flush()
+            u3 = User(
+                tenant_id=tenant_b.id,
+                email="u3@example.com",
+                password_hash=generate_password_hash("pw"),
+                role="admin",
+                unit_id=None,
+            )
+            db.add_all([u1, u2, u3])
+            db.commit()
+            tenant_b_id = int(tenant_b.id)
+            db.refresh(u1)
+            db.refresh(u2)
+            db.refresh(u3)
+            tenant_id = int(tenant.id)
+            site_rows = SitesRepo().list_sites_for_tenant(tenant_id)
+            if site_rows:
+                site_id = str(site_rows[0].get("id"))
+            else:
+                site, _ = SitesRepo().create_site("Notes Test Site", tenant_id=tenant_id)
+                site_id = str(site.get("id"))
+            site_b, _ = SitesRepo().create_site("Notes Other Site", tenant_id=tenant_id)
+            site_c, _ = SitesRepo().create_site(
+                "Notes Tenant B Site", tenant_id=tenant_b_id
+            )
+            bindings = [
+                {
+                    "user_id": int(u1.id),
+                    "tenant_id": tenant_id,
+                    "site_id": site_id,
+                },
+                {
+                    "user_id": int(u2.id),
+                    "tenant_id": tenant_id,
+                    "site_id": site_id,
+                },
+                {
+                    "user_id": int(u3.id),
+                    "tenant_id": tenant_b_id,
+                    "site_id": str(site_c.get("id")),
+                },
+            ]
+            db.execute(
+                text(
+                    "INSERT INTO kitchen_user_sites (user_id, tenant_id, site_id) "
+                    "VALUES (:user_id, :tenant_id, :site_id)"
+                ),
+                bindings,
+            )
+            actual_bindings = {
+                tuple(row)
+                for row in db.execute(
+                    text(
+                        "SELECT user_id, tenant_id, site_id "
+                        "FROM kitchen_user_sites ORDER BY user_id"
+                    )
+                ).fetchall()
+            }
+            assert actual_bindings == {
+                (binding["user_id"], binding["tenant_id"], binding["site_id"])
+                for binding in bindings
+            }
+            db.commit()
+            return {
+                "tenant_id": tenant_id,
+                "u1_email": "u1@example.com",
+                "u2_email": "u2@example.com",
+                "site_id": site_id,
+                "site_b_id": str(site_b.get("id")),
+                "site_c_id": str(site_c.get("id")),
+                "u3_email": "u3@example.com",
+                "u1_id": int(u1.id),
+                "u3_id": int(u3.id),
+                "tenant_b_id": tenant_b_id,
+            }
+        finally:
+            db.close()
 
 
 def login(client, email, site_id, password="pw"):
@@ -220,7 +248,7 @@ def test_notes_are_site_scoped_and_rejected_writes_are_unchanged(
         legacy = Note(
             tenant_id=seeded_users["tenant_id"],
             site_id=None,
-            user_id=1,
+            user_id=seeded_users["u1_id"],
             content="Legacy unscoped",
             private_flag=False,
         )

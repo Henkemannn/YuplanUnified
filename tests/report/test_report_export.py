@@ -5,9 +5,9 @@ import uuid
 
 import pytest
 
-ETAG_SITE_RE = re.compile(r'^W/"report:site:year:\d{4}:week:\d{1,2}:v\d+:n\d+"$')
-ETAG_SITE_CSV_RE = re.compile(r'^W/"report:site:year:\d{4}:week:\d{1,2}:v\d+:n\d+:fmt:csv"$')
-ETAG_SITE_XLSX_RE = re.compile(r'^W/"report:site:year:\d{4}:week:\d{1,2}:v\d+:n\d+:fmt:xlsx"$')
+ETAG_SITE_RE = re.compile(r'^W/"report:site:[0-9a-f]{64}:year:\d{4}:week:\d{1,2}:v\d+:n\d+"$')
+ETAG_SITE_CSV_RE = re.compile(r'^W/"report:site:[0-9a-f]{64}:year:\d{4}:week:\d{1,2}:v\d+:n\d+:fmt:csv"$')
+ETAG_SITE_XLSX_RE = re.compile(r'^W/"report:site:[0-9a-f]{64}:year:\d{4}:week:\d{1,2}:v\d+:n\d+:fmt:xlsx"$')
 
 
 def _headers(role):
@@ -95,6 +95,18 @@ def test_csv_and_xlsx_export_with_etag_and_304(client_admin):
         finally:
             db.close()
 
+    from core.admin_repo import DietTypesRepo
+
+    diet_id = DietTypesRepo().create(
+        site_id=site,
+        tenant_id=1,
+        name="gluten",
+        semantics="atomic",
+    )
+    from tests._auth_site_helpers import login_bound_user
+
+    login_bound_user(client_admin, site_id=site)
+
     # Seed weekview: get ETag, set residents and specials
     etag0 = _get(client_admin, "admin", wv_base).headers.get("ETag")
     # residents
@@ -125,7 +137,12 @@ def test_csv_and_xlsx_export_with_etag_and_304(client_admin):
             "year": year,
             "week": week,
             "operations": [
-                {"day_of_week": 1, "meal": "lunch", "diet_type": "gluten", "marked": True}
+                {
+                    "day_of_week": 1,
+                    "meal": "lunch",
+                    "diet_type": str(diet_id),
+                    "marked": True,
+                }
             ],
         },
         extra_headers={"If-Match": etag1},
@@ -188,11 +205,37 @@ def test_csv_and_xlsx_export_with_etag_and_304(client_admin):
 
 @pytest.mark.usefixtures("enable_report", "enable_weekview")
 def test_department_filter_limits_rows_in_csv(client_admin):
+    from sqlalchemy import text
+    from core.db import get_session
+    from tests._auth_site_helpers import login_bound_user
+
     dep = str(uuid.uuid4())
+    site = str(uuid.uuid4())
     year, week = 2025, 46
+    with client_admin.application.app_context():
+        db = get_session()
+        try:
+            db.execute(
+                text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:id, 1, 'Export site', 0)"),
+                {"id": site},
+            )
+            db.execute(
+                text(
+                    "INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) "
+                    "VALUES(:id, :site, 'Export department', 'fixed', 10, 0)"
+                ),
+                {"id": dep, "site": site},
+            )
+            db.commit()
+        finally:
+            db.close()
+    login_bound_user(client_admin, site_id=site)
     wv_base = f"/api/weekview?year={year}&week={week}&department_id={dep}"
-    etag0 = _get(client_admin, "admin", wv_base).headers.get("ETag")
-    _patch(
+    response = _get(client_admin, "admin", wv_base)
+    assert response.status_code == 200
+    etag0 = response.headers.get("ETag")
+    assert etag0
+    response = _patch(
         client_admin,
         "admin",
         "/api/weekview/residents",
@@ -206,9 +249,12 @@ def test_department_filter_limits_rows_in_csv(client_admin):
         },
         extra_headers={"If-Match": etag0},
     )
+    assert response.status_code == 200
 
     r = _get(client_admin, "admin", f"/api/report/export?year={year}&week={week}&department_id={dep}&format=csv")
     assert r.status_code == 200
+    unknown = _get(client_admin, "admin", f"/api/report/export?year={year}&week={week}&department_id={uuid.uuid4()}&format=csv")
+    assert unknown.status_code in (403, 404)
     # Parse a bit and ensure departments section has only two rows (lunch+dinner) for the single department
     text = r.data.decode("utf-8")
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]

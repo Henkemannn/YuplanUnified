@@ -44,6 +44,7 @@ def _seed_session(client, *, role: str, tenant_id: int, user_id: int) -> None:
 
 
 def _app_with_builder_db(db_path: str):
+    initialize_builder_sqlite(db_path)
     db_dir = tempfile.mkdtemp(prefix="builder_api_main_")
     _TEMP_DB_DIRS.append(db_dir)
     main_db_path = os.path.join(db_dir, "main.db")
@@ -74,6 +75,7 @@ def _client():
     _TEMP_DB_DIRS.append(db_dir)
     main_db_path = os.path.join(db_dir, "main.db")
     builder_db_path = os.path.join(db_dir, "builder.db")
+    initialize_builder_sqlite(builder_db_path)
     previous = os.environ.get("BUILDER_DB_PATH")
     os.environ["BUILDER_DB_PATH"] = builder_db_path
     try:
@@ -104,6 +106,7 @@ def _sqlite_client():
     _TEMP_DB_DIRS.append(db_dir)
     main_db_path = os.path.join(db_dir, "main.db")
     builder_db_path = os.path.join(db_dir, "builder.db")
+    initialize_builder_sqlite(builder_db_path)
     previous = os.environ.get("BUILDER_DB_PATH")
     os.environ["BUILDER_DB_PATH"] = builder_db_path
     try:

@@ -1,3 +1,4 @@
+from tests._auth_site_helpers import login_bound_user
 from datetime import date as _date
 
 from sqlalchemy import text
@@ -9,12 +10,12 @@ def _seed_site_and_department():
     from core.db import get_session
     conn = get_session()
     try:
-        site = conn.execute(text("SELECT id FROM sites WHERE id='00000000-0000-0000-0000-000000000000'"))
+        site = conn.execute(text("SELECT id FROM sites WHERE id='38c632e3-0825-58b5-8fdd-af71b04f8e57'"))
         if not site.fetchone():
-            conn.execute(text("INSERT INTO sites (id, name) VALUES ('00000000-0000-0000-0000-000000000000', 'Test Site')"))
-        dep = conn.execute(text("SELECT id FROM departments WHERE id='00000000-0000-0000-0000-000000000001'"))
+            conn.execute(text("INSERT INTO sites (id, tenant_id, name) VALUES ('38c632e3-0825-58b5-8fdd-af71b04f8e57', 1, 'Test Site')"))
+        dep = conn.execute(text("SELECT id FROM departments WHERE id='f608ffc6-691c-5b4d-ac8e-37ddb4a390cc'"))
         if not dep.fetchone():
-            conn.execute(text("INSERT INTO departments (id, site_id, name, resident_count_mode, resident_count_fixed) VALUES ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000000', 'Avd Alpha', 'fixed', 5)"))
+            conn.execute(text("INSERT INTO departments (id, site_id, name, resident_count_mode, resident_count_fixed) VALUES ('f608ffc6-691c-5b4d-ac8e-37ddb4a390cc', '38c632e3-0825-58b5-8fdd-af71b04f8e57', 'Avd Alpha', 'fixed', 5)"))
         conn.commit()
     finally:
         conn.close()
@@ -45,8 +46,9 @@ def _ensure_menu_for_week(tenant_id: int, site_id: str, year: int, week: int) ->
 def test_weekview_reflects_department_registration_choice(app_session):
     client = app_session.test_client()
     _seed_site_and_department()
-    site_id = "00000000-0000-0000-0000-000000000000"
-    department_id = "00000000-0000-0000-0000-000000000001"
+    site_id = "38c632e3-0825-58b5-8fdd-af71b04f8e57"
+    login_bound_user(client, site_id=site_id)
+    department_id = "f608ffc6-691c-5b4d-ac8e-37ddb4a390cc"
     year = 2025
     week = 48
     tid = 1

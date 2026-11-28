@@ -3,8 +3,8 @@ import uuid
 
 import pytest
 
-ETAG_DEPT_RE = re.compile(r'^W/"report:dept:[0-9a-f-]+:year:\d{4}:week:\d{1,2}:v\d+"$')
-ETAG_SITE_RE = re.compile(r'^W/"report:site:year:\d{4}:week:\d{1,2}:v\d+:n\d+"$')
+ETAG_DEPT_RE = re.compile(r'^W/"report:dept:[0-9a-f]{64}:[0-9a-f-]+:year:\d{4}:week:\d{1,2}:v\d+"$')
+ETAG_SITE_RE = re.compile(r'^W/"report:site:[0-9a-f]{64}:year:\d{4}:week:\d{1,2}:v\d+:n\d+"$')
 
 
 def _headers(role):
@@ -107,6 +107,21 @@ def test_report_math_and_clamp_with_weekview_data(client_admin):
         finally:
             db.close()
 
+    from core.admin_repo import DietTypesRepo
+
+    diet_ids = {
+        name: DietTypesRepo().create(
+            site_id=site,
+            tenant_id=1,
+            name=name,
+            semantics="atomic",
+        )
+        for name in ("gluten", "timbal")
+    }
+    from tests._auth_site_helpers import login_bound_user
+
+    login_bound_user(client_admin, site_id=site)
+
     # Get initial ETag for weekview
     r0 = _get(client_admin, "admin", wv_base)
     assert r0.status_code == 200
@@ -135,8 +150,8 @@ def test_report_math_and_clamp_with_weekview_data(client_admin):
 
     # Mark specials: lunch gluten on day1, timbal on day2
     ops = [
-        {"day_of_week": 1, "meal": "lunch", "diet_type": "gluten", "marked": True},
-        {"day_of_week": 2, "meal": "lunch", "diet_type": "timbal", "marked": True},
+        {"day_of_week": 1, "meal": "lunch", "diet_type": str(diet_ids["gluten"]), "marked": True},
+        {"day_of_week": 2, "meal": "lunch", "diet_type": str(diet_ids["timbal"]), "marked": True},
     ]
     r2 = _patch(
         client_admin,

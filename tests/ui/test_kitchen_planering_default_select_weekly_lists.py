@@ -30,7 +30,7 @@ def _seed_site_department_and_diet(site_id: str, dep_id: str, diet_name: str, de
             )
         )
         db.execute(
-            text("INSERT OR IGNORE INTO sites(id, name, version) VALUES(:i, :n, 0)"),
+            text("INSERT OR IGNORE INTO sites(id, tenant_id, name, version) VALUES(:i, 1, :n, 0)"),
             {"i": site_id, "n": "Site Default Select"},
         )
         db.execute(

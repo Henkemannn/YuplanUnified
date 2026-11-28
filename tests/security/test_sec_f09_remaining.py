@@ -93,18 +93,34 @@ def _seed_scope(app_session):
                 {"user_id": actor.id, "tenant_id": 1, "site_id": site_a.id},
             )
             db.commit()
+            site_a_id = str(site_a.id)
+            site_b_id = str(site_b.id)
+            site_c_id = str(site_c.id)
+            department_a_id = str(department_a.id)
+            department_b_id = str(department_b.id)
+            department_c_id = str(department_c.id)
+            actor_id = int(actor.id)
+            from core.admin_repo import DietTypesRepo
+
+            diet_id = DietTypesRepo().create(
+                site_id=site_a_id,
+                tenant_id=1,
+                name=f"F09 Diet {suffix[:8]}",
+                semantics="atomic",
+            )
             return {
                 "email": email,
                 "password": password,
                 "superuser_email": superuser_email,
                 "superuser_password": superuser_password,
-                "actor_id": actor.id,
-                "site_a": site_a.id,
-                "site_b": site_b.id,
-                "site_c": site_c.id,
-                "department_a": department_a.id,
-                "department_b": department_b.id,
-                "department_c": department_c.id,
+                "actor_id": actor_id,
+                "site_a": site_a_id,
+                "site_b": site_b_id,
+                "site_c": site_c_id,
+                "department_a": department_a_id,
+                "department_b": department_b_id,
+                "department_c": department_c_id,
+                "diet_id": diet_id,
             }
         finally:
             db.close()
@@ -193,7 +209,7 @@ def test_real_user_cannot_mutate_foreign_weekview_departments(
                 "department_id": data["department_b"],
                 "local_date": "2026-03-16",
                 "meal": "lunch",
-                "diet_type_id": "f09-diet",
+                "diet_type_id": str(data["diet_id"]),
                 "marked": True,
             },
         ),
@@ -276,7 +292,7 @@ def test_real_admin_scope_guard_runs_for_all_weekview_mutations(
                 "department_id": data["department_b"],
                 "local_date": "2026-05-18",
                 "meal": "lunch",
-                "diet_type_id": "f09-diet",
+                "diet_type_id": str(data["diet_id"]),
                 "marked": True,
             },
         ),
@@ -309,7 +325,7 @@ def test_real_user_cannot_create_version_for_foreign_specialdiet_without_if_matc
             "department_id": data["department_b"],
             "local_date": "2026-03-16",
             "meal": "lunch",
-            "diet_type_id": "f09-diet",
+            "diet_type_id": str(data["diet_id"]),
             "marked": True,
         },
     )
@@ -422,7 +438,7 @@ def test_real_user_can_mutate_all_own_weekview_endpoints(app_session):
                 "department_id": data["department_a"],
                 "local_date": "2026-03-16",
                 "meal": "lunch",
-                "diet_type_id": "f09-diet",
+                "diet_type_id": str(data["diet_id"]),
                 "marked": True,
             },
             False,
@@ -495,7 +511,7 @@ def test_superuser_is_denied_weekview_mutations(app_session):
                 "department_id": data["department_b"],
                 "local_date": "2026-03-16",
                 "meal": "lunch",
-                "diet_type_id": "f09-diet",
+                "diet_type_id": str(data["diet_id"]),
                 "marked": True,
             },
         ),
@@ -563,7 +579,7 @@ def test_inactive_or_revoked_user_cannot_mutate_planera(
             "day_index": 1,
             "meal": "lunch",
             "alt": "1",
-            "diet_type_id": "f09-diet",
+            "diet_type_id": str(data["diet_id"]),
         },
     )
     assert response.status_code in (401, 403)
@@ -582,7 +598,7 @@ def test_real_user_can_toggle_own_normal_exclusion(app_session):
             "day_index": 1,
             "meal": "lunch",
             "alt": "1",
-            "diet_type_id": "f09-diet",
+            "diet_type_id": str(data["diet_id"]),
         },
     )
     assert response.status_code == 200
@@ -650,7 +666,7 @@ def test_real_user_cannot_toggle_foreign_normal_exclusion(app_session):
         "day_index": 1,
         "meal": "lunch",
         "alt": "1",
-        "diet_type_id": "f09-diet",
+        "diet_type_id": str(data["diet_id"]),
     }
     response = client.post(
         "/api/kitchen/planering/normal_exclusions/toggle",

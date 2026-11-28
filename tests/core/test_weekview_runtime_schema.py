@@ -64,7 +64,10 @@ def isolated_weekview_app(tmp_path, monkeypatch, request):
         db = get_session()
         try:
             ensure_weekview_schema(db.connection())
-            for name in ("department_residents_schedule", "department_residents_weekly", "department_diet_defaults"):
+            for name in (
+                "department_residents_schedule", "department_residents_weekly",
+                "department_diet_defaults", "department_diet_overrides", "dietary_types",
+            ):
                 Base.metadata.tables[name].create(db.connection(), checkfirst=True)
             db.execute(
                 text(
@@ -286,7 +289,14 @@ def test_canonical_weekview_read_executes_no_runtime_ddl(isolated_weekview_app):
 
 
 def test_weekview_mutations_execute_only_business_dml(isolated_weekview_app):
+    from core.admin_repo import DietTypesRepo
+
     with isolated_weekview_app.app_context():
+        diet_type_id = DietTypesRepo().create(
+            site_id="site-1",
+            name="Gluten",
+            semantics="atomic",
+        )
         db = get_session()
         try:
             engine = db.bind
@@ -298,7 +308,7 @@ def test_weekview_mutations_execute_only_business_dml(isolated_weekview_app):
                     2026,
                     6,
                     "dep-1",
-                    [{"day_of_week": 2, "meal": "lunch", "diet_type": "Gluten", "marked": True}],
+                    [{"day_of_week": 2, "meal": "lunch", "diet_type": str(diet_type_id), "marked": True}],
                 )
                 repo.set_residents_counts(
                     1,

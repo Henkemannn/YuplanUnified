@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import pytest
+from core.admin_repo import SitesRepo
+from tests._auth_site_helpers import login_bound_user
 
 # These tests assume env flag enabled; we simulate by overriding app config during test.
 
@@ -19,14 +21,21 @@ def _reset_flag_after_module(strict_app):
 
 @pytest.fixture
 def strict_client(strict_app):
-    return strict_app.test_client()
+    client = strict_app.test_client()
+    with strict_app.app_context():
+        site, _ = SitesRepo().create_site(name="Strict CSRF Site", tenant_id=1)
+    login_bound_user(client, site_id=site["id"])
+    return client
 
 
 def _get_token(client):
     # Trigger a GET on a path under enforced prefix to set token
-    client.get("/diet/types", headers={"X-User-Role": "admin", "X-Tenant-Id": "1"})
+    response = client.get("/diet/types", headers={"X-User-Role": "admin", "X-Tenant-Id": "1"})
+    assert response.status_code == 200
     with client.session_transaction() as s:  # type: ignore
-        return s.get("CSRF_TOKEN")
+        token = s.get("CSRF_TOKEN")
+    assert token
+    return token
 
 
 def test_csrf_missing_header_returns_403_problemjson(strict_client):

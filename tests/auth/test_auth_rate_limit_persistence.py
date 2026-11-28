@@ -296,7 +296,7 @@ def test_auth_login_throttle_migration_up_and_down(tmp_path: Path, monkeypatch) 
     config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
     config.set_main_option("sqlalchemy.url", db_url)
 
-    command.upgrade(config, "head")
+    command.upgrade(config, "0049_add_auth_login_throttle_reservations")
     engine = create_engine(db_url)
     try:
         inspector = inspect(engine)

@@ -36,7 +36,7 @@ def test_0046_upgrade_backfills_auth_version_and_must_change_password_and_preser
                 {"ph": generate_password_hash("OldPassw0rd!")},
             )
 
-        command.upgrade(_alembic_cfg(db_url), "head")
+        command.upgrade(_alembic_cfg(db_url), "0046_add_user_must_change_password")
 
         inspector = inspect(engine)
         columns = {column["name"] for column in inspector.get_columns("users")}
@@ -73,7 +73,7 @@ def test_0046_upgrade_backfills_auth_version_and_must_change_password_and_preser
         assert "auth_version" not in columns
         assert "must_change_password" not in columns
 
-        command.upgrade(_alembic_cfg(db_url), "head")
+        command.upgrade(_alembic_cfg(db_url), "0046_add_user_must_change_password")
         inspector = inspect(engine)
         columns = {column["name"] for column in inspector.get_columns("users")}
         assert "auth_version" in columns

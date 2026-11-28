@@ -13,6 +13,7 @@ import pytest
 from core.app_factory import create_app
 from core.builder.library_scope import ActorContext
 from core.builder.library_scope import ObjectScope
+from core.builder_sqlite import initialize_builder_sqlite
 from core.db import create_all, get_session
 from core.models import CommunBuilderPublicationPin, Site, Tenant, User
 from modules.offshore2.menu_context import _service as menu_context_service
@@ -81,6 +82,10 @@ def _mk_app():
     _TEMP_DB_DIRS.append(db_dir)
     main_db_path = os.path.join(db_dir, "main.db")
     builder_db_path = os.path.join(db_dir, "builder.db")
+    assert os.path.dirname(os.path.realpath(builder_db_path)) == os.path.realpath(db_dir)
+    assert os.path.dirname(os.path.realpath(db_dir)) == os.path.realpath(tempfile.gettempdir())
+    assert not os.path.exists(builder_db_path)
+    initialize_builder_sqlite(builder_db_path)
     previous_builder_db_path = os.environ.get("BUILDER_DB_PATH")
     os.environ["BUILDER_DB_PATH"] = builder_db_path
     try:

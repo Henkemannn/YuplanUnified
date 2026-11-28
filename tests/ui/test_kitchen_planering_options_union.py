@@ -5,20 +5,20 @@ from sqlalchemy import text
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 
-def _seed_union(site_id: str):
+def _seed_union():
     from core.admin_repo import SitesRepo, DepartmentsRepo, DietTypesRepo
-    # Create site
-    srepo = SitesRepo()
-    srepo.create_site("Plan Site")
+    site, _ = SitesRepo().create_site("Plan Site", tenant_id=1)
+    site_id = site["id"]
     # Create three departments
     drepo = DepartmentsRepo()
     depA, _ = drepo.create_department(site_id, "Avd A", "fixed", 12)
     depB, _ = drepo.create_department(site_id, "Avd B", "fixed", 10)
     depC, _ = drepo.create_department(site_id, "Avd C", "fixed", 11)
-    # Create diet types (site-scoped)
+    # Use the site's provisioned canonical types.
     trepo = DietTypesRepo()
-    dt_laktos = trepo.create(site_id=site_id, name="Laktos", default_select=False)
-    dt_gluten = trepo.create(site_id=site_id, name="Glutenfri", default_select=False)
+    types = {row["name"]: row for row in trepo.list_all(site_id=site_id)}
+    dt_laktos = int(types["Laktosfri"]["id"])
+    dt_gluten = int(types["Glutenfri"]["id"])
     # Upsert defaults per department
     vA = drepo.get_version(depA["id"]) or 0
     vB = drepo.get_version(depB["id"]) or 0
@@ -35,13 +35,17 @@ def _seed_union(site_id: str):
         {"diet_type_id": str(dt_laktos), "default_count": 4},
         {"diet_type_id": str(dt_gluten), "default_count": 2},
     ])
-    return {"deps": (depA, depB, depC), "diet_ids": {"laktos": dt_laktos, "gluten": dt_gluten}}
+    return {
+        "site_id": site_id,
+        "deps": (depA, depB, depC),
+        "diet_ids": {"laktos": dt_laktos, "gluten": dt_gluten},
+    }
 
 
 def test_options_union_render(app_session):
     client = app_session.test_client()
-    site_id = f"site-plan-{uuid.uuid4().hex[:8]}"
-    _seed_union(site_id)
+    seeded = _seed_union()
+    site_id = seeded["site_id"]
     # Select a day + meal to show checklist
     rv = client.get(f"/ui/kitchen/planering?site_id={site_id}&day=0&meal=lunch", headers=HEADERS)
     assert rv.status_code == 200

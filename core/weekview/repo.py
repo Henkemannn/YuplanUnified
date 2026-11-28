@@ -7,6 +7,7 @@ from typing import Optional, Sequence
 from sqlalchemy import text
 
 from ..db import get_session
+from ..diet_scope import weekview_diet_key_for_department
 from ..department_menu_choice_repo import MenuChoiceRepo
 from .schema import verify_weekview_schema
 
@@ -250,6 +251,22 @@ class WeekviewRepo:
         try:
             self._verify_schema_in_session(db)
             dialect = db.bind.dialect.name if db.bind is not None else ""
+            validated_ops = []
+            for op in ops:
+                diet_type = weekview_diet_key_for_department(
+                    db,
+                    tenant_id=tenant_id,
+                    department_id=department_id,
+                    diet_type_id=op["diet_type"],
+                )
+                validated_ops.append(
+                    {
+                        "day_of_week": int(op["day_of_week"]),
+                        "meal": str(op["meal"]),
+                        "diet_type": diet_type,
+                        "marked": bool(op.get("marked", True)),
+                    }
+                )
             # Ensure version row exists
             db.execute(
                 text(
@@ -262,7 +279,7 @@ class WeekviewRepo:
                 {"tid": str(tenant_id), "dep": department_id, "yy": year, "ww": week},
             )
             # Upsert registrations
-            for op in ops:
+            for op in validated_ops:
                 params = {
                     "tid": str(tenant_id),
                     "dep": department_id,
@@ -271,7 +288,7 @@ class WeekviewRepo:
                     "dow": int(op["day_of_week"]),
                     "meal": str(op["meal"]),
                     "diet": str(op["diet_type"]),
-                    "marked": 1 if bool(op.get("marked", True)) else 0,
+                    "marked": int(bool(op["marked"])),
                 }
                 if dialect == "sqlite":
                     db.execute(

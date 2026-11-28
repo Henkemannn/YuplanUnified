@@ -1131,7 +1131,7 @@ def test_weekview_still_works_after_phase2(client_admin):
         create_all()
         db = get_session()
         try:
-            db.execute(text(f"INSERT INTO sites (id, name, version) VALUES ('{site_id}', 'TestSite', 0)"))
+            db.execute(text(f"INSERT INTO sites (id, tenant_id, name, version) VALUES ('{site_id}', 1, 'TestSite', 0)"))
             
             db.execute(
                 text(
@@ -1143,6 +1143,9 @@ def test_weekview_still_works_after_phase2(client_admin):
         finally:
             db.close()
     
+    from tests._auth_site_helpers import login_bound_user
+    login_bound_user(client_admin, site_id=site_id)
+
     resp = client_admin.get(
         f"/ui/weekview?site_id={site_id}&department_id={dept_id}",
         headers=_h("admin"),

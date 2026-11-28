@@ -12,6 +12,7 @@
     <p><strong>Avdelning:</strong> {{ vm.department_name }} &nbsp; <span class="muted">(ID: {{ vm.department_id }})</span></p>
 
     <form method="post" action="/ui/admin/departments/{{ vm.department_id }}/settings">
+      <input type="hidden" name="csrf_token" value="{{ csrf_meta_token() }}">
       <section>
         <h2>Boendeantal</h2>
         <label for="residents_base_count">Antal boende totalt:</label>
@@ -31,7 +32,7 @@
             {% for item in vm.diet_defaults %}
             <tr>
               <td>
-                {{ item.diet_type_id }}
+                {{ item.diet_type_name }}
                 <input type="hidden" name="diet_type_id[]" value="{{ item.diet_type_id }}">
               </td>
               <td>

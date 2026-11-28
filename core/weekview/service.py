@@ -8,7 +8,7 @@ from typing import Sequence, Any
 from flask import current_app
 from ..admin_repo import DietDefaultsRepo, DepartmentDietOverridesRepo, DietTypesRepo
 from ..department_menu_choice_repo import MenuChoiceRepo
-from sqlalchemy import Integer, String, inspect, text
+from sqlalchemy import Boolean, Integer, String, inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 from ..residents_weekly_repo import ResidentsWeeklyRepo
 from ..residents_schedule_repo import ResidentsScheduleRepo
@@ -87,6 +87,71 @@ class WeekviewService:
         finally:
             db.close()
 
+    def _verify_diet_schema(self, department_id: str) -> None:
+        db = get_session()
+        try:
+            inspector = inspect(db.connection())
+            required = {
+                "department_diet_defaults": {
+                    "department_id": String, "diet_type_id": Integer, "default_count": Integer,
+                },
+                "department_diet_overrides": {
+                    "department_id": String, "diet_type_id": Integer, "day": Integer,
+                    "meal": String, "count": Integer,
+                },
+                "dietary_types": {
+                    "id": Integer, "site_id": String, "name": String, "diet_family": String,
+                    "requirement_key": String, "semantics": String, "default_select": (Boolean, Integer),
+                },
+            }
+            for table, types in required.items():
+                columns = {column["name"]: column for column in inspector.get_columns(table)}
+                if any(name not in columns or not isinstance(columns[name]["type"], kind)
+                       for name, kind in types.items()):
+                    raise WeekviewSchemaError("Diet schema incompatible")
+                if table != "dietary_types" and not any(
+                    fk["constrained_columns"] == ["diet_type_id"]
+                    and fk["referred_table"] == "dietary_types"
+                    and fk["referred_columns"] == ["id"]
+                    for fk in inspector.get_foreign_keys(table)
+                ):
+                    raise WeekviewSchemaError("Diet schema incompatible")
+            for table in ("department_diet_defaults", "department_diet_overrides"):
+                invalid_reference = db.execute(text(
+                    f"SELECT 1 FROM {table} r "
+                    "LEFT JOIN departments d ON d.id=r.department_id "
+                    "LEFT JOIN sites s ON s.id=d.site_id "
+                    "LEFT JOIN dietary_types dt ON dt.id=r.diet_type_id "
+                    "WHERE r.department_id=:department "
+                    "AND (s.tenant_id IS NULL OR dt.id IS NULL OR dt.tenant_id IS NULL "
+                    "OR dt.tenant_id<>s.tenant_id OR dt.site_id IS NULL OR dt.site_id<>d.site_id) LIMIT 1"
+                ), {"department": department_id}).first()
+                if invalid_reference:
+                    raise WeekviewSchemaError("Diet reference incompatible")
+            invalid_semantics = db.execute(text(
+                "SELECT 1 FROM dietary_types "
+                "WHERE site_id = (SELECT site_id FROM departments WHERE id=:department) "
+                "AND semantics IS NOT NULL AND trim(CAST(semantics AS TEXT)) <> '' "
+                "AND lower(trim(CAST(semantics AS TEXT))) NOT IN ('legacy_bucket', 'atomic') LIMIT 1"
+            ), {"department": department_id}).first()
+            if invalid_semantics:
+                raise WeekviewSchemaError("Diet semantics incompatible")
+            for table, column in (
+                ("department_diet_defaults", "default_count"),
+                ("department_diet_overrides", "count"),
+            ):
+                invalid_type = f" OR typeof({column}) <> 'integer'" if db.bind.dialect.name == "sqlite" else ""
+                invalid_count = db.execute(text(
+                    f"SELECT 1 FROM {table} WHERE department_id=:department "
+                    f"AND ({column} IS NULL OR {column} < 0{invalid_type}) LIMIT 1"
+                ), {"department": department_id}).first()
+                if invalid_count:
+                    raise WeekviewSchemaError("Diet counts incompatible")
+        except SQLAlchemyError as exc:
+            raise WeekviewSchemaError("Diet schema incompatible") from exc
+        finally:
+            db.close()
+
     def get_effective_version(self, tenant_id: int | str, year: int, week: int, department_id: str, site_id: str | None = None) -> int:
         try:
             base_version = int(self.repo.get_version(tenant_id, year, week, department_id))
@@ -135,6 +200,7 @@ class WeekviewService:
         with self.repo.schema_verified():
             if department_id:
                 self._verify_residents_schema()
+                self._verify_diet_schema(department_id)
             version = 0 if not department_id else self.get_effective_version(tenant_id, year, week, department_id, site_id)
             payload = self.repo.get_weekview(tenant_id, year, week, department_id, site_id)
         if site_id and isinstance(payload, dict) and not payload.get("site_id"):
@@ -200,6 +266,7 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         with self.repo.schema_verified():
             if department_id:
                 self._verify_residents_schema()
+                self._verify_diet_schema(department_id)
             version = 0 if not department_id else self.get_effective_version(tenant_id, year, week, department_id, site_id)
             etag = self.build_etag(tenant_id, dep, year, week, version)
             if if_none_match and if_none_match == etag:
@@ -433,17 +500,15 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
 
             # Resolve department id for diet defaults
             dept_id = str(summary.get("department_id") or "").strip()
-            diet_defaults: dict[str, int] = {}
             try:
+                diet_defaults: dict[str, int] = {}
                 if dept_id:
                     repo = DietDefaultsRepo()
                     items = repo.list_for_department(dept_id)
                     diet_defaults = {str(it["diet_type_id"]): int(it.get("default_count", 0)) for it in items}
-            except Exception:
-                diet_defaults = {}
 
-            diet_default_select: dict[str, bool] = {}
-            try:
+                diet_default_select: dict[str, bool] = {}
+                diet_names: dict[str, str] = {}
                 if dept_id:
                     site_id_for_defaults = str(payload.get("site_id") or "").strip()
                     if not site_id_for_defaults:
@@ -454,19 +519,18 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
                         finally:
                             db.close()
                     if site_id_for_defaults:
+                        diet_types = DietTypesRepo().list_all(site_id=site_id_for_defaults)
                         diet_default_select = {
                             str(it["id"]): bool(it.get("default_select"))
-                            for it in DietTypesRepo().list_all(site_id=site_id_for_defaults)
+                            for it in diet_types
                         }
-            except Exception:
-                diet_default_select = {}
+                        diet_names = {str(it["id"]): str(it["name"]) for it in diet_types}
 
-            diet_override_counts: dict[tuple[int, str, str], int] = {}
-            try:
+                diet_override_counts: dict[tuple[int, str, str], int] = {}
                 if dept_id:
                     diet_override_counts = DepartmentDietOverridesRepo().get_map_for_department(dept_id)
-            except Exception:
-                diet_override_counts = {}
+            except (SQLAlchemyError, RuntimeError, TypeError, ValueError) as exc:
+                raise WeekviewSchemaError("Diet data unavailable") from exc
 
             # Build explicit mark map from raw marks list if present.
             # Marked semantics:
@@ -555,7 +619,7 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
                         out.append(
                             {
                                 "diet_type_id": dt_id,
-                                "diet_name": dt_id,  # TODO: map id->human name via diet types registry
+                                "diet_name": diet_names[dt_id],
                                 "resident_count": planned_cnt,
                                 "planned_count": planned_cnt,
                                 "base_count": int(default_cnt),

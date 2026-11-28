@@ -19,7 +19,7 @@ def _patch(client, role, path, json=None, extra_headers=None):
 
 
 def _seed_weekview_target(app_session, site_id, department_id):
-    from core.models import Department, Site
+    from core.models import Department, DietaryType, Site
     from core.db import get_session
 
     with app_session.app_context():
@@ -33,7 +33,16 @@ def _seed_weekview_target(app_session, site_id, department_id):
                     name="Weekview Test Department",
                 )
             )
+            diet = DietaryType(
+                tenant_id=1,
+                site_id=site_id,
+                name="Weekview test diet",
+                default_select=False,
+            )
+            db.add(diet)
+            db.flush()
             db.commit()
+            return int(diet.id)
         finally:
             db.close()
 
@@ -130,7 +139,7 @@ def test_validation_errors(client_admin, meal):
 def test_batch_semantics_and_idempotence(client_admin):
     dep = str(uuid.uuid4())
     site = str(uuid.uuid4())
-    _seed_weekview_target(client_admin.application, site, dep)
+    diet_id = _seed_weekview_target(client_admin.application, site, dep)
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
     with client_admin.session_transaction() as sess:
         sess["site_id"] = site
@@ -138,7 +147,7 @@ def test_batch_semantics_and_idempotence(client_admin):
 
     ops = [
         {"day_of_week": 1, "meal": "lunch", "diet_type": "normal", "marked": True},
-        {"day_of_week": 2, "meal": "dinner", "diet_type": "veg", "marked": True},
+        {"day_of_week": 2, "meal": "dinner", "diet_type": str(diet_id), "marked": True},
     ]
     p = {"site_id": site, "department_id": dep, "year": 2025, "week": 45, "operations": ops}
 
@@ -154,7 +163,7 @@ def test_batch_semantics_and_idempotence(client_admin):
     data = _get(client_admin, "viewer", base).get_json()
     dep_summ = data.get("department_summaries")[0]
     marks = {(m["day_of_week"], m["meal"], m["diet_type"]) for m in dep_summ.get("marks", [])}
-    assert (1, "lunch", "normal") in marks and (2, "dinner", "veg") in marks
+    assert (1, "lunch", "normal") in marks and (2, "dinner", str(diet_id)) in marks
 
 
 def test_etag_parser_accepts_hyphenated_department_id_and_rejects_malformed_if_match(app_session):
@@ -168,7 +177,9 @@ def test_etag_parser_accepts_hyphenated_department_id_and_rejects_malformed_if_m
     with app_session.app_context():
         db = get_session()
         try:
-            db.execute(text("INSERT OR REPLACE INTO sites(id, name, version) VALUES(:i,:n,0)"), {"i": site_id, "n": "Example Site"})
+            db.execute(text(
+                "INSERT OR REPLACE INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0)"
+            ), {"i": site_id, "n": "Example Site"})
             db.execute(
                 text(
                     "INSERT OR REPLACE INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',0,0)"

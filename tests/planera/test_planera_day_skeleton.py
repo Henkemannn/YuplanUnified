@@ -2,6 +2,7 @@ import uuid
 from datetime import date
 
 import pytest
+from tests._auth_site_helpers import login_bound_user
 
 
 def _h(role):
@@ -29,6 +30,7 @@ def test_planera_day_api_and_ui_skeleton(client_admin):
         )
         dep_id = department["id"]
 
+    login_bound_user(client_admin, site_id=site_id)
     # Ensure feature flag enabled (add or set True)
     with app.app_context():
         reg = getattr(app, "feature_registry", None)

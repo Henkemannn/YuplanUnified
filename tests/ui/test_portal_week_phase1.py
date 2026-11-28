@@ -1,4 +1,5 @@
 """Department Portal Phase 1 – Read-only Week View Tests"""
+from tests._auth_site_helpers import login_bound_user
 import uuid
 from datetime import date as _date
 
@@ -17,7 +18,7 @@ def _seed_base(app, site_id: str, dep_id: str, year: int, week: int):
         create_all()
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), {"i": site_id, "n": "PortalSite"})
+            db.execute(text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0) ON CONFLICT(id) DO NOTHING"), {"i": site_id, "n": "PortalSite"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',15,0) ON CONFLICT(id) DO NOTHING"), {"i": dep_id, "s": site_id, "n": "Portal Avd"})
             db.commit()
             # Dishes for Monday lunch + dessert + alt2 highlighting
@@ -44,8 +45,10 @@ def test_portal_rbac_allowed_roles(client_admin):
     _enable_weekview(client_admin)
     site_id = str(uuid.uuid4()); dep_id = str(uuid.uuid4()); year, week = 2025, 45
     _seed_base(app, site_id, dep_id, year, week)
+    login_bound_user(client_admin, site_id=site_id)
 
     for role in ["admin", "cook", "unit_portal", "superuser"]:
+        login_bound_user(client_admin, site_id=site_id, role=role, department_id=dep_id if role == "unit_portal" else None)
         r = client_admin.get(f"/portal/week?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=_h(role))
         assert r.status_code == 200, role
 
@@ -55,6 +58,8 @@ def test_portal_rbac_viewer_forbidden(client_admin):
     _enable_weekview(client_admin)
     site_id = str(uuid.uuid4()); dep_id = str(uuid.uuid4()); year, week = 2025, 45
     _seed_base(app, site_id, dep_id, year, week)
+    login_bound_user(client_admin, site_id=site_id)
+    login_bound_user(client_admin, site_id=site_id, role="viewer")
     r = client_admin.get(f"/portal/week?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=_h("viewer"))
     assert r.status_code == 403
 
@@ -64,6 +69,7 @@ def test_portal_basic_content(client_admin):
     _enable_weekview(client_admin)
     site_id = str(uuid.uuid4()); dep_id = str(uuid.uuid4()); year, week = 2025, 46
     _seed_base(app, site_id, dep_id, year, week)
+    login_bound_user(client_admin, site_id=site_id)
     r = client_admin.get(f"/portal/week?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=_h("admin"))
     html = r.get_data(as_text=True)
     assert "Avdelningsportalen" in html
@@ -77,6 +83,7 @@ def test_portal_alt2_badge_visible(client_admin):
     _enable_weekview(client_admin)
     site_id = str(uuid.uuid4()); dep_id = str(uuid.uuid4()); year, week = 2025, 47
     _seed_base(app, site_id, dep_id, year, week)
+    login_bound_user(client_admin, site_id=site_id)
     with client_admin.session_transaction() as sess:
         sess["site_id"] = site_id
     _enable_weekview(client_admin)
@@ -95,6 +102,7 @@ def test_portal_registration_badge(client_admin):
     _enable_weekview(client_admin)
     site_id = str(uuid.uuid4()); dep_id = str(uuid.uuid4()); year, week = 2025, 48
     _seed_base(app, site_id, dep_id, year, week)
+    login_bound_user(client_admin, site_id=site_id)
     # Upsert registration for Monday lunch
     from core.meal_registration_repo import MealRegistrationRepo
     repo = MealRegistrationRepo(); repo.ensure_table_exists()
@@ -110,6 +118,7 @@ def test_portal_diets_render(client_admin):
     _enable_weekview(client_admin)
     site_id = str(uuid.uuid4()); dep_id = str(uuid.uuid4()); year, week = 2025, 49
     _seed_base(app, site_id, dep_id, year, week)
+    login_bound_user(client_admin, site_id=site_id)
     _enable_weekview(client_admin)
     # Simulate diet defaults via marks/residents (simplified by setting counts)
     # Use residents PATCH to set lunch counts (not directly diets, but ensures counts visible)
@@ -131,6 +140,7 @@ def test_portal_regression_other_views_ok(client_admin):
     _enable_weekview(client_admin)
     site_id = str(uuid.uuid4()); dep_id = str(uuid.uuid4()); year, week = 2025, 50
     _seed_base(app, site_id, dep_id, year, week)
+    login_bound_user(client_admin, site_id=site_id)
     r_portal = client_admin.get(f"/portal/week?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=_h("admin"))
     assert r_portal.status_code == 200
     r_weekview = client_admin.get(f"/ui/weekview?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=_h("admin"))
@@ -153,11 +163,12 @@ def test_portal_week_renders_days_even_without_menu(client_admin):
         try:
             site_id = str(uuid.uuid4()); dep_id = str(uuid.uuid4())
             year, week = 2025, 5
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0)"), {"i": site_id, "n": "PortalSite"})
+            db.execute(text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0)"), {"i": site_id, "n": "PortalSite"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',12,0)"), {"i": dep_id, "s": site_id, "n": "Portal Avd"})
             db.commit()
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
     # Hit legacy route (should render unified template with synthetic days fallback)
     r = client_admin.get(f"/portal/week?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=_h("admin"))
     assert r.status_code == 200

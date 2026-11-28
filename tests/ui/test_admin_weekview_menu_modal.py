@@ -1,3 +1,4 @@
+from tests._auth_site_helpers import login_bound_user
 from sqlalchemy import text
 
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
@@ -7,9 +8,9 @@ def _seed_basics():
     from core.db import get_session
     conn = get_session()
     try:
-        site = conn.execute(text("SELECT id FROM sites WHERE id='00000000-0000-0000-0000-000000000000'"))
+        site = conn.execute(text("SELECT id FROM sites WHERE id='891bbe11-9337-5276-8f73-d980bf688f69'"))
         if not site.fetchone():
-            conn.execute(text("INSERT INTO sites (id, name) VALUES ('00000000-0000-0000-0000-000000000000', 'Test Site')"))
+            conn.execute(text("INSERT INTO sites (id, tenant_id, name) VALUES ('891bbe11-9337-5276-8f73-d980bf688f69', 1, 'Test Site')"))
         conn.commit()
     finally:
         conn.close()
@@ -18,7 +19,8 @@ def _seed_basics():
 def test_admin_weekview_has_menu_modal_markup(app_session):
     client = app_session.test_client()
     _seed_basics()
-    site_id = "00000000-0000-0000-0000-000000000000"
+    site_id = "891bbe11-9337-5276-8f73-d980bf688f69"
+    login_bound_user(client, site_id=site_id)
     # Use explicit year/week to avoid redirect
     year = 2025
     week = 49

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import os
+import sqlite3
+from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import create_engine, event, text
 
 from tests.migrations.test_residents_schedule_migration import _upgrade
@@ -52,6 +56,33 @@ def _existing_data_roundtrip(url, monkeypatch):
 def test_existing_meal_registrations_survive_upgrade(tmp_path, monkeypatch):
     url = f"sqlite:///{(tmp_path / 'legacy-meals.db').as_posix()}"
     _existing_data_roundtrip(url, monkeypatch)
+
+
+@pytest.mark.parametrize(
+    ("revision", "target", "message"),
+    [
+        ("0056_residents_schedule_schema", "0055_weekview_schema", "cannot be downgraded"),
+        ("head", "0056_residents_schedule_schema", "cannot be downgraded"),
+    ],
+)
+def test_blocked_downgrade_preserves_schema_and_data(tmp_path, monkeypatch, revision, target, message):
+    path = tmp_path / "downgrade.db"
+    url = f"sqlite:///{path.as_posix()}"
+    _upgrade(monkeypatch, url, revision)
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "INSERT INTO department_residents_schedule(department_id, week, weekday, meal, count) "
+            "VALUES ('synthetic', NULL, 1, 'lunch', 4)"
+        )
+        conn.commit()
+        before = list(conn.iterdump())
+
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    config.set_main_option("sqlalchemy.url", url)
+    with pytest.raises(RuntimeError, match=message):
+        command.downgrade(config, target)
+    with sqlite3.connect(path) as conn:
+        assert list(conn.iterdump()) == before
 
 
 def test_missing_meal_unique_key_is_rejected_without_data_loss(tmp_path, monkeypatch):

@@ -1,3 +1,4 @@
+from tests._auth_site_helpers import login_bound_user
 from datetime import date as _date
 import uuid
 from sqlalchemy import text
@@ -13,7 +14,7 @@ def _seed_site_and_department():
         dep_id = "00000000-0000-0000-0000-00000000A001"
         site = conn.execute(text("SELECT id FROM sites WHERE id=:id"), {"id": site_id}).fetchone()
         if not site:
-            conn.execute(text("INSERT INTO sites (id, name) VALUES (:id, 'Test Site A')"), {"id": site_id})
+            conn.execute(text("INSERT INTO sites (id, tenant_id, name) VALUES (:id, 1, 'Test Site A')"), {"id": site_id})
         dep = conn.execute(text("SELECT id FROM departments WHERE id=:id"), {"id": dep_id}).fetchone()
         if not dep:
             conn.execute(
@@ -31,6 +32,7 @@ def _seed_site_and_department():
 def test_portal_weeks_overview_grid_and_links(app_session):
     client = app_session.test_client()
     site_id, dep_id = _seed_site_and_department()
+    login_bound_user(client, site_id=site_id)
     private_note = "PRIVATE_ADMIN_NOTE_DO_NOT_EXPOSE"
 
     # Legacy path
@@ -65,6 +67,7 @@ def test_week_page_has_link_to_weeks_overview(app_session):
 
     client = app_session.test_client()
     site_id, dep_id = _seed_site_and_department()
+    login_bound_user(client, site_id=site_id)
 
     # Ensure a menu exists for current week so the page renders with content
     today = _date.today()

@@ -16,6 +16,14 @@ def _seed(db):
     db.execute(text("CREATE TABLE IF NOT EXISTS weekview_versions (tenant_id TEXT NOT NULL, department_id TEXT NOT NULL, year INTEGER NOT NULL, week INTEGER NOT NULL, version INTEGER NOT NULL DEFAULT 0, UNIQUE (tenant_id, department_id, year, week))"))
     db.execute(text("CREATE TABLE IF NOT EXISTS weekview_registrations (tenant_id TEXT NOT NULL, department_id TEXT NOT NULL, year INTEGER NOT NULL, week INTEGER NOT NULL, day_of_week INTEGER NOT NULL, meal TEXT NOT NULL, diet_type TEXT NOT NULL, marked INTEGER NOT NULL DEFAULT 0, UNIQUE (tenant_id, department_id, year, week, day_of_week, meal, diet_type))"))
     db.commit()
+    from core.admin_repo import DietTypesRepo
+
+    return DietTypesRepo().create(
+        site_id="s1",
+        tenant_id=1,
+        name="Gluten",
+        semantics="atomic",
+    )
 
 
 def test_toggle_mark_respects_active_site_and_persists():
@@ -23,7 +31,7 @@ def test_toggle_mark_respects_active_site_and_persists():
     with app.app_context():
         db = get_session()
         try:
-            _seed(db)
+            diet_id = _seed(db)
         finally:
             db.close()
     client: FlaskClient = app.test_client()
@@ -52,7 +60,7 @@ def test_toggle_mark_respects_active_site_and_persists():
         "department_id": "d1",
         "meal": "Lunch",
         "weekday_abbr": "Mån",
-        "diet_type_id": "Gluten",
+        "diet_type_id": str(diet_id),
         "marked": True,
     }
     r_mark = client.post("/api/weekview/specialdiets/mark", json=payload, headers={"If-Match": etag, "X-User-Role": "admin", "X-Tenant-Id": "1"})
@@ -62,7 +70,7 @@ def test_toggle_mark_respects_active_site_and_persists():
     # Verify row persisted
     db = get_session()
     try:
-        row = db.execute(text("SELECT marked FROM weekview_registrations WHERE tenant_id='1' AND department_id='d1' AND year=2025 AND week=10 AND day_of_week=1 AND meal='lunch' AND diet_type='Gluten'"))
+        row = db.execute(text("SELECT marked FROM weekview_registrations WHERE tenant_id='1' AND department_id='d1' AND year=2025 AND week=10 AND day_of_week=1 AND meal='lunch' AND diet_type=:diet_type"), {"diet_type": str(diet_id)})
         rec = row.fetchone()
         assert rec and int(rec[0]) == 1
     finally:
@@ -74,7 +82,7 @@ def test_toggle_mark_blocked_when_wrong_site():
     with app.app_context():
         db = get_session()
         try:
-            _seed(db)
+            diet_id = _seed(db)
         finally:
             db.close()
     client: FlaskClient = app.test_client()
@@ -101,7 +109,7 @@ def test_toggle_mark_blocked_when_wrong_site():
         "department_id": "d2",
         "meal": "Lunch",
         "weekday_abbr": "Mån",
-        "diet_type_id": "Gluten",
+        "diet_type_id": str(diet_id),
         "marked": True,
     }
     r_mark = client.post("/api/weekview/specialdiets/mark", json=payload, headers={"If-Match": etag, "X-User-Role": "admin", "X-Tenant-Id": "1"})
@@ -113,7 +121,7 @@ def test_toggle_mark_rejects_scope_database_failure(monkeypatch):
     with app.app_context():
         db = get_session()
         try:
-            _seed(db)
+            diet_id = _seed(db)
             db.execute(
                 text(
                     "INSERT OR IGNORE INTO weekview_versions"
@@ -148,7 +156,7 @@ def test_toggle_mark_rejects_scope_database_failure(monkeypatch):
             "department_id": "d1",
             "meal": "Lunch",
             "weekday_abbr": "Mån",
-            "diet_type_id": "Gluten",
+            "diet_type_id": str(diet_id),
             "marked": True,
         },
         headers={"If-Match": etag, "X-User-Role": "admin", "X-Tenant-Id": "1"},
@@ -162,7 +170,7 @@ def test_toggle_mark_rejects_site_owned_by_another_tenant():
     with app.app_context():
         db = get_session()
         try:
-            _seed(db)
+            diet_id = _seed(db)
             db.execute(text("UPDATE sites SET tenant_id=2 WHERE id='s2'"))
             db.execute(
                 text(
@@ -193,7 +201,7 @@ def test_toggle_mark_rejects_site_owned_by_another_tenant():
             "department_id": "d2",
             "meal": "Lunch",
             "weekday_abbr": "Mån",
-            "diet_type_id": "Gluten",
+            "diet_type_id": str(diet_id),
             "marked": True,
         },
         headers={"If-Match": etag, "X-User-Role": "admin", "X-Tenant-Id": "1"},

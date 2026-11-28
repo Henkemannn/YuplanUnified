@@ -41,9 +41,15 @@ def _seed_bulk():
 
 
 def test_bulk_mark_produced_updates_weekview(app_session):
+    from tests._auth_site_helpers import login_bound_user
+
     client = app_session.test_client()
     seeded = _seed_bulk()
     site_id = seeded["site_id"]
+    login_bound_user(client, site_id=site_id)
+    csrf_token = "bulk-mark-test-token"
+    with client.session_transaction() as session:
+        session["CSRF_TOKEN"] = csrf_token
     today = _date.today()
     year = today.year
     week = today.isocalendar()[1]
@@ -55,7 +61,11 @@ def test_bulk_mark_produced_updates_weekview(app_session):
         "meal": "lunch",
         "selected_diet_type_ids": seeded["diet_ids"],
     }
-    rv = client.post("/api/planering/mark_produced_special", json=payload, headers=HEADERS)
+    rv = client.post(
+        "/api/planering/mark_produced_special",
+        json=payload,
+        headers={**HEADERS, "X-CSRF-Token": csrf_token},
+    )
     assert rv.status_code == 200
     data = rv.get_json()
     assert data and data.get("ok") is True
@@ -63,14 +73,39 @@ def test_bulk_mark_produced_updates_weekview(app_session):
     from core.db import get_session
     db = get_session()
     try:
-        rows = db.execute(text(
-            """
-            SELECT COUNT(*) FROM weekview_registrations
-            WHERE tenant_id=:tid AND year=:y AND week=:w AND day_of_week=:d AND meal=:m AND marked=1
-            """
-        ), {"tid": "1", "y": year, "w": week, "d": 1, "m": "lunch"}).fetchone()
-        count = int(rows[0] or 0) if rows else 0
+        rows = db.execute(
+            text(
+                """
+                SELECT wr.department_id, wr.diet_type
+                FROM weekview_registrations AS wr
+                JOIN departments AS d
+                  ON d.id=wr.department_id AND d.site_id=:site_id
+                WHERE wr.tenant_id=:tid AND wr.year=:y AND wr.week=:w
+                  AND wr.day_of_week=:d AND wr.meal=:m AND wr.marked=1
+                  AND wr.department_id IN (:dep_a, :dep_b)
+                  AND wr.diet_type IN (:diet_a, :diet_b)
+                """
+            ),
+            {
+                "site_id": site_id,
+                "tid": "1",
+                "y": year,
+                "w": week,
+                "d": 1,
+                "m": "lunch",
+                "dep_a": seeded["deps"][0],
+                "dep_b": seeded["deps"][1],
+                "diet_a": seeded["diet_ids"][0],
+                "diet_b": seeded["diet_ids"][1],
+            },
+        ).fetchall()
+        persisted_marks = {(str(row[0]), str(row[1])) for row in rows}
     finally:
         db.close()
-    # 2 departments x 2 diets = 4 marks
-    assert count == 4
+    expected_marks = {
+        (department_id, diet_id)
+        for department_id in seeded["deps"]
+        for diet_id in seeded["diet_ids"]
+    }
+    assert len(rows) == 4
+    assert persisted_marks == expected_marks

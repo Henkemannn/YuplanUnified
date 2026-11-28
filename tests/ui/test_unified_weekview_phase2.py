@@ -323,7 +323,7 @@ def test_weekview_ui_displays_registration_badges(client_admin):
     with app.app_context():
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Test Site 5"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',20,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "Test Dept 5"})
@@ -339,7 +339,10 @@ def test_weekview_ui_displays_registration_badges(client_admin):
     # Register lunch for Monday
     repo = MealRegistrationRepo()
     repo.upsert_registration(1, "site5", "dept5", monday.strftime("%Y-%m-%d"), "lunch", True)
-    
+
+    with client_admin.session_transaction() as session:
+        session["site_id"] = site_id
+
     # GET weekview
     resp = client_admin.get(
         f"/ui/weekview?site_id=site5&department_id=dept5&year={year}&week={week}",
@@ -366,7 +369,7 @@ def test_weekview_registration_modal_present(client_admin):
     with app.app_context():
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Test Site 6"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',20,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "Test Dept 6"})
@@ -377,7 +380,10 @@ def test_weekview_registration_modal_present(client_admin):
     today = date.today()
     iso_cal = today.isocalendar()
     year, week = iso_cal[0], iso_cal[1]
-    
+
+    with client_admin.session_transaction() as session:
+        session["site_id"] = site_id
+
     resp = client_admin.get(
         f"/ui/weekview?site_id=site6&department_id=dept6&year={year}&week={week}",
         headers=_h("admin")

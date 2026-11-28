@@ -5,23 +5,35 @@ HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 
 def _seed(db, site_id: str, dep_id: str, date_str: str):
+    from core.models import DietaryType
+
     # Basic site/department
     db.execute(text("CREATE TABLE IF NOT EXISTS sites(id TEXT PRIMARY KEY, name TEXT)"))
     db.execute(text("CREATE TABLE IF NOT EXISTS departments(id TEXT PRIMARY KEY, site_id TEXT, name TEXT, resident_count_mode TEXT NOT NULL DEFAULT 'manual')"))
     db.execute(text("INSERT OR REPLACE INTO sites(id, name) VALUES(:i,'Reg Site')"), {"i": site_id})
     db.execute(text("INSERT OR REPLACE INTO departments(id, site_id, name, resident_count_mode) VALUES(:i,:s,'Reg Dept','manual')"), {"i": dep_id, "s": site_id})
-    # Diet types
-    db.execute(text("CREATE TABLE IF NOT EXISTS diet_types(id TEXT PRIMARY KEY, name TEXT, is_default INTEGER)"))
-    db.execute(text("INSERT OR REPLACE INTO diet_types(id, name, is_default) VALUES('gluten','Glutenfri',0)"))
-    db.execute(text("INSERT OR REPLACE INTO diet_types(id, name, is_default) VALUES('laktos','Laktosfri',0)"))
-    db.execute(text("INSERT OR REPLACE INTO diet_types(id, name, is_default) VALUES('timbal','Timbal',1)"))
+    diets = [
+        DietaryType(tenant_id=1, site_id=site_id, name="Glutenfri", default_select=False),
+        DietaryType(tenant_id=1, site_id=site_id, name="Laktosfri", default_select=False),
+        DietaryType(tenant_id=1, site_id=site_id, name="Timbal", default_select=True),
+    ]
+    db.add_all(diets)
+    db.flush()
     # Residents count
     db.execute(text("CREATE TABLE IF NOT EXISTS residents_counts(site_id TEXT, department_id TEXT, date TEXT, lunch INTEGER, dinner INTEGER)"))
     db.execute(text("INSERT OR REPLACE INTO residents_counts(site_id, department_id, date, lunch, dinner) VALUES(:s,:d,:dt,10,8)"), {"s": site_id, "d": dep_id, "dt": date_str})
     # Diet registrations for lunch
     db.execute(text("CREATE TABLE IF NOT EXISTS diet_registrations(site_id TEXT, department_id TEXT, date TEXT, meal TEXT, diet_type_id TEXT, count INTEGER)"))
-    db.execute(text("INSERT OR REPLACE INTO diet_registrations(site_id, department_id, date, meal, diet_type_id, count) VALUES(:s,:d,:dt,'lunch','gluten',2)"), {"s": site_id, "d": dep_id, "dt": date_str})
-    db.execute(text("INSERT OR REPLACE INTO diet_registrations(site_id, department_id, date, meal, diet_type_id, count) VALUES(:s,:d,:dt,'lunch','laktos',1)"), {"s": site_id, "d": dep_id, "dt": date_str})
+    db.execute(text(
+        "INSERT OR REPLACE INTO diet_registrations"
+        "(site_id, department_id, date, meal, diet_type_id, count) "
+        "VALUES(:s,:d,:dt,'lunch',:diet_id,2)"
+    ), {"s": site_id, "d": dep_id, "dt": date_str, "diet_id": str(diets[0].id)})
+    db.execute(text(
+        "INSERT OR REPLACE INTO diet_registrations"
+        "(site_id, department_id, date, meal, diet_type_id, count) "
+        "VALUES(:s,:d,:dt,'lunch',:diet_id,1)"
+    ), {"s": site_id, "d": dep_id, "dt": date_str, "diet_id": str(diets[1].id)})
     db.commit()
 
 

@@ -1,3 +1,4 @@
+from tests._auth_site_helpers import login_bound_user
 import pytest
 from sqlalchemy import text
 
@@ -25,12 +26,12 @@ def _seed_basics():
     from core.db import get_session
     conn = get_session()
     try:
-        site = conn.execute(text("SELECT id FROM sites WHERE id='00000000-0000-0000-0000-000000000000'"))
+        site = conn.execute(text("SELECT id FROM sites WHERE id='b308edac-0418-5f28-bc16-994c8220758a'"))
         if not site.fetchone():
-            conn.execute(text("INSERT INTO sites (id, name) VALUES ('00000000-0000-0000-0000-000000000000', 'Test Site')"))
-        dep = conn.execute(text("SELECT id FROM departments WHERE id='00000000-0000-0000-0000-000000000001'"))
+            conn.execute(text("INSERT INTO sites (id, tenant_id, name) VALUES ('b308edac-0418-5f28-bc16-994c8220758a', 1, 'Test Site')"))
+        dep = conn.execute(text("SELECT id FROM departments WHERE id='cab28fa2-6fe1-5d68-b273-fd9143994270'"))
         if not dep.fetchone():
-            conn.execute(text("INSERT INTO departments (id, site_id, name, resident_count_mode, resident_count_fixed) VALUES ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000000', 'Avd Alpha', 'fixed', 5)"))
+            conn.execute(text("INSERT INTO departments (id, site_id, name, resident_count_mode, resident_count_fixed) VALUES ('cab28fa2-6fe1-5d68-b273-fd9143994270', 'b308edac-0418-5f28-bc16-994c8220758a', 'Avd Alpha', 'fixed', 5)"))
         conn.commit()
     finally:
         conn.close()
@@ -39,7 +40,8 @@ def _seed_basics():
 def test_kitchen_week_has_shared_menu_modal(app_session):
     client = app_session.test_client()
     _seed_basics()
-    site_id = "00000000-0000-0000-0000-000000000000"
+    site_id = "b308edac-0418-5f28-bc16-994c8220758a"
+    login_bound_user(client, site_id=site_id)
     rv = client.get(f"/ui/kitchen/week?site_id={site_id}", headers=HEADERS)
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")

@@ -42,7 +42,7 @@ def test_0044_upgrade_downgrade_and_reupgrade(tmp_path: Path, monkeypatch) -> No
                 text("INSERT INTO menus(id, tenant_id, site_id, week, year, status) VALUES (1, 1, 'site-demand', 16, 2026, 'published')")
             )
 
-        command.upgrade(_alembic_cfg(db_url), "head")
+        command.upgrade(_alembic_cfg(db_url), "0044_add_department_menu_row_demands")
 
         inspector = inspect(engine)
         assert "department_menu_row_demands" in inspector.get_table_names()
@@ -140,7 +140,7 @@ def test_0044_upgrade_downgrade_and_reupgrade(tmp_path: Path, monkeypatch) -> No
         assert "department_menu_row_demands" not in inspector.get_table_names()
         assert "commun_builder_publication_revisions" in inspector.get_table_names()
 
-        command.upgrade(_alembic_cfg(db_url), "head")
+        command.upgrade(_alembic_cfg(db_url), "0044_add_department_menu_row_demands")
         inspector = inspect(engine)
         assert "department_menu_row_demands" in inspector.get_table_names()
     finally:

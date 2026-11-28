@@ -97,7 +97,7 @@ def _seed_diet_types(db):
     # (No-op: table definition above includes site_id)
 
 
-def _seed_diet_defaults(db):
+def _seed_diet_defaults(db, gluten_id: int, lactose_id: int):
     db.execute(text(
         """
         CREATE TABLE IF NOT EXISTS department_diet_defaults (
@@ -109,12 +109,23 @@ def _seed_diet_defaults(db):
         )
         """
     ))
-    # For Avd A: 1 Gluten + 1 Laktos defaults (names align with marks)
-    db.execute(text("INSERT OR REPLACE INTO department_diet_defaults(department_id, diet_type_id, default_count) VALUES('dep-A','Gluten',1)"))
-    db.execute(text("INSERT OR REPLACE INTO department_diet_defaults(department_id, diet_type_id, default_count) VALUES('dep-A','Laktos',1)"))
+    db.execute(
+        text(
+            "INSERT OR REPLACE INTO department_diet_defaults"
+            "(department_id, diet_type_id, default_count) VALUES('dep-A',:diet_id,1)"
+        ),
+        {"diet_id": str(gluten_id)},
+    )
+    db.execute(
+        text(
+            "INSERT OR REPLACE INTO department_diet_defaults"
+            "(department_id, diet_type_id, default_count) VALUES('dep-A',:diet_id,1)"
+        ),
+        {"diet_id": str(lactose_id)},
+    )
 
 
-def _seed_weekview(db, year: int, week: int):
+def _seed_weekview(db, year: int, week: int, gluten_id: int, lactose_id: int):
     db.execute(text("""
         CREATE TABLE IF NOT EXISTS weekview_registrations (
           tenant_id TEXT NOT NULL,
@@ -158,10 +169,10 @@ def _seed_weekview(db, year: int, week: int):
             count_b = 6 if (dow == 3 and meal == "lunch") else 8
             db.execute(text("INSERT OR REPLACE INTO weekview_residents_count(tenant_id,department_id,year,week,day_of_week,meal,count) VALUES('1','dep-B',:y,:w,:d,:m,:c)"), {"y": year, "w": week, "d": dow, "m": meal, "c": count_b})
     # Specials for Avd A
-    db.execute(text("INSERT OR REPLACE INTO weekview_registrations(tenant_id,department_id,year,week,day_of_week,meal,diet_type,marked) VALUES('1','dep-A',:y,:w,1,'lunch','Gluten',1)"), {"y": year, "w": week})
-    db.execute(text("INSERT OR REPLACE INTO weekview_registrations(tenant_id,department_id,year,week,day_of_week,meal,diet_type,marked) VALUES('1','dep-A',:y,:w,1,'lunch','Laktos',1)"), {"y": year, "w": week})
+    db.execute(text("INSERT OR REPLACE INTO weekview_registrations(tenant_id,department_id,year,week,day_of_week,meal,diet_type,marked) VALUES('1','dep-A',:y,:w,1,'lunch',:diet,1)"), {"y": year, "w": week, "diet": str(gluten_id)})
+    db.execute(text("INSERT OR REPLACE INTO weekview_registrations(tenant_id,department_id,year,week,day_of_week,meal,diet_type,marked) VALUES('1','dep-A',:y,:w,1,'lunch',:diet,1)"), {"y": year, "w": week, "diet": str(lactose_id)})
     db.execute(text("INSERT OR REPLACE INTO weekview_registrations(tenant_id,department_id,year,week,day_of_week,meal,diet_type,marked) VALUES('1','dep-A',:y,:w,1,'lunch','Normalkost',1)"), {"y": year, "w": week})
-    db.execute(text("INSERT OR REPLACE INTO weekview_registrations(tenant_id,department_id,year,week,day_of_week,meal,diet_type,marked) VALUES('1','dep-A',:y,:w,2,'lunch','Gluten',1)"), {"y": year, "w": week})
+    db.execute(text("INSERT OR REPLACE INTO weekview_registrations(tenant_id,department_id,year,week,day_of_week,meal,diet_type,marked) VALUES('1','dep-A',:y,:w,2,'lunch',:diet,1)"), {"y": year, "w": week, "diet": str(gluten_id)})
     # Avd B Sunday dinner 0 residents
     db.execute(text("UPDATE weekview_residents_count SET count=0 WHERE tenant_id='1' AND department_id='dep-B' AND year=:y AND week=:w AND day_of_week=7 AND meal='dinner'"), {"y": year, "w": week})
 
@@ -171,10 +182,22 @@ def test_seeded_weekly_diets_report(client):
     from core.db import get_session
     db = get_session()
     try:
-        _seed_site_and_departments(db)
-        _seed_diet_types(db)
-        _seed_weekview(db, year, week)
-        _seed_diet_defaults(db)
+        site_id = _seed_site_and_departments(db)
+        db.commit()
+    finally:
+        db.close()
+    from core.admin_repo import DietTypesRepo
+
+    gluten_id = DietTypesRepo().create(
+        site_id=site_id, tenant_id=1, name="Gluten", semantics="atomic"
+    )
+    lactose_id = DietTypesRepo().create(
+        site_id=site_id, tenant_id=1, name="Laktos", semantics="atomic"
+    )
+    db = get_session()
+    try:
+        _seed_weekview(db, year, week, gluten_id, lactose_id)
+        _seed_diet_defaults(db, gluten_id, lactose_id)
         db.commit()
     finally:
         db.close()

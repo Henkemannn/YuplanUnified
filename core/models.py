@@ -12,6 +12,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Text,
@@ -83,8 +84,8 @@ Table(
 Table(
     "department_diet_defaults",
     Base.metadata,
-    Column("department_id", Text, primary_key=True),
-    Column("diet_type_id", Text, primary_key=True),
+    Column("department_id", Text, ForeignKey("departments.id"), primary_key=True),
+    Column("diet_type_id", Integer, ForeignKey("dietary_types.id"), primary_key=True),
     Column("default_count", Integer, nullable=False, server_default=text("0")),
     Column("always_mark", Integer, nullable=False, server_default=text("0")),
 )
@@ -92,12 +93,43 @@ Table(
 Table(
     "department_diet_overrides",
     Base.metadata,
-    Column("department_id", Text, primary_key=True),
-    Column("diet_type_id", Text, primary_key=True),
+    Column("department_id", Text, ForeignKey("departments.id"), primary_key=True),
+    Column("diet_type_id", Integer, ForeignKey("dietary_types.id"), primary_key=True),
     Column("day", Integer, primary_key=True),
     Column("meal", Text, primary_key=True),
     Column("count", Integer, nullable=False, server_default=text("0")),
     Column("updated_at", DateTime),
+)
+
+Table(
+    "normal_exclusions",
+    Base.metadata,
+    Column("tenant_id", Integer, nullable=False),
+    Column("site_id", String(64), nullable=False),
+    Column("year", Integer, nullable=False),
+    Column("week", Integer, nullable=False),
+    Column("day_index", Integer, nullable=False),
+    Column("meal", String, nullable=False),
+    Column("alt", String, nullable=False),
+    Column("diet_type_id", Integer, nullable=False),
+    ForeignKeyConstraint(
+        ["tenant_id", "site_id"],
+        ["sites.tenant_id", "sites.id"],
+        name="fk_normal_exclusions_site_tenant",
+        ondelete="RESTRICT",
+        onupdate="RESTRICT",
+    ),
+    ForeignKeyConstraint(
+        ["tenant_id", "site_id", "diet_type_id"],
+        ["dietary_types.tenant_id", "dietary_types.site_id", "dietary_types.id"],
+        name="fk_normal_exclusions_diet_scope",
+        ondelete="RESTRICT",
+        onupdate="RESTRICT",
+    ),
+    UniqueConstraint(
+        "tenant_id", "site_id", "year", "week", "day_index", "meal", "alt", "diet_type_id",
+        name="uq_normal_exclusions_scope",
+    ),
 )
 
 Table(
@@ -243,6 +275,9 @@ class Unit(Base):
 
 class Site(Base):
     __tablename__ = "sites"
+    __table_args__ = (
+        Index("uq_sites_tenant_id_id", "tenant_id", "id", unique=True),
+    )
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(120))
     tenant_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -815,6 +850,9 @@ class MenuOverride(Base):
 # --- Diets & Attendance ---
 class DietaryType(Base):
     __tablename__ = "dietary_types"
+    __table_args__ = (
+        Index("uq_dietary_types_tenant_site_id", "tenant_id", "site_id", "id", unique=True),
+    )
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
     site_id: Mapped[str | None] = mapped_column(String(64), nullable=True)

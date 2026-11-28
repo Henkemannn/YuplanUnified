@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
 from sqlalchemy import text
 
-from core import admin_repo as admin_repo_module
 from core.admin_repo import DepartmentDietOverridesRepo, DepartmentsRepo, DietTypesRepo, SitesRepo
 from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
 from core.department_requirement_group_weekday_overrides_repo import DepartmentRequirementGroupWeekdayOverridesRepo
@@ -24,6 +24,39 @@ def _canonical_diet_id(site_id: str, name: str, *, default_select: bool) -> int:
         row = next(row for row in DietTypesRepo().list_all(site_id=site_id) if row["name"] == name)
     assert bool(row["default_select"]) is default_select
     return int(row["id"])
+
+
+def test_admin_diet_defaults_rejects_stale_form(app_session, client_admin):
+    site, _ = SitesRepo().create_site(f"Stale diet form site {uuid.uuid4()}")
+    departments = DepartmentsRepo()
+    dep, initial_version = departments.create_department(
+        site_id=site["id"], name="Stale diet form", resident_count_mode="fixed", resident_count_fixed=10
+    )
+    diet_id = _canonical_diet_id(site["id"], "Glutenfri", default_select=False)
+    current_version = departments.upsert_department_diet_defaults(
+        dep["id"], initial_version, [{"diet_type_id": str(diet_id), "default_count": 2}]
+    )
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+
+    response = client_admin.post(
+        f"/ui/admin/departments/{dep['id']}/edit/diets",
+        headers=_h("admin"),
+        data={"version": str(initial_version), f"diet_default_{diet_id}": "7"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "Avdelningen har ändrats av någon annan" in response.get_data(as_text=True)
+    assert departments.get_version(dep["id"]) == current_version
+    db = get_session()
+    try:
+        assert db.execute(
+            text("SELECT default_count FROM department_diet_defaults WHERE department_id=:dep AND diet_type_id=:diet"),
+            {"dep": dep["id"], "diet": str(diet_id)},
+        ).scalar_one() == 2
+    finally:
+        db.close()
 
 
 def test_admin_diet_overrides_save_diff_only_and_reset(app_session, client_admin):
@@ -111,27 +144,20 @@ def test_admin_diet_overrides_get_accepts_explicit_site_id_fallback(app_session,
     assert int(data_get.get("base_count") or 0) == 2
 
 
-def test_department_diet_overrides_repo_tolerates_missing_table(app_session, monkeypatch):
-    db = get_session()
-    try:
-        db.execute(text("DROP TABLE IF EXISTS department_diet_overrides"))
-        db.commit()
-    finally:
-        db.close()
+def test_department_diet_overrides_repo_rejects_missing_table(tmp_path):
+    from core.db import init_engine
 
-    monkeypatch.setattr(
-        admin_repo_module,
-        "_ensure_department_diet_overrides_table",
-        lambda _db: None,
-    )
+    init_engine(f"sqlite:///{(tmp_path / 'missing-diet-overrides.db').as_posix()}", force=True)
 
     repo = DepartmentDietOverridesRepo()
-    assert repo.list_for_department_diet("dept-x", "35") == []
-    repo.replace_for_department_diet(
-        dept_id="dept-x",
-        diet_type_id="35",
-        items=[{"day": 1, "meal": "lunch", "count": 3}],
-    )
+    with pytest.raises(RuntimeError, match="Missing dietary reference schema"):
+        repo.list_for_department_diet("dept-x", "35")
+    with pytest.raises(RuntimeError, match="Missing dietary reference schema"):
+        repo.replace_for_department_diet(
+            dept_id="dept-x",
+            diet_type_id="35",
+            items=[{"day": 1, "meal": "lunch", "count": 3}],
+        )
 
 
 def test_edit_form_marks_diet_override_button_when_overrides_exist(app_session, client_admin):

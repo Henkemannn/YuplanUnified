@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from pathlib import Path
 from contextvars import ContextVar
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -24,6 +25,153 @@ _active_transaction: ContextVar[tuple[str, sqlite3.Connection] | None] = Context
     default=None,
 )
 
+class BuilderSchemaError(RuntimeError):
+    pass
+
+
+_REQUIRED_COLUMNS = {
+    "builder_components": "component_id canonical_name is_active default_uom tags_json categories_json primary_recipe_id created_at",
+    "builder_component_aliases": "alias_id component_id alias_text alias_norm source confidence created_at",
+    "component_details": "component_id recipe_ingredients_text recipe_ingredient_rows_json recipe_ingredients_text_intent tags_json long_description_text method_text method_notes calculation_yield calculation_cost calculation_notes calculation_rows_json allergens_json allergen_notes updated_at",
+    "builder_compositions": "composition_id composition_name library_group use_custom_menu_name menu_name created_at",
+    "builder_dish_categories": "category_id tenant_id site_id display_name name_norm created_at",
+    "builder_object_scopes": "object_type object_id tenant_id owner_scope owner_site_id owner_user_id visibility source_object_id created_at updated_at",
+    "builder_review_idempotency": "idempotency_key tenant_id site_id menu_id menu_detail_id payload_hash composition_id created_at",
+    "builder_composition_components": "composition_id component_id component_name role sort_order",
+    "builder_composition_aliases": "alias_id composition_id alias_text alias_norm source confidence created_at",
+    "builder_menus": "menu_id title site_id week_key version status created_at",
+    "builder_menu_rows": "menu_detail_id menu_id day meal_slot composition_ref_type composition_id unresolved_text note sort_order display_label row_kind selection_group_id created_at",
+    "builder_import_sessions": "session_id source_name import_type status total_rows detected_dishes detected_components ignored_rows pending_review_count published_count created_at updated_at source_tenant_id source_site_id source_menu_id source_menu_detail_id",
+    "builder_import_session_items": "item_id session_id item_order raw_text cleaned_name item_type selected item_status classification reason components_json category_hint hints_json created_at updated_at",
+}
+_REQUIRED_PRIMARY_KEYS = {
+    "builder_components": ("component_id",),
+    "builder_component_aliases": ("alias_id",),
+    "component_details": ("component_id",),
+    "builder_compositions": ("composition_id",),
+    "builder_dish_categories": ("category_id",),
+    "builder_object_scopes": ("object_type", "object_id"),
+    "builder_review_idempotency": ("idempotency_key",),
+    "builder_composition_components": ("composition_id", "component_id", "sort_order"),
+    "builder_composition_aliases": ("alias_id",),
+    "builder_menus": ("menu_id",),
+    "builder_menu_rows": ("menu_detail_id",),
+    "builder_import_sessions": ("session_id",),
+    "builder_import_session_items": ("item_id",),
+}
+_INTEGER_COLUMNS = {
+    "is_active", "recipe_ingredients_text_intent", "use_custom_menu_name", "tenant_id",
+    "owner_user_id", "sort_order", "version", "total_rows", "detected_dishes",
+    "detected_components", "ignored_rows", "pending_review_count", "published_count",
+    "source_tenant_id", "item_order", "selected",
+}
+_REQUIRED_NOT_NULL = {
+    "builder_components": "canonical_name is_active tags_json categories_json created_at",
+    "builder_component_aliases": "component_id alias_text alias_norm source created_at",
+    "component_details": "recipe_ingredients_text recipe_ingredient_rows_json recipe_ingredients_text_intent tags_json long_description_text method_text method_notes calculation_yield calculation_cost calculation_notes calculation_rows_json allergens_json allergen_notes updated_at",
+    "builder_compositions": "composition_name use_custom_menu_name created_at",
+    "builder_dish_categories": "tenant_id site_id display_name name_norm created_at",
+    "builder_object_scopes": "object_type object_id tenant_id owner_scope visibility created_at updated_at",
+    "builder_review_idempotency": "tenant_id site_id menu_id menu_detail_id payload_hash composition_id created_at",
+    "builder_composition_components": "composition_id component_id sort_order",
+    "builder_composition_aliases": "composition_id alias_text alias_norm source created_at",
+    "builder_menus": "site_id week_key version status created_at",
+    "builder_menu_rows": "menu_id day meal_slot composition_ref_type sort_order row_kind created_at",
+    "builder_import_sessions": "import_type status total_rows detected_dishes detected_components ignored_rows pending_review_count published_count created_at updated_at",
+    "builder_import_session_items": "session_id item_order raw_text cleaned_name item_type selected item_status classification components_json hints_json created_at updated_at",
+}
+_REQUIRED_FOREIGN_KEYS = {
+    "builder_component_aliases": {("component_id", "builder_components", "component_id")},
+    "component_details": {("component_id", "builder_components", "component_id")},
+    "builder_composition_components": {
+        ("composition_id", "builder_compositions", "composition_id"),
+        ("component_id", "builder_components", "component_id"),
+    },
+    "builder_composition_aliases": {("composition_id", "builder_compositions", "composition_id")},
+    "builder_menu_rows": {
+        ("menu_id", "builder_menus", "menu_id"),
+        ("composition_id", "builder_compositions", "composition_id"),
+    },
+    "builder_import_session_items": {("session_id", "builder_import_sessions", "session_id")},
+}
+
+
+def _validate_builder_schema(conn: sqlite3.Connection) -> None:
+    try:
+        _check_builder_schema(conn)
+    except sqlite3.Error as exc:
+        raise BuilderSchemaError("Builder schema could not be inspected") from exc
+
+
+def _check_builder_schema(conn: sqlite3.Connection) -> None:
+    for table, names in _REQUIRED_COLUMNS.items():
+        rows = conn.execute(f"PRAGMA table_info('{table}')").fetchall()
+        columns = {row["name"]: row for row in rows}
+        if not set(names.split()) <= columns.keys():
+            raise BuilderSchemaError(f"Builder schema incompatible: {table}")
+        for name in names.split():
+            expected = "INTEGER" if name in _INTEGER_COLUMNS else "TEXT"
+            if str(columns[name]["type"]).upper() != expected:
+                raise BuilderSchemaError(f"Builder schema incompatible: {table}.{name}")
+        for name in _REQUIRED_NOT_NULL[table].split():
+            if not columns[name]["notnull"]:
+                raise BuilderSchemaError(f"Builder nullability incompatible: {table}.{name}")
+        primary_key = tuple(row["name"] for row in sorted(rows, key=lambda row: row["pk"]) if row["pk"])
+        if primary_key != _REQUIRED_PRIMARY_KEYS[table]:
+            raise BuilderSchemaError(f"Builder primary key incompatible: {table}")
+        expected_foreign_keys = _REQUIRED_FOREIGN_KEYS.get(table, set())
+        foreign_keys = {(row["from"], row["table"], row["to"]) for row in conn.execute(
+            f"PRAGMA foreign_key_list('{table}')"
+        )}
+        if not expected_foreign_keys <= foreign_keys:
+            raise BuilderSchemaError(f"Builder foreign keys incompatible: {table}")
+    category_indexes = conn.execute("PRAGMA index_list('builder_dish_categories')").fetchall()
+    if not any(
+        row["unique"] and not row["partial"]
+        and tuple(item["name"] for item in conn.execute(
+            f"PRAGMA index_info('{row['name']}')"
+        )) == ("tenant_id", "site_id", "name_norm")
+        for row in category_indexes
+    ):
+        raise BuilderSchemaError("Builder category uniqueness incompatible")
+    for table, index, keys, partial in (
+        ("builder_import_sessions", "idx_builder_import_active_source",
+         ("source_tenant_id", "source_site_id", "source_menu_id", "source_menu_detail_id"), True),
+        ("builder_review_idempotency", "idx_builder_review_idempotency_row",
+         ("tenant_id", "site_id", "menu_id", "menu_detail_id"), False),
+    ):
+        indexes = {row["name"]: row for row in conn.execute(f"PRAGMA index_list('{table}')")}
+        found = indexes.get(index)
+        if (found is None or not found["unique"] or bool(found["partial"]) != partial
+                or tuple(row["name"] for row in conn.execute(f"PRAGMA index_info('{index}')")) != keys):
+            raise BuilderSchemaError(f"Builder unique index incompatible: {index}")
+    sql = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='index' AND name='idx_builder_import_active_source'"
+    ).fetchone()
+    definition = " ".join(str(sql["sql"] or "").lower().split()) if sql else ""
+    _, separator, predicate = definition.partition(" where ")
+    if not separator or predicate != "source_menu_id is not null and status not in ('published', 'ignored', 'cancelled')":
+        raise BuilderSchemaError("Builder import index predicate incompatible")
+
+
+def _open_existing(path: str) -> sqlite3.Connection:
+    try:
+        conn = sqlite3.connect(Path(path).as_uri() + "?mode=rw", uri=True)
+    except sqlite3.Error as exc:
+        raise BuilderSchemaError("Builder database unavailable; explicit provisioning required") from exc
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def require_builder_sqlite(path: str) -> str:
+    db_path = _normalize_path(path)
+    conn = _open_existing(db_path)
+    try:
+        _validate_builder_schema(conn)
+    finally:
+        conn.close()
+    return db_path
+
 
 def _to_bool(value: object) -> bool:
     return bool(int(value)) if value is not None else False
@@ -37,17 +185,19 @@ def _normalize_path(path: str) -> str:
 
 
 @contextmanager
-def _connect(path: str) -> Iterator[sqlite3.Connection]:
+def _connect(path: str, *, provision: bool = False) -> Iterator[sqlite3.Connection]:
     normalized_path = _normalize_path(path)
     active = _active_transaction.get()
     if active is not None and active[0] == normalized_path:
         yield active[1]
         return
 
-    conn = sqlite3.connect(normalized_path)
+    conn = sqlite3.connect(normalized_path) if provision else _open_existing(normalized_path)
     try:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
+        if not provision:
+            _validate_builder_schema(conn)
         yield conn
         conn.commit()
     finally:
@@ -57,11 +207,12 @@ def _connect(path: str) -> Iterator[sqlite3.Connection]:
 @contextmanager
 def builder_transaction(path: str) -> Iterator[sqlite3.Connection]:
     normalized_path = _normalize_path(path)
-    conn = sqlite3.connect(normalized_path)
+    conn = _open_existing(normalized_path)
     token = _active_transaction.set((normalized_path, conn))
     try:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
+        _validate_builder_schema(conn)
         conn.execute("BEGIN IMMEDIATE")
         yield conn
         conn.commit()
@@ -76,9 +227,10 @@ def builder_transaction(path: str) -> Iterator[sqlite3.Connection]:
 def initialize_builder_sqlite(path: str) -> str:
     db_path = _normalize_path(path)
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    with _connect(db_path) as conn:
+    with _connect(db_path, provision=True) as conn:
         conn.executescript(
             """
+            BEGIN IMMEDIATE;
             CREATE TABLE IF NOT EXISTS builder_components (
                 component_id TEXT PRIMARY KEY,
                 canonical_name TEXT NOT NULL,
@@ -351,6 +503,9 @@ def initialize_builder_sqlite(path: str) -> str:
                 WHERE display_label IS NULL
                 """,
             )
+        _validate_builder_schema(conn)
+        if conn.execute("PRAGMA foreign_key_check").fetchone() is not None:
+            raise BuilderSchemaError("Builder database contains invalid foreign keys")
     return db_path
 
 

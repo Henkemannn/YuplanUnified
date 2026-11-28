@@ -1,4 +1,6 @@
+from tests._auth_site_helpers import login_bound_user
 from datetime import date as _date
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
@@ -25,16 +27,17 @@ pytestmark = pytest.mark.usefixtures("enable_weekview")
 
 def _seed_basics():
     from core.db import get_session
+    site_id, department_id = str(uuid4()), str(uuid4())
     conn = get_session()
     try:
-        site = conn.execute(text("SELECT id FROM sites WHERE id='00000000-0000-0000-0000-000000000000'"))
-        if not site.fetchone():
-            conn.execute(text("INSERT INTO sites (id, tenant_id, name) VALUES ('00000000-0000-0000-0000-000000000000', 1, 'Test Site')"))
-        conn.execute(text("UPDATE sites SET tenant_id=1 WHERE id='00000000-0000-0000-0000-000000000000' AND tenant_id IS NULL"))
-        dep = conn.execute(text("SELECT id FROM departments WHERE id='00000000-0000-0000-0000-000000000001'"))
-        if not dep.fetchone():
-            conn.execute(text("INSERT INTO departments (id, site_id, name, resident_count_mode, resident_count_fixed) VALUES ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000000', 'Avd Alpha', 'fixed', 5)"))
+        conn.execute(text("INSERT INTO sites (id, tenant_id, name) VALUES (:site, 1, 'Test Site')"), {"site": site_id})
+        conn.execute(
+            text("INSERT INTO departments (id, site_id, name, resident_count_mode, resident_count_fixed) "
+                 "VALUES (:department, :site, 'Avd Alpha', 'fixed', 5)"),
+            {"department": department_id, "site": site_id},
+        )
         conn.commit()
+        return site_id, department_id
     finally:
         conn.close()
 
@@ -76,9 +79,8 @@ def test_kitchen_grid_renders_and_icons_present(app_session, monkeypatch):
         def today(cls):
             return cls(2025, 12, 3)
     monkeypatch.setattr(ui_blueprint, "_date", _FrozenDate)
-    _seed_basics()
-    site_id = "00000000-0000-0000-0000-000000000000"
-    department_id = "00000000-0000-0000-0000-000000000001"
+    site_id, department_id = _seed_basics()
+    login_bound_user(client, site_id=site_id)
     year = 2025
     week = 49
     tid = 1
@@ -118,9 +120,8 @@ def test_kitchen_grid_renders_and_icons_present(app_session, monkeypatch):
 
 def test_enhetsportal_does_not_render_grid(app_session):
     client = app_session.test_client()
-    _seed_basics()
-    site_id = "00000000-0000-0000-0000-000000000000"
-    department_id = "00000000-0000-0000-0000-000000000001"
+    site_id, department_id = _seed_basics()
+    login_bound_user(client, site_id=site_id)
     year = 2025
     week = 49
 
@@ -138,9 +139,8 @@ def test_enhetsportal_does_not_render_grid(app_session):
 
 def test_cell_classes_markerad_and_alt2(app_session):
     client = app_session.test_client()
-    _seed_basics()
-    site_id = "00000000-0000-0000-0000-000000000000"
-    department_id = "00000000-0000-0000-0000-000000000001"
+    site_id, department_id = _seed_basics()
+    login_bound_user(client, site_id=site_id)
     year = 2025
     week = 49
     tid = 1

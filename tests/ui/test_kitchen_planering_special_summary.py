@@ -11,8 +11,7 @@ def _seed_minimal(site_id: str, dept_id: str, year: int, week: int, lunch_reside
     db = get_session()
     try:
         # sites
-        db.execute(text("CREATE TABLE IF NOT EXISTS sites(id TEXT PRIMARY KEY, name TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 0)"))
-        db.execute(text("INSERT OR IGNORE INTO sites(id, name, version) VALUES(:i,'Test Site',0)"), {"i": site_id})
+        db.execute(text("INSERT OR IGNORE INTO sites(id, tenant_id, name, version) VALUES(:i,1,'Test Site',0)"), {"i": site_id})
         # departments
         db.execute(text(
             """

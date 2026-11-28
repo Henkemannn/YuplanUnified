@@ -3,6 +3,7 @@
 {% block page_title %}Avdelningar – Yuplan{% endblock %}
 
 {% block head_extra %}
+    <meta name="csrf-token" content="{{ csrf_meta_token() }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_departments.css') }}">
 {% endblock %}
 
@@ -113,7 +114,7 @@
                     </p>
                     <p class="admin-department-delete-modal__text" data-department-delete-name-text></p>
                     <form method="POST" action="" class="admin-department-delete-modal__form" data-department-delete-form>
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_meta_token() }}">
                         <label class="admin-department-delete-modal__label" for="department-delete-confirmation">
                             Skriv avdelningens namn för att bekräfta.
                         </label>

@@ -49,6 +49,8 @@ def pytest_sessionstart(session):  # pragma: no cover - pytest lifecycle hook
         raise RuntimeError("pytest database workspace must be outside the repository")
     main_db = workspace / "main.db"
     builder_db = workspace / "builder.db"
+    from core.builder_sqlite import initialize_builder_sqlite
+    initialize_builder_sqlite(str(builder_db))
     env_names = (
         "DATABASE_URL",
         "BUILDER_DB_PATH",

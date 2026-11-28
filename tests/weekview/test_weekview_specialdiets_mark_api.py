@@ -30,9 +30,15 @@ def test_toggle_specialdiet_mark_with_etag(client_admin):
         create_all()
         db = get_session()
         try:
+            from core.models import DietaryType
+
             # Seed site + department
             db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"), {"i": site_id, "n": "Varberg"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',0,0) ON CONFLICT(id) DO NOTHING"), {"i": dep_id, "s": site_id, "n": "Avd E"})
+            diet = DietaryType(tenant_id=1, site_id=site_id, name="Gluten-free")
+            db.add(diet)
+            db.flush()
+            diet_id = str(diet.id)
             db.commit()
         finally:
             db.close()
@@ -55,7 +61,7 @@ def test_toggle_specialdiet_mark_with_etag(client_admin):
             "department_id": dep_id,
             "local_date": "2025-11-24",  # Monday week 48
             "meal": "lunch",
-            "diet_type_id": "gluten",
+            "diet_type_id": diet_id,
             "marked": True,
         },
     )
@@ -66,7 +72,7 @@ def test_toggle_specialdiet_mark_with_etag(client_admin):
     r1 = client_admin.get(base, headers=_h("admin"))
     assert r1.status_code == 200
     marks = r1.get_json()["department_summaries"][0].get("marks", [])
-    assert any(m["day_of_week"] == 1 and m["meal"] == "lunch" and m["diet_type"] == "gluten" and m["marked"] for m in marks)
+    assert any(m["day_of_week"] == 1 and m["meal"] == "lunch" and m["diet_type"] == diet_id and m["marked"] for m in marks)
 
     # Clear mark using the new ETag
     r_clr = client_admin.patch(
@@ -77,7 +83,7 @@ def test_toggle_specialdiet_mark_with_etag(client_admin):
             "department_id": dep_id,
             "local_date": "2025-11-24",
             "meal": "lunch",
-            "diet_type_id": "gluten",
+            "diet_type_id": diet_id,
             "marked": False,
         },
     )
@@ -92,7 +98,7 @@ def test_toggle_specialdiet_mark_with_etag(client_admin):
             "department_id": dep_id,
             "local_date": "2025-11-24",
             "meal": "lunch",
-            "diet_type_id": "gluten",
+            "diet_type_id": diet_id,
             "marked": True,
         },
     )

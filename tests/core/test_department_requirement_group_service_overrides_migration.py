@@ -43,7 +43,7 @@ def test_0037_upgrade_downgrade_and_reupgrade(tmp_path: Path, monkeypatch) -> No
         assert "department_requirement_groups" in inspector.get_table_names()
         assert "department_requirement_group_requirements" in inspector.get_table_names()
 
-        command.upgrade(_alembic_cfg(db_url), "head")
+        command.upgrade(_alembic_cfg(db_url), "0037_add_department_requirement_group_service_overrides")
 
         inspector = inspect(engine)
         assert "department_requirement_group_service_overrides" in inspector.get_table_names()
@@ -84,7 +84,7 @@ def test_0037_upgrade_downgrade_and_reupgrade(tmp_path: Path, monkeypatch) -> No
         assert "department_requirement_groups" in inspector.get_table_names()
         assert "department_requirement_group_requirements" in inspector.get_table_names()
 
-        command.upgrade(_alembic_cfg(db_url), "head")
+        command.upgrade(_alembic_cfg(db_url), "0037_add_department_requirement_group_service_overrides")
         inspector = inspect(engine)
         assert "department_requirement_group_service_overrides" in inspector.get_table_names()
     finally:

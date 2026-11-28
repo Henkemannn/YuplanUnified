@@ -39,13 +39,40 @@ def test_planera_week_csv_export_and_304(client_admin):
                     "day_of_week INTEGER, meal TEXT, count INTEGER)"
                 )
             )
-            # Seed diet defaults (will appear as potential diets, though not special unless marked)
-            db.execute(text("CREATE TABLE IF NOT EXISTS department_diet_defaults(department_id TEXT, diet_type_id TEXT, default_count INTEGER, PRIMARY KEY(department_id,diet_type_id))"))
-            db.execute(text("INSERT INTO department_diet_defaults(department_id,diet_type_id,default_count) VALUES(:d,'Gluten',2)"), {"d": dep_id})
-            # Mark Gluten diet for Monday lunch (day_of_week=1)
-            db.execute(text("INSERT INTO weekview_registrations(tenant_id,department_id,year,week,day_of_week,meal,diet_type,marked) VALUES(:tid,:dep,:yy,:ww,1,'lunch','Gluten',1)"), {"tid": 1, "dep": dep_id, "yy": year, "ww": week})
-            # Residents count for Monday lunch
-            db.execute(text("INSERT INTO weekview_residents_count(tenant_id,department_id,year,week,day_of_week,meal,count) VALUES(:tid,:dep,:yy,:ww,1,'lunch',10)"), {"tid": 1, "dep": dep_id, "yy": year, "ww": week})
+            db.commit()
+        finally:
+            db.close()
+        from core.admin_repo import DepartmentsRepo, DietTypesRepo
+
+        diet_id = DietTypesRepo().create(
+            site_id=site_id,
+            tenant_id=1,
+            name="Gluten",
+            semantics="atomic",
+        )
+        DepartmentsRepo().upsert_department_diet_defaults(
+            dep_id,
+            0,
+            [{"diet_type_id": str(diet_id), "default_count": 2}],
+        )
+        db = get_session()
+        try:
+            db.execute(
+                text(
+                    "INSERT INTO weekview_registrations"
+                    "(tenant_id,department_id,year,week,day_of_week,meal,diet_type,marked) "
+                    "VALUES(:tid,:dep,:yy,:ww,1,'lunch',:diet,1)"
+                ),
+                {"tid": 1, "dep": dep_id, "yy": year, "ww": week, "diet": str(diet_id)},
+            )
+            db.execute(
+                text(
+                    "INSERT INTO weekview_residents_count"
+                    "(tenant_id,department_id,year,week,day_of_week,meal,count) "
+                    "VALUES(:tid,:dep,:yy,:ww,1,'lunch',10)"
+                ),
+                {"tid": 1, "dep": dep_id, "yy": year, "ww": week},
+            )
             db.commit()
         finally:
             db.close()
@@ -63,10 +90,10 @@ def test_planera_week_csv_export_and_304(client_admin):
     assert r1.headers.get("Content-Type", "").startswith("text/csv")
     etag = r1.headers.get("ETag")
     body = r1.get_data(as_text=True)
-    lines = [l for l in body.splitlines() if l.strip()]
+    lines = [line for line in body.splitlines() if line.strip()]
     assert lines[0].startswith("date,weekday,meal,department,residents_total,normal,special_diets")
     # Expect a line with Gluten diet (special_diets column includes Gluten:2)
-    assert any("Gluten:2" in l for l in lines[1:])
+    assert any("Gluten:2" in line for line in lines[1:])
 
     # Conditional GET with ETag
     r2 = client_admin.get(f"/api/planera/week/csv?site_id={site_id}&year={year}&week={week}", headers={**_h("admin"), "If-None-Match": etag})

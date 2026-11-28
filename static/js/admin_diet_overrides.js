@@ -11,6 +11,10 @@
       return null;
     }
   }
+  function getCsrfToken(){
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? (meta.getAttribute('content') || '') : getCookie('csrf_token');
+  }
 
   function init(){
     if(document.documentElement.hasAttribute('data-diet-overrides-init')) return;
@@ -111,7 +115,7 @@
       if(!state.departmentId || !state.dietTypeId) return;
       setStatus('Sparar...');
       try {
-        var csrf = getCookie('csrf_token');
+        var csrf = getCsrfToken();
         var r = await fetch('/ui/admin/departments/' + state.departmentId + '/diet-overrides', {
           method: 'POST',
           credentials: 'same-origin',
@@ -145,7 +149,7 @@
       if(!state.departmentId || !state.dietTypeId) return;
       setStatus('Återställer...');
       try {
-        var csrf = getCookie('csrf_token');
+        var csrf = getCsrfToken();
         var r = await fetch('/ui/admin/departments/' + state.departmentId + '/diet-overrides/reset', {
           method: 'POST',
           credentials: 'same-origin',

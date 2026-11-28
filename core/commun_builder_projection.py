@@ -11,9 +11,10 @@ from sqlalchemy import text
 from .commun_builder_linkage import CommunBuilderMenuLinkService
 from .builder.library_scope import ActorContext, ObjectScope, can_read_object
 from .builder_sqlite import (
+    BuilderSchemaError,
     SQLiteMenuDetailRepository,
     SQLiteMenuRepository,
-    initialize_builder_sqlite,
+    require_builder_sqlite,
 )
 from .db import get_session
 
@@ -397,6 +398,8 @@ def _get_builder_menu_context_flow() -> Any:
             from .builder_api import _get_builder_flow
 
             builder_flow = _get_builder_flow()
+        except BuilderSchemaError:
+            raise
         except Exception:
             builder_flow = None
     if builder_flow is None:
@@ -409,7 +412,7 @@ def _get_builder_menu_context_flow() -> Any:
             if builder_db_path:
                 from .menu import MenuService
 
-                db_path = initialize_builder_sqlite(builder_db_path)
+                db_path = require_builder_sqlite(builder_db_path)
                 menu_service = MenuService(
                     menu_repository=SQLiteMenuRepository(db_path=db_path),
                     menu_detail_repository=SQLiteMenuDetailRepository(db_path=db_path),
@@ -419,6 +422,8 @@ def _get_builder_menu_context_flow() -> Any:
                 from .menu import MenuService
 
                 menu_service = MenuService(composition_repository=builder_flow._composition_repository)
+        except BuilderSchemaError:
+            raise
         except Exception:
             menu_service = None
         if menu_service is not None:

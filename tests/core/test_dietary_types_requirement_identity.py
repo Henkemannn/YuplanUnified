@@ -9,6 +9,8 @@ from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 import pytest
 
+from tests.core.dietary_migration_fixture import seed_historical_diet_reference_tables
+
 
 def _alembic_cfg(db_url: str) -> Config:
     cfg = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
@@ -127,6 +129,7 @@ def _seed_historical_0034_support(conn) -> None:
         )
     )
     conn.execute(text("CREATE UNIQUE INDEX ix_users_username_unique ON users(username)"))
+    seed_historical_diet_reference_tables(conn)
 
 
 def _seed_legacy_dietary_types_table(conn, *, with_site_id: bool = False, with_requirement_fields: bool = False) -> None:
@@ -203,17 +206,27 @@ def test_legacy_service_create_keeps_legacy_bucket_and_stable_key(app_session) -
     from core.db import get_session
 
     with app_session.app_context():
+        site_id = f"legacy-service-{uuid.uuid4()}"
         db = get_session()
         try:
             db.execute(text("DELETE FROM unit_diet_assignments"))
             db.execute(text("DELETE FROM dietary_types"))
+            db.execute(
+                text("INSERT INTO sites(id, name, tenant_id) VALUES (:id, :name, 1)"),
+                {"id": site_id, "name": "Legacy service site"},
+            )
             db.commit()
         finally:
             db.close()
 
         service = DietService()
-        diet_id = service.create_diet_type(tenant_id=1, name="Laktos och gluten", default_select=False)
-        rows = service.list_diet_types(1)
+        diet_id = service.create_diet_type(
+            tenant_id=1,
+            name="Laktos och gluten",
+            default_select=False,
+            site_id=site_id,
+        )
+        rows = service.list_diet_types(1, site_id=site_id)
 
         assert len(rows) == 1
         assert set(rows[0].keys()) == {"id", "name", "default_select"}
@@ -235,11 +248,12 @@ def test_legacy_service_create_keeps_legacy_bucket_and_stable_key(app_session) -
         assert row[3] == f"legacy_{diet_id}"
 
 
-def test_runtime_repair_stops_on_unknown_non_empty_semantics(app_session) -> None:
+def test_runtime_repair_stops_on_unknown_non_empty_semantics(app_session, tmp_path) -> None:
     from core.admin_repo import DietTypesRepo
-    from core.db import get_session
+    from core.db import get_session, init_engine
 
     with app_session.app_context():
+        init_engine(f"sqlite:///{(tmp_path / 'invalid-semantics.db').as_posix()}", force=True)
         db = get_session()
         try:
             db.execute(text("DROP TABLE IF EXISTS dietary_types"))
@@ -268,6 +282,8 @@ def test_runtime_repair_stops_on_unknown_non_empty_semantics(app_session) -> Non
             repo = DietTypesRepo()
             with pytest.raises(RuntimeError, match="invalid preexisting semantics"):
                 repo.list_all(tenant_id=1)
+            with pytest.raises(RuntimeError, match="invalid preexisting semantics"):
+                repo.get_by_id(1)
 
             row = db.execute(
                 text("SELECT requirement_key, semantics FROM dietary_types WHERE name='Mystery'")
@@ -279,6 +295,30 @@ def test_runtime_repair_stops_on_unknown_non_empty_semantics(app_session) -> Non
             db.rollback()
             db.execute(text("DROP TABLE IF EXISTS dietary_types"))
             db.commit()
+            db.close()
+
+
+def test_diet_runtime_rejects_legacy_schema_without_repair(app_session, tmp_path) -> None:
+    from core.admin_repo import DietTypesRepo
+    from core.db import get_session, init_engine
+
+    with app_session.app_context():
+        init_engine(f"sqlite:///{(tmp_path / 'old-diet.db').as_posix()}", force=True)
+        db = get_session()
+        try:
+            _seed_legacy_dietary_types_table(db, with_site_id=True)
+            db.execute(text("INSERT INTO dietary_types(id, tenant_id, name) VALUES (1, 1, 'Synthetic')"))
+            db.commit()
+            before = db.execute(text("SELECT sql FROM sqlite_master WHERE name='dietary_types'")).scalar_one()
+        finally:
+            db.close()
+        with pytest.raises(RuntimeError, match="Incompatible dietary types schema"):
+            DietTypesRepo().get_by_id(1)
+        db = get_session()
+        try:
+            assert db.execute(text("SELECT sql FROM sqlite_master WHERE name='dietary_types'")).scalar_one() == before
+            assert db.execute(text("SELECT id, name FROM dietary_types")).one() == (1, "Synthetic")
+        finally:
             db.close()
 
 
@@ -328,7 +368,7 @@ def test_multiple_legacy_rows_get_unique_requirement_keys(tmp_path: Path, monkey
     try:
         with engine.begin() as conn:
             _seed_historical_0034_support(conn)
-            _seed_legacy_dietary_types_table(conn, with_site_id=False)
+            _seed_legacy_dietary_types_table(conn, with_site_id=True)
             conn.execute(text("INSERT INTO dietary_types(id, tenant_id, name, default_select) VALUES (1, 1, 'Glutenfri', 0)"))
             conn.execute(text("INSERT INTO dietary_types(id, tenant_id, name, default_select) VALUES (2, 1, 'Laktosfri', 0)"))
 
@@ -523,37 +563,91 @@ def test_tenant_isolation_for_legacy_diet_service_crud(app_session) -> None:
     from core.db import get_session
 
     with app_session.app_context():
+        site_a1 = f"diet-service-a1-{uuid.uuid4()}"
+        site_a2 = f"diet-service-a2-{uuid.uuid4()}"
+        site_b1 = f"diet-service-b1-{uuid.uuid4()}"
         db = get_session()
         try:
             db.execute(text("DELETE FROM unit_diet_assignments"))
             db.execute(text("DELETE FROM dietary_types"))
+            db.execute(
+                text(
+                    "INSERT INTO tenants(id, name, active) "
+                    "VALUES (2, 'Diet service tenant B', 1) ON CONFLICT(id) DO NOTHING"
+                )
+            )
+            db.execute(
+                text(
+                    "INSERT INTO sites(id, name, tenant_id) VALUES "
+                    "(:site_a1, 'Diet service A1', 1), "
+                    "(:site_a2, 'Diet service A2', 1), "
+                    "(:site_b1, 'Diet service B1', 2)"
+                ),
+                {
+                    "site_a1": site_a1,
+                    "site_a2": site_a2,
+                    "site_b1": site_b1,
+                },
+            )
             db.commit()
         finally:
             db.close()
 
         service = DietService()
-        diet_a = service.create_diet_type(tenant_id=1, name="Diet A", default_select=False)
-        diet_b = service.create_diet_type(tenant_id=2, name="Diet B", default_select=True)
+        diet_a1 = service.create_diet_type(
+            tenant_id=1, name="Diet A1", default_select=False, site_id=site_a1
+        )
+        diet_a2 = service.create_diet_type(
+            tenant_id=1, name="Diet A2", default_select=False, site_id=site_a2
+        )
+        diet_b1 = service.create_diet_type(
+            tenant_id=2, name="Diet B1", default_select=True, site_id=site_b1
+        )
 
-        list_a = service.list_diet_types(1)
-        assert [row["name"] for row in list_a] == ["Diet A"]
-        assert set(list_a[0].keys()) == {"id", "name", "default_select"}
+        list_a1 = service.list_diet_types(1, site_id=site_a1)
+        assert [row["name"] for row in list_a1] == ["Diet A1"]
+        assert set(list_a1[0].keys()) == {"id", "name", "default_select"}
+        assert [row["name"] for row in service.list_diet_types(1, site_id=site_a2)] == [
+            "Diet A2"
+        ]
 
-        assert service.update_diet_type(1, diet_b, name="Diet B renamed", default_select=False) is False
-        assert service.delete_diet_type(1, diet_b) is False
+        assert (
+            service.update_diet_type(
+                1, diet_a2, name="Diet A2 renamed", site_id=site_a1
+            )
+            is False
+        )
+        assert service.delete_diet_type(1, diet_a2, site_id=site_a1) is False
+        assert (
+            service.update_diet_type(
+                1, diet_b1, name="Diet B1 renamed", site_id=site_a1
+            )
+            is False
+        )
+        assert service.delete_diet_type(1, diet_b1, site_id=site_a1) is False
 
-        assert service.update_diet_type(1, diet_a, name="Diet A renamed", default_select=True) is True
-        assert service.delete_diet_type(1, diet_a) is True
+        assert (
+            service.update_diet_type(
+                1,
+                diet_a1,
+                name="Diet A1 renamed",
+                default_select=True,
+                site_id=site_a1,
+            )
+            is True
+        )
+        assert service.delete_diet_type(1, diet_a1, site_id=site_a1) is True
 
-        list_b = service.list_diet_types(2)
+        list_b = service.list_diet_types(2, site_id=site_b1)
         assert len(list_b) == 1
-        assert list_b[0]["name"] == "Diet B"
+        assert list_b[0]["name"] == "Diet B1"
 
         db = get_session()
         try:
             remaining = db.execute(text("SELECT name, default_select FROM dietary_types ORDER BY id")).fetchall()
         finally:
             db.close()
+        assert remaining == [("Diet A2", False), ("Diet B1", True)]
 
 
 def test_upsert_atomic_repairs_legacy_row_and_is_idempotent(app_session) -> None:
@@ -609,14 +703,18 @@ def test_upsert_atomic_creates_new_atomic_row(app_session) -> None:
         assert int(tenant_id) == 1
 
 
-def test_atomic_upsert_promotes_null_tenant_and_rejects_conflicting_tenant(app_session) -> None:
+def test_atomic_upsert_promotes_null_tenant_and_rejects_conflicting_tenant(app_session, tmp_path) -> None:
     from core.admin_repo import DietTypesRepo, SitesRepo
-    from core.db import get_session
+    from core.db import create_all, get_session, init_engine
 
     with app_session.app_context():
+        init_engine(f"sqlite:///{(tmp_path / 'legacy-tenant.db').as_posix()}", force=True)
+        create_all()
         site, _ = SitesRepo().create_site(f"Atomic tenant integrity site {uuid.uuid4()}")
         db = get_session()
         try:
+            db.execute(text("DROP TABLE dietary_types"))
+            _seed_legacy_dietary_types_table(db, with_requirement_fields=True)
             db.execute(
                 text(
                     "INSERT INTO dietary_types "

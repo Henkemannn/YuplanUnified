@@ -8,7 +8,8 @@ from alembic import command
 from alembic.operations import Operations
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event, inspect, text
+from sqlalchemy.engine import Engine
 
 from core.weekview.schema import WEEKVIEW_TABLES, verify_weekview_schema
 from tests.migrations.test_users_updated_at_migration import (
@@ -217,6 +218,37 @@ def test_postgresql_chain_recovery(monkeypatch):
                     if table != "weekview_versions":
                         assert (table, f"trg_{table}_bump_version_v2") in triggers
             _upgrade(database_url, "head")
-            _assert_revision(engine, "0055_weekview_schema")
+            _assert_revision(engine, "0059_normal_exclusions_scope")
+            _assert_data_preserved(engine, before)
+            with engine.connect() as connection:
+                menu_before = connection.execute(text(
+                    "SELECT menu_id, dish_id FROM menu_variants WHERE id=9101"
+                )).one()
+                assert menu_before == (9101, 9101)
+                tables_before = inspect(connection).get_table_names()
+
+            statements = []
+
+            def capture(_conn, _cursor, statement, _parameters, _context, _executemany):
+                statements.append(statement)
+
+            event.listen(Engine, "before_cursor_execute", capture)
+            try:
+                _upgrade(database_url, "head")
+            finally:
+                event.remove(Engine, "before_cursor_execute", capture)
+            assert not [
+                statement for statement in statements
+                if statement.lstrip().upper().startswith(
+                    ("CREATE ", "ALTER ", "DROP ", "INSERT ", "UPDATE ", "DELETE ")
+                )
+            ]
+            _assert_revision(engine, "0059_normal_exclusions_scope")
+            _assert_data_preserved(engine, before)
+            with engine.connect() as connection:
+                assert connection.execute(text(
+                    "SELECT menu_id, dish_id FROM menu_variants WHERE id=9101"
+                )).one() == menu_before
+                assert inspect(connection).get_table_names() == tables_before
         finally:
             engine.dispose()

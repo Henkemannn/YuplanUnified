@@ -1,3 +1,4 @@
+from tests._auth_site_helpers import login_bound_user
 import re
 import uuid
 from datetime import date
@@ -94,8 +95,7 @@ def test_weekview_ui_renders_header_menu_and_alt2(client_admin):
     # Get baseline ETag then set alt2 + residents
     base = f"/api/weekview?year={year}&week={week}&department_id={dep_id}"
     # Align session site context directly (selector is superuser-only)
-    with client_admin.session_transaction() as sess:
-        sess["site_id"] = site_id
+    login_bound_user(client_admin, site_id=site_id)
     assert client_admin.post(
         "/features/set",
         json={"name": "ff.weekview.enabled", "enabled": True},
@@ -207,8 +207,7 @@ def test_weekview_ui_no_dinner_hides_columns(client_admin):
             db.close()
 
     # Ensure weekview materialized (align session site first)
-    with client_admin.session_transaction() as sess:
-        sess["site_id"] = site_id
+    login_bound_user(client_admin, site_id=site_id)
     assert client_admin.post(
         "/features/set",
         json={"name": "ff.weekview.enabled", "enabled": True},
@@ -271,7 +270,7 @@ def test_weekview_ui_empty_department_id_does_not_500(client_admin):
         db = get_session()
         try:
             db.execute(
-                text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"),
+                text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0) ON CONFLICT(id) DO NOTHING"),
                 {"i": site_id, "n": "Varberg"},
             )
             db.execute(
@@ -285,9 +284,7 @@ def test_weekview_ui_empty_department_id_does_not_500(client_admin):
         finally:
             db.close()
 
-    with client_admin.session_transaction() as sess:
-        sess["site_id"] = site_id
-        sess["tenant_id"] = 1
+    login_bound_user(client_admin, site_id=site_id)
 
     resp = client_admin.get(
         f"/ui/weekview?site_id={site_id}&department_id=&year=2026&week=8",
@@ -301,7 +298,7 @@ def test_weekview_ui_empty_department_id_does_not_500(client_admin):
 
 
 @pytest.mark.usefixtures("enable_weekview")
-def test_weekview_ui_filters_orphan_diets_single_department(client_admin):
+def test_weekview_ui_filters_orphan_diets_single_department(client_admin, monkeypatch):
     app = client_admin.application
     site_id = str(uuid.uuid4())
     dep_id = str(uuid.uuid4())
@@ -309,14 +306,14 @@ def test_weekview_ui_filters_orphan_diets_single_department(client_admin):
 
     from core.db import create_all, get_session
     from sqlalchemy import text
-    from core.admin_repo import DietTypesRepo
+    from core.admin_repo import DepartmentsRepo, DietTypesRepo
 
     with app.app_context():
         create_all()
         db = get_session()
         try:
             db.execute(
-                text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"),
+                text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0) ON CONFLICT(id) DO NOTHING"),
                 {"i": site_id, "n": "Varberg"},
             )
             db.execute(
@@ -326,36 +323,81 @@ def test_weekview_ui_filters_orphan_diets_single_department(client_admin):
                 ),
                 {"i": dep_id, "s": site_id, "n": "Avd 9"},
             )
-            diet_a = DietTypesRepo().create(site_id=site_id, name="Gluten", default_select=False)
-            diet_b = DietTypesRepo().create(site_id=site_id, name="Laktos", default_select=False)
+            db.commit()
+        finally:
+            db.close()
+    diet_a = DietTypesRepo().create(
+        site_id=site_id, tenant_id=1, name="Gluten", semantics="atomic"
+    )
+    diet_b = DietTypesRepo().create(
+        site_id=site_id, tenant_id=1, name="Laktos", semantics="atomic"
+    )
+    DepartmentsRepo().upsert_department_diet_defaults(
+        dep_id,
+        expected_version=0,
+        items=[
+            {"diet_type_id": str(diet_a), "default_count": 2},
+            {"diet_type_id": str(diet_b), "default_count": 3},
+        ],
+    )
+    with app.app_context():
+        db = get_session()
+        try:
             db.execute(
                 text(
                     "INSERT INTO department_diet_defaults(department_id, diet_type_id, default_count) "
-                    "VALUES(:d,:dt,:c)"
+                    "VALUES(:d,'999',4)"
                 ),
-                {"d": dep_id, "dt": str(diet_a), "c": 2},
-            )
-            db.execute(
-                text(
-                    "INSERT INTO department_diet_defaults(department_id, diet_type_id, default_count) "
-                    "VALUES(:d,:dt,:c)"
-                ),
-                {"d": dep_id, "dt": str(diet_b), "c": 3},
-            )
-            db.execute(
-                text(
-                    "INSERT INTO department_diet_defaults(department_id, diet_type_id, default_count) "
-                    "VALUES(:d,:dt,:c)"
-                ),
-                {"d": dep_id, "dt": "999", "c": 4},
+                {"d": dep_id},
             )
             db.commit()
         finally:
             db.close()
 
-    with client_admin.session_transaction() as sess:
-        sess["site_id"] = site_id
-        sess["tenant_id"] = 1
+    login_bound_user(client_admin, site_id=site_id)
+
+    from core.weekview.schema import WeekviewSchemaError
+    from core.weekview.service import WeekviewService
+
+    validation_failures = []
+    verify_diet_schema = WeekviewService._verify_diet_schema
+
+    def capture_diet_validation(service, department_id):
+        try:
+            verify_diet_schema(service, department_id)
+        except WeekviewSchemaError as exc:
+            validation_failures.append((department_id, str(exc)))
+            raise
+
+    monkeypatch.setattr(WeekviewService, "_verify_diet_schema", capture_diet_validation)
+    resp = client_admin.get(
+        f"/ui/weekview?site_id={site_id}&department_id={dep_id}&year={year}&week={week}",
+        headers=_h("admin"),
+    )
+    assert resp.status_code == 500
+    assert set(validation_failures) == {(dep_id, "Diet reference incompatible")}
+    with app.app_context():
+        db = get_session()
+        try:
+            orphan = db.execute(
+                text(
+                    "SELECT diet_type_id, default_count FROM department_diet_defaults "
+                    "WHERE department_id=:department_id AND diet_type_id='999'"
+                ),
+                {"department_id": dep_id},
+            ).first()
+            assert orphan is not None
+            assert (str(orphan[0]), int(orphan[1])) == ("999", 4)
+            db.execute(
+                text(
+                    "DELETE FROM department_diet_defaults "
+                    "WHERE department_id=:department_id AND diet_type_id='999'"
+                ),
+                {"department_id": dep_id},
+            )
+            db.commit()
+        finally:
+            db.close()
 
     resp = client_admin.get(
         f"/ui/weekview?site_id={site_id}&department_id={dep_id}&year={year}&week={week}",
@@ -369,7 +411,7 @@ def test_weekview_ui_filters_orphan_diets_single_department(client_admin):
 
 
 @pytest.mark.usefixtures("enable_weekview")
-def test_weekview_ui_filters_orphan_diets_all_departments(client_admin):
+def test_weekview_ui_filters_orphan_diets_all_departments(client_admin, monkeypatch):
     app = client_admin.application
     site_id = str(uuid.uuid4())
     dep_a = str(uuid.uuid4())
@@ -378,14 +420,14 @@ def test_weekview_ui_filters_orphan_diets_all_departments(client_admin):
 
     from core.db import create_all, get_session
     from sqlalchemy import text
-    from core.admin_repo import DietTypesRepo
+    from core.admin_repo import DepartmentsRepo, DietTypesRepo
 
     with app.app_context():
         create_all()
         db = get_session()
         try:
             db.execute(
-                text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"),
+                text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0) ON CONFLICT(id) DO NOTHING"),
                 {"i": site_id, "n": "Varberg"},
             )
             db.execute(
@@ -402,37 +444,81 @@ def test_weekview_ui_filters_orphan_diets_all_departments(client_admin):
                 ),
                 {"i": dep_b, "s": site_id, "n": "Avd B"},
             )
-            diet_a = DietTypesRepo().create(site_id=site_id, name="Gluten", default_select=False)
-            diet_b = DietTypesRepo().create(site_id=site_id, name="Laktos", default_select=False)
+            db.commit()
+        finally:
+            db.close()
+    diet_a = DietTypesRepo().create(
+        site_id=site_id, tenant_id=1, name="Gluten", semantics="atomic"
+    )
+    diet_b = DietTypesRepo().create(
+        site_id=site_id, tenant_id=1, name="Laktos", semantics="atomic"
+    )
+    for dep_id in (dep_a, dep_b):
+        DepartmentsRepo().upsert_department_diet_defaults(
+            dep_id,
+            expected_version=0,
+            items=[
+                {"diet_type_id": str(diet_a), "default_count": 2},
+                {"diet_type_id": str(diet_b), "default_count": 3},
+            ],
+        )
+    with app.app_context():
+        db = get_session()
+        try:
             for dep_id in (dep_a, dep_b):
                 db.execute(
                     text(
                         "INSERT INTO department_diet_defaults(department_id, diet_type_id, default_count) "
-                        "VALUES(:d,:dt,:c)"
+                        "VALUES(:d,'999',4)"
                     ),
-                    {"d": dep_id, "dt": str(diet_a), "c": 2},
-                )
-                db.execute(
-                    text(
-                        "INSERT INTO department_diet_defaults(department_id, diet_type_id, default_count) "
-                        "VALUES(:d,:dt,:c)"
-                    ),
-                    {"d": dep_id, "dt": str(diet_b), "c": 3},
-                )
-                db.execute(
-                    text(
-                        "INSERT INTO department_diet_defaults(department_id, diet_type_id, default_count) "
-                        "VALUES(:d,:dt,:c)"
-                    ),
-                    {"d": dep_id, "dt": "999", "c": 4},
+                    {"d": dep_id},
                 )
             db.commit()
         finally:
             db.close()
 
-    with client_admin.session_transaction() as sess:
-        sess["site_id"] = site_id
-        sess["tenant_id"] = 1
+    login_bound_user(client_admin, site_id=site_id)
+
+    from core.weekview.schema import WeekviewSchemaError
+    from core.weekview.service import WeekviewService
+
+    validation_failures = []
+    verify_diet_schema = WeekviewService._verify_diet_schema
+
+    def capture_diet_validation(service, department_id):
+        try:
+            verify_diet_schema(service, department_id)
+        except WeekviewSchemaError as exc:
+            validation_failures.append((department_id, str(exc)))
+            raise
+
+    monkeypatch.setattr(WeekviewService, "_verify_diet_schema", capture_diet_validation)
+    resp = client_admin.get(
+        f"/ui/weekview?site_id={site_id}&department_id=&year={year}&week={week}",
+        headers=_h("admin"),
+    )
+    assert resp.status_code == 500
+    assert validation_failures
+    assert set(reason for _department_id, reason in validation_failures) == {
+        "Diet reference incompatible"
+    }
+    with app.app_context():
+        db = get_session()
+        try:
+            orphans = db.execute(
+                text(
+                    "SELECT department_id, diet_type_id, default_count "
+                    "FROM department_diet_defaults WHERE diet_type_id='999' "
+                    "ORDER BY department_id"
+                )
+            ).fetchall()
+            assert sorted((str(row[0]), str(row[1]), int(row[2])) for row in orphans) == sorted(
+                [(dep_a, "999", 4), (dep_b, "999", 4)]
+            )
+            db.execute(text("DELETE FROM department_diet_defaults WHERE diet_type_id='999'"))
+            db.commit()
+        finally:
+            db.close()
 
     resp = client_admin.get(
         f"/ui/weekview?site_id={site_id}&department_id=&year={year}&week={week}",

@@ -2,6 +2,7 @@ import uuid
 from datetime import date
 
 from core.admin_repo import DietTypesRepo
+from tests._auth_site_helpers import login_bound_user
 
 
 def _canonical_diet_id(site_id: str, name: str, *, default_select: bool) -> int:
@@ -46,6 +47,7 @@ def test_planera_day_etag_304(client_admin):
                 reg.add("ff.planera.enabled")
             reg.set("ff.planera.enabled", True)
 
+    login_bound_user(client_admin, site_id=site_id)
     r1 = client_admin.get(f"/api/planera/day?site_id={site_id}&date={d}&department_id={dep_id}", headers=_h("admin"))
     assert r1.status_code == 200
     etag = r1.headers.get("ETag")

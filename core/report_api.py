@@ -4,12 +4,14 @@ import uuid
 from typing import Any, Optional
 
 from flask import Blueprint, Response, current_app, jsonify, request, session, g, make_response
+from sqlalchemy.exc import SQLAlchemyError
 
 from .auth import require_roles
-from .http_errors import bad_request, not_found
+from .http_errors import bad_request, forbidden, not_found, problem
 from .report.service import ReportService
 from .report.repo import ReportRepo
 from .report.export import build_csv, build_xlsx
+from .weekview.schema import WeekviewSchemaError
 
 
 bp = Blueprint("report_api", __name__, url_prefix="/api")
@@ -36,11 +38,30 @@ def _require_report_enabled() -> Response | None:
     return None
 
 
-def _tenant_id() -> Any:
+def _tenant_id() -> int | None:
     tid = session.get("tenant_id")
     if not tid:
         return None
-    return tid
+    try:
+        return int(tid)
+    except (TypeError, ValueError):
+        return None
+
+
+def _report_site_id() -> str | Response:
+    site_id = str(session.get("site_id") or "").strip()
+    if not site_id:
+        return forbidden("site_context_required")
+    return site_id
+
+
+def _schema_unavailable() -> Response:
+    return problem(
+        503,
+        "https://example.com/errors/report_schema_unavailable",
+        "Service Unavailable",
+        "report_schema_unavailable",
+    )
 
 
 @bp.get("/report")
@@ -52,6 +73,9 @@ def get_report() -> Response:
     tid = _tenant_id()
     if tid is None:
         return bad_request("tenant_missing")
+    site_id = _report_site_id()
+    if isinstance(site_id, Response):
+        return site_id
     try:
         year = int(request.args.get("year", ""))
         week = int(request.args.get("week", ""))
@@ -60,16 +84,23 @@ def get_report() -> Response:
     if year < 1970 or not (1 <= week <= 53):
         return bad_request("invalid_year_or_week")
     department_id: Optional[str] = request.args.get("department_id") or None
-    if department_id:
-        try:
-            uuid.UUID(department_id)
-        except Exception:
-            return bad_request("invalid_department_id")
-        # If specified but no data for this week/tenant, return 404
-        if not _repo.department_exists(tid, year, week, department_id):
-            return not_found("department_not_found")
-    inm = request.headers.get("If-None-Match")
-    not_mod, payload, etag = _service.compute(tid, year, week, department_id, inm)
+    try:
+        if not _repo.site_exists(tid, site_id):
+            return not_found("site_not_found")
+        if department_id:
+            try:
+                uuid.UUID(department_id)
+            except Exception:
+                return bad_request("invalid_department_id")
+            if not _repo.department_exists(tid, site_id, year, week, department_id):
+                return not_found("department_not_found")
+        inm = request.headers.get("If-None-Match")
+        not_mod, payload, etag = _service.compute(
+            tid, site_id, year, week, department_id, inm
+        )
+    except (WeekviewSchemaError, SQLAlchemyError):
+        current_app.logger.exception("Report schema or data is unavailable")
+        return _schema_unavailable()
     if not_mod:
         resp = make_response("")
         resp.status_code = 304
@@ -91,6 +122,9 @@ def export_report() -> Response:
     tid = _tenant_id()
     if tid is None:
         return bad_request("tenant_missing")
+    site_id = _report_site_id()
+    if isinstance(site_id, Response):
+        return site_id
     try:
         year = int(request.args.get("year", ""))
         week = int(request.args.get("week", ""))
@@ -99,18 +133,26 @@ def export_report() -> Response:
     if year < 1970 or not (1 <= week <= 53):
         return bad_request("invalid_year_or_week")
     department_id: Optional[str] = request.args.get("department_id") or None
-    if department_id:
-        try:
-            uuid.UUID(department_id)
-        except Exception:
-            return bad_request("invalid_department_id")
-        if not _repo.department_exists(tid, year, week, department_id):
-            return not_found("department_not_found")
     fmt = (request.args.get("format") or "").strip().lower()
     if fmt not in ("csv", "xlsx"):
         return bad_request("invalid_format")
+    try:
+        if not _repo.site_exists(tid, site_id):
+            return not_found("site_not_found")
+        if department_id:
+            try:
+                uuid.UUID(department_id)
+            except Exception:
+                return bad_request("invalid_department_id")
+            if not _repo.department_exists(tid, site_id, year, week, department_id):
+                return not_found("department_not_found")
+        _, payload, base_etag = _service.compute(
+            tid, site_id, year, week, department_id, None
+        )
+    except (WeekviewSchemaError, SQLAlchemyError):
+        current_app.logger.exception("Report export schema or data is unavailable")
+        return _schema_unavailable()
     inm = request.headers.get("If-None-Match")
-    not_mod, payload, base_etag = _service.compute(tid, year, week, department_id, None)
     # Suffix ETag with format to differentiate export variants
     export_etag = base_etag[:-1] + f":fmt:{fmt}" + base_etag[-1:]
     if inm and inm == export_etag:

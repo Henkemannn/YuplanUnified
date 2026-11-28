@@ -1,3 +1,4 @@
+from tests._auth_site_helpers import login_bound_user
 import uuid
 from sqlalchemy import text
 
@@ -14,21 +15,39 @@ def _seed_site_dep_week_with_menu():
         dep_id = str(uuid.uuid4())
         year, week = 2025, 2
         # Create site/department
-        db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0)"), {"i": site_id, "n": "PortalSite"})
+        db.execute(text("INSERT INTO sites(id, name, tenant_id, version) VALUES(:i,:n,1,0)"), {"i": site_id, "n": "PortalSite"})
         db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, notes, version) VALUES(:i,:s,:n,'fixed',8,'PRIVATE_ADMIN_NOTE_DO_NOT_EXPOSE',0)"), {"i": dep_id, "s": site_id, "n": "Avd Portal"})
-        # Diet defaults
-        db.execute(text("CREATE TABLE IF NOT EXISTS department_diet_defaults (department_id TEXT NOT NULL, diet_type_id TEXT NOT NULL, default_count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(department_id, diet_type_id))"))
-        db.execute(text("INSERT INTO department_diet_defaults(department_id, diet_type_id, default_count) VALUES(:d,'Gluten',2)"), {"d": dep_id})
-        db.execute(text("INSERT INTO department_diet_defaults(department_id, diet_type_id, default_count) VALUES(:d,'Laktos',1)"), {"d": dep_id})
         db.commit()
-        return site_id, dep_id, year, week
     finally:
         db.close()
+    from core.admin_repo import DepartmentsRepo, DietTypesRepo
+
+    diet_repo = DietTypesRepo()
+    diet_ids = {
+        name: diet_repo.create(
+            site_id=site_id,
+            tenant_id=1,
+            name=name,
+            semantics="atomic",
+        )
+        for name in ("Gluten", "Laktos")
+    }
+    DepartmentsRepo().upsert_department_diet_defaults(
+        dep_id,
+        0,
+        [
+            {"diet_type_id": str(diet_ids["Gluten"]), "default_count": 2},
+            {"diet_type_id": str(diet_ids["Laktos"]), "default_count": 1},
+        ],
+    )
+    return site_id, dep_id, year, week
 
 
 def test_portal_week_enhetsportal_view(app_session):
     client = app_session.test_client()
     site_id, dep_id, year, week = _seed_site_dep_week_with_menu()
+
+    login_bound_user(client, site_id=site_id, role="unit_portal", department_id=dep_id)
 
     # GET portal week as portal role
     r = client.get(f"/ui/portal/week?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=HEADERS_PORTAL)

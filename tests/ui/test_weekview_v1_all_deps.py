@@ -149,7 +149,7 @@ def test_weekview_empty_department_id_matches_absent_and_valid_and_invalid_behav
     assert empty_resp.status_code == 200
     assert absent_resp.status_code == 200
     assert valid_resp.status_code == 200
-    assert invalid_resp.status_code == 200
+    assert invalid_resp.status_code == 403
 
     empty_body = empty_resp.get_data(as_text=True)
     absent_body = absent_resp.get_data(as_text=True)
@@ -161,7 +161,6 @@ def test_weekview_empty_department_id_matches_absent_and_valid_and_invalid_behav
     assert empty_body == absent_body or ("Avdelning 1" in empty_body and "Avdelning 1" in absent_body)
     assert "Avdelning 1" in valid_body
     assert "Avd A" not in invalid_body and "Avd B" not in invalid_body
-    assert "Avdelning" in invalid_body
 
 
 def test_weekview_identity_hierarchy_renders_residence_names_and_no_avd_prefix(client_admin, app_session):

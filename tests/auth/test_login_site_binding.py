@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import pytest
 from core.app_factory import create_app
 from core.db import get_session, create_all
-from core.models import User, Tenant, Site, Department
+from core.models import User, Tenant, Site, Department, DietaryType
 from core.jwt_utils import decode as jwt_decode
 from werkzeug.security import generate_password_hash
 from sqlalchemy import text
@@ -604,6 +604,15 @@ def test_stateless_bearer_uses_current_db_site_binding(monkeypatch):
         user = db.query(User).filter(User.email == email.lower()).one()
         user_id = int(user.id)
         tenant_id = int(user.tenant_id)
+        diet = DietaryType(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            name="Synthetic exclusion diet",
+        )
+        db.add(diet)
+        db.flush()
+        diet_id = int(diet.id)
+        db.commit()
         login_client = app.test_client()
         login_response = login_client.post(
             "/auth/login",
@@ -621,7 +630,7 @@ def test_stateless_bearer_uses_current_db_site_binding(monkeypatch):
             "day_index": 2,
             "meal": "lunch",
             "alt": "1",
-            "diet_type_id": "dt1",
+            "diet_type_id": str(diet_id),
         }
         core_response = stateless_core_client.post(
             "/api/kitchen/planering/normal_exclusions/toggle",

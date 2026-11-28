@@ -14,7 +14,7 @@ from .builder_menu_context_flow import (
     ReviewedCompositionConflict,
 )
 from .builder_sqlite import (
-    initialize_builder_sqlite,
+    require_builder_sqlite,
     SQLiteMenuDetailRepository,
     SQLiteMenuRepository,
 )
@@ -292,7 +292,7 @@ def _get_menu_context_flow() -> BuilderMenuContextFlow:
     if not isinstance(menu_service, MenuService):
         builder_db_path = str(current_app.config.get("BUILDER_DB_PATH") or "").strip()
         if builder_db_path:
-            db_path = initialize_builder_sqlite(builder_db_path)
+            db_path = require_builder_sqlite(builder_db_path)
             menu_service = MenuService(
                 menu_repository=SQLiteMenuRepository(db_path=db_path),
                 menu_detail_repository=SQLiteMenuDetailRepository(db_path=db_path),

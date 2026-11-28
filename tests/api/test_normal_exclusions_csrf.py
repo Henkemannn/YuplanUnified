@@ -4,7 +4,7 @@ from sqlalchemy import text
 from core import create_app
 from core.db import create_all
 from core.db import get_session
-from core.models import Site, Tenant, User
+from core.models import DietaryType, Site, Tenant, User
 
 
 def _make_app(tmp_path):
@@ -28,6 +28,15 @@ def _make_app(tmp_path):
                 db.add(tenant)
             if db.query(Site).filter_by(id="site-csrf-1").first() is None:
                 db.add(Site(id="site-csrf-1", name="CSRF Test Site", tenant_id=1))
+            if db.query(DietaryType).filter_by(id=1).first() is None:
+                db.add(DietaryType(
+                    id=1,
+                    tenant_id=1,
+                    site_id="site-csrf-1",
+                    name="Synthetic CSRF diet",
+                    requirement_key="csrf_diet",
+                    semantics="atomic",
+                ))
             user = db.query(User).filter_by(id=1).first()
             if user is None:
                 user = User(
@@ -76,7 +85,7 @@ def _payload():
         "day_index": 2,
         "meal": "lunch",
         "alt": "1",
-        "diet_type_id": "dt1",
+        "diet_type_id": "1",
     }
 
 

@@ -1,73 +1,36 @@
-from sqlalchemy import inspect, text
+from pathlib import Path
+
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import create_engine, inspect, text
 
 
-def _restore_canonical_dietary_types_schema(db) -> None:
-    from core.models import DietaryType
-
-    db.execute(text("DROP TABLE IF EXISTS dietary_types"))
-    DietaryType.__table__.create(bind=db.bind, checkfirst=True)
-    db.commit()
-
-
-def _canonical_dietary_types_columns(db) -> list[str]:
-    inspector = inspect(db.bind)
-    return [column["name"] for column in inspector.get_columns("dietary_types")]
-
-
-def test_diet_family_column_backfilled_from_existing_names(app_session):
-    from core.db import get_session
-    from core.admin_repo import DietTypesRepo
-
-    db = get_session()
+def test_diet_family_column_backfilled_from_existing_names(tmp_path, monkeypatch):
+    url = f"sqlite:///{(tmp_path / 'diet-family.db').as_posix()}"
+    monkeypatch.setenv("DATABASE_URL", url)
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    config.set_main_option("sqlalchemy.url", url)
+    command.upgrade(config, "0019_add_production_lists")
+    engine = create_engine(url)
     try:
-        db.execute(text("DROP TABLE IF EXISTS dietary_types"))
-        db.execute(
-            text(
-                """
-                CREATE TABLE dietary_types (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    site_id TEXT NULL,
-                    name TEXT NOT NULL,
-                    default_select INTEGER NOT NULL DEFAULT 0
+        with engine.begin() as conn:
+            for name in ("Timbal-Fisk", "Glutenfri", "Vegan", "Special A"):
+                conn.execute(
+                    text("INSERT INTO dietary_types(tenant_id, name, default_select) VALUES(1, :name, 0)"),
+                    {"name": name},
                 )
-                """
-            )
-        )
-        db.execute(
-            text("INSERT INTO dietary_types(site_id, name, default_select) VALUES('site-1', 'Timbal-Fisk', 0)")
-        )
-        db.execute(
-            text("INSERT INTO dietary_types(site_id, name, default_select) VALUES('site-1', 'Glutenfri', 0)")
-        )
-        db.execute(
-            text("INSERT INTO dietary_types(site_id, name, default_select) VALUES('site-1', 'Vegan', 0)")
-        )
-        db.execute(
-            text("INSERT INTO dietary_types(site_id, name, default_select) VALUES('site-1', 'Special A', 0)")
-        )
-        db.commit()
-
-        repo = DietTypesRepo()
-        rows = repo.list_all(tenant_id=1)
-        by_name = {str(r.get("name")): str(r.get("diet_family")) for r in rows}
-
-        assert by_name.get("Timbal-Fisk") == "Textur"
-        assert by_name.get("Glutenfri") == "Allergi / Exkludering"
-        assert by_name.get("Vegan") == "Kostval"
-        assert by_name.get("Special A") == "Övrigt"
+        command.upgrade(config, "0020_add_diet_family_to_dietary_types")
+        with engine.connect() as conn:
+            by_name = dict(conn.execute(text("SELECT name, diet_family FROM dietary_types")).all())
+        assert by_name["Timbal-Fisk"] == "Textur"
+        assert by_name["Glutenfri"] == "Allergi / Exkludering"
+        assert by_name["Vegan"] == "Kostval"
+        assert by_name["Special A"] == "Övrigt"
+        command.upgrade(config, "0035_add_dietary_types_requirement_identity")
+        canonical_columns = {column["name"] for column in inspect(engine).get_columns("dietary_types")}
+        assert {"tenant_id", "site_id", "diet_family", "requirement_key", "semantics"} <= canonical_columns
     finally:
-        try:
-            db = get_session()
-            _restore_canonical_dietary_types_schema(db)
-            canonical_columns = _canonical_dietary_types_columns(db)
-        finally:
-            db.close()
-
-    assert "tenant_id" in canonical_columns
-    assert "site_id" in canonical_columns
-    assert "diet_family" in canonical_columns
-    assert "requirement_key" in canonical_columns
-    assert "semantics" in canonical_columns
+        engine.dispose()
 
 
 def test_diet_family_utils_normalize_and_infer():

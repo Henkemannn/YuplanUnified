@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests._auth_site_helpers import login_bound_user
+
 import os
 import uuid
 from datetime import date as _date
@@ -37,6 +39,8 @@ def test_weekview_shows_alt2_lunch_highlight(client_admin):
         dep, _ = dep_repo.create_department(site_id=site["id"], name="Avd Alt2", resident_count_mode="fixed", resident_count_fixed=10)
         site_id = site["id"]
         dep_id = dep["id"]
+
+    login_bound_user(client_admin, site_id=site_id)
 
     # Directly seed Alt2 flag (canonical schema: site_id, enabled)
     with app.app_context():

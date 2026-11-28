@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 import sqlite3
+import subprocess
+import sys
+from contextlib import closing
 from pathlib import Path
 
+import pytest
+
+import core.builder_sqlite as builder_sqlite
 from core.builder import BuilderFlow
 from core.builder_menu_context_flow import BuilderMenuContextFlow
 from core.builder_sqlite import (
@@ -13,6 +19,8 @@ from core.builder_sqlite import (
     SQLiteCompositionRepository,
     SQLiteMenuDetailRepository,
     SQLiteMenuRepository,
+    BuilderSchemaError,
+    require_builder_sqlite,
 )
 from core.components import ComponentService, Composition, CompositionComponent, CompositionService
 from core.components import InMemoryRecipeIngredientLineRepository, InMemoryRecipeRepository
@@ -48,7 +56,9 @@ def _create_legacy_composition_db(path: Path) -> None:
                 component_name TEXT NULL,
                 role TEXT NULL,
                 sort_order INTEGER NOT NULL,
-                PRIMARY KEY (composition_id, component_id, sort_order)
+                PRIMARY KEY (composition_id, component_id, sort_order),
+                FOREIGN KEY(composition_id) REFERENCES builder_compositions(composition_id),
+                FOREIGN KEY(component_id) REFERENCES builder_components(component_id)
             );
             """
         )
@@ -79,10 +89,182 @@ def _create_legacy_menu_db(path: Path) -> None:
                 note TEXT NULL,
                 sort_order INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(menu_id) REFERENCES builder_menus(menu_id)
+                FOREIGN KEY(menu_id) REFERENCES builder_menus(menu_id),
+                FOREIGN KEY(composition_id) REFERENCES builder_compositions(composition_id)
             );
             """
         )
+
+
+def test_missing_builder_schema_does_not_create_database(tmp_path: Path) -> None:
+    path = tmp_path / "missing.db"
+    with pytest.raises(BuilderSchemaError, match="explicit provisioning"):
+        require_builder_sqlite(str(path))
+    assert not path.exists()
+
+
+def test_builder_provisioning_cli_requires_confirmation(tmp_path: Path) -> None:
+    path = tmp_path / "builder.db"
+    command = [sys.executable, "-m", "scripts.provision_builder_sqlite", "--database", str(path)]
+    denied = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert denied.returncode != 0
+    assert not path.exists()
+    result = subprocess.run(command + ["--confirm-schema-upgrade"], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
+    assert require_builder_sqlite(str(path)) == str(path)
+
+
+def test_repeated_builder_provisioning_preserves_existing_data(tmp_path: Path) -> None:
+    path = tmp_path / "builder.db"
+    initialize_builder_sqlite(str(path))
+    with _connect(path) as conn:
+        conn.execute("INSERT INTO builder_components(component_id, canonical_name) VALUES('c1', 'Synthetic')")
+        conn.execute(
+            "INSERT INTO builder_object_scopes(object_type, object_id, tenant_id, owner_scope, owner_site_id, visibility) "
+            "VALUES('component', 'c1', 1, 'site', 'site-1', 'site')"
+        )
+        conn.commit()
+        before = list(conn.iterdump())
+    initialize_builder_sqlite(str(path))
+    with _connect(path) as conn:
+        assert list(conn.iterdump()) == before
+
+
+@pytest.mark.parametrize(
+    ("table", "column", "column_type"),
+    [
+        ("builder_object_scopes", "tenant_id", "INTEGER"),
+        ("builder_object_scopes", "object_type", "TEXT"),
+        ("builder_components", "canonical_name", "TEXT"),
+        ("builder_menu_rows", "row_kind", "TEXT"),
+        ("builder_import_session_items", "selected", "INTEGER"),
+    ],
+)
+def test_builder_schema_rejects_nullable_required_columns(tmp_path: Path, table, column, column_type) -> None:
+    path = tmp_path / "builder.db"
+    initialize_builder_sqlite(str(path))
+    with closing(_connect(path)) as conn:
+        sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone()["sql"]
+        required = f"{column} {column_type} NOT NULL"
+        assert sql.count(required) == 1
+        conn.execute(f"DROP TABLE {table}")
+        conn.execute(sql.replace(required, f"{column} {column_type} NULL"))
+        conn.commit()
+        before = list(conn.iterdump())
+
+    with pytest.raises(BuilderSchemaError, match=rf"{table}\.{column}"):
+        require_builder_sqlite(str(path))
+    with closing(_connect(path)) as conn:
+        assert list(conn.iterdump()) == before
+
+
+def test_canonical_builder_schema_allows_nullable_columns_and_text_primary_keys(tmp_path: Path) -> None:
+    path = tmp_path / "builder.db"
+    initialize_builder_sqlite(str(path))
+    with closing(_connect(path)) as conn:
+        scopes = {row["name"]: row for row in conn.execute("PRAGMA table_info('builder_object_scopes')")}
+        components = {row["name"]: row for row in conn.execute("PRAGMA table_info('builder_components')")}
+        assert scopes["owner_site_id"]["notnull"] == 0
+        assert scopes["owner_user_id"]["notnull"] == 0
+        assert scopes["source_object_id"]["notnull"] == 0
+        assert components["component_id"]["pk"] == 1
+        assert components["component_id"]["notnull"] == 0
+    assert require_builder_sqlite(str(path)) == str(path)
+
+
+def test_all_canonical_required_columns_reject_nullable_schema(tmp_path: Path) -> None:
+    path = tmp_path / "builder.db"
+    initialize_builder_sqlite(str(path))
+    with closing(_connect(path)) as canonical:
+        for table in builder_sqlite._REQUIRED_COLUMNS:
+            sql = canonical.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)
+            ).fetchone()["sql"]
+            for column in canonical.execute(f"PRAGMA table_info('{table}')"):
+                if not column["notnull"]:
+                    continue
+                name = column["name"]
+                declaration = f'{name} {column["type"]} NOT NULL'
+                assert sql.count(declaration) == 1
+                with closing(sqlite3.connect(":memory:")) as probe:
+                    canonical.backup(probe)
+                    probe.row_factory = sqlite3.Row
+                    probe.execute(f"DROP TABLE {table}")
+                    probe.execute(sql.replace(declaration, f'{name} {column["type"]} NULL'))
+                    with pytest.raises(BuilderSchemaError, match=rf"{table}\.{name}"):
+                        builder_sqlite._check_builder_schema(probe)
+
+
+def test_builder_provisioning_rejects_nullable_scope_and_rolls_back(tmp_path: Path) -> None:
+    path = tmp_path / "legacy.db"
+    _create_legacy_menu_db(path)
+    with closing(_connect(path)) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE builder_object_scopes (
+                object_type TEXT NOT NULL, object_id TEXT NOT NULL, tenant_id INTEGER NULL,
+                owner_scope TEXT NOT NULL, owner_site_id TEXT NULL, owner_user_id INTEGER NULL,
+                visibility TEXT NOT NULL, source_object_id TEXT NULL,
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                PRIMARY KEY (object_type, object_id)
+            );
+            INSERT INTO builder_object_scopes VALUES (
+                'component', 'synthetic', NULL, 'site', 'site-1', NULL, 'site', NULL, 'before', 'before'
+            );
+            INSERT INTO builder_menus(menu_id, site_id, week_key) VALUES('menu-1', 'site-1', '2026-W15');
+            INSERT INTO builder_menu_rows(menu_detail_id, menu_id, day, meal_slot, composition_ref_type)
+                VALUES('row-1', 'menu-1', 'monday', 'lunch', 'unresolved');
+            """
+        )
+        before = list(conn.iterdump())
+
+    with pytest.raises(BuilderSchemaError, match=r"builder_object_scopes\.tenant_id"):
+        initialize_builder_sqlite(str(path))
+    with closing(_connect(path)) as conn:
+        assert list(conn.iterdump()) == before
+
+
+def test_builder_schema_without_category_uniqueness_is_rejected(tmp_path: Path) -> None:
+    path = tmp_path / "builder.db"
+    initialize_builder_sqlite(str(path))
+    with _connect(path) as conn:
+        conn.executescript(
+            """
+            DROP TABLE builder_dish_categories;
+            CREATE TABLE builder_dish_categories (
+                category_id TEXT PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL,
+                display_name TEXT NOT NULL, name_norm TEXT NOT NULL, created_at TEXT NOT NULL
+            );
+            """
+        )
+    with pytest.raises(BuilderSchemaError, match="category uniqueness"):
+        require_builder_sqlite(str(path))
+
+
+def test_builder_schema_upgrade_failure_rolls_back_schema_and_data(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "legacy.db"
+    _create_legacy_menu_db(path)
+    with _connect(path) as conn:
+        conn.execute(
+            "INSERT INTO builder_menus(menu_id, site_id, week_key) VALUES('menu-1', 'site-1', '2026-W15')"
+        )
+        conn.execute(
+            "INSERT INTO builder_menu_rows(menu_detail_id, menu_id, day, meal_slot, composition_ref_type) "
+            "VALUES('row-1', 'menu-1', 'monday', 'lunch', 'unresolved')"
+        )
+        conn.commit()
+        before = list(conn.iterdump())
+
+    def fail(_conn):
+        raise BuilderSchemaError("injected provisioning failure")
+
+    monkeypatch.setattr(builder_sqlite, "_validate_builder_schema", fail)
+    with pytest.raises(BuilderSchemaError, match="injected provisioning failure"):
+        initialize_builder_sqlite(str(path))
+    with _connect(path) as conn:
+        assert list(conn.iterdump()) == before
 
 
 def _build_builder_flow(db_path: str) -> BuilderFlow:
@@ -178,15 +360,25 @@ def test_composition_with_component_links_persists(tmp_path: Path) -> None:
 def test_legacy_composition_schema_upgrade_adds_custom_menu_columns(tmp_path: Path) -> None:
     db_path = tmp_path / "legacy_builder_persistence_test.db"
     _create_legacy_composition_db(db_path)
+    with _connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO builder_compositions(composition_id, composition_name, library_group) "
+            "VALUES('existing-dish', 'Synthetic legacy dish', 'fisk')"
+        )
+        conn.commit()
 
     initialize_builder_sqlite(str(db_path))
 
     with _connect(db_path) as conn:
         columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info('builder_compositions')").fetchall()}
+        row = conn.execute(
+            "SELECT composition_name, library_group FROM builder_compositions WHERE composition_id='existing-dish'"
+        ).fetchone()
 
     assert "use_custom_menu_name" in columns
     assert "menu_name" in columns
     assert "menu_nameTEXT" not in columns
+    assert tuple(row) == ("Synthetic legacy dish", "fisk")
 
     repo = SQLiteCompositionRepository(db_path=str(db_path))
     created = Composition(
@@ -209,14 +401,27 @@ def test_legacy_composition_schema_upgrade_adds_custom_menu_columns(tmp_path: Pa
 def test_legacy_menu_row_schema_upgrade_adds_display_label_and_row_kind(tmp_path: Path) -> None:
     db_path = tmp_path / "legacy_builder_menu_rows_test.db"
     _create_legacy_menu_db(db_path)
+    with _connect(db_path) as conn:
+        conn.execute("INSERT INTO builder_menus(menu_id, site_id, week_key) VALUES('old-menu', 'old-site', '2026-W15')")
+        conn.execute(
+            "INSERT INTO builder_menu_rows(menu_detail_id, menu_id, day, meal_slot, composition_ref_type, unresolved_text) "
+            "VALUES('old-row', 'old-menu', 'monday', 'lunch', 'unresolved', 'Synthetic legacy row')"
+        )
+        conn.commit()
 
     initialize_builder_sqlite(str(db_path))
 
     with _connect(db_path) as conn:
         columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info('builder_menu_rows')").fetchall()}
+        row = conn.execute(
+            "SELECT m.site_id, r.menu_id, r.unresolved_text FROM builder_menu_rows r "
+            "JOIN builder_menus m ON r.menu_id=m.menu_id WHERE r.menu_detail_id='old-row'"
+        ).fetchone()
+        assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
 
     assert "display_label" in columns
     assert "row_kind" in columns
+    assert tuple(row) == ("old-site", "old-menu", "Synthetic legacy row")
 
     builder_flow = _build_builder_flow(str(db_path))
     menu_flow = _build_menu_context_flow(builder_flow, str(db_path))

@@ -5,6 +5,7 @@ Tests for inline toggle, keyboard navigation, visual clarity, and code organizat
 import pytest
 from datetime import date
 from sqlalchemy import text
+from tests._auth_site_helpers import login_bound_user
 
 
 def _h(role: str = "staff"):
@@ -24,13 +25,14 @@ def test_weekview_external_css_loaded(client_admin):
     with app.app_context():
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "CSS Test Site"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',20,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "CSS Dept"})
             db.commit()
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
     
     today = date.today()
     iso_cal = today.isocalendar()
@@ -64,13 +66,14 @@ def test_weekview_external_js_loaded(client_admin):
     with app.app_context():
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "JS Test Site"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',20,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "JS Dept"})
             db.commit()
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
     
     today = date.today()
     iso_cal = today.isocalendar()
@@ -101,13 +104,14 @@ def test_weekview_keyboard_navigation_attributes(client_admin):
     with app.app_context():
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Keyboard Test Site"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',20,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "Keyboard Dept"})
             db.commit()
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
     
     today = date.today()
     iso_cal = today.isocalendar()
@@ -136,13 +140,14 @@ def test_weekview_meal_section_visual_distinction(client_admin):
     with app.app_context():
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Visual Test Site"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',20,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "Visual Dept"})
             db.commit()
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
     
     today = date.today()
     iso_cal = today.isocalendar()
@@ -172,13 +177,14 @@ def test_weekview_meal_cells_have_data_attributes(client_admin):
     with app.app_context():
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Data Attrs Test"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',20,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "Data Dept"})
             db.commit()
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
     
     today = date.today()
     iso_cal = today.isocalendar()
@@ -213,13 +219,14 @@ def test_weekview_alt2_badge_enhanced_styling(client_admin):
         create_all()
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Alt2 Test Site"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',20,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "Alt2 Dept"})
             db.commit()
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
     
     resp = client_admin.get(
         f"/ui/weekview?site_id={site_id}&department_id={dept_id}&year={year}&week={week}",
@@ -247,13 +254,14 @@ def test_weekview_aria_labels_present(client_admin):
     with app.app_context():
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "ARIA Test Site"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',20,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "ARIA Dept"})
             db.commit()
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
     
     today = date.today()
     iso_cal = today.isocalendar()
@@ -283,13 +291,14 @@ def test_weekview_modal_close_button_has_data_attribute(client_admin):
     with app.app_context():
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Modal Test Site"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',20,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "Modal Dept"})
             db.commit()
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
     
     today = date.today()
     iso_cal = today.isocalendar()

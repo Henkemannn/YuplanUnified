@@ -1,6 +1,7 @@
 {% extends "ui/unified_admin_base.html" %}
 
 {% block admin_head_extra %}
+    <meta name="csrf-token" content="{{ csrf_meta_token() }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_departments.css') }}">
 {% endblock %}
 
@@ -191,7 +192,7 @@
 <dialog id="service-addon-modal" class="ua-modal admin-service-addon-modal">
     <div class="ua-modal-inner admin-service-addon-modal__inner">
         <form method="POST" action="{{ url_for('ui.admin_departments_edit_save_service_addons', dept_id=vm.department.id) }}" class="admin-service-addon-modal__form" data-service-addon-form data-service-addon-main-form>
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_meta_token() }}">
             <input type="hidden" name="service_addon_mode" value="add">
             <input type="hidden" name="service_addon_action" value="">
             <input type="hidden" name="service_addon_row_id" value="">
@@ -436,7 +437,7 @@
         </form>
 
         <form method="POST" action="{{ url_for('ui.admin_departments_edit_save_service_addons', dept_id=vm.department.id) }}" class="admin-service-addon-modal__form admin-service-addon-modal__form--remove" data-service-addon-remove-form hidden>
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_meta_token() }}">
             <input type="hidden" name="service_addon_mode" value="edit">
             <input type="hidden" name="service_addon_action" value="remove">
             <input type="hidden" name="service_addon_row_id" value="">
@@ -465,7 +466,7 @@
         <form method="POST"
               action="{{ url_for('ui.admin_departments_create') }}"
               class="yp-form department-form admin-department-create-form">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_meta_token() }}">
 
             <div class="admin-department-create__section">
                 <div class="admin-department-create__section-head">
@@ -545,7 +546,7 @@
             <button type="button" class="ua-modal-close" data-modal-close aria-label="Stäng">×</button>
         </header>
         <form method="POST" action="{{ url_for('ui.admin_residences_create') }}" class="yp-form">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_meta_token() }}">
             <input type="hidden" name="return_to" value="{{ 'edit' if vm.mode == 'edit' else 'new' }}">
             {% if vm.mode == 'edit' and vm.department %}
             <input type="hidden" name="dept_id" value="{{ vm.department.id }}">
@@ -606,7 +607,7 @@
         <form method="POST"
               action="{{ url_for('ui.admin_departments_update', dept_id=vm.department.id) }}"
               class="admin-department-edit-modal__form">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_meta_token() }}">
             <input type="hidden" name="version" value="{{ vm.department.version }}">
 
             <header class="ua-modal-header admin-department-edit-modal__header">
@@ -673,7 +674,7 @@
 <dialog id="need-modal" class="ua-modal admin-need-modal">
     <div class="ua-modal-inner">
         <form id="need-modal-form" method="POST" action="{{ url_for('ui.admin_departments_save_requirement_group', dept_id=vm.department.id) }}" class="admin-need-modal__form admin-need-modal__edit-form">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_meta_token() }}">
             <input type="hidden" name="group_id" value="">
 
             <div class="admin-need-modal__edit-state" data-need-edit-state>
@@ -731,7 +732,7 @@
         </form>
 
         <form class="admin-need-modal__remove-form" data-need-remove-form method="POST" action="{{ url_for('ui.admin_departments_save_requirement_group', dept_id=vm.department.id) }}" hidden>
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_meta_token() }}">
             <input type="hidden" name="group_id" value="">
             <input type="hidden" name="remove_request" value="1">
             <div class="admin-need-modal__remove-state" data-need-remove-state>
@@ -819,7 +820,7 @@
                   data-variation-has-selected-week-override="{{ '1' if vm.has_selected_week_override else '' }}"
                   data-variation-forever-table='{{ vm.resident_variation_forever_table | tojson }}'
                   data-variation-week-table='{{ vm.resident_variation_selected_week_table | tojson }}'>
-                {{ csrf_token_input()|safe }}
+                <input type="hidden" name="csrf_token" value="{{ csrf_meta_token() }}">
                 <input type="hidden" name="selected_year" value="{{ vm.current_year }}">
                 <input type="hidden" name="selected_week" value="{{ vm.selected_week if vm.selected_week else (vm.current_week if vm.current_week else 1) }}">
                 <input type="hidden" name="variation_focus_group_id" value="">

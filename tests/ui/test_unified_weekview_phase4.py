@@ -10,6 +10,7 @@ Test coverage for Phase 4 summary functionality:
 import pytest
 from datetime import date
 from sqlalchemy import text
+from tests._auth_site_helpers import login_bound_user
 import uuid
 
 
@@ -35,7 +36,7 @@ def test_weekview_daily_summary_happy_path(client_admin):
         db = get_session()
         try:
             # Create site and department
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Summary Test Site"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',20,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "Summary Dept"})
@@ -54,6 +55,7 @@ def test_weekview_daily_summary_happy_path(client_admin):
             )
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
     
     # Fetch weekview UI
     resp = client_admin.get(
@@ -87,13 +89,14 @@ def test_weekview_daily_summary_dinner_only_if_exists(client_admin):
         db = get_session()
         try:
             # Create site and department (no dinner service by default)
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "No Dinner Site"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',15,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "No Dinner Dept"})
             db.commit()
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
     
     # Fetch weekview UI
     resp = client_admin.get(
@@ -127,7 +130,7 @@ def test_weekview_weekly_department_summary_aggregates_correctly(client_admin):
         db = get_session()
         try:
             # Create site and department
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Weekly Summary Site"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',25,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "Weekly Dept"})
@@ -150,6 +153,7 @@ def test_weekview_weekly_department_summary_aggregates_correctly(client_admin):
                 )
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
     
     # Fetch weekview UI
     resp = client_admin.get(
@@ -185,13 +189,14 @@ def test_weekview_summary_permissions_staff_can_view(client_admin):
         create_all()
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Staff Summary Site"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',18,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "Staff Dept"})
             db.commit()
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
     
     # Fetch as staff user (not admin)
     resp = client_admin.get(
@@ -222,7 +227,7 @@ def test_weekview_summary_unregistered_count_correct(client_admin):
         db = get_session()
         try:
             # Create site and department with 10 residents
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Unregistered Test Site"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',10,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "Unreg Dept"})
@@ -241,6 +246,7 @@ def test_weekview_summary_unregistered_count_correct(client_admin):
             )
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
     
     # Fetch weekview UI
     resp = client_admin.get(
@@ -272,13 +278,14 @@ def test_weekview_phase4_no_schema_changes(client_admin):
         db = get_session()
         try:
             # Create minimal setup
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "No Schema Site"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',12,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "No Schema Dept"})
             db.commit()
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
     
     # Fetch weekview UI - should render summaries from existing data only
     resp = client_admin.get(
@@ -309,13 +316,14 @@ def test_weekview_phase1_phase2_phase3_still_passing(client_admin):
         create_all()
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Regression Test"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',30,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dept_id, "s": site_id, "n": "Regression Dept"})
             db.commit()
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
     
     # Fetch weekview UI
     resp = client_admin.get(

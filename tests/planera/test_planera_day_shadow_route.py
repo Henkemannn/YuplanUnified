@@ -8,6 +8,7 @@ from core.admin_repo import DepartmentsRepo, SitesRepo
 from core.db import create_all, get_session
 from core.models import TenantFeatureFlag
 from sqlalchemy import text
+from tests._auth_site_helpers import login_bound_user
 
 
 def _h(role: str = "admin") -> dict[str, str]:
@@ -114,6 +115,7 @@ def _route_payload(site_id: str, site_name: str, d: str, dep_id: str) -> dict[st
 def test_planera_day_shadow_flag_controls_application_mode(client_admin, monkeypatch: pytest.MonkeyPatch, shadow_flag_value, expected_mode):
     app = client_admin.application
     site_id, dep_id = _seed_site_and_department(app, site_name="PlaneraSite")
+    login_bound_user(client_admin, site_id=site_id)
     d = date(2025, 11, 20).isoformat()
     _enable_planera_api(app)
     _set_tenant_shadow_flag(app, enabled=shadow_flag_value)
@@ -145,6 +147,7 @@ def test_planera_day_shadow_flag_controls_application_mode(client_admin, monkeyp
 def test_planera_day_shadow_and_legacy_response_are_identical_for_same_payload(client_admin, monkeypatch: pytest.MonkeyPatch):
     app = client_admin.application
     site_id, dep_id = _seed_site_and_department(app, site_name="PlaneraSite")
+    login_bound_user(client_admin, site_id=site_id)
     d = date(2025, 11, 20).isoformat()
     _enable_planera_api(app)
 
@@ -171,6 +174,7 @@ def test_planera_day_shadow_and_legacy_response_are_identical_for_same_payload(c
 def test_planera_day_resolver_errors_map_to_existing_404_shape(client_admin, monkeypatch: pytest.MonkeyPatch, resolver_code: str):
     app = client_admin.application
     site_id, dep_id = _seed_site_and_department(app, site_name="PlaneraSite")
+    login_bound_user(client_admin, site_id=site_id)
     d = date(2025, 11, 20).isoformat()
     _enable_planera_api(app)
     _set_tenant_shadow_flag(app, enabled=True)
@@ -193,6 +197,7 @@ def test_planera_day_resolver_errors_map_to_existing_404_shape(client_admin, mon
 def test_planera_day_route_does_not_call_planera_service_compute_day(client_admin, monkeypatch: pytest.MonkeyPatch):
     app = client_admin.application
     site_id, dep_id = _seed_site_and_department(app, site_name="PlaneraSite")
+    login_bound_user(client_admin, site_id=site_id)
     d = date(2025, 11, 20).isoformat()
     _enable_planera_api(app)
     _set_tenant_shadow_flag(app, enabled=False)
@@ -217,6 +222,11 @@ def test_planera_day_route_does_not_call_planera_service_compute_day(client_admi
 def test_planera_day_wrong_tenant_returns_existing_404_shape(client_admin):
     app = client_admin.application
     (site_id, dep_id), _ = _seed_owned_sites_and_departments(app)
+    with client_admin.session_transaction() as sess:
+        sess["role"] = "admin"
+        sess["tenant_id"] = 2
+        sess["site_id"] = site_id
+        sess.pop("user_id", None)
     d = date(2025, 11, 20).isoformat()
     _enable_planera_api(app)
     _set_tenant_shadow_flag(app, enabled=None)
@@ -235,6 +245,7 @@ def test_planera_day_wrong_tenant_returns_existing_404_shape(client_admin):
 def test_planera_day_wrong_department_scope_returns_existing_404_shape(client_admin):
     app = client_admin.application
     (site_a_id, _dep_a_id), (_site_b_id, dep_b_id) = _seed_owned_sites_and_departments(app)
+    login_bound_user(client_admin, site_id=site_a_id)
     d = date(2025, 11, 20).isoformat()
     _enable_planera_api(app)
     _set_tenant_shadow_flag(app, enabled=None)
@@ -253,6 +264,7 @@ def test_planera_day_wrong_department_scope_returns_existing_404_shape(client_ad
 def test_planera_day_shadow_flag_false_is_legacy_and_etag_304_still_works(client_admin, monkeypatch: pytest.MonkeyPatch):
     app = client_admin.application
     site_id, dep_id = _seed_site_and_department(app, site_name="PlaneraSite")
+    login_bound_user(client_admin, site_id=site_id)
     d = date(2025, 11, 20).isoformat()
     _enable_planera_api(app)
     _set_tenant_shadow_flag(app, enabled=False)

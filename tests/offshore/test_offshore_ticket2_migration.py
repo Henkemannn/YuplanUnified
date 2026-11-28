@@ -14,11 +14,11 @@ def _alembic_cfg(db_url: str) -> Config:
     return cfg
 
 
-def _upgrade_to_head(db_url: str) -> None:
+def _upgrade_to_ticket2(db_url: str) -> None:
     old = os.environ.get("DATABASE_URL")
     os.environ["DATABASE_URL"] = db_url
     try:
-        command.upgrade(_alembic_cfg(db_url), "head")
+        command.upgrade(_alembic_cfg(db_url), "0026_add_offshore_v2_installation_settings")
     finally:
         if old is None:
             os.environ.pop("DATABASE_URL", None)
@@ -42,7 +42,7 @@ def test_offshore_ticket2_migration_upgrade_downgrade_roundtrip(tmp_path):
     db_path = tmp_path / "offshore_migration.db"
     db_url = f"sqlite:///{db_path}"
 
-    _upgrade_to_head(db_url)
+    _upgrade_to_ticket2(db_url)
     engine = create_engine(db_url)
     try:
         inspector = inspect(engine)
@@ -94,7 +94,7 @@ def test_offshore_ticket2_migration_upgrade_downgrade_roundtrip(tmp_path):
     finally:
         engine.dispose()
 
-    _upgrade_to_head(db_url)
+    _upgrade_to_ticket2(db_url)
     engine = create_engine(db_url)
     try:
         inspector = inspect(engine)

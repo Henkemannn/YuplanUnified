@@ -32,20 +32,23 @@ def test_site_level_weekview_shows_alt2_on_lunch_cell(client_admin):
     from core.db import create_all
     from core.admin_repo import SitesRepo, DepartmentsRepo, DietTypesRepo
     from core.department_menu_choice_repo import MenuChoiceRepo
+    from tests._auth_site_helpers import login_bound_user
 
     with app.app_context():
         create_all()
         # Create site and a department with fixed resident counts
         srepo = SitesRepo()
-        site, _ = srepo.create_site("Alt2 Site-Level Demo")
+        site, _ = srepo.create_site("Alt2 Site-Level Demo", tenant_id=1)
         dep_repo = DepartmentsRepo()
         dep, _ = dep_repo.create_department(site_id=site["id"], name="Avd Alt2", resident_count_mode="fixed", resident_count_fixed=10)
         # Ensure at least one diet row renders by creating a diet type and setting defaults
         trepo = DietTypesRepo()
-        dt_id = trepo.create(tenant_id=1, name="Glutenfri", default_select=False)
+        dt_id = trepo.create(site_id=site["id"], tenant_id=1, name="Glutenfri", default_select=False, semantics="atomic")
         dep_repo.upsert_department_diet_defaults(dep["id"], 0, [{"diet_type_id": str(dt_id), "default_count": 2}])
         site_id = site["id"]
         dep_id = dep["id"]
+
+    login_bound_user(client_admin, site_id=site_id)
 
     # Seed Alt2 flag for Tuesday (day_of_week = 2)
     with app.app_context():
@@ -67,6 +70,8 @@ def test_site_level_weekview_shows_alt2_on_lunch_cell(client_admin):
     )
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
+    assert "Alt2 Site-Level Demo" in html
+    assert "Avd Alt2" in html
     # Expect the canonical Alt2 marker to appear at least twice:
     # once for the boende row and once for the diet row.
     assert html.count("is-alt2") >= 2

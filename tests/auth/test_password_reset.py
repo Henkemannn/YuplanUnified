@@ -398,7 +398,7 @@ def test_password_reset_migration_round_trips_in_isolated_database(tmp_path, mon
     config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
     config.set_main_option("sqlalchemy.url", db_url)
     command.upgrade(config, "0049_add_auth_login_throttle_reservations")
-    command.upgrade(config, "head")
+    command.upgrade(config, "0050_add_password_reset_storage")
     engine = create_engine(db_url)
     try:
         inspector = inspect(engine)

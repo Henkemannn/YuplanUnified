@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy import text
 
 from core.app_factory import create_app
+from core.builder_sqlite import initialize_builder_sqlite
 from core.db import create_all, get_session
 
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
@@ -21,6 +22,7 @@ def _client():
     _TEMP_DB_DIRS.append(db_dir)
     db_path = os.path.join(db_dir, "test_app.db")
     builder_db_path = os.path.join(db_dir, "builder.db")
+    initialize_builder_sqlite(builder_db_path)
     previous_builder_db_path = os.environ.get("BUILDER_DB_PATH")
     os.environ["BUILDER_DB_PATH"] = builder_db_path
     try:

@@ -23,18 +23,27 @@ def test_edit_department_shows_diet_types_and_saves_defaults(app_session, client
         create_all()
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites (id, name, version) VALUES (:id, :name, 0)"), {"id": site_id, "name": "Site A"})
+            db.execute(
+                text("INSERT INTO sites (id, tenant_id, name, version) VALUES (:id, 1, :name, 0)"),
+                {"id": site_id, "name": "Site A"},
+            )
             db.execute(text("INSERT INTO departments (id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES (:id, :sid, :name, 'fixed', 10, 0)"), {"id": dept_id, "sid": site_id, "name": "Dept A"})
-            # Insert one site-scoped diet type via repo to satisfy legacy tenant_id constraints
-            from core.admin_repo import DietTypesRepo
-            DietTypesRepo().create(site_id=site_id, name="Laktosfri", default_select=False)
             db.commit()
         finally:
             db.close()
+        from core.admin_repo import DietTypesRepo
 
-    # Set active site in session
-    with client_admin.session_transaction() as sess:
-        sess["site_id"] = site_id
+        diet_id = DietTypesRepo().create(
+            site_id=site_id,
+            tenant_id=1,
+            name="Laktosfri",
+            default_select=False,
+            semantics="atomic",
+        )
+
+    from tests._auth_site_helpers import login_bound_user
+
+    login_bound_user(client_admin, site_id=site_id)
 
     # GET edit form: shows diet type
     r_get = client_admin.get(f"/ui/admin/departments/{dept_id}/edit", headers=_h("admin"))
@@ -42,7 +51,7 @@ def test_edit_department_shows_diet_types_and_saves_defaults(app_session, client
     html = r_get.data.decode("utf-8")
     assert "Kostbehov" in html
     assert "Standardvärden / avancerade inställningar" not in html
-    assert "Laktosfri" not in html
+    assert "Laktosfri" in html
 
     # POST save defaults (set 3 for Laktosfri). Version is 0 from seed.
     r_post = client_admin.post(
@@ -50,7 +59,7 @@ def test_edit_department_shows_diet_types_and_saves_defaults(app_session, client
         headers=_h("admin"),
         data={
             "version": "0",
-            "diet_default_1": "3",
+            f"diet_default_{diet_id}": "3",
         },
         follow_redirects=True,
     )
@@ -60,8 +69,8 @@ def test_edit_department_shows_diet_types_and_saves_defaults(app_session, client
     r_get2 = client_admin.get(f"/ui/admin/departments/{dept_id}/edit", headers=_h("admin"))
     assert r_get2.status_code == 200
     html2 = r_get2.data.decode("utf-8")
-    assert "Laktosfri" not in html2
+    assert "Laktosfri" in html2
     from core.admin_repo import DietDefaultsRepo
     defaults = DietDefaultsRepo().list_for_department(dept_id)
     found = {int(item["diet_type_id"]): int(item.get("default_count", 0)) for item in defaults}
-    assert found.get(1) == 3
+    assert found.get(diet_id) == 3

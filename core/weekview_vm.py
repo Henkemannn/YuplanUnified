@@ -13,7 +13,14 @@ from .weekview.service import WeekviewService
 from .admin_repo import DepartmentsRepo, DietDefaultsRepo, DietTypesRepo, ResidencesRepo
 
 
-def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None = None) -> dict[str, Any]:
+def build_weekview_vm(
+    site_id: str,
+    year: int,
+    week: int,
+    tenant_id: int | None = None,
+    *,
+    department_id: str | None = None,
+) -> dict[str, Any]:
     """Build a weekview VM using the same data logic as kitchen/week."""
     tid = int(tenant_id) if tenant_id is not None else int(session.get("tenant_id") or 1)
 
@@ -21,19 +28,25 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
     try:
         row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
         site_name = str(row_s[0]) if row_s else ""
+        department_filter = "AND id=:department_id " if department_id is not None else ""
         rows = db.execute(
             text(
                 "SELECT id, name, COALESCE(resident_count_fixed,0), COALESCE(notes,'') "
                 ", residence_id "
                 "FROM departments "
                 "WHERE site_id=:s "
-                "ORDER BY COALESCE(display_order, 2147483647), name"
+                + department_filter
+                + "ORDER BY COALESCE(display_order, 2147483647), name"
             ),
-            {"s": site_id},
+            {"s": site_id, "department_id": department_id},
         ).fetchall()
         residences = ResidencesRepo().list_for_site(site_id)
         residence_name_by_id = {str(r.get("id") or ""): str(r.get("name") or "").strip() for r in residences}
-        departments_meta = DepartmentsRepo().list_for_site(site_id)
+        departments_meta = (
+            [{"id": row[0], "residence_id": row[4]} for row in rows]
+            if department_id is not None
+            else DepartmentsRepo().list_for_site(site_id)
+        )
         residence_id_by_department_id = {
             str(r.get("id") or ""): (str(r.get("residence_id") or "").strip() or None)
             for r in departments_meta
@@ -98,15 +111,10 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
                         d["alt2_lunch"] = True
         except Exception:
             pass
-        defaults = []
-        try:
-            defaults = DietDefaultsRepo().list_for_department(dep_id)
-            types = DietTypesRepo().list_all(site_id=site_id)
-            name_by_id = {str(it["id"]): str(it["name"]) for it in types}
-            allowed_diet_ids = {str(it["id"]) for it in types}
-        except Exception:
-            name_by_id = {}
-            allowed_diet_ids = set()
+        defaults = DietDefaultsRepo().list_for_department(dep_id)
+        types = DietTypesRepo().list_all(site_id=site_id)
+        name_by_id = {str(it["id"]): str(it["name"]) for it in types}
+        allowed_diet_ids = {str(it["id"]) for it in types}
         defaults_pos = [it for it in (defaults or []) if int(it.get("default_count", 0) or 0) > 0]
         default_count_by_id = {
             str(it.get("diet_type_id")): int(it.get("default_count") or 0)

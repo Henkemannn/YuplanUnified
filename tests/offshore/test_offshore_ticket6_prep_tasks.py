@@ -172,11 +172,11 @@ def _alembic_cfg(db_url: str) -> Config:
     return cfg
 
 
-def _upgrade_to_head(db_url: str) -> None:
+def _upgrade_to_prep_revision(db_url: str) -> None:
     old = os.environ.get("DATABASE_URL")
     os.environ["DATABASE_URL"] = db_url
     try:
-        command.upgrade(_alembic_cfg(db_url), "head")
+        command.upgrade(_alembic_cfg(db_url), "0029_add_offshore_v2_prep_tasks")
     finally:
         if old is None:
             os.environ.pop("DATABASE_URL", None)
@@ -200,7 +200,7 @@ def test_offshore_prep_migration_upgrade_downgrade_roundtrip(tmp_path):
     db_path = tmp_path / "offshore_prep_migration.db"
     db_url = f"sqlite:///{db_path}"
 
-    _upgrade_to_head(db_url)
+    _upgrade_to_prep_revision(db_url)
     engine = create_engine(db_url)
     try:
         inspector = inspect(engine)

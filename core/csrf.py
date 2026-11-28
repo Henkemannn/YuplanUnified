@@ -34,6 +34,7 @@ ENFORCED_PREFIXES = [
     "/ui/kitchen/planering/day/review",
     "/api/superuser/",
     "/api/kitchen/",
+    "/ui/admin/departments/",
 ]
 
 EXEMPT_PREFIXES = [

@@ -7,6 +7,8 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 
+from tests.core.dietary_migration_fixture import seed_historical_diet_reference_tables
+
 
 def _alembic_cfg(db_url: str) -> Config:
     cfg = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
@@ -121,6 +123,7 @@ def _seed_historical_0034_support(conn) -> None:
         )
     )
     conn.execute(text("CREATE UNIQUE INDEX ix_users_username_unique ON users(username)"))
+    seed_historical_diet_reference_tables(conn)
 
 
 def test_fresh_upgrade_adds_dietary_types_site_id_and_index(tmp_path: Path, monkeypatch) -> None:
@@ -339,7 +342,7 @@ def test_downgrade_is_non_destructive_for_existing_site_id_schema(tmp_path: Path
             )
 
         command.stamp(_alembic_cfg(db_url), "0033_add_users_department_id")
-        command.upgrade(_alembic_cfg(db_url), "head")
+        command.upgrade(_alembic_cfg(db_url), "0034_add_dietary_types_site_id")
         command.downgrade(_alembic_cfg(db_url), "0033_add_users_department_id")
 
         inspector = inspect(engine)

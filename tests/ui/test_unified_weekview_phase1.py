@@ -12,6 +12,7 @@ import uuid
 from datetime import date as _date
 
 import pytest
+from tests._auth_site_helpers import login_bound_user
 
 ETAG_RE = __import__("re").compile(r'^W/"weekview:dept:.*:year:\d{4}:week:\d{1,2}:v\d+"$')
 
@@ -78,6 +79,7 @@ def test_weekview_happy_path_with_menu_data(client_admin):
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="wed", meal="lunch", variant_type="alt1", dish_id=d5.id)
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
 
     resp = client_admin.post(
         "/features/set",
@@ -156,13 +158,14 @@ def test_weekview_missing_menu_shows_friendly_message(client_admin):
         create_all()
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Tomtköket"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',0,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dep_id, "s": site_id, "n": "Tom Avd"})
             db.commit()
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
 
     # Render UI for week with no menu
     r_ui = client_admin.get(
@@ -193,13 +196,14 @@ def test_weekview_navigation_links_correct(client_admin):
         create_all()
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Navköket"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',0,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dep_id, "s": site_id, "n": "Nav Avd"})
             db.commit()
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
 
     r_ui = client_admin.get(
         f"/ui/weekview?site_id={site_id}&department_id={dep_id}&year={year}&week={week}",
@@ -237,7 +241,7 @@ def test_weekview_alt2_highlighting_visible(client_admin):
         create_all()
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Alt2köket"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',0,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dep_id, "s": site_id, "n": "Alt2 Avd"})
@@ -254,6 +258,7 @@ def test_weekview_alt2_highlighting_visible(client_admin):
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt2", dish_id=d2.id)
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
 
     resp = client_admin.post(
         "/features/set",
@@ -307,16 +312,18 @@ def test_weekview_permissions_staff_can_access(client_admin):
         create_all()
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Staffköket"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',0,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dep_id, "s": site_id, "n": "Staff Avd"})
             db.commit()
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
 
     # Test with different roles that should have access
     for role in ["admin", "cook", "unit_portal"]:
+        login_bound_user(client_admin, site_id=site_id, role=role, department_id=dep_id if role == "unit_portal" else None)
         r_ui = client_admin.get(
             f"/ui/weekview?site_id={site_id}&department_id={dep_id}&year={year}&week={week}",
             headers=_h(role),
@@ -340,13 +347,14 @@ def test_weekview_defaults_to_current_week(client_admin):
         create_all()
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Defaultköket"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',0,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dep_id, "s": site_id, "n": "Default Avd"})
             db.commit()
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
 
     # Call without year/week params
     r_ui = client_admin.get(
@@ -386,7 +394,7 @@ def test_weekview_dinner_columns_hidden_when_no_dinner(client_admin):
         create_all()
         db = get_session()
         try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"), 
+            db.execute(text("INSERT INTO sites(id, tenant_id, name, version) VALUES(:i,1,:n,0) ON CONFLICT(id) DO NOTHING"),
                       {"i": site_id, "n": "Lunchköket"})
             db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',0,0) ON CONFLICT(id) DO NOTHING"), 
                       {"i": dep_id, "s": site_id, "n": "Lunch Avd"})
@@ -401,6 +409,7 @@ def test_weekview_dinner_columns_hidden_when_no_dinner(client_admin):
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt1", dish_id=d1.id)
         finally:
             db.close()
+    login_bound_user(client_admin, site_id=site_id)
 
     resp = client_admin.post(
         "/features/set",

@@ -82,9 +82,14 @@ class RegistrationService:
     def _get_diet_rows(self, site_id: str, department_id: str, date_str: str, meal: str, planned_map: dict[str, int], marks_set: set[tuple[str, str]]) -> list[dict[str, Any]]:
         db = get_session()
         try:
-            # Fetch all diet types; if table missing, return empty
+            # Registration marks use the canonical dietary identity.
             try:
-                diet_types = db.execute(__import__("sqlalchemy").text("SELECT id, name, is_default FROM diet_types"))
+                diet_types = db.execute(
+                    __import__("sqlalchemy").text(
+                        "SELECT id, name, default_select FROM dietary_types WHERE site_id=:site"
+                    ),
+                    {"site": site_id},
+                )
                 types = [(str(r[0]), str(r[1]), bool(r[2]) if len(r) > 2 else False) for r in diet_types.fetchall()]
             except Exception:
                 types = []

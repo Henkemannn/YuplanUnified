@@ -46,7 +46,6 @@ def _seed_site(site_id: str):
 
 def _seed_weekview_inputs(site_id: str):
     dep_id = f"dep-{uuid.uuid4()}"
-    diet_id = f"diet-{uuid.uuid4()}"
     db = get_session()
     try:
         db.execute(
@@ -59,6 +58,14 @@ def _seed_weekview_inputs(site_id: str):
         db.commit()
     finally:
         db.close()
+    from core.admin_repo import DietTypesRepo
+
+    diet_id = DietTypesRepo().create(
+        site_id=site_id,
+        tenant_id=1,
+        name=f"Glutenfri {uuid.uuid4().hex[:8]}",
+        semantics="atomic",
+    )
     return dep_id, diet_id
 
 
@@ -205,9 +212,12 @@ def test_kitchen_role_can_mark_weekview_specialdiet(client_user):
     _seed_site(site_id)
     dep_id, diet_id = _seed_weekview_inputs(site_id)
 
-    with client_user.session_transaction() as sess:
-        sess["site_id"] = site_id
-        sess["tenant_id"] = 1
+    login_bound_user(
+        client_user,
+        site_id=site_id,
+        role="kitchen",
+        department_id=dep_id,
+    )
 
     iso = _date.today().isocalendar()
     year, week = int(iso[0]), int(iso[1])

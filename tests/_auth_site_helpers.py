@@ -14,6 +14,7 @@ def seed_bound_user(
     *,
     site_id: str,
     role: str = "admin",
+    department_id: str | None = None,
     email: str | None = None,
     password: str = "TestPassw0rd!2026",
 ) -> tuple[int, str]:
@@ -28,6 +29,7 @@ def seed_bound_user(
                 username=email,
                 password_hash=generate_password_hash(password),
                 role=role,
+                department_id=department_id,
                 is_active=True,
                 auth_version=1,
             )
@@ -67,6 +69,7 @@ def login_bound_user(
     *,
     site_id: str,
     role: str = "admin",
+    department_id: str | None = None,
     email: str | None = None,
     password: str = "TestPassw0rd!2026",
 ) -> int:
@@ -74,6 +77,7 @@ def login_bound_user(
         client,
         site_id=site_id,
         role=role,
+        department_id=department_id,
         email=email,
         password=password,
     )

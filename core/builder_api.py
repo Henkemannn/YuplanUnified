@@ -27,7 +27,7 @@ from .builder.file_import import (
 )
 from .builder_sqlite import (
     clear_builder_sqlite_data,
-    initialize_builder_sqlite,
+    require_builder_sqlite,
     SQLiteComponentAliasRepository,
     SQLiteComponentRepository,
     SQLiteCompositionAliasRepository,
@@ -57,6 +57,10 @@ class _LibraryImportMetrics:
 
 def _bad_request(message: str):
     return jsonify({"ok": False, "error": "bad_request", "message": str(message)}), 400
+
+
+def _unauthorized():
+    return jsonify({"ok": False, "error": "unauthorized", "message": "authentication required"}), 401
 
 
 def _too_large():
@@ -174,7 +178,7 @@ def _normalize_dish_category_name(value: str) -> str:
 
 def _builder_category_db_path() -> str | None:
     configured_path = str(current_app.config.get("BUILDER_DB_PATH") or "").strip()
-    return initialize_builder_sqlite(configured_path) if configured_path else None
+    return require_builder_sqlite(configured_path) if configured_path else None
 
 
 def _custom_dish_category_exists(category_id: str, actor: ActorContext | None) -> bool:
@@ -1100,7 +1104,7 @@ def _load_component_detail_summaries(component_ids: list[str]) -> dict[str, dict
 
     db_path = _builder_db_path()
     if db_path:
-        sqlite_path = initialize_builder_sqlite(db_path)
+        sqlite_path = require_builder_sqlite(db_path)
         placeholders = ", ".join("?" for _ in normalized_ids)
         with sqlite3.connect(sqlite_path) as conn:
             conn.row_factory = sqlite3.Row
@@ -1228,7 +1232,7 @@ def _load_component_details(component_id: str) -> dict[str, Any]:
 
     db_path = _builder_db_path()
     if db_path:
-        sqlite_path = initialize_builder_sqlite(db_path)
+        sqlite_path = require_builder_sqlite(db_path)
         with sqlite3.connect(sqlite_path) as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
@@ -1275,7 +1279,7 @@ def _save_component_details(component_id: str, payload: dict[str, Any]) -> dict[
 
     db_path = _builder_db_path()
     if db_path:
-        sqlite_path = initialize_builder_sqlite(db_path)
+        sqlite_path = require_builder_sqlite(db_path)
         with sqlite3.connect(sqlite_path) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute(
@@ -1349,7 +1353,7 @@ def _delete_component_details(component_id: str) -> None:
 
     db_path = _builder_db_path()
     if db_path:
-        sqlite_path = initialize_builder_sqlite(db_path)
+        sqlite_path = require_builder_sqlite(db_path)
         with sqlite3.connect(sqlite_path) as conn:
             conn.execute("DELETE FROM component_details WHERE component_id = ?", (component_id_value,))
         return
@@ -1500,7 +1504,7 @@ def _session_from_drafts(
 def _persist_import_session(session: dict[str, Any], items: list[dict[str, Any]]) -> None:
     db_path = _builder_db_path()
     if db_path:
-        sqlite_path = initialize_builder_sqlite(db_path)
+        sqlite_path = require_builder_sqlite(db_path)
         with sqlite3.connect(sqlite_path) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute(
@@ -1621,7 +1625,7 @@ def _find_active_source_import_session(
 
     db_path = _builder_db_path()
     if db_path:
-        sqlite_path = initialize_builder_sqlite(db_path)
+        sqlite_path = require_builder_sqlite(db_path)
         with sqlite3.connect(sqlite_path) as conn:
             row = conn.execute(
                 """
@@ -1663,7 +1667,7 @@ def _find_active_source_import_session(
 def _list_import_sessions() -> list[dict[str, Any]]:
     db_path = _builder_db_path()
     if db_path:
-        sqlite_path = initialize_builder_sqlite(db_path)
+        sqlite_path = require_builder_sqlite(db_path)
         with sqlite3.connect(sqlite_path) as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
@@ -1687,7 +1691,7 @@ def _load_import_session(
 
     db_path = _builder_db_path()
     if db_path:
-        sqlite_path = initialize_builder_sqlite(db_path)
+        sqlite_path = require_builder_sqlite(db_path)
         with sqlite3.connect(sqlite_path) as conn:
             conn.row_factory = sqlite3.Row
             session_row = conn.execute(
@@ -1730,7 +1734,7 @@ def _save_import_session_item(session_id: str, item: dict[str, Any]) -> None:
 
     db_path = _builder_db_path()
     if db_path:
-        sqlite_path = initialize_builder_sqlite(db_path)
+        sqlite_path = require_builder_sqlite(db_path)
         with sqlite3.connect(sqlite_path) as conn:
             conn.execute(
                 """
@@ -1779,7 +1783,7 @@ def _refresh_session_summary(session_id: str) -> dict[str, Any] | None:
 
     db_path = _builder_db_path()
     if db_path:
-        sqlite_path = initialize_builder_sqlite(db_path)
+        sqlite_path = require_builder_sqlite(db_path)
         with sqlite3.connect(sqlite_path) as conn:
             conn.execute(
                 """
@@ -1832,7 +1836,7 @@ def _reset_builder_state(*, actor: ActorContext | None = None) -> dict[str, Any]
     before_counts: dict[str, int] = {}
 
     if builder_db_path:
-        db_path = initialize_builder_sqlite(builder_db_path)
+        db_path = require_builder_sqlite(builder_db_path)
         before_counts = clear_builder_sqlite_data(db_path)
     else:
         flow = current_app.extensions.get("builder_flow")
@@ -1898,7 +1902,7 @@ def _get_builder_flow() -> BuilderFlow:
     builder_db_path = str(current_app.config.get("BUILDER_DB_PATH") or "").strip()
 
     if builder_db_path:
-        db_path = initialize_builder_sqlite(builder_db_path)
+        db_path = require_builder_sqlite(builder_db_path)
         component_repository = SQLiteComponentRepository(db_path=db_path)
         component_alias_repository = SQLiteComponentAliasRepository(db_path=db_path)
         composition_repository = SQLiteCompositionRepository(db_path=db_path)
@@ -1983,10 +1987,10 @@ def create_private_composition():
         return payload
 
     try:
-        flow = _get_builder_flow()
         actor = _get_builder_actor()
         if actor is None:
             return _unauthorized()
+        flow = _get_builder_flow()
         if "composition_id" in payload:
             return _bad_request("composition_id is not allowed")
         if "seed_components" in payload:
@@ -2193,10 +2197,10 @@ def create_private_component():
         return payload
 
     try:
-        flow = _get_builder_flow()
         actor = _get_builder_actor()
         if actor is None:
             return _unauthorized()
+        flow = _get_builder_flow()
         component_name_value = _require_str(payload, "component_name")
         result = flow.create_private_component(
             component_name=component_name_value,

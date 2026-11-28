@@ -5,90 +5,58 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from sqlalchemy import text
 
 from ..db import get_session
+from ..weekview.schema import WeekviewSchemaError, verify_weekview_schema
 
 
 class ReportRepo:
     """Read-only access for report aggregation from weekview tables."""
 
-    def _ensure_schema(self) -> None:
-        """Ensure weekview tables exist in SQLite test env.
-
-        Mirrors WeekviewRepo._ensure_schema for safety when report is used without touching weekview first.
-        """
+    def site_exists(self, tenant_id: int | str, site_id: str) -> bool:
         db = get_session()
         try:
-            dialect = db.bind.dialect.name if db.bind is not None else ""
-            if dialect != "sqlite":
-                return
-            db.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS weekview_registrations (
-                      tenant_id TEXT NOT NULL,
-                      department_id TEXT NOT NULL,
-                      year INTEGER NOT NULL,
-                      week INTEGER NOT NULL,
-                      day_of_week INTEGER NOT NULL,
-                      meal TEXT NOT NULL,
-                      diet_type TEXT NOT NULL,
-                      marked INTEGER NOT NULL DEFAULT 0,
-                      UNIQUE (tenant_id, department_id, year, week, day_of_week, meal, diet_type)
-                    );
-                    """
-                )
-            )
-            db.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS weekview_versions (
-                      tenant_id TEXT NOT NULL,
-                      department_id TEXT NOT NULL,
-                      year INTEGER NOT NULL,
-                      week INTEGER NOT NULL,
-                      version INTEGER NOT NULL DEFAULT 0,
-                      UNIQUE (tenant_id, department_id, year, week)
-                    );
-                    """
-                )
-            )
-            db.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS weekview_residents_count (
-                        tenant_id TEXT NOT NULL,
-                        department_id TEXT NOT NULL,
-                        year INTEGER NOT NULL,
-                        week INTEGER NOT NULL,
-                        day_of_week INTEGER NOT NULL,
-                        meal TEXT NOT NULL,
-                        count INTEGER NOT NULL DEFAULT 0,
-                        UNIQUE (tenant_id, department_id, year, week, day_of_week, meal)
-                    );
-                    """
-                )
-            )
-            db.commit()
+            row = db.execute(
+                text("SELECT 1 FROM sites WHERE id=:site AND tenant_id=:tid LIMIT 1"),
+                {"site": site_id, "tid": int(tenant_id)},
+            ).first()
+            return row is not None
         finally:
             db.close()
 
+    @staticmethod
+    def _verify_schema(db) -> None:
+        verify_weekview_schema(db.connection())
+
     def get_residents(
-        self, tenant_id: int | str, year: int, week: int, department_id: Optional[str] = None
+        self,
+        tenant_id: int | str,
+        site_id: str,
+        year: int,
+        week: int,
+        department_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        self._ensure_schema()
         db = get_session()
         try:
-            params = {"tid": str(tenant_id), "yy": year, "ww": week}
-            where = ["tenant_id=:tid", "year=:yy", "week=:ww"]
+            self._verify_schema(db)
+            params = {"tid": int(tenant_id), "site": site_id, "yy": year, "ww": week}
+            where = [
+                "r.tenant_id=:tid",
+                "s.tenant_id=:tid",
+                "d.site_id=:site",
+                "r.year=:yy",
+                "r.week=:ww",
+            ]
             if department_id:
-                where.append("department_id=:dep")
+                where.append("r.department_id=:dep")
                 params["dep"] = department_id
             rows = db.execute(
                 text(
                     f"""
-                    SELECT department_id, day_of_week, meal, count
-                    FROM weekview_residents_count
+                    SELECT r.department_id, r.day_of_week, r.meal, r.count
+                    FROM weekview_residents_count AS r
+                    JOIN departments AS d ON d.id=r.department_id
+                    JOIN sites AS s ON s.id=d.site_id
                     WHERE {' AND '.join(where)}
-                    ORDER BY department_id, day_of_week, meal
+                    ORDER BY r.department_id, r.day_of_week, r.meal
                     """
                 ),
                 params,
@@ -106,59 +74,102 @@ class ReportRepo:
             db.close()
 
     def get_marks(
-        self, tenant_id: int | str, year: int, week: int, department_id: Optional[str] = None
+        self,
+        tenant_id: int | str,
+        site_id: str,
+        year: int,
+        week: int,
+        department_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        self._ensure_schema()
         db = get_session()
         try:
-            params = {"tid": str(tenant_id), "yy": year, "ww": week}
-            where = ["tenant_id=:tid", "year=:yy", "week=:ww", "marked=1"]
+            self._verify_schema(db)
+            params = {"tid": int(tenant_id), "site": site_id, "yy": year, "ww": week}
+            where = [
+                "wr.tenant_id=:tid",
+                "s.tenant_id=:tid",
+                "d.site_id=:site",
+                "wr.year=:yy",
+                "wr.week=:ww",
+                "wr.marked=1",
+            ]
             if department_id:
-                where.append("department_id=:dep")
+                where.append("wr.department_id=:dep")
                 params["dep"] = department_id
             rows = db.execute(
                 text(
                     f"""
-                    SELECT department_id, day_of_week, meal, diet_type
-                    FROM weekview_registrations
+                    SELECT wr.department_id, wr.day_of_week, wr.meal,
+                           wr.diet_type, dt.name
+                    FROM weekview_registrations AS wr
+                    JOIN departments AS d ON d.id=wr.department_id
+                    JOIN sites AS s ON s.id=d.site_id AND s.tenant_id=wr.tenant_id
+                    LEFT JOIN dietary_types AS dt
+                      ON CAST(dt.id AS TEXT)=wr.diet_type
+                     AND dt.tenant_id=wr.tenant_id
+                     AND dt.site_id=d.site_id
                     WHERE {' AND '.join(where)}
-                    ORDER BY department_id, day_of_week, meal, diet_type
+                    ORDER BY wr.department_id, wr.day_of_week, wr.meal, wr.diet_type
                     """
                 ),
                 params,
             ).fetchall()
-            return [
-                {
-                    "department_id": str(r[0]),
-                    "day_of_week": int(r[1]),
-                    "meal": str(r[2]),
-                    "diet_type": str(r[3]),
-                }
-                for r in rows
-            ]
+            marks = []
+            for row in rows:
+                raw_diet_type = str(row[3]).strip()
+                reserved_normal = raw_diet_type.casefold() in {"normal", "normalkost"}
+                if reserved_normal:
+                    diet_type = raw_diet_type.casefold()
+                elif row[4] is None or not str(row[4]).strip():
+                    raise WeekviewSchemaError("Diet reference incompatible")
+                else:
+                    diet_type = str(row[4])
+                marks.append(
+                    {
+                        "department_id": str(row[0]),
+                        "day_of_week": int(row[1]),
+                        "meal": str(row[2]),
+                        "diet_type": diet_type,
+                        "reserved_normal": reserved_normal,
+                    }
+                )
+            return marks
         finally:
             db.close()
 
     def get_versions(
-        self, tenant_id: int | str, year: int, week: int, department_id: Optional[str] = None
+        self,
+        tenant_id: int | str,
+        site_id: str,
+        year: int,
+        week: int,
+        department_id: Optional[str] = None,
     ) -> Tuple[Dict[str, int], int, int]:
         """Return mapping dept->version and (vmax, vsum).
 
         vmax and vsum are computed across filtered departments (or all departments when department_id is None).
         """
-        self._ensure_schema()
         db = get_session()
         try:
-            params = {"tid": str(tenant_id), "yy": year, "ww": week}
-            where = ["tenant_id=:tid", "year=:yy", "week=:ww"]
+            self._verify_schema(db)
+            params = {"tid": int(tenant_id), "site": site_id, "yy": year, "ww": week}
+            where = [
+                "v.tenant_id=:tid",
+                "s.tenant_id=:tid",
+                "d.site_id=:site",
+                "v.year=:yy",
+                "v.week=:ww",
+            ]
             if department_id:
-                where.append("department_id=:dep")
+                where.append("v.department_id=:dep")
                 params["dep"] = department_id
             rows = db.execute(
                 text(
                     f"""
-                    SELECT department_id, version
-                    FROM weekview_versions
+                    SELECT v.department_id, v.version
+                    FROM weekview_versions AS v
+                    JOIN departments AS d ON d.id=v.department_id
+                    JOIN sites AS s ON s.id=d.site_id
                     WHERE {' AND '.join(where)}
                     """
                 ),
@@ -174,25 +185,46 @@ class ReportRepo:
         finally:
             db.close()
 
-    def department_exists(self, tenant_id: int | str, year: int, week: int, department_id: str) -> bool:
-        self._ensure_schema()
+    def department_exists(
+        self,
+        tenant_id: int | str,
+        site_id: str,
+        year: int,
+        week: int,
+        department_id: str,
+    ) -> bool:
         db = get_session()
         try:
+            self._verify_schema(db)
             # Check versions first, then residents/registrations
-            for table, extra in (
-                ("weekview_versions", ""),
-                ("weekview_residents_count", ""),
-                ("weekview_registrations", ""),
+            for table in (
+                "weekview_versions",
+                "weekview_residents_count",
+                "weekview_registrations",
             ):
                 rec = db.execute(
                     text(
                         f"""
-                        SELECT 1 FROM {table}
-                        WHERE tenant_id=:tid AND department_id=:dep AND year=:yy AND week=:ww
+                        SELECT 1
+                        FROM {table} AS entry
+                        JOIN departments AS d ON d.id=entry.department_id
+                        JOIN sites AS s ON s.id=d.site_id
+                        WHERE entry.tenant_id=:tid
+                          AND s.tenant_id=:tid
+                          AND d.site_id=:site
+                          AND entry.department_id=:dep
+                          AND entry.year=:yy
+                          AND entry.week=:ww
                         LIMIT 1
                         """
                     ),
-                    {"tid": str(tenant_id), "dep": department_id, "yy": year, "ww": week},
+                    {
+                        "tid": int(tenant_id),
+                        "site": site_id,
+                        "dep": department_id,
+                        "yy": year,
+                        "ww": week,
+                    },
                 ).fetchone()
                 if rec:
                     return True

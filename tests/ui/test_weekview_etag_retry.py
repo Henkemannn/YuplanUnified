@@ -23,7 +23,13 @@ def seed_basic():
     drepo = DepartmentsRepo()
     dep, _ = drepo.create_department(site_id=site["id"], name=f"Avd A {suffix}", resident_count_mode="fixed", resident_count_fixed=10)
     trepo = DietTypesRepo()
-    dt_id = trepo.create(tenant_id=1, name=f"Glutenfri {suffix}", default_select=False)
+    dt_id = trepo.create(
+        site_id=site["id"],
+        tenant_id=1,
+        name=f"Glutenfri {suffix}",
+        default_select=False,
+        semantics="atomic",
+    )
     drepo.upsert_department_diet_defaults(dep["id"], 0, [{"diet_type_id": str(dt_id), "default_count": 2}])
     return site, dep, dt_id
 

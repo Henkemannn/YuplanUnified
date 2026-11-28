@@ -7,6 +7,8 @@ from flask import Blueprint, Response, current_app, jsonify, request, session, g
 
 from .auth import require_roles
 from .app_authz import resolve_department_scope
+from .csrf import csrf_protect
+from .diet_scope import DietaryReferenceError
 from .http_errors import bad_request, not_found, problem
 from .weekview.schema import WeekviewSchemaError
 from .weekview.service import WeekviewService, EtagMismatchError
@@ -111,6 +113,7 @@ def get_weekview() -> Response:
 
 @bp.patch("/weekview/specialdiets/mark")
 @require_roles("admin", "editor")
+@csrf_protect
 def patch_weekview_specialdiets_mark() -> Response:
     """Toggle a single special diet mark for a given date+meal+diet.
 
@@ -125,6 +128,9 @@ def patch_weekview_specialdiets_mark() -> Response:
     tid = _tenant_id()
     if tid is None:
         return bad_request("tenant_missing")
+    body_tid = data.get("tenant_id")
+    if body_tid is not None and str(body_tid) != str(tid):
+        return bad_request("tenant_mismatch")
     department_id = (data.get("department_id") or "").strip()
     local_date = (data.get("local_date") or "").strip()
     meal = (data.get("meal") or "").strip()
@@ -167,6 +173,10 @@ def patch_weekview_specialdiets_mark() -> Response:
         new_etag = _service.toggle_marks(tid, year, week, department_id, etag, [op])
     except EtagMismatchError:
         return problem(412, "https://example.com/errors/etag_mismatch", "Precondition Failed", "etag_mismatch")
+    except DietaryReferenceError as exc:
+        if exc.status_code == 403:
+            return problem(403, "https://example.com/errors/diet_type_outside_scope", "Forbidden", exc.code)
+        return bad_request(exc.code)
     resp = jsonify({"updated": 1, "status": "ok"})
     resp.headers["ETag"] = new_etag
     return resp
@@ -203,6 +213,7 @@ def resolve_weekview() -> Response:
 
 @bp.patch("/weekview")
 @require_roles("admin", "editor")
+@csrf_protect
 def patch_weekview() -> Response:
     maybe = _require_weekview_enabled()
     if maybe is not None:
@@ -265,6 +276,10 @@ def patch_weekview() -> Response:
         new_etag = _service.toggle_marks(tid, year, week, department_id, etag, ops)
     except EtagMismatchError:
         return problem(412, "https://example.com/errors/etag_mismatch", "Precondition Failed", "etag_mismatch")
+    except DietaryReferenceError as exc:
+        if exc.status_code == 403:
+            return problem(403, "https://example.com/errors/diet_type_outside_scope", "Forbidden", exc.code)
+        return bad_request(exc.code)
     resp = jsonify({"updated": len(ops), "status": "ok"})
     resp.headers["ETag"] = new_etag
     return resp
