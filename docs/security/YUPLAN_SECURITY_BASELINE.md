@@ -1,5 +1,92 @@
 # Yuplan Unified — Security Baseline
 
+## SEC-FINAL — CURRENT 2026-11-28 | verified-scope closure and handoff
+
+**Status authority:** SEC-FINAL-07F-R was accepted and its 08A candidate was
+committed and pushed. The security stage is **CLOSED within the verified
+scope** recorded below. This is not a new general security audit, blanket
+certification of every route/runtime, Kommun 1.1 Pilot GO, release GO, or
+approval to migrate real pilot data or deploy.
+
+### Accepted checkpoint and evidence
+
+- Repository/branch: `Henkemannn/YuplanUnified`,
+  `feat/planera-app-shell-2026-03-03`.
+- Product/security commit and current local/tracking/remote HEAD:
+  `479bd9c356ebfcd6270b6c7340262c28ee2771ba`.
+- The accepted candidate comprises 130 individually verified source files.
+  Source manifest SHA-256:
+  `72b1ac57c79d045b6cd979b188c3e4c33c551d9e0888ea729fc1020f3f7c3818`.
+- Full isolated pytest: **3,259 passed, 0 failed, 0 errors, 32 skipped,
+  3 warnings**. All 125 historical regression-test IDs passed.
+- Alembic candidate head: **0059**. A synthetic migration rehearsal covered
+  **0050–0059**; isolated PostgreSQL **17.12** verification was completed.
+- Coordinated synthetic backup/restore was verified. It does not establish
+  recovery of real pilot data or an operational production restore procedure.
+- Six protected database/checkpoint artefacts remained byte-identical:
+  original, protected backup and both census copies each have SHA-256
+  `1add124065aae2aa995619aa9dcc349252a39493e0ea1855bb5ce0b3f21dbd67`;
+  checkpoint 0057 has
+  `e7b82d138de75fd78c95eb47552ba5ec664b1ee35f25bb3ee098e65c9ad8607c`;
+  checkpoint 0059 has
+  `70f6e3ec8d73337212ff84c501df72f408b3998519e48c0977f340902dcfccf2`.
+
+The verified scope includes the accepted tenant/site isolation, canonical
+dietary identity and migration recovery, Builder runtime provisioning and
+isolation, PostgreSQL runtime verification, report scoping and CSRF hardening
+described in the approved SEC-FINAL-07F-R evidence. Closure is limited to
+those examined code paths and evidence. It does not retroactively close
+unexamined paths or pending live operational controls.
+
+### Post-push CI-RECOVERY-01 — separate open stabilization work
+
+GitHub Actions
+[run 46160919466](https://github.com/Henkemannn/YuplanUnified/actions/runs/46160919466)
+failed on the pushed commit:
+
+- Vitest: **112 passed, 16 failed**, 7 failing files out of 34:
+  `portal_department_week_choice.test.js`,
+  `unified_admin_need_picker.test.js`,
+  `builder_standalone_runtime.test.js`,
+  `admin_menu_import_week_actions.test.js`,
+  `planera_product2_page3_completion.test.js`,
+  `admin_builder_iframe_color_scheme.test.js`, and
+  `builder_calculation_utils.test.js`.
+- Ruff 0.6.3 repository-wide: F811 at `admin/ui_blueprint.py:1984` and
+  F822 at `core/planera_v2/adapters/kommun_target_demand.py:227`.
+- Backend pytest was not reached because the backend job stopped at Ruff.
+  `openapi-validate` and the separate markdownlint workflow passed.
+- Independently verify PostgreSQL service/job scope and the migration
+  command's `|| true` behavior. Do not classify all failures as pre-existing
+  without comparative reproduction.
+
+Track this as **CI-RECOVERY-01**, a prioritized stabilization task before
+continued product development, separate from the closed SEC-FINAL scope.
+Also retain **TEST-ISOLATION-01**: a reproducible test-order dependency
+between `unified_admin_departments_phase2` and
+`admin_department_service_addons`. No root cause or production defect is
+asserted without reproduction. No tests or fixes are authorized by this
+documentation update.
+
+### Remaining operational verification
+
+The following remain outside the verified SEC-FINAL closure:
+
+- Establish authoritative Builder storage and its operational backup path.
+- Resolve legacy Unit/Assignment site identity and any data-migration path.
+- Close runtime and restore-evidence limitations using an approved current
+  environment; synthetic restore is not a production recovery drill.
+- Verify production configuration, secret handling/rotation, authentication
+  and reset flows, HTTPS, CSRF and other runtime controls in approved staging.
+- Any real pilot migration or deployment requires separate explicit approval.
+  The older Fly.io Yuplan installation is historical and is not the current
+  development or pilot environment.
+
+See [Kommun 1.1 Live Acceptance](../KOMMUN_1_1_LIVE_ACCEPTANCE.md) for the
+current A–Ö ledger and pilot blockers, and
+[`SEC_FINAL_HANDOFF_2026-11-28.md`](../handoffs/SEC_FINAL_HANDOFF_2026-11-28.md)
+for the project handover. Prior security history below is retained unchanged.
+
 ## SEC-01 — CURRENT 2026-11-27 | SEC-CLOSURE-01 reconciliation
 
 **Status authority:** This section supersedes all earlier `CURRENT` sections

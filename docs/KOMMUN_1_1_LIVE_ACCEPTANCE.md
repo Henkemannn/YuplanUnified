@@ -1,5 +1,141 @@
 # Kommun 1.1 — Live Acceptance & UX Race
 
+## CURRENT — 2026-11-28 | SEC-FINAL-08B documentation handoff
+
+**Operational authority:** This section supersedes earlier `CURRENT`, next-gate
+and security-closure wording below. Prior A–Ö decisions, acceptance evidence,
+security history and limitations remain unchanged. SEC-FINAL is closed only
+within its verified scope. This is not Kommun 1.1 Pilot GO, release GO, live
+staging approval, pilot migration approval or deployment approval.
+
+### Approved product/security checkpoint
+
+- Repository/branch: `Henkemannn/YuplanUnified`,
+  `feat/planera-app-shell-2026-03-03`.
+- Local, tracking and remote HEAD:
+  `479bd9c356ebfcd6270b6c7340262c28ee2771ba`.
+- Working tree was clean after the approved push.
+- SEC-FINAL-07F-R was accepted; the 08A candidate was pushed as the commit
+  above. Exactly 130 candidate source files were individually verified.
+- Full isolated pytest: **3,259 passed, 0 failed, 0 errors, 32 skipped,
+  3 warnings**. All 125 historical regression-test IDs passed.
+- Candidate Alembic head: **0059**. The synthetic migration rehearsal covered
+  **0050–0059**; PostgreSQL **17.12** was verified on an isolated environment.
+- A coordinated synthetic backup/restore was exercised. This is not proof of
+  recovery of real pilot data or of an operational production restore process.
+- Six protected database/checkpoint artefacts remained unchanged. The four
+  protected database copies each retained SHA-256
+  `1add124065aae2aa995619aa9dcc349252a39493e0ea1855bb5ce0b3f21dbd67`;
+  checkpoint 0057 retained
+  `e7b82d138de75fd78c95eb47552ba5ec664b1ee35f25bb3ee098e65c9ad8607c`;
+  checkpoint 0059 retained
+  `70f6e3ec8d73337212ff84c501df72f408b3998519e48c0977f340902dcfccf2`.
+- Verified 130-file source manifest SHA-256:
+  `72b1ac57c79d045b6cd979b188c3e4c33c551d9e0888ea729fc1020f3f7c3818`.
+
+The prior handoff `SEC_FINAL_04R_HANDOFF_2026-11-27.md` was read-only checked
+from remote documentation branch `handoff/sec-final-04r-2026-11-27` at tip
+`c19e193bb9e2e8fb36aaf171afa4b8fdbfc23250` (file blob
+`a81ce8ab3ddf4ecedeac33af8825afaca7380e09`). Its 04R continuation instructions
+are superseded by the accepted SEC-FINAL-07F-R/08A checkpoint and this handoff;
+that branch was not checked out, fetched, merged or modified.
+
+### Post-push CI-RECOVERY-01 — prioritized, separate from security closure
+
+GitHub Actions run
+[46160919466](https://github.com/Henkemannn/YuplanUnified/actions/runs/46160919466)
+failed on commit `479bd9c356ebfcd6270b6c7340262c28ee2771ba`:
+
+- Vitest: **112 passed, 16 failed**, with **7 failing test files out of 34**:
+  `portal_department_week_choice.test.js`,
+  `unified_admin_need_picker.test.js`,
+  `builder_standalone_runtime.test.js`,
+  `admin_menu_import_week_actions.test.js`,
+  `planera_product2_page3_completion.test.js`,
+  `admin_builder_iframe_color_scheme.test.js`, and
+  `builder_calculation_utils.test.js`.
+- Ruff 0.6.3 repository-wide:
+  `admin/ui_blueprint.py:1984` — F811;
+  `core/planera_v2/adapters/kommun_target_demand.py:227` — F822.
+- The backend pytest job stopped at Ruff; backend pytest was not reached.
+  `openapi-validate` passed and the separate markdownlint workflow passed.
+- CI configuration still needs a bounded review of PostgreSQL service/job
+  scope and the migration command's `|| true`. Do not classify all failures
+  as pre-existing without comparative reproduction.
+
+Treat CI-RECOVERY-01 as the next prioritized stabilization task before
+continued product development. Keep it separate from the completed security
+checkpoint; no CI failure attribution or fix is claimed here.
+
+### TEST-ISOLATION-01
+
+A reproducible test-order dependency is reported between
+`unified_admin_departments_phase2` and `admin_department_service_addons`.
+This remains a test-isolation issue to diagnose independently; no production
+defect or root cause is asserted without evidence.
+
+### Current A–Ö status
+
+The owner-accepted 2026-11-18 per-ID ledger remains binding. No A–Ö feature
+was changed by SEC-FINAL-08A. The current status is:
+
+| ID | Status | Current scope / remaining work |
+|---|---|---|
+| AÖ-01 | CLOSED · owner-accepted | Email or distinct globally unique ASCII username login. Hosted reset/IDNA equivalence is not implied. |
+| AÖ-02 | OPEN · P3 | Verify and correct the `Användare` sidebar encoding/rendering. |
+| AÖ-03 | CLOSED | Residence-create dialog dismissal accepted. |
+| AÖ-04 | OPEN · P2 | Decide and scope in-context canonical cost-type creation. |
+| AÖ-05 | CLOSED · owner-accepted | Equal-emphasis combined dietary labels and unchanged group count. |
+| AÖ-06A/B | CLOSED · owner-accepted | Persisted serving-adaptation flow through Admin, production lists, Page3 and pack list. |
+| AÖ-07 | CLOSED · owner-accepted | Admin menu status-button light/dark hierarchy. |
+| AÖ-08A/08I/08B | CLOSED · scoped/owner-accepted | Audited tenant isolation, local reference repair and accepted Builder modal presentation; not a blanket hosted audit. |
+| AÖ-09 | OPEN · P2 | Responsive Admin Users action layout. |
+| AÖ-10 | OPEN · P2 decision | Define safe delete versus reversible deactivate/archive semantics. |
+| AÖ-11 | OPEN · P2 | Replace user-facing `SCOPE` wording without changing authorization. |
+| AÖ-12 | CLOSED · owner-accepted | Kitchen shell portrait/landscape spacing. |
+| AÖ-13 | CLOSED · owner-accepted | Weekview tablet function/layout; Thursday polish remains AÖ-27. |
+| AÖ-14 | CLOSED · owner-accepted | Weekview completion persistence and scoped authorization. |
+| AÖ-15 | CANCELLED / rolled back | Do not revive the temporary navigation feature without a new owner decision. |
+| AÖ-16 | CLOSED · owner-accepted | Shared topbar badge clipping; long-label geometry is not claimed verified. |
+| AÖ-17 | CLOSED · owner-accepted | Kitchen Menu Overview A4 print; extreme multipage cases remain release evidence. |
+| AÖ-18 | OPEN · P3 | Read-only cross-product design consistency audit after blockers. |
+| AÖ-19 | PARTIAL | Publication/modal/unpublish safety accepted; Kitchen searchable recipe-library permissions remain open; automatic notices/diffs deferred. |
+| AÖ-20 | CLOSED · owner-accepted | Week selectors accepted; ISO year-boundary E2E remains unverified. |
+| AÖ-21 | CLOSED · owner-accepted | Page2 per-option review state; historical fixture debt remains separately tracked. |
+| AÖ-22 | OPEN · P3 | Page3 heading typography/glyph-fit visual review. |
+| AÖ-23 | OPEN · P2 | Reuse the Normalkost `Visa` selector pattern in Page3 Overview. |
+| AÖ-24 | CLOSED · owner-accepted | Normalkost A4 print; 20-department multipage Safari pagination remains unverified. |
+| AÖ-25 | CLOSED · owner-accepted | Admin published-week menu tablet rendering; no causal code attribution. |
+| AÖ-26 | CLOSED · owner-accepted | Builder Dish modal frame; preserve accepted presentation. |
+| AÖ-27 | OPEN · P3 | Weekview yellow/Thursday visual polish, preserving meaning and completion behavior. |
+
+Counts: **16 CLOSED, 9 OPEN, 1 PARTIAL (AÖ-19), 1 CANCELLED (AÖ-15)**.
+Ancillary OPEN items remain **AÖ-IPAD-PRINT-01**, **AÖ-PWA-01**, and
+**AÖ-KITCHEN-ALT2-01**. Preserve accepted behavior and reopen only on a
+reproducible defect or explicit owner decision.
+
+### Remaining pilot blockers and next gate
+
+The following are not resolved by the synthetic SEC checkpoint:
+
+- Establish the authoritative Builder data store and ownership/read/write
+  path.
+- Resolve legacy Unit/Assignment site identity and its validated migration
+  path.
+- Close runtime and restore-evidence limitations with a controlled, current
+  environment; synthetic restore is not a real pilot recovery drill.
+- Verify production configuration, secret handling/rotation, HTTPS, CSRF,
+  and real authentication/reset flows in approved staging.
+- Obtain separate explicit approval for any real pilot migration or
+  deployment. The older Fly.io Yuplan installation is historical and is not
+  the current development or pilot environment.
+
+Recommended next bounded order: **CI-RECOVERY-01**, beginning with read-only
+verification of PostgreSQL service/job scope and migration `|| true`, followed
+by comparative reproduction and evidence-based triage of Vitest/Ruff failures.
+Keep TEST-ISOLATION-01 separately scoped. Do not infer all CI failures are old,
+weaken assertions, reopen accepted A–Ö work, or claim pilot GO.
+
 ## CURRENT — 2026-11-27 | SEC-CLOSURE-01 security reconciliation
 
 **Operational authority:** This section supersedes every earlier `CURRENT` section and
